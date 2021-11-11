@@ -1,0 +1,41 @@
+# vim:ft=automake
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+libwolfprov_la_SOURCES =
+libwolfprov_la_SOURCES += src/wp_wolfprov.c
+libwolfprov_la_SOURCES += src/wp_tls_capa.c
+libwolfprov_la_SOURCES += src/wp_digests.c
+libwolfprov_la_SOURCES += src/wp_aes_block.c
+libwolfprov_la_SOURCES += src/wp_aes_stream.c
+libwolfprov_la_SOURCES += src/wp_aes_aead.c
+libwolfprov_la_SOURCES += src/wp_aes_wrap.c
+libwolfprov_la_SOURCES += src/wp_hmac.c
+libwolfprov_la_SOURCES += src/wp_cmac.c
+libwolfprov_la_SOURCES += src/wp_gmac.c
+libwolfprov_la_SOURCES += src/wp_mac_kmgmt.c
+libwolfprov_la_SOURCES += src/wp_mac_sig.c
+libwolfprov_la_SOURCES += src/wp_hkdf.c
+libwolfprov_la_SOURCES += src/wp_tls1_prf.c
+libwolfprov_la_SOURCES += src/wp_kdf_kmgmt.c
+libwolfprov_la_SOURCES += src/wp_kdf_exch.c
+libwolfprov_la_SOURCES += src/wp_pbkdf2.c
+libwolfprov_la_SOURCES += src/wp_rsa_kmgmt.c
+libwolfprov_la_SOURCES += src/wp_rsa_sig.c
+libwolfprov_la_SOURCES += src/wp_rsa_asym.c
+libwolfprov_la_SOURCES += src/wp_ecc_kmgmt.c
+libwolfprov_la_SOURCES += src/wp_ecdh_exch.c
+libwolfprov_la_SOURCES += src/wp_ecdsa_sig.c
+libwolfprov_la_SOURCES += src/wp_ecx_kmgmt.c
+libwolfprov_la_SOURCES += src/wp_ecx_exch.c
+libwolfprov_la_SOURCES += src/wp_ecx_sig.c
+libwolfprov_la_SOURCES += src/wp_dh_kmgmt.c
+libwolfprov_la_SOURCES += src/wp_dh_exch.c
+libwolfprov_la_SOURCES += src/wp_drbg.c
+libwolfprov_la_SOURCES += src/wp_dec_pem2der.c
+libwolfprov_la_SOURCES += src/wp_dec_epki2pki.c
+libwolfprov_la_SOURCES += src/wp_file_store.c
+libwolfprov_la_SOURCES += src/wp_internal.c
+libwolfprov_la_SOURCES += src/wp_params.c
+libwolfprov_la_SOURCES += src/wp_logging.c
+
