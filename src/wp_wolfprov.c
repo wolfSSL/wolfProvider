@@ -454,12 +454,33 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
       wp_rsa_pki_pem_encoder_functions,
       "" },
+    { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_rsa_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_rsa_epki_pem_encoder_functions,
+      "" },
+#ifdef WOLFSSL_RSA_PSS_ENCODING
+    /* TODO: RSA-PSS encoding isn't supported in wolfSSL */
+    { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_rsapss_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_rsapss_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_rsapss_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_rsapss_pki_pem_encoder_functions,
+      "" },
+#endif
 
     { WP_NAMES_DH, WP_ENCODER_PROPERTIES(type-specific, der),
-      wp_dh_params_der_encoder_functions,
+      wp_dh_type_specific_der_encoder_functions,
       "" },
     { WP_NAMES_DH, WP_ENCODER_PROPERTIES(type-specific, pem),
-      wp_dh_params_pem_encoder_functions,
+      wp_dh_type_specific_pem_encoder_functions,
       "" },
     { WP_NAMES_DH, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_dh_spki_der_encoder_functions,
@@ -481,10 +502,10 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
       "" },
 
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(type-specific, der),
-      wp_ecc_params_der_encoder_functions,
+      wp_ecc_type_specific_der_encoder_functions,
       "" },
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(type-specific, pem),
-      wp_ecc_params_pem_encoder_functions,
+      wp_ecc_type_specific_pem_encoder_functions,
       "" },
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_ecc_spki_der_encoder_functions,
@@ -505,6 +526,82 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
       wp_ecc_epki_pem_encoder_functions,
       "" },
 
+    { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_x25519_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_x25519_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_x25519_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_x25519_pki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_x25519_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_x25519_epki_pem_encoder_functions,
+      "" },
+
+    { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_ed25519_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_ed25519_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_ed25519_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_ed25519_pki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_ed25519_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_ed25519_epki_pem_encoder_functions,
+      "" },
+
+    { WP_NAMES_X448, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_x448_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_X448, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_x448_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_X448, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_x448_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_X448, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_x448_pki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_X448, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_x448_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_X448, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_x448_epki_pem_encoder_functions,
+      "" },
+
+    { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_ed448_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_ed448_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_ed448_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_ed448_pki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_ed448_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_ed448_epki_pem_encoder_functions,
+      "" },
+
     { NULL, NULL, NULL, NULL }
 };
 
@@ -512,6 +609,62 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
 /* The properties to indicate the supported DER format. */
 #define WP_DECODER_PROPERTIES(format) \
     WOLFPROV_PROPERTIES ",input=der,structure=" #format
+
+/**
+ * Create dummy decoder.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  Provider context as a dummy decoder object.
+ */
+static WOLFPROV_CTX* wp_dummy_dec_new(WOLFPROV_CTX* provCtx)
+{
+    return provCtx;
+}
+/**
+ * Dispose of dummy decoder.
+ *
+ * @param [in] provCtx  Provider context as a dummy decoder object. Unused.
+ */
+static void wp_dummy_dec_free(WOLFPROV_CTX* provCtx)
+{
+    (void)provCtx;
+    return;
+}
+/**
+ * Dummy decoder.
+ *
+ * @param [in] ctx        Provider context as a dummy decoder object. Unused.
+ * @param [in] cBio       Core BIO to read data from. Unused.
+ * @param [in] selection  Parts of key to export. Unused.
+ * @param [in] dataCb     Callback to pass ECX key in parameters to. Unused.
+ * @param [in] dataCbArg  Argument to pass to callback. Unused.
+ * @param [in] pwCb       Password callback. Unused.
+ * @param [in] pwCbArg    Argument to pass to password callback. Unused.
+ * @return  1 on success.
+ */
+static int wp_dummy_decode(WOLFPROV_CTX* ctx, OSSL_CORE_BIO* cBio,
+    int selection, OSSL_CALLBACK* dataCb, void* dataCbArg,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    (void)ctx;
+    (void)cBio;
+    (void)selection;
+    (void)dataCb;
+    (void)dataCbArg;
+    (void)pwCb;
+    (void)pwCbArg;
+
+    return 1;
+}
+/**
+ * Dispatch table for dummy decoder.
+ */
+const OSSL_DISPATCH wp_dummy_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,  (DFUNC)wp_dummy_dec_new  },
+    { OSSL_FUNC_DECODER_FREECTX, (DFUNC)wp_dummy_dec_free },
+    { OSSL_FUNC_DECODER_DECODE,  (DFUNC)wp_dummy_decode   },
+    { 0, NULL }
+};
 
 /* List of ASN.1 decoding implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_decoder[] = {
@@ -521,6 +674,15 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
     { WP_NAMES_RSA, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_rsa_pki_decoder_functions,
       "" },
+    { WP_NAMES_RSA, WP_DECODER_PROPERTIES(type-specific),
+      wp_rsa_legacy_decoder_functions,
+      "" },
+    { WP_NAMES_RSA_PSS, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
+      wp_rsapss_spki_decoder_functions,
+      "" },
+    { WP_NAMES_RSA_PSS, WP_DECODER_PROPERTIES(PrivateKeyInfo),
+      wp_rsapss_pki_decoder_functions,
+      "" },
 
     { WP_NAMES_DH, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_dh_spki_decoder_functions,
@@ -529,7 +691,7 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
       wp_dh_pki_decoder_functions,
       "" },
     { WP_NAMES_DH, WP_DECODER_PROPERTIES(type-specific),
-      wp_dh_params_decoder_functions,
+      wp_dh_type_specific_decoder_functions,
       "" },
 
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
@@ -539,7 +701,7 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
       wp_ecc_pki_decoder_functions,
       "" },
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(type-specific),
-      wp_ecc_params_decoder_functions,
+      wp_ecc_type_specific_decoder_functions,
       "" },
 
     { WP_NAMES_X25519, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
@@ -568,6 +730,15 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
       "" },
     { WP_NAMES_ED448, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_ed448_pki_decoder_functions,
+      "" },
+
+    /* Dummy decoder added to match PKI bit not match EPKI from context.
+     * Flag set to say context type checked even though it didn't match and
+     * not checked again.
+     * PEM to DER implementation strips encryption.
+     */
+    { WP_NAMES_DER, WP_DECODER_PROPERTIES(PrivateKeyInfo),
+      wp_dummy_decoder_functions,
       "" },
 
     { WP_NAMES_DER, WOLFPROV_PROPERTIES ",input=pem",

@@ -1971,10 +1971,18 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     if (ok && (!wp_read_der_bio(cBio, &data, &len))) {
         ok = 0;
     }
-    if (ok && (ctx->format == WP_ENC_FORMAT_PARAMS)) {
-        if (!wp_dh_decode_params(dh, data, len)) {
-            ok = 0;
-            decoded = 0;
+    if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
+        if (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
+            if (!wp_dh_decode_params(dh, data, len)) {
+                ok = 0;
+                decoded = 0;
+            }
+        }
+        else {
+            if (!wp_dh_decode_pki(dh, data, len)) {
+                ok = 0;
+                decoded = 0;
+            }
         }
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
@@ -2182,14 +2190,11 @@ static int wp_dh_encode_pki(const wp_Dh *dh, unsigned char* keyData,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_dh_encode_epki_size(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
-    size_t* keyLen)
+static int wp_dh_encode_epki_size(const wp_Dh *dh, size_t* keyLen)
 {
     int ok = 1;
     int ret;
     word32 len;
-
-    (void)ctx;
 
     ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &len);
     if (ret != LENGTH_ONLY_E) {
@@ -2277,7 +2282,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         ok = 0;
     }
 
-    if (ok && (ctx->format == WP_ENC_FORMAT_PARAMS)) {
+    if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         private = 1;
         if (!wp_dh_encode_params_size(key, &derLen)) {
             ok = 0;
@@ -2296,7 +2301,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
-        if (!wp_dh_encode_epki_size(ctx, key, &derLen)) {
+        if (!wp_dh_encode_epki_size(key, &derLen)) {
             ok = 0;
         }
     }
@@ -2309,7 +2314,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
 
-    if (ok && (ctx->format == WP_ENC_FORMAT_PARAMS)) {
+    if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         pemType = DH_PARAM_TYPE;
         if (!wp_dh_encode_params(key, derData, &derLen)) {
             ok = 0;
@@ -2411,9 +2416,10 @@ static int wp_dh_export_object(wp_DhEncDecCtx* ctx, wp_Dh* dh, size_t size,
  * @return  New DH encoder/decoder context object on success.
  * @return  NULL on failure.
  */
-static wp_DhEncDecCtx* wp_dh_params_dec_new(WOLFPROV_CTX* provCtx)
+static wp_DhEncDecCtx* wp_dh_type_specific_dec_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_dh_enc_dec_new(provCtx, WP_ENC_FORMAT_PARAMS, WP_FORMAT_DER);
+    return wp_dh_enc_dec_new(provCtx, WP_ENC_FORMAT_TYPE_SPECIFIC,
+        WP_FORMAT_DER);
 }
 
 /**
@@ -2424,7 +2430,8 @@ static wp_DhEncDecCtx* wp_dh_params_dec_new(WOLFPROV_CTX* provCtx)
  * @return  1 when supported.
  * @return  0 when not supported.
  */
-static int wp_dh_params_does_selection(WOLFPROV_CTX* provCtx, int selection)
+static int wp_dh_type_specific_does_selection(WOLFPROV_CTX* provCtx,
+    int selection)
 {
     int ok;
 
@@ -2441,39 +2448,42 @@ static int wp_dh_params_does_selection(WOLFPROV_CTX* provCtx, int selection)
 }
 
 /**
- * Dispatch table for parameters decoder.
+ * Dispatch table for type-specific decoder.
  */
-const OSSL_DISPATCH wp_dh_params_decoder_functions[] = {
-    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_dh_params_dec_new          },
+const OSSL_DISPATCH wp_dh_type_specific_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_dh_type_specific_dec_new   },
     { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_dh_enc_dec_free            },
-    { OSSL_FUNC_DECODER_DOES_SELECTION, (DFUNC)wp_dh_params_does_selection   },
+    { OSSL_FUNC_DECODER_DOES_SELECTION,
+                                   (DFUNC)wp_dh_type_specific_does_selection },
     { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_dh_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_dh_export_object           },
     { 0, NULL }
 };
 
 /**
- * Create a new DH encoder/decoder context that handles encoding params in DER.
+ * Create a new DH encoder/decoder context that handles encoding t-s in DER.
  *
  * @param [in] provCtx  Provider context.
  * @return  New DH encoder/decoder context object on success.
  * @return  NULL on failure.
  */
-static wp_DhEncDecCtx* wp_dh_params_der_enc_new(WOLFPROV_CTX* provCtx)
+static wp_DhEncDecCtx* wp_dh_type_specific_der_enc_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_dh_enc_dec_new(provCtx, WP_ENC_FORMAT_PARAMS, WP_FORMAT_DER);
+    return wp_dh_enc_dec_new(provCtx, WP_ENC_FORMAT_TYPE_SPECIFIC,
+        WP_FORMAT_DER);
 }
 
 /**
- * Dispatch table for parameters to DER encoder.
+ * Dispatch table for type-specific to DER encoder.
  */
-const OSSL_DISPATCH wp_dh_params_der_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_dh_params_der_enc_new      },
+const OSSL_DISPATCH wp_dh_type_specific_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,    (DFUNC)wp_dh_type_specific_der_enc_new    },
     { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_dh_enc_dec_free            },
     { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_dh_enc_dec_settable_ctx_params },
+                                   (DFUNC)wp_dh_enc_dec_settable_ctx_params  },
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_dh_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_dh_params_does_selection   },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION,
+                                   (DFUNC)wp_dh_type_specific_does_selection },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_dh_encode                  },
     { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_dh_import                  },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_dh_free                    },
@@ -2481,27 +2491,29 @@ const OSSL_DISPATCH wp_dh_params_der_encoder_functions[] = {
 };
 
 /**
- * Create a new DH encoder/decoder context that handles encoding params in PEM.
+ * Create a new DH encoder/decoder context that handles encoding t-s in PEM.
  *
  * @param [in] provCtx  Provider context.
  * @return  New DH encoder/decoder context object on success.
  * @return  NULL on failure.
  */
-static wp_DhEncDecCtx* wp_dh_params_pem_enc_new(WOLFPROV_CTX* provCtx)
+static wp_DhEncDecCtx* wp_dh_type_specific_pem_enc_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_dh_enc_dec_new(provCtx, WP_ENC_FORMAT_PARAMS, WP_FORMAT_PEM);
+    return wp_dh_enc_dec_new(provCtx, WP_ENC_FORMAT_TYPE_SPECIFIC,
+        WP_FORMAT_PEM);
 }
 
 /**
- * Dispatch table for params to PEM encoder.
+ * Dispatch table for type-specific to PEM encoder.
  */
-const OSSL_DISPATCH wp_dh_params_pem_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_dh_params_pem_enc_new      },
+const OSSL_DISPATCH wp_dh_type_specific_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,    (DFUNC)wp_dh_type_specific_pem_enc_new    },
     { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_dh_enc_dec_free            },
     { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_dh_enc_dec_settable_ctx_params },
+                                   (DFUNC)wp_dh_enc_dec_settable_ctx_params  },
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_dh_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_dh_params_does_selection   },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION,
+                                   (DFUNC)wp_dh_type_specific_does_selection },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_dh_encode                  },
     { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_dh_import                  },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_dh_free                    },

@@ -975,11 +975,11 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
 }
 
 /**
- * Export the ECC key.
+ * Export the ECX key.
  *
  * Key data placed in parameters and then passed to callback.
  *
- * @param [in] ecc        ECC key object.
+ * @param [in] ecx        ECX key object.
  * @param [in] selection  Parts of key to export.
  * @param [in] paramCb    Function to pass constructed parameters to.
  * @param [in] cbArg      Argument to pass to callback.
@@ -1645,37 +1645,44 @@ typedef struct wp_EcxEncDecCtx {
     int keyType;
     /** Supported format. */
     int format;
-    /** Indicates whether this an encoder. */
-    int encoder;
+    /** Data format. */
+    int encoding;
+
+    /** Cipher to use when encoding EncryptedPrivateKeyInfo. */
+    int cipher;
+    /** Name of cipher to use when encoding EncryptedPrivateKeyInfo. */
+    const char* cipherName;
 } wp_EcxEncDecCtx;
 
 /**
  * Create a new ECX encoder/decoder context.
  *
- * @param [in] provCtx  Provider context.
- * @param [in] format   Supported format.
- * @param [in] encoder  Indicates whether this an encoder.
- * @param [in] keyType  Type of key.
- * @param [in] format   Supported key format.
- * @param [in] decode   Function to decode DER data to a key.
- * @param [in] encode   Function to encode key to DER data.
+ * @param [in] provCtx   Provider context.
+ * @param [in] format    Supported format.
+ * @param [in] encoder   Indicates whether this an encoder.
+ * @param [in] keyType   Type of key.
+ * @param [in] format    Supported key format.
+ * @param [in] encoding  Data format.
+ * @param [in] decode    Function to decode DER data to a key.
+ * @param [in] encode    Function to encode key to DER data.
  * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_ecx_enc_dec_new(WOLFPROV_CTX* provCtx,
-    int keyType, int format, WP_ECX_DECODE decode, WP_ECX_ENCODE encode)
+    int keyType, int format, int encoding, WP_ECX_DECODE decode,
+    WP_ECX_ENCODE encode)
 {
     wp_EcxEncDecCtx *ctx = NULL;
     if (wolfssl_prov_is_running()) {
         ctx = (wp_EcxEncDecCtx*)OPENSSL_zalloc(sizeof(wp_EcxEncDecCtx));
     }
     if (ctx != NULL) {
-        ctx->decode  = decode;
-        ctx->encode  = encode;
-        ctx->provCtx = provCtx;
-        ctx->keyType = keyType;
-        ctx->format  = format;
-        ctx->encoder = encode != NULL;
+        ctx->decode   = decode;
+        ctx->encode   = encode;
+        ctx->provCtx  = provCtx;
+        ctx->keyType  = keyType;
+        ctx->format   = format;
+        ctx->encoding = encoding;
     }
     return ctx;
 }
@@ -1683,18 +1690,57 @@ static wp_EcxEncDecCtx* wp_ecx_enc_dec_new(WOLFPROV_CTX* provCtx,
 /**
  * Dispose of ECX encoder/decoder context object.
  *
- * @param [in, out] ctx  ECC encoder/decoder context object.
+ * @param [in, out] ctx  ECX encoder/decoder context object.
  */
-static void wp_ecx_dec_free(wp_EcxEncDecCtx* ctx)
+static void wp_ecx_enc_dec_free(wp_EcxEncDecCtx* ctx)
 {
     OPENSSL_free(ctx);
+}
+
+/**
+ * Return the settable parameters for the ECX encoder/decoder context.
+ *
+ * @param [in] provCtx  Provider context. Unused.
+ * @return  Array of parameters with data type.
+ */
+static const OSSL_PARAM* wp_ecx_enc_dec_settable_ctx_params(
+    WOLFPROV_CTX* provCtx)
+{
+    static const OSSL_PARAM wp_ecx_enc_dec_supported_settables[] = {
+        OSSL_PARAM_utf8_string(OSSL_ENCODER_PARAM_CIPHER, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_ENCODER_PARAM_PROPERTIES, NULL, 0),
+        OSSL_PARAM_END,
+    };
+
+    (void)provCtx;
+    return wp_ecx_enc_dec_supported_settables;
+}
+
+/**
+ * Set the ECX encoder/decoder context parameters.
+ *
+ * @param [in, out] ctx     ECX encoder/decoder context object.
+ * @param [in]      params  Aray of parameters.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecx_enc_dec_set_ctx_params(wp_EcxEncDecCtx* ctx,
+    const OSSL_PARAM params[])
+{
+    int ok = 1;
+
+    if (!wp_cipher_from_params(params, &ctx->cipher, &ctx->cipherName)) {
+        ok = 0;
+    }
+
+    return ok;
 }
 
 /**
  * Construct parameters from ECX key and pass off to callback.
  *
  * @param [in] ecx        ECX key object.
- * @param [in] dataCb     Callback to pass ECC key in parameters to.
+ * @param [in] dataCb     Callback to pass ECX key in parameters to.
  * @param [in] dataCbArg  Argument to pass to callback.
  * @return  1 on success.
  * @return  0 on failure.
@@ -1715,7 +1761,7 @@ static int wp_ecx_dec_send_params(wp_Ecx* ecx, const char* dataType,
         &ecx, sizeof(ecx));
     params[3] = OSSL_PARAM_construct_end();
 
-    /* Callback to do something with ECC key object. */
+    /* Callback to do something with ECX key object. */
     if (!dataCb(params, dataCbArg)) {
         ok = 0;
     }
@@ -1731,14 +1777,14 @@ static int wp_ecx_dec_send_params(wp_Ecx* ecx, const char* dataType,
  * @param [in, out] ctx        ECX encoder/decoder context object.
  * @param [in, out] cBio       Core BIO to read data from.
  * @param [in]      selection  Parts of key to export.
- * @param [in]      dataCb     Callback to pass ECC key in parameters to.
+ * @param [in]      dataCb     Callback to pass ECX key in parameters to.
  * @param [in]      dataCbArg  Argument to pass to callback.
  * @param [in]      pwCb       Password callback.
  * @param [in]      pwCbArg    Argument to pass to password callback.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_ecx_dec_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cin,
+static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     int selection, OSSL_CALLBACK* dataCb, void* dataCbArg,
     OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
 {
@@ -1776,7 +1822,7 @@ static int wp_ecx_dec_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cin,
     }
 
     if (ok) {
-        ok = wp_read_der_bio(cin, &data, &len);
+        ok = wp_read_der_bio(cBio, &data, &len);
     }
     if (ok) {
         rc = ctx->decode(data, &idx, (void*)&ecx->key, len);
@@ -1809,10 +1855,111 @@ static int wp_ecx_dec_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cin,
 }
 
 /**
+ * Encode the ECX key.
+ *
+ * @param [in]      ctx        ECX encoder/decoder context object.
+ * @param [in, out] cBio       Core BIO to write data to.
+ * @param [in]      key        ECX key object.
+ * @param [in]      params     Key parameters. Unused.
+ * @param [in]      selection  Parts of key to encode. Unused.
+ * @param [in]      pwCb       Password callback.
+ * @param [in]      pwCbArg    Argument to pass to password callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
+    const wp_Ecx *ecx, const OSSL_PARAM* params, int selection,
+    OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg)
+{
+    int ok = 1;
+    int rc;
+    BIO* out = wp_corebio_get_bio(cBio);
+    unsigned char* keyData = NULL;
+    size_t keyLen = 0;
+    unsigned char derData[160];
+    size_t derLen = 0;
+    unsigned char* pemData = NULL;
+    size_t pemLen = 0;
+    int pemType = (ctx->format == WP_ENC_FORMAT_SPKI) ? PUBLICKEY_TYPE :
+                                                        PKCS8_PRIVATEKEY_TYPE;
+    int private = (ctx->format == WP_ENC_FORMAT_PKI) ||
+                  (ctx->format == WP_ENC_FORMAT_EPKI);
+    byte* cipherInfo = NULL;
+
+    (void)params;
+    (void)selection;
+
+    if (out == NULL) {
+        ok = 0;
+    }
+
+    if (ok) {
+        rc = ctx->encode((void*)&ecx->key, derData, sizeof(derData));
+        if (rc <= 0) {
+            ok = 0;
+        }
+        else {
+            derLen = rc;
+        }
+    }
+    if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
+        if (!wp_encrypt_key(ctx->provCtx, ctx->cipherName, derData, &derLen, rc,
+            pwCb, pwCbArg, &cipherInfo)) {
+            ok = 0;
+        }
+    }
+
+    if (ok && (ctx->encoding == WP_FORMAT_DER)) {
+        keyData = derData;
+        keyLen = derLen;
+    }
+    else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
+        rc = wc_DerToPemEx(derData, derLen, NULL, 0, cipherInfo, pemType);
+        if (rc <= 0) {
+            ok = 0;
+        }
+        if (ok) {
+            pemLen = rc;
+            pemData = OPENSSL_malloc(pemLen);
+            if (pemData == NULL) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            rc = wc_DerToPemEx(derData, derLen, pemData, pemLen, cipherInfo,
+                pemType);
+            if (rc <= 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            keyLen = pemLen = rc;
+            keyData = pemData;
+        }
+    }
+    if (ok) {
+        rc = BIO_write(out, keyData, keyLen);
+        if (rc <= 0) {
+            ok = 0;
+        }
+    }
+
+    if (private) {
+        OPENSSL_cleanse(derData, derLen);
+        OPENSSL_clear_free(pemData, pemLen);
+    }
+    else {
+        OPENSSL_free(pemData);
+    }
+    OPENSSL_free(cipherInfo);
+    return ok;
+}
+
+/**
  * Export the ECX key object.
  *
  * @param [in] ctx          ECX encoder/decoder context object.
- * @param [in] ecc          ECX key object.
+ * @param [in] ecx          ECX key object.
  * @oaram [in] size         Size of key object.
  * @param [in] exportCb     Callback to export key.
  * @param [in] exportCbArg  Argument to pass to callback.
@@ -1839,7 +1986,7 @@ static int wp_ecx_export_object(wp_EcxEncDecCtx* ctx, wp_Ecx* ecx, size_t size,
  * @return  1 when supported.
  * @return  0 when not supported.
  */
-static int wp_ecx_spki_dec_does_selection(WOLFPROV_CTX* provCtx, int selection)
+static int wp_ecx_spki_does_selection(WOLFPROV_CTX* provCtx, int selection)
 {
     int ok = 0;
 
@@ -1867,7 +2014,7 @@ static int wp_ecx_spki_dec_does_selection(WOLFPROV_CTX* provCtx, int selection)
  * @return  1 when supported.
  * @return  0 when not supported.
  */
-static int wp_ecx_pki_dec_does_selection(WOLFPROV_CTX* provCtx, int selection)
+static int wp_ecx_pki_does_selection(WOLFPROV_CTX* provCtx, int selection)
 {
     int ok;
 
@@ -1887,7 +2034,21 @@ static int wp_ecx_pki_dec_does_selection(WOLFPROV_CTX* provCtx, int selection)
  * X25519 Public Key
  */
 
-static int wp_x25519_pub_deocde(const byte* input, word32* inOutIdx,
+/**
+ * Decode public X25519 key.
+ *
+ * Loads little-endian public key.
+ *
+ * @param [in]      input     Buffer holding X25519 public key data.
+ * @param [in, out] inOutIdx  On in, index into buffer of data.
+ *                            On out, index into buffer after data.
+ * @param [in, out] key       X25519 key object.
+ * @param [in]      inSz      Length of buffer in bytes.
+ * @return  0 on success.
+ * @return  ASN_PARSE_E when data is not valid.
+ * @return  BUFFER_E when data is not valid.
+ */
+static int wp_x25519_pub_decode(const byte* input, word32* inOutIdx,
     curve25519_key* key, word32 inSz)
 {
     int ret;
@@ -1907,13 +2068,13 @@ static int wp_x25519_pub_deocde(const byte* input, word32* inOutIdx,
  * for X25519 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_x25519_spki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_SPKI,
-        (WP_ECX_DECODE)wp_x25519_pub_deocde, NULL);
+        0, (WP_ECX_DECODE)wp_x25519_pub_decode, NULL);
 }
 
 /**
@@ -1921,11 +2082,103 @@ static wp_EcxEncDecCtx* wp_x25519_spki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_x25519_spki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_x25519_spki_dec_new         },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_spki_dec_does_selection },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Encode the public part of an X25519 key in DER.
+ *
+ * Pass NULL for output to get the size of the encoding.
+ *
+ * @param [in]  key       X25519 key object.
+ * @param [out] output    Buffer to put encoded data in.
+ * @param [in]  inLen     Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success.
+ * @return  BAD_FUNC_ARG when key is NULL.
+ * @return  MEMORY_E when dynamic memory allocation failed.
+ */
+static int wp_Curve25519PublicKeyToDer(curve25519_key* key, byte* output,
+    word32 inLen)
+{
+    int ret;
+
+    /* Always include the algorithm. */
+    ret = wc_Curve25519PublicKeyToDer(key, output, inLen, 1);
+    if (ret > 0) {
+        /* Reverse the order of the key. */
+        int i;
+        byte* p = output + ret - CURVE25519_KEYSIZE;
+
+        for (i = 0; i < CURVE25519_KEYSIZE / 2; i++) {
+            byte t = p[i];
+            p[i] = p[CURVE25519_KEYSIZE - 1 - i];
+            p[CURVE25519_KEYSIZE - 1 - i] = t;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x25519_spki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve25519PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x25519_spki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x25519_spki_der_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x25519_spki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve25519PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x25519_spki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x25519_spki_pem_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
 
@@ -1933,7 +2186,21 @@ const OSSL_DISPATCH wp_x25519_spki_decoder_functions[] = {
  * X25519 Private Key
  */
 
-static int wp_x25519_priv_deocde(const byte* input, word32* inOutIdx,
+/**
+ * Decode private X25519 key.
+ *
+ * Loads little-endian private key.
+ *
+ * @param [in]      input     Buffer holding X25519 private key data.
+ * @param [in, out] inOutIdx  On in, index into buffer of data.
+ *                            On out, index into buffer after data.
+ * @param [in, out] key       X25519 key object.
+ * @param [in]      inSz      Length of buffer in bytes.
+ * @return  0 on success.
+ * @return  ASN_PARSE_E when data is not valid.
+ * @return  BUFFER_E when data is not valid.
+ */
+static int wp_x25519_priv_decode(const byte* input, word32* inOutIdx,
     curve25519_key* key, word32 inSz)
 {
     int ret;
@@ -1954,13 +2221,13 @@ static int wp_x25519_priv_deocde(const byte* input, word32* inOutIdx,
  * for X25519 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_x25519_pki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_PKI,
-        (WP_ECX_DECODE)wp_x25519_priv_deocde, NULL);
+        0, (WP_ECX_DECODE)wp_x25519_priv_decode, NULL);
 }
 
 /**
@@ -1968,11 +2235,164 @@ static wp_EcxEncDecCtx* wp_x25519_pki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_x25519_pki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_x25519_pki_dec_new          },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_pki_dec_does_selection  },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Encode the private part of an X25519 key in DER.
+ *
+ * Pass NULL for output to get the size of the encoding.
+ *
+ * @param [in]  key       X25519 key object.
+ * @param [out] output    Buffer to put encoded data in.
+ * @param [in]  inLen     Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success.
+ * @return  BAD_FUNC_ARG when key is NULL.
+ * @return  MEMORY_E when dynamic memory allocation failed.
+ */
+static int wp_Curve25519PrivateKeyToDer(curve25519_key* key, byte* output,
+    word32 inLen)
+{
+    int ret;
+
+    ret = wc_Curve25519PrivateKeyToDer(key, output, inLen);
+    if (ret > 0) {
+        /* Reverse the order of the key. */
+        int i;
+        byte* p = output + ret - CURVE25519_KEYSIZE;
+
+        for (i = 0; i < CURVE25519_KEYSIZE / 2; i++) {
+            byte t = p[i];
+            p[i] = p[CURVE25519_KEYSIZE - 1 - i];
+            p[CURVE25519_KEYSIZE - 1 - i] = t;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x25519_pki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x25519_pki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x25519_pki_der_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x25519_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x25519_pki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x25519_pki_pem_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/*
+ * X25519 EncryptedPrivateKeyInfo
+ */
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x25519_epki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x25519_epki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x25519_epki_der_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x25519_epki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X25519, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x25519_epki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x25519_epki_pem_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
 
@@ -1985,13 +2405,13 @@ const OSSL_DISPATCH wp_x25519_pki_decoder_functions[] = {
  * Ed25519 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_ed25519_spki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_SPKI,
-        (WP_ECX_DECODE)wc_Ed25519PublicKeyDecode, NULL);
+        0, (WP_ECX_DECODE)wc_Ed25519PublicKeyDecode, NULL);
 }
 
 /**
@@ -1999,11 +2419,88 @@ static wp_EcxEncDecCtx* wp_ed25519_spki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_ed25519_spki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_ed25519_spki_dec_new        },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_spki_dec_does_selection },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Encode the public part of an Ed25519 key in DER.
+ *
+ * Pass NULL for output to get the size of the encoding.
+ *
+ * @param [in]  key       Ed25519 key object.
+ * @param [out] output    Buffer to put encoded data in.
+ * @param [in]  inLen     Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success.
+ * @return  BAD_FUNC_ARG when key is NULL.
+ * @return  MEMORY_E when dynamic memory allocation failed.
+ */
+static int wp_Ed25519PublicKeyToDer(ed25519_key* key, byte* output,
+    word32 inLen)
+{
+    /* Always include the algorithm. */
+    return wc_Ed25519PublicKeyToDer(key, output, inLen, 1);
+}
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed25519_spki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Ed25519PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_ed25519_spki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed25519_spki_der_enc_new    },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed25519_spki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Ed25519PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_ed25519_spki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed25519_spki_pem_enc_new    },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
 
@@ -2016,13 +2513,13 @@ const OSSL_DISPATCH wp_ed25519_spki_decoder_functions[] = {
  * Ed25519 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_ed25519_pki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_PKI,
-        (WP_ECX_DECODE)wc_Ed25519PrivateKeyDecode, NULL);
+        0, (WP_ECX_DECODE)wc_Ed25519PrivateKeyDecode, NULL);
 }
 
 /**
@@ -2030,11 +2527,131 @@ static wp_EcxEncDecCtx* wp_ed25519_pki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_ed25519_pki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_ed25519_pki_dec_new         },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_pki_dec_does_selection  },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed25519_pki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wc_Ed25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_ed25519_pki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed25519_pki_der_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed25519_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wc_Ed25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_ed25519_pki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed25519_pki_pem_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/*
+ * Ed25519 EncryptedPrivateKeyInfo
+ */
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed25519_epki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wc_Ed25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_ed25519_epki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed25519_epki_der_enc_new    },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed25519_epki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED25519, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wc_Ed25519PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_ed25519_epki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed25519_epki_pem_enc_new    },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
 
@@ -2042,7 +2659,21 @@ const OSSL_DISPATCH wp_ed25519_pki_decoder_functions[] = {
  * X448 Public Key
  */
 
-static int wp_x448_pub_deocde(const byte* input, word32* inOutIdx,
+/**
+ * Decode public X448 key.
+ *
+ * Loads little-endian public key.
+ *
+ * @param [in]      input     Buffer holding X448 public key data.
+ * @param [in, out] inOutIdx  On in, index into buffer of data.
+ *                            On out, index into buffer after data.
+ * @param [in, out] key       X448 key object.
+ * @param [in]      inSz      Length of buffer in bytes.
+ * @return  0 on success.
+ * @return  ASN_PARSE_E when data is not valid.
+ * @return  BUFFER_E when data is not valid.
+ */
+static int wp_x448_pub_decode(const byte* input, word32* inOutIdx,
     curve448_key* key, word32 inSz)
 {
     int ret;
@@ -2061,13 +2692,13 @@ static int wp_x448_pub_deocde(const byte* input, word32* inOutIdx,
  * for X448 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_x448_spki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_SPKI,
-        (WP_ECX_DECODE)wp_x448_pub_deocde, NULL);
+        0, (WP_ECX_DECODE)wp_x448_pub_decode, NULL);
 }
 
 /**
@@ -2075,11 +2706,103 @@ static wp_EcxEncDecCtx* wp_x448_spki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_x448_spki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_x448_spki_dec_new           },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_spki_dec_does_selection },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Encode the public part of an X448 key in DER.
+ *
+ * Pass NULL for output to get the size of the encoding.
+ *
+ * @param [in]  key       X448 key object.
+ * @param [out] output    Buffer to put encoded data in.
+ * @param [in]  outLen    Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success.
+ * @return  BAD_FUNC_ARG when key is NULL.
+ * @return  MEMORY_E when dynamic memory allocation failed.
+ */
+static int wp_Curve448PublicKeyToDer(curve448_key* key, byte* output,
+    word32 inLen)
+{
+    int ret;
+
+    /* Always include the algorithm. */
+    ret = wc_Curve448PublicKeyToDer(key, output, inLen, 1);
+    if (ret > 0) {
+        /* Reverse the order of the key. */
+        int i;
+        byte* p = output + ret - CURVE448_KEY_SIZE;
+
+        for (i = 0; i < CURVE448_KEY_SIZE / 2; i++) {
+            byte t = p[i];
+            p[i] = p[CURVE448_KEY_SIZE - 1 - i];
+            p[CURVE448_KEY_SIZE - 1 - i] = t;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_spki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve448PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x448_spki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_spki_der_enc_new       },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_spki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve448PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x448_spki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_spki_pem_enc_new       },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
 
@@ -2087,7 +2810,21 @@ const OSSL_DISPATCH wp_x448_spki_decoder_functions[] = {
  * X448 Private Key
  */
 
-static int wp_x448_priv_deocde(const byte* input, word32* inOutIdx,
+/**
+ * Decode private X448 key.
+ *
+ * Loads little-endian private key.
+ *
+ * @param [in]      input     Buffer holding X448 private key data.
+ * @param [in, out] inOutIdx  On in, index into buffer of data.
+ *                            On out, index into buffer after data.
+ * @param [in, out] key       X448 key object.
+ * @param [in]      inSz      Length of buffer in bytes.
+ * @return  0 on success.
+ * @return  ASN_PARSE_E when data is not valid.
+ * @return  BUFFER_E when data is not valid.
+ */
+static int wp_x448_priv_decode(const byte* input, word32* inOutIdx,
     curve448_key* key, word32 inSz)
 {
     int ret;
@@ -2108,13 +2845,13 @@ static int wp_x448_priv_deocde(const byte* input, word32* inOutIdx,
  * for X448 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_x448_pki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_PKI,
-        (WP_ECX_DECODE)wp_x448_priv_deocde, NULL);
+        0, (WP_ECX_DECODE)wp_x448_priv_decode, NULL);
 }
 
 /**
@@ -2122,10 +2859,10 @@ static wp_EcxEncDecCtx* wp_x448_pki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_x448_pki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_x448_pki_dec_new            },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_pki_dec_does_selection  },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
     { 0, NULL }
 };
@@ -2139,13 +2876,13 @@ const OSSL_DISPATCH wp_x448_pki_decoder_functions[] = {
  * Ed448 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_ed448_spki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_SPKI,
-        (WP_ECX_DECODE)wc_Ed448PublicKeyDecode, NULL);
+        0, (WP_ECX_DECODE)wc_Ed448PublicKeyDecode, NULL);
 }
 
 /**
@@ -2153,16 +2890,92 @@ static wp_EcxEncDecCtx* wp_ed448_spki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_ed448_spki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_ed448_spki_dec_new          },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_spki_dec_does_selection },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
     { 0, NULL }
 };
 
+/**
+ * Encode the public part of an Ed448 key in DER.
+ *
+ * Pass NULL for output to get the size of the encoding.
+ *
+ * @param [in]  key       Ed448 key object.
+ * @param [out] output    Buffer to put encoded data in.
+ * @param [in]  outLen    Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success.
+ * @return  BAD_FUNC_ARG when key is NULL.
+ * @return  MEMORY_E when dynamic memory allocation failed.
+ */
+static int wp_Ed448PublicKeyToDer(ed448_key* key, byte* output, word32 inLen)
+{
+    /* Always include the algorithm. */
+    return wc_Ed448PublicKeyToDer(key, output, inLen, 1);
+}
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed448_spki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Ed448PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_ed448_spki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed448_spki_der_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding SPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed448_spki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Ed448PublicKeyToDer);
+}
+
+/**
+ * Dispatch table for SPKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_ed448_spki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed448_spki_pem_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
 /*
- * X448 PrivateKeyInfo
+ * Ed448 PrivateKeyInfo
  */
 
 /**
@@ -2170,13 +2983,13 @@ const OSSL_DISPATCH wp_ed448_spki_decoder_functions[] = {
  * Ed448 keys.
  *
  * @param [in] provCtx  Provider context.
- * @return  New ECC encoder/decoder context object on success.
+ * @return  New ECX encoder/decoder context object on success.
  * @return  NULL on failure.
  */
 static wp_EcxEncDecCtx* wp_ed448_pki_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_PKI,
-        (WP_ECX_DECODE)wc_Ed448PrivateKeyDecode, NULL);
+        0, (WP_ECX_DECODE)wc_Ed448PrivateKeyDecode, NULL);
 }
 
 /**
@@ -2184,11 +2997,284 @@ static wp_EcxEncDecCtx* wp_ed448_pki_dec_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_ed448_pki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_ed448_pki_dec_new           },
-    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_dec_free                },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
     { OSSL_FUNC_DECODER_DOES_SELECTION,
-                                        (DFUNC)wp_ecx_pki_dec_does_selection  },
-    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_dec_decode              },
+                                        (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecx_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed448_pki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wc_Ed448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_ed448_pki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed448_pki_der_enc_new       },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed448_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wc_Ed448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_ed448_pki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed448_pki_pem_enc_new       },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/*
+ * Ed448 EncryptedPrivateKeyInfo
+ */
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed448_epki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wc_Ed448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_ed448_epki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed448_epki_der_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_ed448_epki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_ED448, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wc_Ed448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_ed448_epki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ed448_epki_pem_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Encode the private part of an X448 key in DER.
+ *
+ * Pass NULL for output to get the size of the encoding.
+ *
+ * @param [in]  key       X448 key object.
+ * @param [out] output    Buffer to put encoded data in.
+ * @param [in]  inLen     Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success.
+ * @return  BAD_FUNC_ARG when key is NULL.
+ * @return  MEMORY_E when dynamic memory allocation failed.
+ */
+static int wp_Curve448PrivateKeyToDer(curve448_key* key, byte* output,
+    word32 inLen)
+{
+    int ret;
+
+    ret = wc_Curve448PrivateKeyToDer(key, output, inLen);
+    if (ret > 0) {
+        /* Reverse the order of the key. */
+        int i;
+        byte* p = output + ret - CURVE448_KEY_SIZE;
+
+        for (i = 0; i < CURVE448_KEY_SIZE / 2; i++) {
+            byte t = p[i];
+            p[i] = p[CURVE448_KEY_SIZE - 1 - i];
+            p[CURVE448_KEY_SIZE - 1 - i] = t;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_pki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x448_pki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_pki_der_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x448_pki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_pki_pem_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/*
+ * X448 EncryptedPrivateKeyInfo
+ */
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_epki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x448_epki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_epki_der_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_epki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x448_epki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_epki_pem_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
 

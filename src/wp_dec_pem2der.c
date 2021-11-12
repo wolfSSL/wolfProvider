@@ -221,8 +221,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     else if (XMEMCMP(data, "-----BEGIN RSA PRIVATE KEY-----", 31) == 0) {
         type = RSA_TYPE;
         dataType = "RSA";
-        dataFormat = "PrivateKeyInfo";
+        dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
+        if (XMEMCMP(data + 32, "Proc-Type", 9) == 0) {
+            info.passwd_cb = wp_pem_password_cb;
+            info.passwd_userdata = (void*)&wpPwCb;
+        }
     }
     else if (XMEMCMP(data, "-----BEGIN EC PARAMETERS-----", 29) == 0) {
         dataType = "EC";

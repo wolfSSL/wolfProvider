@@ -314,6 +314,7 @@ static wp_Ecc* wp_ecc_new(WOLFPROV_CTX *provCtx)
         #endif
             ecc->provCtx = provCtx;
             ecc->refCnt = 1;
+            ecc->includePublic = 1;
         }
 
         if (!ok) {
@@ -1549,7 +1550,7 @@ typedef struct wp_EccEncDecCtx {
  *
  * @param [in] provCtx   Provider context.
  * @param [in] format    Supported format.
- * @param [in] encoding  Indicates whether this an encoder.
+ * @param [in] encoding  Data format.
  * @return  New ECC encoder/decoder context object on success.
  * @return  NULL on failure.
  */
@@ -2040,20 +2041,16 @@ static int wp_ecc_encode_pki(const wp_Ecc *ecc, unsigned char* keyData,
 /**
  * Get the Encrypted PKCS#8 encoding size for the key.
  *
- * @param [in]  ctx     ECC encoder/decoder context object.
  * @param [in]  ecc     ECC key object.
  * @param [out] keyLen  Length of encoding in bytes.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_ecc_encode_epki_size(const wp_EccEncDecCtx* ctx,
-    const wp_Ecc *ecc, size_t* keyLen)
+static int wp_ecc_encode_epki_size(const wp_Ecc *ecc, size_t* keyLen)
 {
     int ok = 1;
     int rc;
     word32 len;
-
-    (void)ctx;
 
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, NULL, &len);
     if (rc != LENGTH_ONLY_E) {
@@ -2163,7 +2160,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
-        if (!wp_ecc_encode_epki_size(ctx, key, &derLen)) {
+        if (!wp_ecc_encode_epki_size(key, &derLen)) {
             ok = 0;
         }
     }
@@ -2283,30 +2280,30 @@ static int wp_ecc_export_object(wp_EccEncDecCtx* ctx, wp_Ecc* ecc, size_t size,
 }
 
 /*
- * ECC Parameters
+ * ECC Type-Specific
  */
 
 /**
- * Create a new ECC encoder/decoder context that handles decoding parameters.
+ * Create a new ECC encoder/decoder context that handles decoding type-specific.
  *
  * @param [in] provCtx  Provider context.
  * @return  New ECC encoder/decoder context object on success.
  * @return  NULL on failure.
  */
-static wp_EccEncDecCtx* wp_ecc_params_dec_new(WOLFPROV_CTX* provCtx)
+static wp_EccEncDecCtx* wp_ecc_type_specific_dec_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecc_enc_dec_new(provCtx, WP_ENC_FORMAT_TYPE_SPECIFIC, 0);
 }
 
 /**
- * Return whether the params decoder/encoder handles this part of the key.
+ * Return whether the type-specific decoder/encoder handles the part of the key.
  *
  * @param [in] ctx        ECC encoder/decoder context object.
  * @param [in] selection  Parts of key to handle.
  * @return  1 when supported.
  * @return  0 when not supported.
  */
-static int wp_ecc_params_does_selection(WOLFPROV_CTX* provCtx,
+static int wp_ecc_type_specific_does_selection(WOLFPROV_CTX* provCtx,
     int selection)
 {
     int ok;
@@ -2324,12 +2321,13 @@ static int wp_ecc_params_does_selection(WOLFPROV_CTX* provCtx,
 }
 
 /**
- * Dispatch table for parameters decoder.
+ * Dispatch table for type-specific decoder.
  */
-const OSSL_DISPATCH wp_ecc_params_decoder_functions[] = {
-    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_ecc_params_dec_new          },
+const OSSL_DISPATCH wp_ecc_type_specific_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_ecc_type_specific_dec_new   },
     { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecc_enc_dec_free            },
-    { OSSL_FUNC_DECODER_DOES_SELECTION, (DFUNC)wp_ecc_params_does_selection   },
+    { OSSL_FUNC_DECODER_DOES_SELECTION,
+                                   (DFUNC)wp_ecc_type_specific_does_selection },
     { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecc_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecc_export_object           },
     { 0, NULL }
@@ -2342,22 +2340,23 @@ const OSSL_DISPATCH wp_ecc_params_decoder_functions[] = {
  * @return  New ECC encoder/decoder context object on success.
  * @return  NULL on failure.
  */
-static wp_EccEncDecCtx* wp_ecc_params_der_enc_new(WOLFPROV_CTX* provCtx)
+static wp_EccEncDecCtx* wp_ecc_type_specific_der_enc_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecc_enc_dec_new(provCtx, WP_ENC_FORMAT_TYPE_SPECIFIC,
         WP_FORMAT_DER);
 }
 
 /**
- * Dispatch table for parameters to DER encoder.
+ * Dispatch table for type-specific to DER encoder.
  */
-const OSSL_DISPATCH wp_ecc_params_der_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ecc_params_der_enc_new      },
+const OSSL_DISPATCH wp_ecc_type_specific_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,    (DFUNC)wp_ecc_type_specific_der_enc_new    },
     { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecc_enc_dec_free            },
     { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_ecc_enc_dec_settable_ctx_params },
+                                   (DFUNC)wp_ecc_enc_dec_settable_ctx_params  },
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecc_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecc_params_does_selection   },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION,
+                                   (DFUNC)wp_ecc_type_specific_does_selection },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecc_encode                  },
     { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecc_import                  },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecc_free                    },
@@ -2365,28 +2364,30 @@ const OSSL_DISPATCH wp_ecc_params_der_encoder_functions[] = {
 };
 
 /**
- * Create a new ECC encoder/decoder context that handles encoding params in PEM.
+ * Create a new ECC encoder/decoder context that handles encoding t-s in PEM.
  *
  * @param [in] provCtx  Provider context.
  * @return  New ECC encoder/decoder context object on success.
  * @return  NULL on failure.
  */
-static wp_EccEncDecCtx* wp_ecc_params_pem_enc_new(WOLFPROV_CTX* provCtx)
+static wp_EccEncDecCtx* wp_ecc_type_specific_pem_enc_new(WOLFPROV_CTX* provCtx)
 {
     return wp_ecc_enc_dec_new(provCtx, WP_ENC_FORMAT_TYPE_SPECIFIC,
         WP_FORMAT_PEM);
 }
 
 /**
- * Dispatch table for params to PEM encoder.
+ * Dispatch table for type-specific to PEM encoder.
  */
-const OSSL_DISPATCH wp_ecc_params_pem_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ecc_params_pem_enc_new      },
+const OSSL_DISPATCH wp_ecc_type_specific_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,
+                                   (DFUNC)wp_ecc_type_specific_pem_enc_new    },
     { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecc_enc_dec_free            },
     { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_ecc_enc_dec_settable_ctx_params },
+                                  (DFUNC)wp_ecc_enc_dec_settable_ctx_params   },
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecc_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecc_params_does_selection   },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION,
+                                   (DFUNC)wp_ecc_type_specific_does_selection },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecc_encode                  },
     { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecc_import                  },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecc_free                    },
