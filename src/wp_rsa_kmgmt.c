@@ -1582,10 +1582,17 @@ typedef struct wp_RsaEncDecCtx {
     /** Parts of key to export. */
     int selection;
 
+    /** Type of RSA key: PKCS#1.5 or PSS. */
+    int type;
     /** Supported key format. */
     int format;
     /** Data format: DER or PEM. */
     int encoding;
+
+    /** Cipher to use when encoding EncryptedPrivateKeyInfo. */
+    int cipher;
+    /** Name of cipher to use when encoding EncryptedPrivateKeyInfo. */
+    const char* cipherName;
 } wp_RsaEncDecCtx;
 
 
@@ -1593,13 +1600,14 @@ typedef struct wp_RsaEncDecCtx {
  * Create a new RSA encoder/decoder context.
  *
  * @param [in] provCtx   Provider context.
+ * @param [in] type      Type of RSA key: RSA or RSA-PSS.
  * @param [in] format    Supported format.
  * @param [in] encoding  Data format.
  * @return  New RSA encoder/decoder context object on success.
  * @return  NULL on failure.
  */
-static wp_RsaEncDecCtx* wp_rsa_enc_dec_new(WOLFPROV_CTX* provCtx, int format,
-    int encoding)
+static wp_RsaEncDecCtx* wp_rsa_enc_dec_new(WOLFPROV_CTX* provCtx, int type,
+    int format, int encoding)
 {
     wp_RsaEncDecCtx *ctx = NULL;
     if (wolfssl_prov_is_running()) {
@@ -1607,6 +1615,7 @@ static wp_RsaEncDecCtx* wp_rsa_enc_dec_new(WOLFPROV_CTX* provCtx, int format,
     }
     if (ctx != NULL) {
         ctx->provCtx  = provCtx;
+        ctx->type     = type;
         ctx->format   = format;
         ctx->encoding = encoding;
     }
@@ -1653,10 +1662,32 @@ static const OSSL_PARAM* wp_rsa_enc_dec_settable_ctx_params(
 static int wp_rsa_enc_dec_set_ctx_params(wp_RsaEncDecCtx* ctx,
     const OSSL_PARAM params[])
 {
-    (void)ctx;
-    (void)params;
+    int ok = 1;
 
-    return 1;
+    if (!wp_cipher_from_params(params, &ctx->cipher, &ctx->cipherName)) {
+        ok = 0;
+    }
+
+    return ok;
+}
+
+static void wp_rsa_find_oid(wp_Rsa* rsa, unsigned char* data, word32 len)
+{
+    static const unsigned char rsa_oid[11] = {
+        0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01
+    };
+    word32 i;
+    word32 max = 20;
+
+    if (max > len - sizeof(rsa_oid)) {
+        max = len - sizeof(rsa_oid);
+    }
+    for (i = 0; i < max; i++) {
+        if (XMEMCMP(data + i, rsa_oid, sizeof(rsa_oid)) == 0) {
+            rsa->type = RSA_FLAG_TYPE_RSA;
+            break;
+        }
+    }
 }
 
 /**
@@ -1679,7 +1710,7 @@ static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
         ok = 0;
     }
     if (ok) {
-        rsa->type = RSA_FLAG_TYPE_RSA;
+        wp_rsa_find_oid(rsa, data, len);
         rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
         rsa->hasPub = 1;
     }
@@ -1707,7 +1738,7 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
         ok = 0;
     }
     if (ok) {
-        rsa->type = RSA_FLAG_TYPE_RSA;
+        wp_rsa_find_oid(rsa, data, len);
         rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
         rsa->hasPub = 1;
         rsa->hasPriv = 1;
@@ -1735,7 +1766,7 @@ static int wp_rsa_dec_send_params(wp_Rsa* rsa, OSSL_CALLBACK *dataCb,
 
     params[0] = OSSL_PARAM_construct_int(OSSL_OBJECT_PARAM_TYPE, &object_type);
     params[1] = OSSL_PARAM_construct_utf8_string(OSSL_OBJECT_PARAM_DATA_TYPE,
-        (char*)"RSA", 0);
+        (rsa->type == RSA_FLAG_TYPE_RSA) ? (char*)"RSA" : (char*)"RSA-PSS", 0);
     /* The address of the key object becomes the octet string pointer. */
     params[2] = OSSL_PARAM_construct_octet_string(OSSL_OBJECT_PARAM_REFERENCE,
         &rsa, sizeof(rsa));
@@ -1779,7 +1810,7 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     ctx->selection = selection;
 
-    rsa = wp_rsa_new(ctx->provCtx);
+    rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
     if (rsa == NULL) {
         ok = 0;
     }
@@ -1793,6 +1824,12 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
+        if (!wp_rsa_decode_pki(rsa, data, len)) {
+            ok = 0;
+            decoded = 0;
+        }
+    }
+    else if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         if (!wp_rsa_decode_pki(rsa, data, len)) {
             ok = 0;
             decoded = 0;
@@ -1955,6 +1992,58 @@ static int wp_rsa_encode_pki(const wp_Rsa *rsa, unsigned char* keyData,
 }
 
 /**
+ * Get the Encrypted PKCS#8 encoding size for the key.
+ *
+ * @param [in]  rsa     RSA key object.
+ * @param [out] keyLen  Length of encoding in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_epki_size(const wp_Rsa *rsa, size_t* keyLen)
+{
+    int ok;
+    size_t len;
+
+    ok = wp_rsa_encode_pki_size(rsa, &len);
+    if (ok) {
+        *keyLen = ((len + 15) / 16) * 16;
+    }
+
+    return ok;
+}
+
+/**
+ * Encode the RSA key in an Encrypted PKCS#8 format.
+ *
+ * @param [in]      ctx         RSA encoder/decoder context object.
+ * @param [in]      rsa         RSA key object.
+ * @param [out]     keyData     Buffer to hold encoded data.
+ * @param [in, out] keyLen      On in, length of buffer in bytes.
+ *                              On out, length of encoding in bytes.
+ * @param [in]      pwCb        Password callback.
+ * @param [in]      pwCbArg     Argument to pass to password callback.
+ * @param [out]     cipherInfo  Information about encryption.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_epki(const wp_RsaEncDecCtx* ctx, const wp_Rsa *rsa,
+    unsigned char* keyData, size_t* keyLen, OSSL_PASSPHRASE_CALLBACK *pwCb,
+    void *pwCbArg, byte** cipherInfo)
+{
+    int ok = 1;
+    size_t len = *keyLen;
+
+    /* Encode key. */
+    ok = wp_rsa_encode_pki(rsa, keyData, &len);
+    if (ok && (!wp_encrypt_key(ctx->provCtx, ctx->cipherName, keyData, keyLen,
+            len, pwCb, pwCbArg, cipherInfo))) {
+        ok = 0;
+    }
+
+    return ok;
+}
+
+/**
  * Encode the RSA key.
  *
  * @param [in]      ctx        RSA encoder/decoder context object.
@@ -1980,21 +2069,19 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     size_t derLen = 0;
     unsigned char* pemData = NULL;
     size_t pemLen = 0;
-    int pemType = PRIVATEKEY_TYPE;
+    int pemType = PKCS8_PRIVATEKEY_TYPE;
     int private = 0;
+    byte* cipherInfo = NULL;
 
-    (void)ctx;
     (void)params;
     (void)selection;
-    (void)pwCb;
-    (void)pwCbArg;
 
     if (out == NULL) {
         ok = 0;
     }
 
     if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
-        if (!wp_rsa_encode_spki_size(key, &keyLen)) {
+        if (!wp_rsa_encode_spki_size(key, &derLen)) {
             ok = 0;
         }
     }
@@ -2004,6 +2091,13 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             ok = 0;
         }
     }
+    else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
+        private = 1;
+        if (!wp_rsa_encode_epki_size(key, &derLen)) {
+            ok = 0;
+        }
+    }
+
     if (ok) {
         keyLen = derLen;
         keyData = derData = OPENSSL_malloc(derLen);
@@ -2023,12 +2117,19 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             ok = 0;
         }
     }
+    else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
+        private = 1;
+        if (!wp_rsa_encode_epki(ctx, key, derData, &derLen, pwCb, pwCbArg,
+                (ctx->encoding == WP_FORMAT_PEM) ? &cipherInfo : NULL)) {
+            ok = 0;
+        }
+    }
 
     if (ok && (ctx->encoding == WP_FORMAT_DER)) {
         keyLen = derLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, derLen, NULL, 0, NULL, pemType);
+        rc = wc_DerToPemEx(derData, derLen, NULL, 0, cipherInfo, pemType);
         if (rc <= 0) {
             ok = 0;
         }
@@ -2100,7 +2201,8 @@ static int wp_rsa_export_object(wp_RsaEncDecCtx* ctx, wp_Rsa* rsa, size_t size,
  */
 static wp_RsaEncDecCtx* wp_rsa_spki_dec_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_rsa_enc_dec_new(provCtx, WP_ENC_FORMAT_SPKI, WP_FORMAT_DER);
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_DER);
 }
 
 /**
@@ -2148,7 +2250,8 @@ const OSSL_DISPATCH wp_rsa_spki_decoder_functions[] = {
  */
 static wp_RsaEncDecCtx* wp_rsa_spki_der_enc_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_rsa_enc_dec_new(provCtx, WP_ENC_FORMAT_SPKI, WP_FORMAT_DER);
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_DER);
 }
 
 /**
@@ -2176,7 +2279,8 @@ const OSSL_DISPATCH wp_rsa_spki_der_encoder_functions[] = {
  */
 static wp_RsaEncDecCtx* wp_rsa_spki_pem_enc_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_rsa_enc_dec_new(provCtx, WP_ENC_FORMAT_SPKI, WP_FORMAT_PEM);
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_SPKI,
+        WP_FORMAT_PEM);
 }
 
 /**
@@ -2208,7 +2312,8 @@ const OSSL_DISPATCH wp_rsa_spki_pem_encoder_functions[] = {
  */
 static wp_RsaEncDecCtx* wp_rsa_pki_dec_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_rsa_enc_dec_new(provCtx, WP_ENC_FORMAT_PKI, WP_FORMAT_DER);
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_DER);
 }
 
 /**
@@ -2256,7 +2361,8 @@ const OSSL_DISPATCH wp_rsa_pki_decoder_functions[] = {
  */
 static wp_RsaEncDecCtx* wp_rsa_pki_der_enc_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_rsa_enc_dec_new(provCtx, WP_ENC_FORMAT_PKI, WP_FORMAT_DER);
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_DER);
 }
 
 /**
@@ -2284,7 +2390,8 @@ const OSSL_DISPATCH wp_rsa_pki_der_encoder_functions[] = {
  */
 static wp_RsaEncDecCtx* wp_rsa_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
 {
-    return wp_rsa_enc_dec_new(provCtx, WP_ENC_FORMAT_PKI, WP_FORMAT_PEM);
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_PEM);
 }
 
 /**
@@ -2292,6 +2399,295 @@ static wp_RsaEncDecCtx* wp_rsa_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
  */
 const OSSL_DISPATCH wp_rsa_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsa_pki_pem_enc_new         },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+/*
+ * RSA EncryptedPrivateKeyInfo
+ */
+
+/**
+ * Create a new RSA encoder/decoder context that handles encoding EPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsa_epki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_DER);
+}
+
+/**
+ * Dispatch table for EPKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_rsa_epki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsa_epki_der_enc_new        },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new RSA encoder/decoder context that handles encoding EPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsa_epki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_PEM);
+}
+
+/**
+ * Dispatch table for EPKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_rsa_epki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsa_epki_pem_enc_new        },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+/*
+ * RSA type-specific/legacy
+ */
+
+/**
+ * Create a new RSA encoder/decoder context that handles decoding legacy.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsa_legacy_dec_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA,
+        WP_ENC_FORMAT_TYPE_SPECIFIC, WP_FORMAT_DER);
+}
+
+/**
+ * Return whether the legacy decoder/encoder handles this part of the key.
+ *
+ * @param [in] ctx        RSA encoder/decoder context object.
+ * @param [in] selection  Parts of key to handle.
+ * @return  1 when supported.
+ * @return  0 when not supported.
+ */
+static int wp_rsa_legacy_does_selection(WOLFPROV_CTX* provCtx, int selection)
+{
+    int ok;
+
+    (void)provCtx;
+
+    if (selection == 0) {
+        ok = 1;
+    }
+    else {
+        ok = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
+    }
+
+    return ok;
+}
+
+/**
+ * Dispatch table for legacy decoder.
+ */
+const OSSL_DISPATCH wp_rsa_legacy_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_rsa_legacy_dec_new          },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_DECODER_DOES_SELECTION, (DFUNC)wp_rsa_legacy_does_selection   },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_rsa_decode                  },
+    { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_rsa_export_object           },
+    { 0, NULL }
+};
+
+/*
+ * RSA-PSS SubjectPublicKeyInfo
+ */
+
+/**
+ * Create a new RSA-PSS encoder/decoder context that handles decoding SPKI.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsapss_spki_dec_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSASSAPSS,
+        WP_ENC_FORMAT_SPKI, WP_FORMAT_DER);
+}
+
+/**
+ * Dispatch table for PSS SPKI decoder.
+ */
+const OSSL_DISPATCH wp_rsapss_spki_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_rsapss_spki_dec_new         },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_DECODER_DOES_SELECTION, (DFUNC)wp_rsa_spki_does_selection     },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_rsa_decode                  },
+    { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_rsa_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Create a new RSA-PSS enc/dec context that handles encoding SPKI to DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsapss_spki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSASSAPSS,
+        WP_ENC_FORMAT_SPKI, WP_FORMAT_DER);
+}
+
+/**
+ * Dispatch table for PSS SPKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_rsapss_spki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsapss_spki_der_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new RSA-PSS enc/dec context that handles encoding SPKI to PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsapss_spki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSASSAPSS,
+        WP_ENC_FORMAT_SPKI, WP_FORMAT_PEM);
+}
+
+/**
+ * Dispatch table for SPKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_rsapss_spki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsapss_spki_pem_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_spki_does_selection     },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+/*
+ * RSA-PSS PrivateKeyInfo
+ */
+
+/**
+ * Create a new RSA-PSS encoder/decoder context that handles decoding PKI.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsapss_pki_dec_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSASSAPSS,
+        WP_ENC_FORMAT_PKI, WP_FORMAT_DER);
+}
+
+/**
+ * Dispatch table for PSS PKI decoder.
+ */
+const OSSL_DISPATCH wp_rsapss_pki_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_rsapss_pki_dec_new          },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_DECODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_rsa_decode                  },
+    { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_rsa_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Create a new RSA-PSS enc/dec context that handles encoding PKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsapss_pki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSASSAPSS,
+        WP_ENC_FORMAT_PKI, WP_FORMAT_DER);
+}
+
+/**
+ * Dispatch table for PSS PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_rsapss_pki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsapss_pki_der_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new RSA-PSS enc/dec context that handles encoding PKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsapss_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSASSAPSS,
+        WP_ENC_FORMAT_PKI, WP_FORMAT_PEM);
+}
+
+/**
+ * Dispatch table for PSS PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_rsapss_pki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsapss_pki_pem_enc_new      },
     { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
     { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
                                     (DFUNC)wp_rsa_enc_dec_settable_ctx_params },

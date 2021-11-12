@@ -53,16 +53,14 @@
 #define WP_MAX_PROPS_SIZE       80
 
 /* DER key encoding/decoding formats. */
-/** Parameters encoding format. */
-#define WP_ENC_FORMAT_PARAMS            1
 /** SubjectPublicKeyInfo encoding format. */
-#define WP_ENC_FORMAT_SPKI              2
+#define WP_ENC_FORMAT_SPKI              1
 /** PrivateKeyInfo encoding format. */
-#define WP_ENC_FORMAT_PKI               3
+#define WP_ENC_FORMAT_PKI               2
 /** EncryptedPrivateKeyInfo encoding format. */
-#define WP_ENC_FORMAT_EPKI              4
+#define WP_ENC_FORMAT_EPKI              3
 /** Type-specific encoding format. */
-#define WP_ENC_FORMAT_TYPE_SPECIFIC     5
+#define WP_ENC_FORMAT_TYPE_SPECIFIC     4
 
 /* Data format. */
 /** DER - Binary encoding. */
