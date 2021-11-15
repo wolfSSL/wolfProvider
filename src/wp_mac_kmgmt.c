@@ -192,6 +192,7 @@ static wp_Mac* wp_mac_new(WOLFPROV_CTX *provCtx, int type)
             mac->provCtx = provCtx;
             mac->type = type;
             mac->refCnt = 1;
+            mac->keyLen = MAX_SIZE_T;
         }
     }
 
@@ -255,10 +256,10 @@ static wp_Mac* wp_mac_dup(const wp_Mac *src, int selection)
                 ok = 0;
             }
             else {
-                dst->keyLen = src->keyLen;
                 XMEMCPY(dst->key, src->key, src->keyLen);
             }
         }
+        dst->keyLen = src->keyLen;
         /* Copy properites if set. */
         if (src->properties != NULL) {
             size_t propLen = XSTRLEN(src->properties) + 1;
@@ -326,7 +327,7 @@ static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-        ((mac1->keyLen != mac2->keyLen) ||
+        (mac1->keyLen != MAX_SIZE_T) && ((mac1->keyLen != mac2->keyLen) ||
         (XMEMCMP(mac1->key, mac2->key, mac1->keyLen) != 0) ||
         (XMEMCMP(mac1->cipher, mac2->cipher, WP_MAX_CIPH_NAME_SIZE) != 0))) {
         ok = 0;
@@ -412,7 +413,7 @@ static int wp_mac_export_priv_key(wp_Mac* mac, OSSL_PARAM* params, int* pIdx,
 {
     int i = *pIdx;
 
-    if (mac->keyLen > 0) {
+    if (mac->keyLen != MAX_SIZE_T) {
         XMEMCPY(data + *idx, mac->key, mac->keyLen);
         wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PRIV_KEY,
             data + *idx, mac->keyLen);
@@ -457,8 +458,8 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
         size_t idx = 0;
 
         len = wp_mac_export_priv_key_alloc_size(mac);
-        if (len > 0) {
-            data = OPENSSL_malloc(len);
+        if (len != MAX_SIZE_T) {
+            data = OPENSSL_malloc(len + 1);
             if (data == NULL) {
                 ok = 0;
             }
@@ -609,10 +610,12 @@ static int wp_mac_get_params(wp_Mac* mac, OSSL_PARAM params[])
     int ok = 1;
     OSSL_PARAM* p;
 
-    p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
-    if ((p != NULL) && (!OSSL_PARAM_set_octet_string(p, mac->key,
-            mac->keyLen))) {
-        ok = 0;
+    if (mac->keyLen != MAX_SIZE_T) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
+        if ((p != NULL) && (!OSSL_PARAM_set_octet_string(p, mac->key,
+                mac->keyLen))) {
+            ok = 0;
+        }
     }
     if (ok && (mac->type == WP_MAC_TYPE_CMAC)) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_CIPHER);

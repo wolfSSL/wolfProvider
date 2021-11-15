@@ -42,7 +42,7 @@ static unsigned char fakeCtx[1];
  *
  * No context data required so returning a global context.
  *
- * @param [in] provCtx  Provider context. UUnused.
+ * @param [in] provCtx  Provider context. Unused.
  * @return  Pointer to context.
  */
 static wp_Pem2Der* wp_pem2der_newctx(WOLFPROV_CTX* provCtx)
@@ -76,7 +76,7 @@ static word32 wp_pem2der_find_header(unsigned char* data, word32 len)
     word32 i;
     word32 idx = len;
 
-    for (i = 0; i < len - 10; i++) {
+    for (i = 0; i + 10 < len; i++) {
         if ((data[i] == '-') && (XMEMCMP(data + i, "-----BEGIN", 10) == 0)) {
             idx = i;
             break;
@@ -176,11 +176,9 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
  * Decode the PEM data to DER.
  *
  * Looks for a BEGIN line and decodes to the corresponding END.
- * Number of bytes consumed passed back through used.
  *
  * @param [in]  data       PEM data.
  * @param [in]  len        Length of PEM data in bytes.
- * @param [out] used       Number of bytes used from data.
  * @param [in]  dataCb     Callback to pass the decoded data to.
  * @param [in]  dataCbArg  Argument to pass to callback.
  * @param [in]  pwCb       Password callback.
@@ -189,8 +187,8 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
  * @return  0 on failure.
  */
 static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
-    word32* used, OSSL_CALLBACK* dataCb, void* dataCbArg,
-    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+    OSSL_CALLBACK* dataCb, void* dataCbArg, OSSL_PASSPHRASE_CALLBACK* pwCb,
+    void* pwCbArg)
 {
     int ok = 1;
     int done = 0;
@@ -285,9 +283,6 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
             ok = 0;
         }
     }
-    if (ok) {
-        *used = info.consumed;
-    }
 
     /* Construct parameters to pass to callback. */
     if (ok && (dataType != NULL)) {
@@ -341,7 +336,6 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     unsigned char* data = NULL;
     word32 len = 0;
     word32 idx = 0;
-    word32 used;
 
     (void)ctx;
     (void)selection;
@@ -354,22 +348,15 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     else if (data == NULL) {
         done = 1;
     }
-    while ((!done) && ok) {
-        /* Find the PEM header. */
+    if (!done) {
         idx += wp_pem2der_find_header(data + idx, len - idx);
         /* No header means nothing to do. */
         if (idx == len) {
             done = 1;
         }
         if (!done) {
-            ok = wp_pem2der_decode_data(data + idx, len - idx, &used,
-                dataCb, dataCbArg, pwCb, pwCbArg);
-            if (ok) {
-                idx += used;
-                if (idx == len) {
-                    done = 1;
-                }
-            }
+            ok = wp_pem2der_decode_data(data + idx, len - idx, dataCb,
+                dataCbArg, pwCb, pwCbArg);
         }
     }
     /* Dispose of the PEM data buffer. */

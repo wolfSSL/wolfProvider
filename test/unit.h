@@ -126,6 +126,7 @@ int test_logging(void *data);
 
 extern OSSL_LIB_CTX* wpLibCtx;
 extern OSSL_LIB_CTX* osslLibCtx;
+extern int noKeyLimits;
 
 
 #ifdef WP_HAVE_DIGEST

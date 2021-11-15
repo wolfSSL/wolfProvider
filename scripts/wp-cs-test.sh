@@ -2,11 +2,12 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 CERT_DIR=$SCRIPT_DIR/../certs
-LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
-LOG_SERVER=$SCRIPT_DIR/wp-cs-test-server.log
-LOG_WP_SERVER=$SCRIPT_DIR/wp-cs-test-wp-server.log
-LOG_CLIENT=$SCRIPT_DIR/wp-cs-test-client.log
-TMP_LOG=$SCRIPT_DIR/wp-cs-test-tmp.log
+LOG_DIR=$SCRIPT_DIR/log
+LOG_FILE=$LOG_DIR/wp-cs-test.log
+LOG_SERVER=$LOG_DIR/wp-cs-test-server.log
+LOG_WP_SERVER=$LOG_DIR/wp-cs-test-wp-server.log
+LOG_CLIENT=$LOG_DIR/wp-cs-test-client.log
+TMP_LOG=$LOG_DIR/wp-cs-test-tmp.log
 
 OPENSSL_SERVER_PID=-1
 WP_OPENSSL_SERVER_PID=-1
@@ -297,39 +298,6 @@ do_client() {
     LOG_LINES=$NEW_LINES
 }
 
-do_wp_client_test() {
-    printf "\tClient testing\n"
-    CHECK_CLIENT=1
-    CHECK_SERVER=
-
-    TLS_VERSION=-tls1
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS1_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-
-    TLS_VERSION=-tls1_1
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS1_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-
-    TLS_VERSION=-tls1_2
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS12_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-
-    TLS_VERSION=-tls1_3
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS13_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-}
 do_wp_client_test() {
     printf "\tClient testing\n"
     CHECK_CLIENT=1
