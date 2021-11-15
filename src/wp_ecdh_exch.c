@@ -151,7 +151,7 @@ static wp_EcdhCtx* wp_ecdh_dup(wp_EcdhCtx* src)
             dst->keyLen   = src->keyLen;
         }
         if (!ok) {
-            /* Free allcoated memory and up referenced objects. */
+            /* Free allocated memory and up referenced objects. */
             wp_ecc_free(src->peer);
             wp_ecc_free(src->key);
             OPENSSL_free(dst);
@@ -234,7 +234,7 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
  * Derive secret from ECC keys.
  *
  * @param [in]      ctx     ECDH key exchange context object.
- * @param [in]      secret  Bufffer to hold secret.
+ * @param [in]      secret  Buffer to hold secret.
  * @param [in, out] secLen  On in, size of buffer in bytes.
  *                          On out, length of secret data in bytes.
  * @return 1 on success.

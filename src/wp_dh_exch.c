@@ -151,7 +151,7 @@ static wp_DhCtx* wp_dh_dupctx(wp_DhCtx* src)
         }
 
         if (!ok) {
-            /* Free allcoated memory and up referenced objects. */
+            /* Free allocated memory and up referenced objects. */
             wp_dh_free(dst->peer);
             wp_dh_free(dst->key);
             OPENSSL_free(dst);
@@ -235,7 +235,7 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
  * Derive secret from DH keys.
  *
  * @param [in]      ctx     DH key exchange context object.
- * @param [in]      secret  Bufffer to hold secret.
+ * @param [in]      secret  Buffer to hold secret.
  * @param [in, out] secLen  On in, size of buffer in bytes.
  *                          On out, length of secret data in bytes.
  * @param [in]      maxLen  Maximum length of secret.

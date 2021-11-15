@@ -136,7 +136,7 @@ static void wp_kdf_pbkdf2_reset(wp_Pbkdf2Ctx* ctx)
  * Set the base PBKDF2 context parameters.
  *
  * @param [in, out] ctx     PBKDF2 context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -271,7 +271,7 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
  * Set all the PBKDF2 context parameters.
  *
  * @param [in, out] ctx     PBKDF2 context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -379,7 +379,7 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
  * Set all the PBKDF2 context parameters for PKCS#12.
  *
  * @param [in, out] ctx     PBKDF2 context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */

@@ -941,7 +941,7 @@ static size_t wp_ecx_export_keypair_alloc_size(wp_Ecx* ecx, int priv)
  *
  * @param [in]      ecx     ECX key object.
  * @param [in, out] params  Array of parameters and values.
- * @param [in, out] pIdx    Current index into parameters aray.
+ * @param [in, out] pIdx    Current index into parameters array.
  * @param [in, out] data    Data buffer to place group data into.
  * @param [in, out] idx     Pointer to current index into data.
  * @return  1 on success.
@@ -1757,7 +1757,7 @@ static const OSSL_PARAM* wp_ecx_enc_dec_settable_ctx_params(
  * Set the ECX encoder/decoder context parameters.
  *
  * @param [in, out] ctx     ECX encoder/decoder context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */

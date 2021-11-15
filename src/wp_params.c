@@ -278,7 +278,7 @@ int wp_params_get_mp(const OSSL_PARAM* params, const char* key, mp_int* mp)
  * @param [in]      key     String key to look for.
  * @param [in, out] data    Byte array that may have been previously allocated..
  * @param [out]     len     Length of data in byte array.
- * @param [in]      secure  Data is sensitve and needs to be secured.
+ * @param [in]      secure  Data is sensitive and needs to be secured.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -314,7 +314,7 @@ int wp_params_get_octet_string(const OSSL_PARAM* params, const char* key,
  * @param [in]      key     String key to look for.
  * @param [in, out] data    Byte array that may have been previously allocated.
  * @param [out]     len     Length of data in byte array.
- * @param [in]      secure  Data is sensitve and needs to be secured.
+ * @param [in]      secure  Data is sensitive and needs to be secured.
  * @return  1 on success.
  * @return  0 on failure.
  */

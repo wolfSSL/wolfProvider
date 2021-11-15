@@ -70,7 +70,7 @@ typedef struct wp_AeadCtx {
     unsigned int ivGen:1;
     /** CCM needs to set IV specially. */
     unsigned int ivSet:1;
-    /** GCM needs to nkow if key has been set. */
+    /** GCM needs to know if key has been set. */
     unsigned int keySet:1;
     /** Cache of authentication status. */
     unsigned int authErr:1;
@@ -185,7 +185,7 @@ static int wp_aesccm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
  * Initialize AEAD cipher for use with TLS. Return extra padding (tag length).
  *
  * @param [in, out] ctx     AEAD context object.
- * @param [in]      aad     Additional autentication data.
+ * @param [in]      aad     Additional authentication data.
  * @param [in]      aadLen  Length of AAD in bytes.
  * @return  Length of extra padding in bytes on success.
  * @return  0 on failure.

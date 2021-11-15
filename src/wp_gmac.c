@@ -337,7 +337,7 @@ typedef struct wp_gmac_cipher {
     size_t keySize;
 } wp_gmac_cipher;
 
-/** wolfSSL GMAC compatable cipher names and key sizes. */
+/** wolfSSL GMAC compatible cipher names and key sizes. */
 static const wp_gmac_cipher wp_gmac_cipher_names[] = {
     { "AES-128-GCM", AES_128_KEY_SIZE },
     { "AES-192-GCM", AES_192_KEY_SIZE },

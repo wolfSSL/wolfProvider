@@ -246,7 +246,7 @@ typedef struct wp_cipher {
     #define AES256CBCb  454
 #endif
 
-/** wolfSSL compatable cipher names and wolfSSL identifiers. */
+/** wolfSSL compatible cipher names and wolfSSL identifiers. */
 static const wp_cipher wp_cipher_names[] = {
     { "AES-128-CBC", AES128CBCb, "AES-128-CBC" },
     { "AES-192-CBC", AES192CBCb, "AES-192-CBC" },

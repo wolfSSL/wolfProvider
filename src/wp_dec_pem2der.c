@@ -64,7 +64,7 @@ static void wp_pem2der_freectx(wp_Pem2Der* ctx)
 }
 
 /**
- * Find the start fo the PEM header.
+ * Find the start of the PEM header.
  *
  * @param [in] data  Data buffer with PEM encoding.
  * @param [in] len   Length of data in bytes.
@@ -182,7 +182,7 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
  * @param [in]  dataCb     Callback to pass the decoded data to.
  * @param [in]  dataCbArg  Argument to pass to callback.
  * @param [in]  pwCb       Password callback.
- * @param [in]  pwCbArg    Argment to pass to password callback.
+ * @param [in]  pwCbArg    Argument to pass to password callback.
  * @return  1 on success or not data.
  * @return  0 on failure.
  */
@@ -323,7 +323,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
  * @param [in]      dataCb     Callback to pass the decoded data to.
  * @param [in]      dataCbArg  Argument to pass to callback.
  * @param [in]      pwCb       Password callback.
- * @param [in]      pwCbArg    Argment to pass to password callback.
+ * @param [in]      pwCbArg    Argument to pass to password callback.
  * @return  1 on success or not data.
  * @return  0 on failure.
  */

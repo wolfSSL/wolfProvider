@@ -231,7 +231,7 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
 /**
  * Find and set the HKDF mode into the context.
  *
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @param [in, out] ctx     HKDF context object.
  * @return  1 on success.
  * @return  0 on failure.
@@ -279,7 +279,7 @@ static int wp_hkdf_base_get_mode(const OSSL_PARAM params[], int* mode)
  * Set the base HKDF context parameters.
  *
  * @param [in, out] ctx     HKDF context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -344,7 +344,7 @@ static int wp_kdf_hkdf_get_ctx_params(wp_HkdfCtx* ctx, OSSL_PARAM params[])
  * Find and set the combined info parameters into the context.
  *
  * @param [in, out] ctx     HKDF context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */

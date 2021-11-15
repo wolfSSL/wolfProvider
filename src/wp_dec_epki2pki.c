@@ -72,7 +72,7 @@ static void wp_epki2pki_freectx(wp_Epki2Pki* ctx)
  * @param [in]      dataCb     Callback to pass the decoded data to.
  * @param [in]      dataCbArg  Argument to pass to callback.
  * @param [in]      pwCb       Password callback.
- * @param [in]      pwCbArg    Argment to pass to password callback.
+ * @param [in]      pwCbArg    Argument to pass to password callback.
  * @return  1 on success or not data.
  * @return  0 on failure.
  */

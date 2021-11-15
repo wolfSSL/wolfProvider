@@ -289,7 +289,7 @@ extern const OSSL_DISPATCH wp_cmac_signature_functions[];
 /* Asymmetric cipher implementations. */
 extern const OSSL_DISPATCH wp_rsa_asym_cipher_functions[];
 
-/* Key Management implemenations. */
+/* Key Management implementations. */
 extern const OSSL_DISPATCH wp_rsa_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_rsapss_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_ecc_keymgmt_functions[];

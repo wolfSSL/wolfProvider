@@ -78,7 +78,7 @@ typedef struct wp_RsaSigCtx {
     int saltLen;
     /** Minimum salt length when padding mode is PSS based on RSA key. */
     int minSaltLen;
-    /** wolfSSL id of MGF operation to peform when padding mode is PSS. */
+    /** wolfSSL id of MGF operation to perform when padding mode is PSS. */
     int mgf;
     /** Indicates that the MGF id has been set explicitly. */
     int mgfSet:1;
