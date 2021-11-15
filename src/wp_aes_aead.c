@@ -76,6 +76,8 @@ typedef struct wp_AeadCtx {
     unsigned int authErr:1;
     /** AAD set with call to update. */
     unsigned int aadSet:1;
+    /** CCM tag available and must be retrieved. */
+    unsigned int tagAvail:1;
 
     /** Buffer to hold TLS AAD or tag. */
     unsigned char buf[AES_BLOCK_SIZE];
@@ -357,6 +359,7 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
             if (ok && (!OSSL_PARAM_set_octet_string(p, ctx->buf, sz))) {
                 ok = 0;
             }
+            ctx->tagAvail = 0;
         }
     }
     if (ok && (ctx->mode == EVP_CIPH_GCM_MODE)) {
@@ -400,7 +403,7 @@ static int wp_aead_set_param_tag(wp_AeadCtx* ctx,
         else {
             sz = p->data_size;
         }
-        if (ok && (sz == 0 || (p->data != NULL && ctx->enc))) {
+        if (ok && ((sz == 0) || ((p->data != NULL) && ctx->enc))) {
             ok = 0;
         }
         ctx->tagLen = sz;
@@ -429,7 +432,7 @@ static int wp_aead_set_param_iv_len(wp_AeadCtx* ctx,
         if (!OSSL_PARAM_get_size_t(p, &sz)) {
             ok = 0;
         }
-        if (ok & (sz == 0 || sz > sizeof(ctx->aes.reg))) {
+        if (ok & ((sz == 0) || (sz > sizeof(ctx->aes.reg)))) {
             ok = 0;
         }
         if (ok) {
@@ -1709,6 +1712,9 @@ static int wp_aesccm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
     if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
         ok = wp_aesccm_tls_cipher(ctx, out, outLen, in, inLen);
     }
+    else if (ctx->tagAvail) {
+        ok = 0;
+    }
     else {
         int oLen = 0;
 
@@ -1731,6 +1737,7 @@ static int wp_aesccm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
                 ok = 0;
             }
             if (ok) {
+                ctx->tagAvail = ctx->enc;
                 oLen = inLen;
             }
         }

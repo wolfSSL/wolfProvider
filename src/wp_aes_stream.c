@@ -45,8 +45,6 @@ typedef struct wp_AesStreamCtx {
 
     /** Operation being performed is encryption. */
     unsigned int enc:1;
-    /** IV has been set. */
-    unsigned int ivSet:1;
 
     /** Current IV. */
     unsigned char iv[AES_BLOCK_SIZE];
@@ -240,15 +238,8 @@ static int wp_aes_init_iv(wp_AesStreamCtx *ctx, const unsigned char *iv,
         ok = 0;
     }
     if (ok) {
-        int rc;
-
-        ctx->ivSet = 1;
         XMEMCPY(ctx->iv, iv, ivLen);
         XMEMCPY(ctx->oiv, iv, ivLen);
-        rc = wc_AesSetIV(&ctx->aes, iv);
-        if (rc != 0) {
-            ok = 0;
-        }
     }
 
     return ok;
@@ -290,12 +281,19 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
             ok = 0;
         }
         if (ok) {
+            /* Decryption is the same as encryption with CTR mode. */
             int rc = wc_AesSetKey(&ctx->aes, key, ctx->keyLen, iv,
                 AES_ENCRYPTION);
             if (rc != 0) {
                 ok = 0;
             }
         }
+    }
+    else if (ok) {
+        /* TODO: don't reach in under the covers.
+         * Setting the key will reset this.
+         */
+        ctx->aes.left = 0;
     }
 
     if (ok) {
@@ -362,10 +360,13 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
     int ok = 0;
 
     if (ctx->mode == EVP_CIPH_CTR_MODE) {
-        int rc = wc_AesCtrEncrypt(&ctx->aes, out, in, inLen);
+        int rc = wc_AesSetIV(&ctx->aes, ctx->iv);
         if (rc == 0) {
-            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
-            ok = 1;
+            rc = wc_AesCtrEncrypt(&ctx->aes, out, in, inLen);
+            if (rc == 0) {
+                XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+                ok = 1;
+            }
         }
     }
 
