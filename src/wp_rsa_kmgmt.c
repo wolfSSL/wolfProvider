@@ -1863,9 +1863,20 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
-        if (!wp_rsa_decode_pki(rsa, data, len)) {
-            ok = 0;
-            decoded = 0;
+        if ((selection == 0) ||
+            (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+            /* Supports decoding with or without PKCS #8 header */
+            if (!wp_rsa_decode_pki(rsa, data, len)) {
+                ok = 0;
+                decoded = 0;
+            }
+        }
+        else {
+            /* Supports decoding with or without header */
+            if (!wp_rsa_decode_spki(rsa, data, len)) {
+                ok = 0;
+                decoded = 0;
+            }
         }
     }
 
@@ -1927,6 +1938,57 @@ static int wp_rsa_encode_spki(const wp_Rsa *rsa, unsigned char* keyData,
     int ret;
 
     ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    if (ret <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        *keyLen = ret;
+    }
+
+    return ok;
+}
+
+/**
+ * Get the Public Key encoding size for the key.
+ *
+ * @param [in]  rsa     RSA key object.
+ * @param [out] keyLen  Length of encoding in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_pub_size(const wp_Rsa *rsa, size_t* keyLen)
+{
+    int ok = 1;
+    int ret;
+
+    ret = wc_RsaKeyToPublicDer_ex((RsaKey*)&rsa->key, NULL, 0, 0);
+    if (ret <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        *keyLen = ret;
+    }
+
+    return ok;
+}
+
+/**
+ * Encode the RSA key in a Public Key format.
+ *
+ * @param [in]      rsa      RSA key object.
+ * @param [out]     keyData  Buffer to hold encoded data.
+ * @param [in, out] keyLen   On in, length of buffer in bytes.
+ *                           On out, length of encoding in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_pub(const wp_Rsa *rsa, unsigned char* keyData,
+    size_t* keyLen)
+{
+    int ok = 1;
+    int ret;
+
+    ret = wc_RsaKeyToPublicDer_ex((RsaKey*)&rsa->key, keyData, *keyLen, 0);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2025,6 +2087,57 @@ static int wp_rsa_encode_pki(const wp_Rsa *rsa, unsigned char* keyData,
 }
 
 /**
+ * Get the Private Key encoding size for the key.
+ *
+ * @param [in]  rsa     RSA key object.
+ * @param [out] keyLen  Length of encoding in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_priv_size(const wp_Rsa *rsa, size_t* keyLen)
+{
+    int ok = 1;
+    int ret;
+
+    ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, NULL, 0);
+    if (ret <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        *keyLen = ret;
+    }
+
+    return ok;
+}
+
+/**
+ * Encode the RSA key in a Private Key format.
+ *
+ * @param [in]      rsa      RSA key object.
+ * @param [out]     keyData  Buffer to hold encoded data.
+ * @param [in, out] keyLen   On in, length of buffer in bytes.
+ *                           On out, length of encoding in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_priv(const wp_Rsa *rsa, unsigned char* keyData,
+    size_t* keyLen)
+{
+    int ok = 1;
+    int ret;
+
+    ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    if (ret <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        *keyLen = ret;
+    }
+
+    return ok;
+}
+
+/**
  * Get the Encrypted PKCS#8 encoding size for the key.
  *
  * @param [in]  rsa     RSA key object.
@@ -2119,15 +2232,25 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
-        private = 1;
         if (!wp_rsa_encode_pki_size(key, &derLen)) {
             ok = 0;
         }
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
-        private = 1;
         if (!wp_rsa_encode_epki_size(key, &derLen)) {
             ok = 0;
+        }
+    }
+    else if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
+        if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+            if (!wp_rsa_encode_priv_size(key, &derLen)) {
+                ok = 0;
+            }
+        }
+        else {
+            if (!wp_rsa_encode_pub_size(key, &derLen)) {
+                ok = 0;
+            }
         }
     }
 
@@ -2155,6 +2278,19 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         if (!wp_rsa_encode_epki(ctx, key, derData, &derLen, pwCb, pwCbArg,
                 (ctx->encoding == WP_FORMAT_PEM) ? &cipherInfo : NULL)) {
             ok = 0;
+        }
+    }
+    else if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
+        if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+            private = 1;
+            if (!wp_rsa_encode_priv(key, derData, &derLen)) {
+                ok = 0;
+            }
+        }
+        else {
+            if (!wp_rsa_encode_pub(key, derData, &derLen)) {
+                ok = 0;
+            }
         }
     }
 
@@ -2555,6 +2691,92 @@ const OSSL_DISPATCH wp_rsa_legacy_decoder_functions[] = {
     { OSSL_FUNC_DECODER_DOES_SELECTION, (DFUNC)wp_rsa_legacy_does_selection   },
     { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_rsa_decode                  },
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_rsa_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Create a new RSA encoder/decoder context that handles encoding t-s in DER.
+ *
+ * For RSA, type-specific means the key pair.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsa_kp_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA,
+        WP_ENC_FORMAT_TYPE_SPECIFIC, WP_FORMAT_DER);
+}
+
+/**
+ * Return whether the key pair decoder/encoder handles this part of the key.
+ *
+ * @param [in] ctx        RSA encoder/decoder context object.
+ * @param [in] selection  Parts of key to handle.
+ * @return  1 when supported.
+ * @return  0 when not supported.
+ */
+static int wp_rsa_kp_does_selection(WOLFPROV_CTX* provCtx, int selection)
+{
+    int ok;
+
+    (void)provCtx;
+
+    if (selection == 0) {
+        ok = 1;
+    }
+    else {
+        ok = (selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0;
+    }
+
+    return ok;
+}
+
+/**
+ * Dispatch table for type-specific (key pair) to DER encoder.
+ */
+const OSSL_DISPATCH wp_rsa_kp_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsa_kp_der_enc_new          },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_kp_does_selection       },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new RSA encoder/decoder context that handles encoding t-s in PEM.
+ *
+ * For RSA, type-specific means the key pair.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsa_kp_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA,
+        WP_ENC_FORMAT_TYPE_SPECIFIC, WP_FORMAT_PEM);
+}
+
+/**
+ * Dispatch table for type-specific(key pair) to PEM encoder.
+ */
+const OSSL_DISPATCH wp_rsa_kp_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsa_kp_pem_enc_new          },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_rsa_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_kp_does_selection       },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
 
