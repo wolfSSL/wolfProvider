@@ -145,7 +145,7 @@ static const OSSL_PARAM wp_param_group_list[][10] = {
     (sizeof(wp_param_group_list) / sizeof(*wp_param_group_list))
 
 /**
- * Pass the list of paramaters for TLS groups to the callback.
+ * Pass the list of parameters for TLS groups to the callback.
  *
  * @param [in] cb   Callback.
  * @param [in] arg  Argument for callback.

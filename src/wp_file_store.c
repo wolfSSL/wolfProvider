@@ -400,9 +400,9 @@ static OSSL_DECODER_CTX* wp_file_setup_decoders(wp_FileCtx* ctx)
  *
  * @param [in, out] ctx       File system context object.
  * @param [in]      objCb     Object callback.
- * @param [in]      objCbArg  Argument ot pass to object callback.
+ * @param [in]      objCbArg  Argument to pass to object callback.
  * @param [in]      pwCb      Password callback.
- * @param [in]      pwCbArg   Argument ot pass to password callback.
+ * @param [in]      pwCbArg   Argument to pass to password callback.
  * @return  1 on success.
  * @return  0 on failure.
  */

@@ -402,7 +402,7 @@ static size_t wp_mac_export_priv_key_alloc_size(wp_Mac* mac)
  *
  * @param [in]      mac     MAC key object.
  * @param [in, out] params  Array of parameters and values.
- * @param [in, out] pIdx    Current index into parameters aray.
+ * @param [in, out] pIdx    Current index into parameters array.
  * @param [in, out] data    Data buffer to place group data into.
  * @param [in, out] idx     Pointer to current index into data.
  * @return  1 on success.

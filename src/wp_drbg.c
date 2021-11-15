@@ -31,7 +31,7 @@
 #include <wolfprovider/internal.h>
 
 
-/* TODO: Add seed. No API avaialble. */
+/* TODO: Add seed. No API available. */
 
 
 /** Maximum number of bytes per request for. */
@@ -148,14 +148,14 @@ static int wp_drbg_uninstantiate(wp_DrbgCtx* ctx)
  * @param [in, out] ctx         DRBG context object.
  * @param [in]      strength    Strength in bits required.
  * @param [in]      predResist  Prediction resistance required.
- * @param [in]      adIn        Additional input data to seed with.
- * @param [in]      adInLen     Length of additional input data in bytes.
+ * @param [in]      addIn       Additional input data to seed with.
+ * @param [in]      addInLen    Length of additional input data in bytes.
  * @return  1 on success.
  * @return  0 on success.
  */
 static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
     size_t outLen, unsigned int strength, int predResist,
-    const unsigned char* adIn, size_t adInLen)
+    const unsigned char* addIn, size_t addInLen)
 {
     int ok = 1;
     int rc;
@@ -166,15 +166,15 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
         ok = 0;
     }
 #if 0
-    if (ok && (adInLen > 0)) {
-        rc = wc_RNG_DRBG_Reseed(ctx->rng, adIn, adInLen);
+    if (ok && (addInLen > 0)) {
+        rc = wc_RNG_DRBG_Reseed(ctx->rng, addIn, addInLen);
         if (rc != 0) {
             ok = 0;
         }
     }
 #else
-    (void)adIn;
-    (void)adInLen;
+    (void)addIn;
+    (void)addInLen;
 #endif
     if (ok) {
         rc = wc_RNG_GenerateBlock(ctx->rng, out, (word32)outLen);
@@ -194,15 +194,15 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
  * @param [in]      predResist  Prediction resistance required.
  * @param [in]      entropy     Entropy data to reseed with.
  * @param [in]      entropyLen  Length of entropy data.
- * @param [in]      adIn        Additional input data to reseed with.
- * @param [in]      adInLen     Length of additional input data in bytes.
+ * @param [in]      addIn       Additional input data to reseed with.
+ * @param [in]      addInLen    Length of additional input data in bytes.
  * @param [in]      params      Other parameters.
  * @return  1 on success.
  * @return  0 on success.
  */
 static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
     const unsigned char* entropy, size_t entropyLen,
-    const unsigned char* adIn, size_t adInLen)
+    const unsigned char* addIn, size_t addInLen)
 {
     int ok = 1;
 
@@ -213,8 +213,8 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
     if (rc != 0) {
         ok = 0;
     }
-    if (ok && (adInLen > 0)) {
-        rc = wc_RNG_DRBG_Reseed(ctx->rng, adIn, adInLen);
+    if (ok && (addInLen > 0)) {
+        rc = wc_RNG_DRBG_Reseed(ctx->rng, addIn, addInLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -223,8 +223,8 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
     (void)ctx;
     (void)entropy;
     (void)entropyLen;
-    (void)adIn;
-    (void)adInLen;
+    (void)addIn;
+    (void)addInLen;
 #endif
 
     (void)predResist;
@@ -410,12 +410,12 @@ static int wp_drbg_verify_zeroization(wp_DrbgCtx* ctx)
  * @param [in]      minLen      Minimum length of buffer to create in bytes.
  * @param [in]      minLen      Maximum length of buffer to create in bytes.
  * @param [in]      predResist  Prediction resistance required.
- * @param [in]      adIn        Additional input to seed with.
- * @param [in]      adInLen     Additional input to seed with.
+ * @param [in]      addIn       Additional input to seed with.
+ * @param [in]      addInLen    Additional input to seed with.
  */
 static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
     int entropy, size_t minLen, size_t maxLen, int prediction_resistance,
-    const unsigned char* adIn, size_t adInLen)
+    const unsigned char* addIn, size_t addInLen)
 {
     int ok = 1;
     int rc;
@@ -430,15 +430,15 @@ static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
         ok = 0;
     }
 #if 0
-    if (ok && (adInLen > 0)) {
-        rc = wc_RNG_DRBG_Reseed(ctx->rng, adIn, adInLen);
+    if (ok && (addInLen > 0)) {
+        rc = wc_RNG_DRBG_Reseed(ctx->rng, addIn, addInLen);
         if (rc != 0) {
             ok = 0;
         }
     }
 #else
-    (void)adIn;
-    (void)adInLen;
+    (void)addIn;
+    (void)addInLen;
 #endif
     if (ok) {
         rc = wc_RNG_GenerateBlock(ctx->rng, buffer, (word32)minLen);

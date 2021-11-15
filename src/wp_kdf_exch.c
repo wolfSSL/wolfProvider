@@ -33,7 +33,7 @@
 /**
  * Key Derivation Function (KDF) context.
  *
- * Calls thorugh to EVP API.
+ * Calls through to EVP API.
  */
 typedef struct wp_KdfCtx {
     /** Provider context - useful for duplication. */

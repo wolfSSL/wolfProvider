@@ -71,7 +71,7 @@ typedef struct wp_RsaAsymCtx {
 
     /** Hash algorithm to use on data with OAEP. */
     enum wc_HashType oaepHashType;
-    /** wolfSSL id of MGF operation to peform when padding mode is PSS. */
+    /** wolfSSL id of MGF operation to perform when padding mode is PSS. */
     int mgf;
     /** Indicates that the MGF id has been set explicitly. */
     int mgfSet:1;

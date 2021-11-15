@@ -50,7 +50,7 @@ static const OSSL_PARAM wolfssl_param_types[] = {
  * Get he table of parameters supported by wolfProv.
  *
  * @param [in] provCtx  Unused.
- * @return  Table of supported paramaters.
+ * @return  Table of supported parameters.
  */
 static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
 {
@@ -60,10 +60,10 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
 }
 
 /*
- * Returns whether the provider is running/useable.
+ * Returns whether the provider is running/usable.
  *
  * In FIPS, if there is an issue with the integrity check, then this can return
- * 0 to indicate provider is unuseable.
+ * 0 to indicate provider is unusable.
  *
  * @return  1 indicating provider is running.
  */
@@ -79,7 +79,7 @@ WC_RNG* wolfssl_prov_get_rng(WOLFPROV_CTX* provCtx)
 }
 
 /*
- * Creates a new provider context oject.
+ * Creates a new provider context object.
  *
  * @return  NULL on memory allocation failure.
  * @return  On success, provider context object.

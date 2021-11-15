@@ -1128,7 +1128,7 @@ static const OSSL_PARAM* wp_ecc_import_types(int selection)
  *
  * @param [in]      ecc     ECC key object.
  * @param [in, out] params  Array of parameters and values.
- * @param [in, out] pIdx    Current index into parameters aray.
+ * @param [in, out] pIdx    Current index into parameters array.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -1173,7 +1173,7 @@ static size_t wp_ecc_export_keypair_alloc_size(wp_Ecc* ecc, int priv)
  *
  * @param [in]      ecc     ECC key object.
  * @param [in, out] params  Array of parameters and values.
- * @param [in, out] pIdx    Current index into parameters aray.
+ * @param [in, out] pIdx    Current index into parameters array.
  * @param [in, out] data    Data buffer to place group data into.
  * @param [in, out] idx     Pointer to current index into data.
  * @return  1 on success.
@@ -1211,7 +1211,7 @@ static int wp_ecc_export_keypair(wp_Ecc* ecc, OSSL_PARAM* params, int* pIdx,
  *
  * @param [in]      ecc     ECC key object.
  * @param [in, out] params  Array of parameters and values.
- * @param [in, out] pIdx    Current index into parameters aray.
+ * @param [in, out] pIdx    Current index into parameters array.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -1617,7 +1617,7 @@ static const OSSL_PARAM* wp_ecc_enc_dec_settable_ctx_params(
  * Set the ECC encoder/decoder context parameters.
  *
  * @param [in, out] ctx     ECC encoder/decoder context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */

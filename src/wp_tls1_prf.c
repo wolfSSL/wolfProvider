@@ -190,7 +190,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
  * Purely additive.
  *
  * @param [in, out] ctx     TLS1 PRF context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */

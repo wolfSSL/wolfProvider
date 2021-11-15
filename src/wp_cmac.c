@@ -337,7 +337,7 @@ typedef struct wp_cmac_cipher {
     size_t keySize;
 } wp_cmac_cipher;
 
-/** wolfSSL CMAC compatable cipher names and key sizes. */
+/** wolfSSL CMAC compatible cipher names and key sizes. */
 static const wp_cmac_cipher wp_cmac_cipher_names[] = {
     { "AES-128-CBC", AES_128_KEY_SIZE },
     { "AES-192-CBC", AES_192_KEY_SIZE },
