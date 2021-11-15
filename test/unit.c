@@ -28,6 +28,7 @@
 
 OSSL_LIB_CTX* wpLibCtx = NULL;
 OSSL_LIB_CTX* osslLibCtx = NULL;
+int noKeyLimits = 0;
 
 #ifdef WOLFPROV_DEBUG
 void print_buffer(const char *desc, const unsigned char *buffer, size_t len)
@@ -270,6 +271,7 @@ static void usage()
     printf("  --dir <path>    Location of wolfprovider shared library.\n");
     printf("                  Default: .libs\n");
     printf("  --provider <str>  Name of wolfssl provider. Default: libwolfprov\n");
+    printf("  --no-key-limits   No limits on key size.\n");
 #ifdef TEST_MULTITHREADED
     printf("  --secs <num>    Number of seconds to run for. Default: 10\n");
 #endif
@@ -528,6 +530,9 @@ int main(int argc, char* argv[])
             }
             name = *argv;
             printf("Provider: %s\n", name);
+        }
+        else if (strncmp(*argv, "--no-key-limits", 11) == 0) {
+            noKeyLimits = 1;
         }
 #ifdef TEST_MULTITHREADED
         else if (strncmp(*argv, "--secs", 7) == 0) {

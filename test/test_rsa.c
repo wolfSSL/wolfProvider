@@ -538,9 +538,11 @@ int test_rsa_enc_dec_pkcs1(void *data)
 
     (void)data;
 
-    PRINT_MSG("Check that private decrypt fails with invalid key size.");
-    err = test_rsa_enc_dec(rsa_key_der_256, sizeof(rsa_key_der_256),
-                           RSA_PKCS1_PADDING, NULL, NULL) != 1;
+    if (!noKeyLimits) {
+        PRINT_MSG("Check that private decrypt fails with invalid key size.");
+        err = test_rsa_enc_dec(rsa_key_der_256, sizeof(rsa_key_der_256),
+                               RSA_PKCS1_PADDING, NULL, NULL) != 1;
+    }
     if (err == 0) {
         PRINT_MSG("Check that private decrypt works with valid key size.");
         err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
@@ -642,7 +644,7 @@ int test_rsa_pkey_keygen(void *data)
         err = BN_cmp(eCmd, eKey) != 0;
     }
 
-    if (err == 0) {
+    if ((err == 0) && (!noKeyLimits)) {
         PRINT_MSG("Check that ctrl commands to set invalid key gen size fail");
         for (; i < numBad && err != 1; ++i) {
             err = EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN,
@@ -696,7 +698,7 @@ int test_rsa_pkey_invalid_key_size(void *data) {
         err = RAND_bytes(buf, sizeof(buf)) == 0;
     }
 
-    if (err == 0) {
+    if ((err == 0) && (!noKeyLimits)) {
         PRINT_MSG("Check that signing with an invalid key size fails.");
         err = test_pkey_sign(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
             &rsaSigLen, 0, NULL, NULL) == 0;

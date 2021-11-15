@@ -121,6 +121,9 @@ struct wp_Ecx {
     /** Data including method table that operates on a wolfSSL key. */
     const wp_EcxData* data;
 
+    /** Unclamped values to restore on export. */
+    byte unclamped[2];
+
 #ifndef WP_SINGLE_THREADED
     /** Mutex for reference count updating. */
     wolfSSL_Mutex mutex;
@@ -815,6 +818,8 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             ok = 0;
         }
         if (ok && (privData != NULL)) {
+            ecx->unclamped[0] = privData[0];
+            ecx->unclamped[1] = privData[len - 1];
             rc = (*ecx->data->importPriv)(privData, len, (void*)&ecx->key,
                 EC25519_LITTLE_ENDIAN);
             if (rc != 0) {
@@ -965,8 +970,10 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
         outLen = ecx->data->len;
         rc = (*ecx->data->exportPriv)((void*)&ecx->key, data + *idx, &outLen);
         if (ok) {
-            wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PUB_KEY,
-                data + *idx, outLen);
+            data[*idx + 0         ] = ecx->unclamped[0];
+            data[*idx + outLen - 1] = ecx->unclamped[1];
+            wp_param_set_octet_string_ptr(&params[i++],
+                OSSL_PKEY_PARAM_PRIV_KEY, data + *idx, outLen);
         }
     }
 
@@ -1219,7 +1226,7 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
 /**
  * Import the X25519 public key.
  *
- * @param [in]      in      Buffer holdnig DER encoded X25519 public key.
+ * @param [in]      in      Buffer holding DER encoded X25519 public key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL X25519 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1240,6 +1247,21 @@ static int wp_x25519_import_public(const byte* in, word32 inLen,
     return wc_curve25519_import_public_ex(in, inLen, key, endian);
 }
 
+/**
+ * Export the X25519 private key.
+ *
+ * @param [in]      key     wolfSSL X25519 key object.
+ * @param [out]     out     Buffer to hold DER encoded X25519 private key.
+ * @param [in, out] outLen  On in, length of buffer in bytes.
+ *                          On out, length of data in bytes.
+ */
+static int wp_curve25519_export_private_raw(curve25519_key* key, byte* out,
+    word32* outLen)
+{
+    return wc_curve25519_export_private_raw_ex(key, out, outLen,
+        EC25519_LITTLE_ENDIAN);
+}
+
 /** X25519 data and wolfSSL functions. */
 static const wp_EcxData x25519Data = {
     WP_KEY_TYPE_X25519,
@@ -1252,7 +1274,7 @@ static const wp_EcxData x25519Data = {
     (WP_ECX_IMPORT_PUB)&wp_x25519_import_public,
     (WP_ECX_EXPORT_PUB)&wc_curve25519_export_public_ex,
     (WP_ECX_IMPORT_PRIV)&wc_curve25519_import_private_ex,
-    (WP_ECX_EXPORT_PRIV)&wc_curve25519_export_private_raw,
+    (WP_ECX_EXPORT_PRIV)&wp_curve25519_export_private_raw,
     (WP_ECX_CHECK_PUB)&wc_curve25519_check_public,
     NULL,
 };
@@ -1303,6 +1325,21 @@ IMPLEMENT_ECX_KEYMGMT_DISPATCH(x25519, x)
  * X448
  */
 
+/**
+ * Export the X448 private key.
+ *
+ * @param [in]      key     wolfSSL X448 key object.
+ * @param [out]     out     Buffer to hold DER encoded X448 private key.
+ * @param [in, out] outLen  On in, length of buffer in bytes.
+ *                          On out, length of data in bytes.
+ */
+static int wp_curve448_export_private_raw(curve448_key* key, byte* out,
+    word32* outLen)
+{
+    return wc_curve448_export_private_raw_ex(key, out, outLen,
+        EC448_LITTLE_ENDIAN);
+}
+
 /** X448 data and wolfSSL functions. */
 static const wp_EcxData x448Data = {
     WP_KEY_TYPE_X448,
@@ -1315,7 +1352,7 @@ static const wp_EcxData x448Data = {
     (WP_ECX_IMPORT_PUB)&wc_curve448_import_public_ex,
     (WP_ECX_EXPORT_PUB)&wc_curve448_export_public_ex,
     (WP_ECX_IMPORT_PRIV)&wc_curve448_import_private_ex,
-    (WP_ECX_EXPORT_PRIV)&wc_curve448_export_private_raw,
+    (WP_ECX_EXPORT_PRIV)&wp_curve448_export_private_raw,
     (WP_ECX_CHECK_PUB)&wc_curve448_check_public,
     NULL,
 };
@@ -1369,7 +1406,7 @@ IMPLEMENT_ECX_KEYMGMT_DISPATCH(x448, x)
 /**
  * Import the Ed25519 public key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed25519 public key.
+ * @param [in]      in      Buffer holding DER encoded Ed25519 public key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed25519 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1414,7 +1451,7 @@ static int wp_ed25519_export_public(ed25519_key* key, const byte* out,
 /**
  * Import the Ed25519 private key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed25519 private key.
+ * @param [in]      in      Buffer holding DER encoded Ed25519 private key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed25519 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1495,7 +1532,7 @@ IMPLEMENT_ECX_KEYMGMT_DISPATCH(ed25519, ed)
 /**
  * Import the Ed448 public key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed448 public key.
+ * @param [in]      in      Buffer holding DER encoded Ed448 public key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed448 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1540,7 +1577,7 @@ static int wp_ed448_export_public(ed448_key* key, const byte* out,
 /**
  * Import the Ed448 private key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed448 private key.
+ * @param [in]      in      Buffer holding DER encoded Ed448 private key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed448 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.

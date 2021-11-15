@@ -1671,23 +1671,52 @@ static int wp_rsa_enc_dec_set_ctx_params(wp_RsaEncDecCtx* ctx,
     return ok;
 }
 
-static void wp_rsa_find_oid(wp_Rsa* rsa, unsigned char* data, word32 len)
-{
-    static const unsigned char rsa_oid[11] = {
-        0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01
-    };
-    word32 i;
-    word32 max = 20;
+/** Common base of RSA PKCS #1.5 and PSS OID. */
+unsigned char rsa_pkcs1_oid[] = {
+    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01
+};
+/** Size of RSA PKCS OID. */
+#define RSA_PKCS1_OID_SZ    sizeof(rsa_pkcs1_oid)
+/** Last byte of RSA PKCS #1.5 OID. */
+#define RSA_PKCS1_5_BYTE    0x01
+/** Last byte of RSA PKCS #1 PSS OID. */
+#define RSA_PKCS1_PSS_BYTE  0x0a
 
-    if (max > len - sizeof(rsa_oid)) {
-        max = len - sizeof(rsa_oid);
-    }
-    for (i = 0; i < max; i++) {
-        if (XMEMCMP(data + i, rsa_oid, sizeof(rsa_oid)) == 0) {
-            rsa->type = RSA_FLAG_TYPE_RSA;
+/**
+ * Find the RSA PKCS #1 OID in the key and set type.
+ *
+ * Assumes that the key data is already parsed and proven valid.
+ *
+ * @param [in, out] rsa   RSA key object.
+ * @param [in]      data  DER encoding.
+ * @param [in]      len   Length, in bytes, of DER encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_find_oid(wp_Rsa* rsa, unsigned char* data, word32 len)
+{
+    int ok = 1;
+    word32 i;
+
+    for (i = 0; i < len - RSA_PKCS1_OID_SZ - 1; i++) {
+        /* Find the base OID. */
+        if (XMEMCMP(data + i, rsa_pkcs1_oid, RSA_PKCS1_OID_SZ) == 0) {
+            /* Check OID is for PKCS #1.5. */
+            if (data[i + RSA_PKCS1_OID_SZ] == RSA_PKCS1_5_BYTE) {
+                rsa->type = RSA_FLAG_TYPE_RSA;
+            }
+            /* Check OID is for PKCS #1 PSS. */
+            else if (data[i + RSA_PKCS1_OID_SZ] == RSA_PKCS1_PSS_BYTE) {
+                rsa->type = RSA_FLAG_TYPE_RSASSAPSS;
+            }
+            else {
+                ok = 0;
+            }
             break;
         }
     }
+
+    return ok;
 }
 
 /**
@@ -1709,8 +1738,10 @@ static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
     if (rc != 0) {
         ok = 0;
     }
+    if (ok && !wp_rsa_find_oid(rsa, data, len)) {
+        ok = 0;
+    }
     if (ok) {
-        wp_rsa_find_oid(rsa, data, len);
         rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
         rsa->hasPub = 1;
     }
@@ -1737,8 +1768,10 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     if (rc != 0) {
         ok = 0;
     }
+    if (ok && !wp_rsa_find_oid(rsa, data, len)) {
+        ok = 0;
+    }
     if (ok) {
-        wp_rsa_find_oid(rsa, data, len);
         rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
         rsa->hasPub = 1;
         rsa->hasPriv = 1;

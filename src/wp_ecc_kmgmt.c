@@ -805,22 +805,37 @@ static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
 static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checktype)
 {
     int ok = 1;
-    int pubDone = 0;
+    int privDone = 0;
+    int rc;
 
     /* Only named curves supported. */
     if (((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) &&
         (ecc->curveId == 0)) {
         ok = 0;
     }
-    if (((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) &&
-        (checktype == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK)) {
-        pubDone = 1;
-        if (!wp_ecc_validate_public_key_quick(ecc)) {
-            ok = 0;
+    if (((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && (!ecc->hasPub)) {
+        ok = 0;
+    }
+    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+        if (checktype == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
+            if (!wp_ecc_validate_public_key_quick(ecc)) {
+                ok = 0;
+            }
+        }
+        else {
+            privDone = 1;
+            rc = wc_ecc_check_key((ecc_key*)&ecc->key);
+            if (rc != 0) {
+                ok = 0;
+            }
         }
     }
-    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) || !pubDone) {
-        int rc = wc_ecc_check_key((ecc_key*)&ecc->key);
+    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+        (!ecc->hasPriv)) {
+        ok = 0;
+    }
+    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) && (!privDone)) {
+        rc = wc_ecc_check_key((ecc_key*)&ecc->key);
         if (rc != 0) {
             ok = 0;
         }
@@ -1801,14 +1816,14 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         ok = 0;
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
-        if (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
-            if (!wp_ecc_decode_params(ecc, data, len)) {
+        if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+            if (!wp_ecc_decode_pki(ecc, data, len)) {
                 ok = 0;
                 decoded = 0;
             }
         }
         else {
-            if (!wp_ecc_decode_pki(ecc, data, len)) {
+            if (!wp_ecc_decode_params(ecc, data, len)) {
                 ok = 0;
                 decoded = 0;
             }
