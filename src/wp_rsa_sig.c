@@ -56,9 +56,9 @@ static OSSL_ITEM wp_pad_mode[] = {
  */
 typedef struct wp_RsaSigCtx {
     /** wolfProvider context object. */
-    WOLFPROV_CTX *provCtx;
+    WOLFPROV_CTX* provCtx;
     /** Library context object. */
-    OSSL_LIB_CTX *libCtx;
+    OSSL_LIB_CTX* libCtx;
 
     /** wolfProvider RSA object. */
     wp_Rsa* rsa;
@@ -93,7 +93,7 @@ typedef struct wp_RsaSigCtx {
 
 
 /* Prototype for wp_rsa_signverify_init() to use.  */
-static int wp_rsa_set_ctx_params(wp_RsaSigCtx *ctx, const OSSL_PARAM params[]);
+static int wp_rsa_set_ctx_params(wp_RsaSigCtx* ctx, const OSSL_PARAM params[]);
 
 /**
  * Setup the message digest based on name and properties.
@@ -105,8 +105,8 @@ static int wp_rsa_set_ctx_params(wp_RsaSigCtx *ctx, const OSSL_PARAM params[]);
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_setup_md(wp_RsaSigCtx *ctx, const char *mdName,
-    const char *mdProps, int op)
+static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
+    const char* mdProps, int op)
 {
     int ok = 1;
 
@@ -178,8 +178,8 @@ static int wp_rsa_setup_md(wp_RsaSigCtx *ctx, const char *mdName,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_setup_mgf1_md(wp_RsaSigCtx *ctx, const char *mdName,
-    const char *mdProps)
+static int wp_rsa_setup_mgf1_md(wp_RsaSigCtx* ctx, const char* mdName,
+    const char* mdProps)
 {
     int ok = 1;
     int mgf;
@@ -430,7 +430,7 @@ static int wp_pss_salt_len_to_wc(int saltLen, enum wc_HashType hashType,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx *ctx)
+static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx* ctx)
 {
     int ok = 1;
     int maxSaltLen;
@@ -469,7 +469,7 @@ static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx *ctx)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_signverify_init(wp_RsaSigCtx *ctx, wp_Rsa* rsa,
+static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[], int op)
 {
     int ok = 1;
@@ -533,7 +533,7 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx *ctx, wp_Rsa* rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_sign_init(wp_RsaSigCtx *ctx, wp_Rsa *rsa,
+static int wp_rsa_sign_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[])
 {
     int ok;
@@ -560,12 +560,12 @@ static int wp_rsa_sign_init(wp_RsaSigCtx *ctx, wp_Rsa *rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_sign_pkcs1(wp_RsaSigCtx *ctx, unsigned char *sig,
-    size_t *sigLen, size_t sigSize, const unsigned char *tbs, size_t tbsLen)
+static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize, const unsigned char* tbs, size_t tbsLen)
 {
     int ok = 1;
     int rc;
-    unsigned char *encodedDigest = NULL;
+    unsigned char* encodedDigest = NULL;
     int encodedDigestLen = 0;
 
     if (ctx->hashType != WC_HASH_TYPE_NONE) {
@@ -573,7 +573,7 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx *ctx, unsigned char *sig,
             ok = 0;
         }
         if (ok) {
-            encodedDigest = (unsigned char *)OPENSSL_malloc(MAX_DER_DIGEST_SZ);
+            encodedDigest = (unsigned char*)OPENSSL_malloc(MAX_DER_DIGEST_SZ);
             if (encodedDigest == NULL) {
                 ok = 0;
             }
@@ -621,8 +621,8 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx *ctx, unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_sign_pss(wp_RsaSigCtx *ctx, unsigned char *sig,
-    size_t *sigLen, size_t sigSize, const unsigned char *tbs, size_t tbsLen)
+static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize, const unsigned char* tbs, size_t tbsLen)
 {
     int ok = 1;
     int rc;
@@ -654,8 +654,8 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx *ctx, unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_sign_no_pad(wp_RsaSigCtx *ctx, unsigned char *sig,
-    size_t *sigLen, size_t sigSize, const unsigned char *tbs, size_t tbsLen)
+static int wp_rsa_sign_no_pad(wp_RsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize, const unsigned char* tbs, size_t tbsLen)
 {
     int ok = 1;
 
@@ -692,8 +692,8 @@ static int wp_rsa_sign_no_pad(wp_RsaSigCtx *ctx, unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_sign(wp_RsaSigCtx *ctx, unsigned char *sig, size_t *sigLen,
-    size_t sigSize, const unsigned char *tbs, size_t tbsLen)
+static int wp_rsa_sign(wp_RsaSigCtx* ctx, unsigned char* sig, size_t* sigLen,
+    size_t sigSize, const unsigned char* tbs, size_t tbsLen)
 {
     int ok = 1;
 
@@ -736,7 +736,7 @@ static int wp_rsa_sign(wp_RsaSigCtx *ctx, unsigned char *sig, size_t *sigLen,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify_init(wp_RsaSigCtx *ctx, wp_Rsa *rsa,
+static int wp_rsa_verify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[])
 {
     int ok;
@@ -763,13 +763,13 @@ static int wp_rsa_verify_init(wp_RsaSigCtx *ctx, wp_Rsa *rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify_pkcs1(wp_RsaSigCtx *ctx, const unsigned char *sig,
-    size_t sigLen, const unsigned char *tbs, size_t tbsLen,
+static int wp_rsa_verify_pkcs1(wp_RsaSigCtx* ctx, const unsigned char* sig,
+    size_t sigLen, const unsigned char* tbs, size_t tbsLen,
     unsigned char* decryptedSig)
 {
     int ok = 1;
     int rc;
-    unsigned char *encodedDigest = NULL;
+    unsigned char* encodedDigest = NULL;
     int encodedDigestLen = 0;
 
     rc = wc_RsaSSL_Verify(sig, (word32)sigLen, decryptedSig, (word32)sigLen,
@@ -779,7 +779,7 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx *ctx, const unsigned char *sig,
     }
 
     if (ok && ((size_t)rc > tbsLen)) {
-        encodedDigest = (unsigned char *)OPENSSL_malloc(MAX_DER_DIGEST_SZ);
+        encodedDigest = (unsigned char*)OPENSSL_malloc(MAX_DER_DIGEST_SZ);
         if (encodedDigest == NULL) {
             ok = 0;
         }
@@ -817,8 +817,8 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx *ctx, const unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify_pss(wp_RsaSigCtx *ctx, const unsigned char *sig,
-    size_t sigLen, const unsigned char *tbs, size_t tbsLen,
+static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
+    size_t sigLen, const unsigned char* tbs, size_t tbsLen,
     unsigned char* decryptedSig)
 {
     int ok = 1;
@@ -862,8 +862,8 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx *ctx, const unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify_no_pad(wp_RsaSigCtx *ctx, const unsigned char *sig,
-    size_t sigLen, const unsigned char *tbs, size_t tbsLen,
+static int wp_rsa_verify_no_pad(wp_RsaSigCtx* ctx, const unsigned char* sig,
+    size_t sigLen, const unsigned char* tbs, size_t tbsLen,
     unsigned char* decryptedSig)
 {
     int ok = 1;
@@ -894,8 +894,8 @@ static int wp_rsa_verify_no_pad(wp_RsaSigCtx *ctx, const unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify(wp_RsaSigCtx *ctx, const unsigned char *sig,
-    size_t sigLen, const unsigned char *tbs, size_t tbsLen)
+static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
+    size_t sigLen, const unsigned char* tbs, size_t tbsLen)
 {
     int ok = 1;
 
@@ -943,7 +943,7 @@ static int wp_rsa_verify(wp_RsaSigCtx *ctx, const unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify_recover_init(wp_RsaSigCtx *ctx, wp_Rsa *rsa,
+static int wp_rsa_verify_recover_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[])
 {
     int ok = 1;
@@ -970,8 +970,8 @@ static int wp_rsa_verify_recover_init(wp_RsaSigCtx *ctx, wp_Rsa *rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify_recover(wp_RsaSigCtx *ctx, const unsigned char *rout,
-    size_t *routlen, size_t routsize, const unsigned char *sig, size_t sigLen)
+static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, const unsigned char* rout,
+    size_t* routlen, size_t routsize, const unsigned char* sig, size_t sigLen)
 {
     /* TODO: implement */
     (void)ctx;
@@ -994,8 +994,8 @@ static int wp_rsa_verify_recover(wp_RsaSigCtx *ctx, const unsigned char *rout,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_digest_signverify_init(wp_RsaSigCtx *ctx, const char *mdName,
-    wp_Rsa *rsa, const OSSL_PARAM params[], int op)
+static int wp_rsa_digest_signverify_init(wp_RsaSigCtx* ctx, const char* mdName,
+    wp_Rsa* rsa, const OSSL_PARAM params[], int op)
 {
     int ok;
 
@@ -1017,8 +1017,8 @@ static int wp_rsa_digest_signverify_init(wp_RsaSigCtx *ctx, const char *mdName,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_digest_signverify_update(wp_RsaSigCtx *ctx,
-    const unsigned char *data, size_t dataLen)
+static int wp_rsa_digest_signverify_update(wp_RsaSigCtx* ctx,
+    const unsigned char* data, size_t dataLen)
 {
     int ok = 1;
     int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, dataLen);
@@ -1038,8 +1038,8 @@ static int wp_rsa_digest_signverify_update(wp_RsaSigCtx *ctx,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_digest_sign_init(wp_RsaSigCtx *ctx, const char *mdName,
-    wp_Rsa *rsa, const OSSL_PARAM params[])
+static int wp_rsa_digest_sign_init(wp_RsaSigCtx* ctx, const char* mdName,
+    wp_Rsa* rsa, const OSSL_PARAM params[])
 {
     int ok;
 
@@ -1067,8 +1067,8 @@ static int wp_rsa_digest_sign_init(wp_RsaSigCtx *ctx, const char *mdName,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_digest_sign_final(wp_RsaSigCtx *ctx, unsigned char *sig,
-    size_t *sigLen, size_t sigSize)
+static int wp_rsa_digest_sign_final(wp_RsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize)
 {
     int ok = 1;
     unsigned char digest[WC_MAX_DIGEST_SIZE];
@@ -1101,8 +1101,8 @@ static int wp_rsa_digest_sign_final(wp_RsaSigCtx *ctx, unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_digest_verify_init(wp_RsaSigCtx *ctx, const char *mdName,
-    wp_Rsa *rsa, const OSSL_PARAM params[])
+static int wp_rsa_digest_verify_init(wp_RsaSigCtx* ctx, const char* mdName,
+    wp_Rsa* rsa, const OSSL_PARAM params[])
 {
     int ok;
 
@@ -1126,7 +1126,7 @@ static int wp_rsa_digest_verify_init(wp_RsaSigCtx *ctx, const char *mdName,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_digest_verify_final(wp_RsaSigCtx *ctx, unsigned char *sig,
+static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
     size_t sigLen)
 {
     int ok = 1;
@@ -1158,7 +1158,7 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx *ctx, unsigned char *sig,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_get_alg_id(wp_RsaSigCtx *ctx, OSSL_PARAM *p)
+static int wp_rsa_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
 {
     /* TODO: implement */
     (void)ctx;
@@ -1174,7 +1174,7 @@ static int wp_rsa_get_alg_id(wp_RsaSigCtx *ctx, OSSL_PARAM *p)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_get_pad_mode(int padMode, OSSL_PARAM *p)
+static int wp_rsa_get_pad_mode(int padMode, OSSL_PARAM* p)
 {
     int ok = 1;
 
@@ -1210,7 +1210,7 @@ static int wp_rsa_get_pad_mode(int padMode, OSSL_PARAM *p)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_get_salt_len(int saltLen, OSSL_PARAM *p)
+static int wp_rsa_get_salt_len(int saltLen, OSSL_PARAM* p)
 {
     int ok = 1;
 
@@ -1263,10 +1263,10 @@ static int wp_rsa_get_salt_len(int saltLen, OSSL_PARAM *p)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_get_ctx_params(wp_RsaSigCtx *ctx, OSSL_PARAM *params)
+static int wp_rsa_get_ctx_params(wp_RsaSigCtx* ctx, OSSL_PARAM* params)
 {
     int ok = 1;
-    OSSL_PARAM *p;
+    OSSL_PARAM* p;
 
     if (ctx == NULL) {
         ok = 0;
@@ -1317,8 +1317,8 @@ static int wp_rsa_get_ctx_params(wp_RsaSigCtx *ctx, OSSL_PARAM *params)
  * @param [in] provCtx  wolfProvider context object. Unused.
  * @return  Array of parameters.
  */
-static const OSSL_PARAM *wp_rsa_gettable_ctx_params(wp_RsaSigCtx *ctx,
-    WOLFPROV_CTX *provCtx)
+static const OSSL_PARAM* wp_rsa_gettable_ctx_params(wp_RsaSigCtx* ctx,
+    WOLFPROV_CTX* provCtx)
 {
     /** Parameters that we support getting from the RSA signature context. */
     static const OSSL_PARAM wp_supported_gettable_ctx_params[] = {
@@ -1343,8 +1343,8 @@ static const OSSL_PARAM *wp_rsa_gettable_ctx_params(wp_RsaSigCtx *ctx,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_set_digest(wp_RsaSigCtx *ctx, const OSSL_PARAM *p,
-    const OSSL_PARAM *propsParam)
+static int wp_rsa_set_digest(wp_RsaSigCtx* ctx, const OSSL_PARAM* p,
+    const OSSL_PARAM* propsParam)
 {
     int ok = 1;
     char mdName[WP_MAX_MD_NAME_SIZE];
@@ -1377,7 +1377,7 @@ static int wp_rsa_set_digest(wp_RsaSigCtx *ctx, const OSSL_PARAM *p,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_set_pad_mode(wp_RsaSigCtx *ctx, const OSSL_PARAM *p)
+static int wp_rsa_set_pad_mode(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
 {
     int ok = 1;
     int padMode = 0;
@@ -1437,7 +1437,7 @@ static int wp_rsa_set_pad_mode(wp_RsaSigCtx *ctx, const OSSL_PARAM *p)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_set_salt_len(wp_RsaSigCtx *ctx, const OSSL_PARAM *p)
+static int wp_rsa_set_salt_len(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
 {
     int ok = 1;
 
@@ -1487,8 +1487,8 @@ static int wp_rsa_set_salt_len(wp_RsaSigCtx *ctx, const OSSL_PARAM *p)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_set_mgf1_digest(wp_RsaSigCtx *ctx, const OSSL_PARAM *p,
-    const OSSL_PARAM *propsParam)
+static int wp_rsa_set_mgf1_digest(wp_RsaSigCtx* ctx, const OSSL_PARAM* p,
+    const OSSL_PARAM* propsParam)
 {
     int ok = 1;
     char mgfMdName[WP_MAX_MD_NAME_SIZE] = "";
@@ -1521,11 +1521,11 @@ static int wp_rsa_set_mgf1_digest(wp_RsaSigCtx *ctx, const OSSL_PARAM *p,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_set_ctx_params(wp_RsaSigCtx *ctx, const OSSL_PARAM params[])
+static int wp_rsa_set_ctx_params(wp_RsaSigCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
-    const OSSL_PARAM *p;
-    const OSSL_PARAM *propsParam;
+    const OSSL_PARAM* p;
+    const OSSL_PARAM* propsParam;
 
     if (params != NULL) {
         p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_DIGEST);
@@ -1582,7 +1582,7 @@ static int wp_rsa_set_ctx_params(wp_RsaSigCtx *ctx, const OSSL_PARAM params[])
  * @param [in] provCtx  wolfProvider context object. Unused.
  * @return  Array of parameters.
  */
-static const OSSL_PARAM *wp_rsa_settable_ctx_params(wp_RsaSigCtx *ctx,
+static const OSSL_PARAM* wp_rsa_settable_ctx_params(wp_RsaSigCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
     /** Parameters that we support setting into the RSA signature context. */
@@ -1607,7 +1607,7 @@ static const OSSL_PARAM *wp_rsa_settable_ctx_params(wp_RsaSigCtx *ctx,
  * @param [in] params  Array of parameter objects.
  * @param  0 on failure.
  */
-static int wp_rsa_get_ctx_md_params(wp_RsaSigCtx *ctx, OSSL_PARAM *params)
+static int wp_rsa_get_ctx_md_params(wp_RsaSigCtx* ctx, OSSL_PARAM* params)
 {
     /* TODO: implement */
     (void)ctx;
@@ -1621,7 +1621,7 @@ static int wp_rsa_get_ctx_md_params(wp_RsaSigCtx *ctx, OSSL_PARAM *params)
  * @param [in] ctx      RSA signature context object. Unused.
  * @return  NULL on failure.
  */
-static const OSSL_PARAM* wp_rsa_gettable_ctx_md_params(wp_RsaSigCtx *ctx)
+static const OSSL_PARAM* wp_rsa_gettable_ctx_md_params(wp_RsaSigCtx* ctx)
 {
     /* TODO: implement */
     (void)ctx;
@@ -1635,7 +1635,7 @@ static const OSSL_PARAM* wp_rsa_gettable_ctx_md_params(wp_RsaSigCtx *ctx)
  * @param [in] params  Array of parameter objects.
  * @param  0 on failure.
  */
-static int wp_rsa_set_ctx_md_params(wp_RsaSigCtx *ctx,
+static int wp_rsa_set_ctx_md_params(wp_RsaSigCtx* ctx,
     const OSSL_PARAM params[])
 {
     /* TODO: implement */
@@ -1650,7 +1650,7 @@ static int wp_rsa_set_ctx_md_params(wp_RsaSigCtx *ctx,
  * @param [in] ctx      RSA signature context object. Unused.
  * @return  NULL on failure.
  */
-static const OSSL_PARAM *wp_rsa_settable_ctx_md_params(wp_RsaSigCtx *ctx)
+static const OSSL_PARAM* wp_rsa_settable_ctx_md_params(wp_RsaSigCtx* ctx)
 {
     /* TODO: implement */
     (void)ctx;
