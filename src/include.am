@@ -23,6 +23,7 @@ libwolfprov_la_SOURCES += src/wp_pbkdf2.c
 libwolfprov_la_SOURCES += src/wp_rsa_kmgmt.c
 libwolfprov_la_SOURCES += src/wp_rsa_sig.c
 libwolfprov_la_SOURCES += src/wp_rsa_asym.c
+libwolfprov_la_SOURCES += src/wp_rsa_kem.c
 libwolfprov_la_SOURCES += src/wp_ecc_kmgmt.c
 libwolfprov_la_SOURCES += src/wp_ecdh_exch.c
 libwolfprov_la_SOURCES += src/wp_ecdsa_sig.c

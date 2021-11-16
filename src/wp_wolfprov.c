@@ -429,9 +429,11 @@ static const OSSL_ALGORITHM wolfprov_asym_cipher[] = {
     { NULL, NULL, NULL, NULL }
 };
 
-/* List of asymmetric key encryption mechanicm algorithm implementations
+/* List of asymmetric key encryption mechanism algorithm implementations
  * available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_asym_kem[] = {
+    { WP_NAMES_RSA, WOLFPROV_PROPERTIES, wp_rsa_asym_kem_functions,
+      "" },
     { NULL, NULL, NULL, NULL }
 };
 
