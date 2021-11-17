@@ -30,6 +30,8 @@
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
 
+#ifndef NO_PWDBASED
+
 /** Base set of parameters settable against context  */
 #define WP_PBKDF2_BASE_SETTABLES                                 \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_PROPERTIES, NULL, 0),  \
@@ -432,4 +434,6 @@ const OSSL_DISPATCH wp_kdf_pkcs12_functions[] = {
     { OSSL_FUNC_KDF_GET_CTX_PARAMS,      (DFUNC)wp_kdf_pbkdf2_get_ctx_params  },
     { 0, NULL }
 };
+
+#endif
 

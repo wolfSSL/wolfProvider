@@ -26,7 +26,11 @@
 #include <openssl/evp.h>
 #include <openssl/prov_ssl.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+
+#if defined(WP_HAVE_AESCBC) || defined(WP_HAVE_AESECB)
 
 /**
  * Data structure for AES ciphers that are block based.
@@ -232,6 +236,7 @@ static const OSSL_PARAM* wp_cipher_settable_ctx_params(wp_AesBlockCtx* ctx,
     return wp_cipher_supported_settable_ctx_params;
 }
 
+#ifdef WP_HAVE_AESCBC
 /**
  * Set the IV against the AES block context object.
  *
@@ -263,6 +268,7 @@ static int wp_aes_init_iv(wp_AesBlockCtx *ctx, const unsigned char *iv,
 
     return ok;
 }
+#endif
 
 /**
  * Initialization of an AES block cipher.
@@ -292,13 +298,19 @@ static int wp_aes_block_init(wp_AesBlockCtx *ctx, const unsigned char *key,
         ok = 0;
     }
 
+#ifdef WP_HAVE_AESCBC
     if (ok && (iv != NULL) && (ctx->mode != EVP_CIPH_ECB_MODE) &&
             (!wp_aes_init_iv(ctx, iv, ivLen))) {
         ok = 0;
     }
+#endif
+#ifdef WP_HAVE_AESCBC
     if (ok && (iv == NULL) && ctx->ivSet && (ctx->mode == EVP_CIPH_CBC_MODE)) {
         XMEMCPY(ctx->iv, ctx->oiv, ctx->ivLen);
     }
+#else
+    (void)ivLen;
+#endif
 
     if (ok && (key != NULL)) {
         if (keyLen != ctx->keyLen) {
@@ -374,8 +386,9 @@ static int wp_aes_block_dinit(wp_AesBlockCtx *ctx, const unsigned char *key,
 static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
     const unsigned char *in, size_t inLen)
 {
-    int rc = -1;
+    int rc;
 
+#ifdef WP_HAVE_AESCBC
     if (ctx->mode == EVP_CIPH_CBC_MODE) {
         if (ctx->enc) {
             rc = wc_AesCbcEncrypt(&ctx->aes, out, in, inLen);
@@ -385,13 +398,21 @@ static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
         }
         XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
     }
-    else if (ctx->mode == EVP_CIPH_ECB_MODE) {
+    else
+#endif
+#ifdef WP_HAVE_AESECB
+    if (ctx->mode == EVP_CIPH_ECB_MODE) {
         if (ctx->enc) {
             rc = wc_AesEcbEncrypt(&ctx->aes, out, in, inLen);
         }
         else {
             rc = wc_AesEcbDecrypt(&ctx->aes, out, in, inLen);
         }
+    }
+    else
+#endif
+    {
+        rc = -1;
     }
 
     return rc == 0;
@@ -863,6 +884,8 @@ IMPLEMENT_AES_BLOCK_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)                  \
 IMPLEMENT_AES_BLOCK_NEWCTX(lcmode, UCMODE, kBits, ivBits)                      \
 IMPLEMENT_AES_BLOCK_DISPATCH(lcmode, kBits, ivBits)
 
+#ifdef WP_HAVE_AESCBC
+
 /*
  * AES CBC
  */
@@ -874,6 +897,10 @@ IMPLEMENT_AES_BLOCK(cbc, CBC, 192, 128)
 /** wp_aes128cbc_functions */
 IMPLEMENT_AES_BLOCK(cbc, CBC, 128, 128)
 
+#endif /* WP_HAVE_AESCBC */
+
+#ifdef WP_HAVE_AESECB
+
 /*
  * AES ECB
  */
@@ -884,4 +911,8 @@ IMPLEMENT_AES_BLOCK(ecb, ECB, 256, 0)
 IMPLEMENT_AES_BLOCK(ecb, ECB, 192, 0)
 /** wp_aes128ecb_functions */
 IMPLEMENT_AES_BLOCK(ecb, ECB, 128, 0)
+
+#endif /* WP_HAVE_AESECB */
+
+#endif /* WP_HAVE_AESCBC || WP_HAVE_AESECB */
 

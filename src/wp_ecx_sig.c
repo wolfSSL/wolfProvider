@@ -26,7 +26,10 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
 
 /**
  * ECX signature context.
@@ -378,6 +381,8 @@ static const OSSL_PARAM *wp_ecx_gettable_ctx_params(wp_EcxSigCtx *ctx,
     return wp_supported_gettable_ctx_params;
 }
 
+#ifdef WP_HAVE_ED25519
+
 /*
  * Ed25519
  */
@@ -516,6 +521,10 @@ const OSSL_DISPATCH wp_ed25519_signature_functions[] = {
                                             (DFUNC)wp_ecx_gettable_ctx_params },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_ED25519 */
+
+#ifdef WP_HAVE_ED448
 
 /*
  * Ed448
@@ -658,4 +667,8 @@ const OSSL_DISPATCH wp_ed448_signature_functions[] = {
                                             (DFUNC)wp_ecx_gettable_ctx_params },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_ED448 */
+
+#endif /* WP_HAVE_ED25519 || WP_HAVE_ED448 */
 

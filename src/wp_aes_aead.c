@@ -25,9 +25,12 @@
 #include <openssl/params.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
 #include <wolfssl/wolfcrypt/error-crypt.h>
+
+#if defined(WP_HAVE_AESGCM) || defined(WP_HAVE_AESCCM)
 
 /**
  * Authenticated Encryption with Associated Data structure.
@@ -172,6 +175,7 @@ IMPLEMENT_AES_AEAD_NEWCTX(lc, kbits)                                           \
 IMPLEMENT_AES_AEAD_DISPATCH(lc, kbits)
 
 
+#ifdef WP_HAVE_AESGCM
 /* Prototypes for get/set params API. */
 static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
     size_t olen, int inc);
@@ -179,8 +183,11 @@ static int wp_aesgcm_set_rand_iv(wp_AeadCtx *ctx, unsigned char *in,
     size_t inLen);
 static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
     size_t len);
+#endif
+#ifdef WP_HAVE_AESCCM
 static int wp_aesccm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
     size_t len);
+#endif
 
 
 /**
@@ -362,6 +369,7 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
             ctx->tagAvail = 0;
         }
     }
+#ifdef WP_HAVE_AESGCM
     if (ok && (ctx->mode == EVP_CIPH_GCM_MODE)) {
         p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TLS1_GET_IV_GEN);
         if (p != NULL) {
@@ -372,6 +380,7 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
             }
         }
     }
+#endif
 
     return ok;
 }
@@ -494,16 +503,20 @@ static int wp_aead_set_param_tls1_iv_fixed(wp_AeadCtx* ctx,
         if (p->data_type != OSSL_PARAM_OCTET_STRING) {
             ok = 0;
         }
+    #ifdef WP_HAVE_AESGCM
         else if (ctx->mode == EVP_CIPH_GCM_MODE) {
             if (wp_aesgcm_tls_iv_set_fixed(ctx, p->data, p->data_size) == 0) {
                 ok = 0;
             }
         }
+    #endif
+    #ifdef WP_HAVE_AESCCM
         else {
             if (wp_aesccm_tls_iv_set_fixed(ctx, p->data, p->data_size) == 0) {
                 ok = 0;
             }
         }
+    #endif
     }
 
     return ok;
@@ -520,6 +533,7 @@ static int wp_aead_set_param_tls1_iv_fixed(wp_AeadCtx* ctx,
 static int wp_aead_set_param_tls1_iv_rand(wp_AeadCtx* ctx,
     const OSSL_PARAM params[])
 {
+#ifdef WP_HAVE_AESGCM
     int ok = 1;
     const OSSL_PARAM* p;
 
@@ -537,6 +551,11 @@ static int wp_aead_set_param_tls1_iv_rand(wp_AeadCtx* ctx,
     }
 
     return ok;
+#else
+    (void)ctx;
+    (void)params;
+    return 1;
+#endif
 }
 
 /**
@@ -684,8 +703,10 @@ static const OSSL_PARAM *wp_aead_gettable_ctx_params(wp_AeadCtx* ctx,
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_UPDATED_IV, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, NULL, 0),
         OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_AEAD_TLS1_AAD_PAD, NULL),
+#ifdef WP_HAVE_AESGCM
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_GET_IV_GEN, NULL,
             0),
+#endif
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -711,8 +732,10 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_AAD, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED, NULL, 0),
+#ifdef WP_HAVE_AESGCM
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV, NULL,
             0),
+#endif
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -720,6 +743,8 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
     return wp_aead_supported_settable_ctx_params;
 }
 
+
+#ifdef WP_HAVE_AESGCM
 
 /*
  * AES-GCM
@@ -748,6 +773,7 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
         ok = 0;
     }
     if (ok) {
+    #ifdef WOLFSSL_AESGCM_STREAM
         int rc;
 
         rc = wc_AesGcmEncryptInit_ex(&ctx->aes, NULL, 0, ctx->iv,
@@ -755,6 +781,9 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
         if (rc != 0) {
             ok = 0;
         }
+    #else
+        XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+    #endif
     }
     if (ok) {
         /* Use all the IV/nonce length if none specified or too much. */
@@ -1439,6 +1468,9 @@ IMPLEMENT_AES_AEAD(gcm, GCM, AEAD_FLAGS, 128, 8, 96);
 IMPLEMENT_AES_AEAD(gcm, GCM, AEAD_FLAGS, 192, 8, 96);
 IMPLEMENT_AES_AEAD(gcm, GCM, AEAD_FLAGS, 256, 8, 96);
 
+#endif /* WP_HAVE_AESGCM */
+
+#ifdef WP_HAVE_AESCCM
 
 /*
  * AES-CCM
@@ -1869,3 +1901,6 @@ IMPLEMENT_AES_AEAD(ccm, CCM, AEAD_FLAGS, 128, 8, 96);
 IMPLEMENT_AES_AEAD(ccm, CCM, AEAD_FLAGS, 192, 8, 96);
 IMPLEMENT_AES_AEAD(ccm, CCM, AEAD_FLAGS, 256, 8, 96);
 
+#endif /* WP_HAVE_AESCCM */
+
+#endif /* WP_HAVE_AESGCM || WP_HAVE_AESCCM */

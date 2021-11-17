@@ -3,12 +3,13 @@
 #
 
 noinst_HEADERS += include/wolfprovider/version.h
-noinst_HEADERS += include/wolfprovider/internal.h
-noinst_HEADERS += include/wolfprovider/wp_logging.h
 noinst_HEADERS += include/wolfprovider/alg_funcs.h
+noinst_HEADERS += include/wolfprovider/internal.h
+noinst_HEADERS += include/wolfprovider/settings.h
+noinst_HEADERS += include/wolfprovider/wp_logging.h
+noinst_HEADERS += include/wolfprovider/wp_fips.h
 noinst_HEADERS += include/wolfprovider/wp_params.h
 noinst_HEADERS += include/wolfprovider/wp_wolfprov.h
-noinst_HEADERS += include/wolfprovider/wp_fips.h
 
 #pkginclude_HEADERS = 
 

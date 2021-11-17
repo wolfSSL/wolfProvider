@@ -26,8 +26,11 @@
 #include <openssl/params.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
+
+#ifdef WP_HAVE_AESGCM
 
 /**
  * GMAC context structure when using wolfSSL for implementation.
@@ -44,7 +47,7 @@ typedef struct wp_GmacCtx {
     size_t expKeySize;
 
     /** IV to use. */
-    unsigned char iv[GCM_NONCE_MAX_SZ];
+    unsigned char iv[AES_BLOCK_SIZE];
     /** Length of IV data. */
     size_t ivLen;
     /** Private key GMAC was initialized with. */
@@ -434,7 +437,7 @@ static int wp_gmac_set_param_iv(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (data != NULL)) {
-        if (len > GCM_NONCE_MAX_SZ) {
+        if (len > AES_BLOCK_SIZE) {
             ok = 0;
         }
         if (ok) {
@@ -490,4 +493,6 @@ const OSSL_DISPATCH wp_gmac_functions[] = {
     { OSSL_FUNC_MAC_SET_CTX_PARAMS,      (DFUNC)wp_gmac_set_ctx_params      },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_AESGCM */
 

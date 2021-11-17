@@ -26,7 +26,10 @@
 #include <openssl/evp.h>
 #include <openssl/prov_ssl.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+#ifdef WP_HAVE_AESCTR
 
 /**
  * Data structure for AES ciphers that are streaming.
@@ -636,4 +639,6 @@ IMPLEMENT_AES_STREAM(ctr, CTR, 256, 128)
 IMPLEMENT_AES_STREAM(ctr, CTR, 192, 128)
 /** wp_aes128cbc_functions */
 IMPLEMENT_AES_STREAM(ctr, CTR, 128, 128)
+
+#endif /* WP_HAVE_AESCTR */
 

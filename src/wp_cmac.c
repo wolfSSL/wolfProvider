@@ -120,9 +120,14 @@ static int wp_cmac_set_key(wp_CmacCtx* macCtx, const unsigned char* key,
         XMEMCPY(macCtx->key, key, keyLen);
 
         if (restart) {
+        #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
             int rc = wc_InitCmac_ex(&macCtx->cmac, macCtx->key,
                 (word32)macCtx->keyLen, macCtx->type, NULL, NULL,
                 INVALID_DEVID);
+        #else
+            int rc = wc_InitCmac(&macCtx->cmac, macCtx->key,
+                (word32)macCtx->keyLen, macCtx->type, NULL);
+        #endif
             if (rc != 0) {
                 ok = 0;
             }

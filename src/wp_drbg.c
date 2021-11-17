@@ -90,7 +90,12 @@ static void wp_drbg_free(wp_DrbgCtx* ctx)
             OPENSSL_free(ctx->mutex);
         }
     #endif
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         (void)wc_rng_free(ctx->rng);
+    #else
+        wc_FreeRng(ctx->rng);
+        OPENSSL_clear_free(ctx->rng, sizeof(*ctx->rng));
+    #endif
         OPENSSL_free(ctx);
     }
 }
@@ -120,10 +125,27 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
         ok = 0;
     }
     if (ok ) {
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         ctx->rng = wc_rng_new((byte*)pStr, pStrLen, NULL);
         if (ctx->rng == NULL) {
             ok = 0;
         }
+    #else
+        (void)pStr;
+        (void)pStrLen;
+
+        ctx->rng = OPENSSL_zalloc(sizeof(*ctx->rng));
+        if (ctx->rng == NULL) {
+            ok = 0;
+        }
+        if (ok) {
+            int rc = wc_InitRng(ctx->rng);
+            if (rc != 0) {
+                OPENSSL_clear_free(ctx->rng, sizeof(*ctx->rng));
+                ok = 0;
+            }
+        }
+    #endif
     }
 
     return ok;
@@ -136,7 +158,12 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
  */
 static int wp_drbg_uninstantiate(wp_DrbgCtx* ctx)
 {
-    wc_rng_free(ctx->rng);
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+    (void)wc_rng_free(ctx->rng);
+#else
+    wc_FreeRng(ctx->rng);
+    OPENSSL_clear_free(ctx->rng, sizeof(*ctx->rng));
+#endif
     ctx->rng = NULL;
     return 1;
 }
