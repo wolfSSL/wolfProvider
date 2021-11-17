@@ -64,6 +64,11 @@ OSSL_PARAM_BN(OSSL_PKEY_PARAM_RSA_COEFFICIENT1, NULL, 0)
 /** Default MGF algorithm */
 #define WP_RSA_PSS_MGF_DEF          WC_MGF1SHA1
 
+
+#ifndef OFFSETOF
+    #define OFFSETOF(type, field) ((size_t)&(((type *)0)->field))
+#endif
+
 /** Table of offsets into RsaKey structure of various fields. */
 static const size_t wp_rsa_offset[WP_RSA_PARAM_NUMS_CNT] = {
     OFFSETOF(RsaKey, n),
@@ -868,13 +873,13 @@ static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
         }
     }
     else if (checkPriv) {
-        if (mp_isone(&rsa->key.d) || mp_iszero(&rsa->key.d) ||
+        if (mp_isone(&rsa->key.d) || mp_iszero((mp_int*)&rsa->key.d) ||
             (mp_cmp((mp_int*)&rsa->key.d, (mp_int*)&rsa->key.n) != MP_LT)) {
             ok = 0;
         }
     }
     else if (checkPub) {
-        if (mp_iseven(&rsa->key.e) || mp_iszero(&rsa->key.e) ||
+        if (mp_iseven(&rsa->key.e) || mp_iszero((mp_int*)&rsa->key.e) ||
             mp_isone(&rsa->key.e)) {
             ok = 0;
         }
@@ -1768,6 +1773,18 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     if (rc != 0) {
         ok = 0;
     }
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+    if (!ok) {
+        idx = 0;
+        rc = wc_GetPkcs8TraditionalOffset(data, &idx, len);
+        if (rc >= 0) {
+            rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
+            if (rc == 0) {
+                 ok = 1;
+            }
+        }
+    }
+#endif
     if (ok && !wp_rsa_find_oid(rsa, data, len)) {
         ok = 0;
     }
@@ -1908,6 +1925,7 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 static int wp_rsa_encode_spki_size(const wp_Rsa* rsa, size_t* keyLen)
 {
     int ok = 1;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     int ret;
 
     ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, NULL, 0);
@@ -1917,6 +1935,16 @@ static int wp_rsa_encode_spki_size(const wp_Rsa* rsa, size_t* keyLen)
     if (ok) {
         *keyLen = ret;
     }
+#else
+    int len = wc_RsaEncryptSize((RsaKey*)&rsa->key);
+    if (len <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        /* TODO: rough estimate (n + e + ASN.1) */
+        *keyLen = len + 50;
+    }
+#endif
 
     return ok;
 }
@@ -1961,7 +1989,11 @@ static int wp_rsa_encode_pub_size(const wp_Rsa* rsa, size_t* keyLen)
     int ok = 1;
     int ret;
 
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     ret = wc_RsaKeyToPublicDer_ex((RsaKey*)&rsa->key, NULL, 0, 0);
+#else
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, NULL, 0);
+#endif
     if (ret <= 0) {
         ok = 0;
     }
@@ -1988,10 +2020,19 @@ static int wp_rsa_encode_pub(const wp_Rsa* rsa, unsigned char* keyData,
     int ok = 1;
     int ret;
 
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     ret = wc_RsaKeyToPublicDer_ex((RsaKey*)&rsa->key, keyData, *keyLen, 0);
     if (ret <= 0) {
         ok = 0;
     }
+#else
+    /* TODO: Encodes with header. Strip it off. */
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    if (ret <= 0) {
+        ok = 0;
+    }
+    
+#endif
     if (ok) {
         *keyLen = ret;
     }

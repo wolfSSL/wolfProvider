@@ -152,12 +152,14 @@ static int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst,
     case WC_HASH_TYPE_SHA512:
         rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
         break;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     case WC_HASH_TYPE_SHA512_224:
         rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
         break;
     case WC_HASH_TYPE_SHA512_256:
         rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
         break;
+#endif
     case WC_HASH_TYPE_SHA3_224:
         rc = wc_Sha3_224_Copy(&src->sha3, &dst->sha3);
         break;
@@ -176,8 +178,10 @@ static int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst,
     case WC_HASH_TYPE_MD5_SHA:
     case WC_HASH_TYPE_BLAKE2B:
     case WC_HASH_TYPE_BLAKE2S:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     case WC_HASH_TYPE_SHAKE128:
     case WC_HASH_TYPE_SHAKE256:
+#endif
     default:
         ok = 0;
         break;

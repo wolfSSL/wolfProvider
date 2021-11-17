@@ -305,14 +305,22 @@ static const wp_DecoderInfo wp_decoders[] = {
     { "EC"     , "structure=type-specific"           },
     { "EC"     , "structure=SubjectPublicKeyInfo"    },
     { "EC"     , "structure=PrivateKeyInfo"          },
+#ifdef HAVE_CURVE25519
     { "X25519" , "structure=SubjectPublicKeyInfo"    },
     { "X25519" , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef HAVE_ED25519
     { "ED25519", "structure=SubjectPublicKeyInfo"    },
     { "ED25519", "structure=PrivateKeyInfo"          },
+#endif
+#ifdef HAVE_CURVE448
     { "X448"   , "structure=SubjectPublicKeyInfo"    },
     { "X448"   , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef HAVE_ED448
     { "ED448"  , "structure=SubjectPublicKeyInfo"    },
     { "ED448"  , "structure=PrivateKeyInfo"          },
+#endif
     { "der"    , NULL                                },
     { "der"    , "structure=EncryptedPrivateKeyInfo" },
 };

@@ -197,6 +197,17 @@ static int wp_rsakem_decapsulate_init(wp_RsaKemCtx* ctx, wp_Rsa* rsa,
     return wp_rsakem_init(ctx, rsa, params, EVP_PKEY_OP_DECAPSULATE);
 }
 
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+static int wp_mp_rand(mp_int* a, int digits, WC_RNG* rng)
+{
+    int cnt = digits * sizeof(mp_digit);
+
+    a->used = digits;
+
+    return wc_RNG_GenerateBlock(rng, (byte*)a->dp, cnt);
+}
+#endif
+
 /**
  * Generate a number between 2 and n-2 (1 < r < n-1).
  *
@@ -229,16 +240,13 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
     }
     while (ok) {
         /* r = random number with all words filled. */
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         rc = mp_rand(&r, mod.used, &ctx->rng);
+    #else
+        rc = wp_mp_rand(&r, mod.used, &ctx->rng);
+    #endif
         if (rc != 0) {
             ok = 0;
-        }
-        if (ok) {
-            /* Ensure random number doesn't have higher bits set. */
-            rc = mp_mod_2d(&r, mp_count_bits(&mod), &r);
-            if (rc != 0) {
-                ok = 0;
-            }
         }
         /* Done when random is less than modulus. */
         if (ok && (mp_cmp(&r, &mod) == MP_LT)) {

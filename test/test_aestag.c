@@ -252,6 +252,8 @@ static int test_aes_tag(void *data, const char *cipher,
     return err;
 }
 
+#ifdef WP_HAVE_AESGCM
+
 /* AES-GCM GMAC test, empty plaintext, operation only outputs tag value */
 static int test_aes_gcm_gmac(void* data, const char* cipher,
                              int keyLen, int ivLen)
@@ -303,7 +305,11 @@ static int test_aes_gcm_gmac(void* data, const char* cipher,
     return err;
 }
 
+#endif
+
 /******************************************************************************/
+
+#ifdef WP_HAVE_AESGCM
 
 static int test_aes_tag_fixed_enc(const EVP_CIPHER *cipher,
     unsigned char *key, unsigned char *iv, int ivFixedLen, int ivLen,
@@ -414,6 +420,8 @@ static int test_aes_tag_fixed(void *data, const char *cipher,
 
     return err;
 }
+
+#endif
 
 /******************************************************************************/
 

@@ -309,9 +309,12 @@ static wp_Ecc* wp_ecc_new(WOLFPROV_CTX *provCtx)
     #endif
 
         if (ok) {
+    #if !defined(HAVE_FIPS) || \
+        (defined(HAVE_FIPS_VERSION) && HAVE_FIPS_VERSION > 2)
         #ifdef ECC_TIMING_RESISTANT
             (void)wc_ecc_set_rng(&ecc->key, &ecc->rng);
         #endif
+    #endif
             ecc->provCtx = provCtx;
             ecc->refCnt = 1;
             ecc->includePublic = 1;
@@ -390,7 +393,8 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
         if (ok && src->hasPub &&
             ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
             dst->hasPub = 1;
-            rc = wc_ecc_copy_point(&src->key.pubkey, &dst->key.pubkey);
+            rc = wc_ecc_copy_point((ecc_point*)&src->key.pubkey,
+                &dst->key.pubkey);
             if (rc != 0) {
                 ok = 0;
             }
@@ -399,7 +403,7 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
         if (ok && src->hasPriv &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
             dst->hasPriv = 1;
-            rc = mp_copy(&src->key.k, &dst->key.k);
+            rc = mp_copy((mp_int*)&src->key.k, &dst->key.k);
             if (rc != 0) {
                 ok = 0;
             }
@@ -767,6 +771,7 @@ static int wp_ecc_match(const wp_Ecc* ecc1, const wp_Ecc* ecc2, int selection)
     return ok;
 }
 
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
 /**
  * Quick validate the ECC public key.
  *
@@ -790,6 +795,7 @@ static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
 
     return ok;
 }
+#endif
 
 /**
  * Validate the ECC key.
@@ -802,7 +808,7 @@ static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checktype)
+static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
 {
     int ok = 1;
     int privDone = 0;
@@ -817,12 +823,18 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checktype)
         ok = 0;
     }
     if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
-        if (checktype == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+        /* TODO: Quick check for older versions? */
+        if (checkType == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
             if (!wp_ecc_validate_public_key_quick(ecc)) {
                 ok = 0;
             }
         }
-        else {
+        else
+    #else
+       (void)checkType;
+    #endif
+        {
             privDone = 1;
             rc = wc_ecc_check_key((ecc_key*)&ecc->key);
             if (rc != 0) {
@@ -1450,8 +1462,13 @@ static wp_Ecc* wp_ecc_gen(wp_EccGenCtx *ctx, OSSL_CALLBACK *cb, void *cbArg)
         }
         if (ok && ((ctx->selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0)) {
             /* Generate key pair with wolfSSL. */
+        #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
             rc = wc_ecc_make_key_ex2(&ecc->rng, (ecc->bits + 7) / 8,
                 &ecc->key, ecc->curveId, WC_ECC_FLAG_NONE);
+        #else
+            rc = wc_ecc_make_key_ex(&ecc->rng, (ecc->bits + 7) / 8,
+                &ecc->key, ecc->curveId);
+        #endif
             if (rc != 0) {
                 ok = 0;
             }
@@ -1633,6 +1650,58 @@ static int wp_ecc_enc_dec_set_ctx_params(wp_EccEncDecCtx* ctx,
     return ok;
 }
 
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+/* List of OID sums to curve ids to lookup and compare with corresponding OIDs.
+ */
+static const struct {
+    int oidSum;
+    int curveId;
+} wp_oid_sum_to_curve_id[] = {
+    { ECC_SECP192R1_OID, ECC_SECP192R1 },
+    { ECC_SECP224R1_OID, ECC_SECP224R1 },
+    { ECC_SECP256R1_OID, ECC_SECP256R1 },
+    { ECC_SECP384R1_OID, ECC_SECP384R1 },
+    { ECC_SECP521R1_OID, ECC_SECP521R1 },
+};
+/* Size of array of oid sum to curve ids mappings. */
+#define WP_OID_SUM_TO_CURVE_ID_SZ  \
+    ((int)(sizeof(wp_oid_sum_to_curve_id) / sizeof(*wp_oid_sum_to_curve_id)))
+
+/*
+ * Get the curve id for the OID passed in.
+ *
+ * @param [in] oid  OID to identify.
+ * @param [in] len  Length of OID data in bytes.
+ * @return  ECC_CURVE_INVALID on failure.
+ * @return  wolfSSL curve id on success.
+ */
+static int wp_ecc_get_curve_id_from_oid(unsigned char* oid, int len)
+{
+    int curveId = ECC_CURVE_INVALID;
+    int i;
+
+    for (i = 0; i < WP_OID_SUM_TO_CURVE_ID_SZ; i++) {
+         const byte* wcOid;
+         word32 wcOidSz;
+         int rc;
+
+         /* Get the OID for the OID sum. */
+         rc = wc_ecc_get_oid(wp_oid_sum_to_curve_id[i].oidSum, &wcOid,
+             &wcOidSz);
+         if (rc < 0)
+             break;
+
+         /* Compare retrieved OID with one passed in. */
+         if ((len == (int)wcOidSz) && (XMEMCMP(oid, wcOid, len) == 0)) {
+             curveId = wp_oid_sum_to_curve_id[i].curveId;
+             break;
+         }
+    }
+
+    return curveId;
+}
+#endif
+
 /**
  * Decode the DER encoded ECC parameters into the ECC key object.
  *
@@ -1662,7 +1731,11 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
         }
     }
     if (ok) {
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         ecc->curveId = wc_ecc_get_curve_id_from_oid(data + 2, oidLen);
+    #else
+        ecc->curveId = wp_ecc_get_curve_id_from_oid(data + 2, oidLen);
+    #endif
         if (ecc->curveId == ECC_CURVE_INVALID) {
             ok = 0;
         }
@@ -1731,6 +1804,18 @@ static int wp_ecc_decode_pki(wp_Ecc* ecc, unsigned char* data, word32 len)
     if (rc != 0) {
         ok = 0;
     }
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+    if (!ok) {
+        idx = 0;
+        rc = wc_GetPkcs8TraditionalOffset(data, &idx, len);
+        if (rc >= 0) {
+            rc = wc_EccPrivateKeyDecode(data, &idx, &ecc->key, len);
+            if (rc == 0) {
+                 ok = 1;
+            }
+        }
+    }
+#endif
     if (ok) {
         ecc->curveId = ecc->key.dp->id;
         /* ECC_PRIVATEKEY_ONLY when no public key data. */
@@ -1907,6 +1992,7 @@ static int wp_ecc_encode_params(const wp_Ecc *ecc, unsigned char* keyData,
 static int wp_ecc_encode_priv_size(const wp_Ecc *ecc, size_t* keyLen)
 {
     int ok = 1;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     int rc;
 
     rc = wc_EccKeyDerSize((ecc_key*)&ecc->key, 1);
@@ -1916,6 +2002,18 @@ static int wp_ecc_encode_priv_size(const wp_Ecc *ecc, size_t* keyLen)
     if (ok) {
         *keyLen = rc;
     }
+#else
+    int sz;
+
+    sz = wc_ecc_size((ecc_key*)&ecc->key);
+    if (sz == 0) {
+        ok = 0;
+    }
+    if (ok) {
+        /* TODO: better approximate! */
+        *keyLen = sz * 3 + 20;
+    }
+#endif
 
     return ok;
 }
@@ -2042,6 +2140,7 @@ static int wp_ecc_encode_pki(const wp_Ecc *ecc, unsigned char* keyData,
     int rc;
     word32 len = *keyLen;
 
+    /* TODO: for older versions, curve is always included! */
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, keyData, &len);
     if (rc <= 0) {
         ok = 0;

@@ -28,6 +28,7 @@
 #include <openssl/prov_ssl.h>
 
 #include "wolfprovider/version.h"
+#include "wolfprovider/settings.h"
 #include "wolfprovider/wp_wolfprov.h"
 #include "wolfprovider/alg_funcs.h"
 
@@ -226,12 +227,14 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
       "" },
     { WP_NAMES_SHA2_512, WOLFPROV_PROPERTIES, wp_sha512_functions,
       "" },
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     { WP_NAMES_SHA2_512_224, WOLFPROV_PROPERTIES,
       wp_sha512_224_functions,
       "" },
     { WP_NAMES_SHA2_512_256, WOLFPROV_PROPERTIES,
       wp_sha512_256_functions,
       "" },
+#endif
 
     /* SHA-3 */
     { WP_NAMES_SHA3_224, WOLFPROV_PROPERTIES, wp_sha3_224_functions,
@@ -243,15 +246,18 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
     { WP_NAMES_SHA3_512, WOLFPROV_PROPERTIES, wp_sha3_512_functions,
       "" },
 
+#ifdef WP_HAVE_SHAKE_256
     /* SHAKE */
     { WP_NAMES_SHAKE_256, WOLFPROV_PROPERTIES, wp_shake_256_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
 
 /* List of cipher algorithm implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_ciphers[] = {
+#ifdef WP_HAVE_AESGCM
     /* AES-GCM */
     { WP_NAMES_AES_256_GCM, WOLFPROV_PROPERTIES, wp_aes256gcm_functions,
       "" },
@@ -259,7 +265,9 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
     { WP_NAMES_AES_128_GCM, WOLFPROV_PROPERTIES, wp_aes128gcm_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_AESCCM
     /* AES-CCM */
     { WP_NAMES_AES_256_CCM, WOLFPROV_PROPERTIES, wp_aes256ccm_functions,
       "" },
@@ -267,7 +275,9 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
     { WP_NAMES_AES_128_CCM, WOLFPROV_PROPERTIES, wp_aes128ccm_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_AESCBC
     /* AES-CBC */
     { WP_NAMES_AES_256_CBC, WOLFPROV_PROPERTIES, wp_aes256cbc_functions,
       "" },
@@ -275,7 +285,9 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
     { WP_NAMES_AES_128_CBC, WOLFPROV_PROPERTIES, wp_aes128cbc_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_AESECB
     /* AES-ECB */
     { WP_NAMES_AES_256_ECB, WOLFPROV_PROPERTIES, wp_aes256ecb_functions,
       "" },
@@ -283,7 +295,9 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
     { WP_NAMES_AES_128_ECB, WOLFPROV_PROPERTIES, wp_aes128ecb_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_AESCTR
     /* AES-CTR */
     { WP_NAMES_AES_256_CTR, WOLFPROV_PROPERTIES, wp_aes256ctr_functions,
       "" },
@@ -291,7 +305,9 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
     { WP_NAMES_AES_128_CTR, WOLFPROV_PROPERTIES, wp_aes128ctr_functions,
       "" },
+#endif
 
+#ifdef HAVE_AES_KEYWRAP
     /* AES Kwy Wrap - unpadded */
     { WP_NAMES_AES_256_WRAP, WOLFPROV_PROPERTIES, wp_aes256wrap_functions,
       "" },
@@ -299,6 +315,7 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
     { WP_NAMES_AES_128_WRAP, WOLFPROV_PROPERTIES, wp_aes128wrap_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -309,8 +326,10 @@ static const OSSL_ALGORITHM wolfprov_macs[] = {
       "" },
     { WP_NAMES_CMAC, WOLFPROV_PROPERTIES, wp_cmac_functions,
       "" },
+#ifdef WP_HAVE_AESGCM
     { WP_NAMES_GMAC, WOLFPROV_PROPERTIES, wp_gmac_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -319,14 +338,20 @@ static const OSSL_ALGORITHM wolfprov_macs[] = {
 static const OSSL_ALGORITHM wolfprov_kdfs[] = {
     { WP_NAMES_HKDF, WOLFPROV_PROPERTIES, wp_kdf_hkdf_functions,
       "" },
+#ifndef NO_PWDBASED
     { WP_NAMES_PBKDF2, WOLFPROV_PROPERTIES, wp_kdf_pbkdf2_functions,
       "" },
+#endif
+#ifndef NO_PWDBASED
     { WP_NAMES_PKCS12KDF, WOLFPROV_PROPERTIES, wp_kdf_pkcs12_functions,
       "" },
+#endif
     { WP_NAMES_TLS1_3_KDF, WOLFPROV_PROPERTIES, wp_kdf_tls1_3_kdf_functions,
       "" },
+#ifdef WP_HAVE_TLS1_PRF
     { WP_NAMES_TLS1_PRF, WOLFPROV_PROPERTIES, wp_kdf_tls1_prf_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -352,15 +377,23 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
     { WP_NAMES_EC, WOLFPROV_PROPERTIES, wp_ecc_keymgmt_functions,
       "ECC" },
 
+#ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WOLFPROV_PROPERTIES, wp_x25519_keymgmt_functions,
       "X25519" },
+#endif
+#ifdef WP_HAVE_X448
     { WP_NAMES_X448, WOLFPROV_PROPERTIES, wp_x448_keymgmt_functions,
       "X448" },
+#endif
 
+#ifdef WP_HAVE_ED25519
     { WP_NAMES_ED25519, WOLFPROV_PROPERTIES, wp_ed25519_keymgmt_functions,
       "X25519" },
+#endif
+#ifdef WP_HAVE_ED448
     { WP_NAMES_ED448, WOLFPROV_PROPERTIES, wp_ed448_keymgmt_functions,
       "X448" },
+#endif
 
     { WP_NAMES_DH, WOLFPROV_PROPERTIES, wp_dh_keymgmt_functions,
       "DH" },
@@ -387,10 +420,14 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
 static const OSSL_ALGORITHM wolfprov_keyexch[] = {
     { WP_NAMES_ECDH, WOLFPROV_PROPERTIES, wp_ecdh_keyexch_functions,
       "" },
+#ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WOLFPROV_PROPERTIES, wp_x25519_keyexch_functions,
       "" },
+#endif
+#ifdef WP_HAVE_X448
     { WP_NAMES_X448, WOLFPROV_PROPERTIES, wp_x448_keyexch_functions,
       "" },
+#endif
     { WP_NAMES_DH, WOLFPROV_PROPERTIES, wp_dh_keyexch_functions,
       "" },
 
@@ -408,10 +445,14 @@ static const OSSL_ALGORITHM wolfprov_signature[] = {
       "" },
     { WP_NAMES_ECDSA, WOLFPROV_PROPERTIES, wp_ecdsa_signature_functions,
       "" },
+#ifdef WP_HAVE_ED25519
     { WP_NAMES_ED25519, WOLFPROV_PROPERTIES, wp_ed25519_signature_functions,
       "" },
+#endif
+#ifdef WP_HAVE_ED448
     { WP_NAMES_ED448, WOLFPROV_PROPERTIES, wp_ed448_signature_functions,
       "" },
+#endif
     { WP_NAMES_HMAC, WOLFPROV_PROPERTIES, wp_hmac_signature_functions,
       "" },
     { WP_NAMES_CMAC, WOLFPROV_PROPERTIES, wp_cmac_signature_functions,
@@ -534,6 +575,7 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
       wp_ecc_epki_pem_encoder_functions,
       "" },
 
+#ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_x25519_spki_der_encoder_functions,
       "" },
@@ -552,7 +594,9 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_x25519_epki_pem_encoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_ED25519
     { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_ed25519_spki_der_encoder_functions,
       "" },
@@ -571,7 +615,9 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_ED25519, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_ed25519_epki_pem_encoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_X448
     { WP_NAMES_X448, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_x448_spki_der_encoder_functions,
       "" },
@@ -590,7 +636,9 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_X448, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_x448_epki_pem_encoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_ED448
     { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_ed448_spki_der_encoder_functions,
       "" },
@@ -609,6 +657,7 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_ED448, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_ed448_epki_pem_encoder_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -712,33 +761,41 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
       wp_ecc_type_specific_decoder_functions,
       "" },
 
+#ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_x25519_spki_decoder_functions,
       "" },
     { WP_NAMES_X25519, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_x25519_pki_decoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_ED25519
     { WP_NAMES_ED25519, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_ed25519_spki_decoder_functions,
       "" },
     { WP_NAMES_ED25519, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_ed25519_pki_decoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_X448
     { WP_NAMES_X448, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_x448_spki_decoder_functions,
       "" },
     { WP_NAMES_X448, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_x448_pki_decoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_ED448
     { WP_NAMES_ED448, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_ed448_spki_decoder_functions,
       "" },
     { WP_NAMES_ED448, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_ed448_pki_decoder_functions,
       "" },
+#endif
 
     /* Dummy decoder added to match PKI bit not match EPKI from context.
      * Flag set to say context type checked even though it didn't match and

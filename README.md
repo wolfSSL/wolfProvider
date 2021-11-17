@@ -67,10 +67,15 @@ sudo make install
 git clone https://github.com/wolfssl/wolfssl.git
 cd wolfssl
 ./autogen.sh
-./configure --enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-des3 --enable-aesctr --enable-aesccm --enable-x963kdf CPPFLAGS="-DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER --enable-certgen --enable-aeskeywrap --enable-enckeys
+./configure --enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-des3 --enable-aesctr --enable-aesccm --enable-x963kdf --enable-compkey CPPFLAGS="-DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER" --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-base16
 make
 sudo make install
 ```
+
+Add `--enable-curve25519` to include support for X25519 Key Exchange.
+Add `--enable-curve448` to include support for X448 Key Exchange.
+Add `--enable-ed25519` to include support for Ed25519 signatures and certificates..
+Add `--enable-ed448` to include support for Ed448 signature and certificates.
 
 Add `--enable-pwdbased` to the configure command above if PKCS#12 is used in OpenSSL.
 

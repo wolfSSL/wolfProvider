@@ -28,6 +28,7 @@
 #include <openssl/ec.h>
 #include <openssl/obj_mac.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
 /** Supported selections (key parts) in this key manager for DH. */
@@ -415,20 +416,20 @@ static int wp_dh_copy_params(const wp_Dh *src, wp_Dh *dst)
     int rc;
 
     /* Copy prime in wolfSSL object. */
-    rc = mp_copy(&src->key.p, &dst->key.p);
+    rc = mp_copy((mp_int*)&src->key.p, &dst->key.p);
     if (rc != 0) {
         ok = 0;
     }
     if (ok) {
         /* Copy generator in wolfSSL object. */
-        rc = mp_copy(&src->key.g, &dst->key.g);
+        rc = mp_copy((mp_int*)&src->key.g, &dst->key.g);
         if (rc != 0) {
             ok = 0;
         }
     }
     if (ok) {
         /* Copy the small prime in wolfSSL object. */
-        rc = mp_copy(&src->key.q, &dst->key.q);
+        rc = mp_copy((mp_int*)&src->key.q, &dst->key.q);
         if (rc != 0) {
             ok = 0;
         }
@@ -738,7 +739,7 @@ static int wp_dh_has(const wp_Dh* dh, int selection)
         ok &= dh->privSz > 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0)) {
-        ok &= (dh->id != 0) || (!mp_iszero(&dh->key.p));
+        ok &= (dh->id != 0) || (!mp_iszero((mp_int*)&dh->key.p));
     }
 
     return ok;
@@ -786,6 +787,7 @@ int wp_dh_match(const wp_Dh* dh1, const wp_Dh* dh2, int selection)
     return ok;
 }
 
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
 /**
  * Quickly validate the public part of DH key.
  *
@@ -797,7 +799,7 @@ static int wp_dh_validate_pub_key_quick(const wp_Dh* dh)
 {
     int ok = 1;
     int rc;
-    word32 primeSz = mp_unsigned_bin_size(&dh->key.p);
+    word32 primeSz = mp_unsigned_bin_size((mp_int*)&dh->key.p);
     unsigned char* prime;
 
     prime = OPENSSL_malloc(primeSz);
@@ -820,6 +822,7 @@ static int wp_dh_validate_pub_key_quick(const wp_Dh* dh)
 
     return ok;
 }
+#endif
 
 /**
  * Validate the DH key.
@@ -842,10 +845,16 @@ static int wp_dh_validate(const wp_Dh* dh, int selection, int checkType)
         /* TODO: check explicit parameters. */
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+        /* TODO: quick check for older versions? */
         if (checkType == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
             ok = wp_dh_validate_pub_key_quick(dh);
         }
-        else {
+        else
+    #else
+        (void)checkType;
+    #endif
+        {
             rc = wc_DhCheckPubKey((DhKey*)&dh->key, dh->pub, dh->pubSz);
             if (rc != 0) {
                 ok = 0;
@@ -1505,7 +1514,10 @@ static int wp_dh_gen_keypair(wp_DhGenCtx *ctx, wp_Dh* dh)
         /* Use wolfSSL to generate key pair. */
         pubSz = dh->pubSz;
         privSz = dh->privSz;
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+        /* TODO: don't want to check parameters in older versions! */
         dh->key.trustedGroup = 1;
+    #endif
         rc = wc_DhGenerateKeyPair(&dh->key, &ctx->rng, dh->priv, &privSz,
             dh->pub, &pubSz);
         if (rc != 0) {
@@ -1798,6 +1810,7 @@ static int wp_dh_enc_dec_set_ctx_params(wp_DhEncDecCtx* ctx,
     return ok;
 }
 
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
 extern int wc_DhPublicKeyDecode(const byte* input, word32* inOutIdx, DhKey* key,
     word32 inSz);
 
@@ -1839,7 +1852,26 @@ static int wp_dh_decode_spki(wp_Dh* dh, unsigned char* data, word32 len)
 
     return ok;
 }
+#else
+/**
+ * Decode the SubjectPublicInfo DER encoded DH key into the DH key object.
+ *
+ * @param [in, out] dh    DH key object.
+ * @param [in]      data  DER encoding.
+ * @param [in]      len   Length, in bytes, of DER encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_dh_decode_spki(wp_Dh* dh, unsigned char* data, word32 len)
+{
+    (void)dh;
+    (void)data;
+    (void)len;
+    return 0;
+}
+#endif
 
+#ifdef WOLFSSL_DH_EXTRA
 /**
  * Decode the PrivateKeyInfo DER encoded DH key into the DH key object.
  *
@@ -1907,6 +1939,24 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
     OPENSSL_free(base);
     return ok;
 }
+#else
+/**
+ * Decode the PrivateKeyInfo DER encoded DH key into the DH key object.
+ *
+ * @param [in, out] dh    DH key object.
+ * @param [in]      data  DER encoding.
+ * @param [in]      len   Length, in bytes, of DER encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
+{
+    (void)dh;
+    (void)data;
+    (void)len;
+    return 0;
+}
+#endif
 
 /**
  * Decode the DER encoded DH parameters into the DH key object.
@@ -2047,6 +2097,7 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     return ok;
 }
 
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
 /**
  * Get the Parameters encoding size for the key.
  *
@@ -2274,6 +2325,7 @@ static int wp_dh_encode_epki(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
 
     return ok;
 }
+#endif
 
 /**
  * Encode the DH key.
@@ -2293,6 +2345,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg)
 {
     int ok = 1;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     int rc;
     BIO* out = wp_corebio_get_bio(cBio);
     unsigned char* keyData = NULL;
@@ -2305,15 +2358,12 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     int private = 0;
     byte* cipherInfo = NULL;
 
-    (void)ctx;
-    (void)params;
-    (void)selection;
-    (void)pwCb;
-    (void)pwCbArg;
-
     if (out == NULL) {
         ok = 0;
     }
+
+    (void)params;
+    (void)selection;
 
     if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         private = 1;
@@ -2416,6 +2466,16 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         OPENSSL_free(pemData);
     }
     OPENSSL_free(cipherInfo);
+#else
+    (void)ctx;
+    (void)cBio;
+    (void)key;
+    (void)params;
+    (void)selection;
+    (void)pwCb;
+    (void)pwCbArg;
+#endif
+
     return ok;
 }
 

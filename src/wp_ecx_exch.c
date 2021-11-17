@@ -26,8 +26,10 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
 
 /** Common key agree function pointer. */
 typedef int (*WP_ECX_AGREE)(void* private_key, void* public_key, byte* out,
@@ -185,6 +187,8 @@ static int wp_ecx_set_peer(wp_EcxCtx* ctx, wp_Ecx* peer)
     return ok;
 }
 
+#ifdef WP_HAVE_X25519
+
 /*
  * X25519
  */
@@ -274,6 +278,10 @@ const OSSL_DISPATCH wp_x25519_keyexch_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_X25519 */
+
+#ifdef WP_HAVE_X448
+
 /*
  * X448
  */
@@ -338,4 +346,8 @@ const OSSL_DISPATCH wp_x448_keyexch_functions[] = {
     { OSSL_FUNC_KEYEXCH_SET_PEER,  (DFUNC)wp_ecx_set_peer },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_X448 */
+
+#endif /* WP_HAVE_X25519 || WP_HAVE_X448 */
 

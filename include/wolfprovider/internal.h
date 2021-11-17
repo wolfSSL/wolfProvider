@@ -26,6 +26,7 @@
     #include "user_settings.h"
 #endif
 #include <wolfssl/options.h>
+#include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/integer.h>

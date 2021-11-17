@@ -193,7 +193,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     int ok = 1;
     int done = 0;
     int rc;
-    int format;
+    int algoId;
     int type;
     const char* dataType = NULL;
     const char* dataFormat = NULL;
@@ -278,10 +278,39 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
 
     if (ok && !done) {
         /* Decode the PEM to DER using wolfSSL. */
-        rc = wc_PemToDer(data, len, type, &der, NULL, &info, &format);
+        rc = wc_PemToDer(data, len, type, &der, NULL, &info, &algoId);
         if (rc != 0) {
             ok = 0;
         }
+    #if LIBWOLFSSL_VERSION_HEX < 0x05000000
+        /* Put back PKCS #8 wrapper so the OID can be checked. */
+        if (ok && ((type ==PKCS8_PRIVATEKEY_TYPE) ||
+                   (type == PKCS8_ENC_PRIVATEKEY_TYPE))) {
+            DerBuffer* pkcs8Der = NULL;
+            word32 pkcs8Sz;
+
+            rc = wc_CreatePKCS8Key(NULL, &pkcs8Sz, der->buffer, der->length,
+                algoId, NULL, 0);
+            if (rc != LENGTH_ONLY_E) {
+                ok = 0;
+            }
+            if (ok) {
+                rc = wc_AllocDer(&pkcs8Der, pkcs8Sz, DYNAMIC_TYPE_KEY, NULL);
+                if (rc != 0) {
+                    ok = 0;
+                }
+            }
+            if (ok) {
+                rc = wc_CreatePKCS8Key(pkcs8Der->buffer, &pkcs8Der->length,
+                    der->buffer, der->length, algoId, NULL, 0);
+                if (rc < 0) {
+                    ok = 0;
+                }
+            }
+            wc_FreeDer(&der);
+            der = pkcs8Der;
+        }
+    #endif
     }
 
     /* Construct parameters to pass to callback. */

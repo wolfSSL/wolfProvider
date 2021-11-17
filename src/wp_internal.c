@@ -145,12 +145,14 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid)
         case NID_sha512:
             hashType = WC_HASH_TYPE_SHA512;
             break;
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         case NID_sha512_224:
             hashType = WC_HASH_TYPE_SHA512_224;
             break;
         case NID_sha512_256:
             hashType = WC_HASH_TYPE_SHA512_256;
             break;
+    #endif
         case NID_sha3_224:
             hashType = WC_HASH_TYPE_SHA3_224;
             break;
@@ -304,6 +306,117 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     return ok;
 }
 
+#ifndef WOLFSSL_ENCRYPTED_KEYS
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
+    static wcchar kEncTypeAesCbc128 = "AES-128-CBC";
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_192)
+    static wcchar kEncTypeAesCbc192 = "AES-192-CBC";
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_256)
+    static wcchar kEncTypeAesCbc256 = "AES-256-CBC";
+#endif
+
+static int wp_EncryptedInfoGet(EncryptedInfo* info, const char* cipherInfo)
+{
+    int ret = 0;
+
+    if (info == NULL || cipherInfo == NULL)
+        return BAD_FUNC_ARG;
+
+    /* determine cipher information */
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
+    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc128, XSTRLEN(kEncTypeAesCbc128)) == 0) {
+        info->cipherType = WC_CIPHER_AES_CBC;
+        info->keySz = AES_128_KEY_SIZE;
+        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
+    }
+    else
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_192)
+    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc192, XSTRLEN(kEncTypeAesCbc192)) == 0) {
+        info->cipherType = WC_CIPHER_AES_CBC;
+        info->keySz = AES_192_KEY_SIZE;
+        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
+    }
+    else
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_256)
+    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc256, XSTRLEN(kEncTypeAesCbc256)) == 0) {
+        info->cipherType = WC_CIPHER_AES_CBC;
+        info->keySz = AES_256_KEY_SIZE;
+        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
+    }
+    else
+#endif
+    {
+        ret = NOT_COMPILED_IN;
+    }
+    return ret;
+}
+#endif
+
+#ifndef WOLFSSL_ENCRYPTED_KEYS
+#define PKCS5_SALT_SZ   8
+
+static int wp_BufferKeyEncrypt(EncryptedInfo* info, byte* der, word32 derSz,
+    const byte* password, int passwordSz, int hashType)
+{
+    int ret = NOT_COMPILED_IN;
+#ifdef WOLFSSL_SMALL_STACK
+    byte* key      = NULL;
+#else
+    byte  key[WC_MAX_SYM_KEY_SIZE];
+#endif
+
+    (void)derSz;
+    (void)passwordSz;
+    (void)hashType;
+
+    if (der == NULL || password == NULL || info == NULL || info->keySz == 0 ||
+            info->ivSz < PKCS5_SALT_SZ) {
+        return BAD_FUNC_ARG;
+    }
+
+#ifdef WOLFSSL_SMALL_STACK
+    key = (byte*)XMALLOC(WC_MAX_SYM_KEY_SIZE, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
+    if (key == NULL) {
+        return MEMORY_E;
+    }
+#endif /* WOLFSSL_SMALL_STACK */
+
+    (void)XMEMSET(key, 0, WC_MAX_SYM_KEY_SIZE);
+
+#ifndef NO_PWDBASED
+    if ((ret = wc_PBKDF1(key, password, passwordSz, info->iv, PKCS5_SALT_SZ, 1,
+                                        info->keySz, hashType)) != 0) {
+#ifdef WOLFSSL_SMALL_STACK
+        XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
+#endif
+        return ret;
+    }
+#endif
+
+#ifndef NO_DES3
+    if (info->cipherType == WC_CIPHER_DES)
+        ret = wc_Des_CbcEncryptWithKey(der, der, derSz, key, info->iv);
+    if (info->cipherType == WC_CIPHER_DES3)
+        ret = wc_Des3_CbcEncryptWithKey(der, der, derSz, key, info->iv);
+#endif /* NO_DES3 */
+#if !defined(NO_AES) && defined(HAVE_AES_CBC)
+    if (info->cipherType == WC_CIPHER_AES_CBC)
+        ret = wc_AesCbcEncryptWithKey(der, der, derSz, key, info->keySz,
+            info->iv);
+#endif /* !NO_AES && HAVE_AES_CBC */
+
+#ifdef WOLFSSL_SMALL_STACK
+    XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
+#endif
+
+    return ret;
+}
+#endif
+
 /**
  * Encrypt the PKCS #8 key.
  *
@@ -343,7 +456,11 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         XSTRNCPY(info->name, cipherName, NAME_SZ-1);
         info->name[NAME_SZ-1] = '\0';
 
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         rc = wc_EncryptedInfoGet(info, info->name);
+    #else
+        rc = wp_EncryptedInfoGet(info, info->name);
+    #endif
         if (rc != 0) {
             ok = 0;
         }
@@ -368,8 +485,13 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         XMEMSET(keyData + pkcs8Len, 0, len - pkcs8Len);
 
         /* Encrypt key and padding. */
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         rc = wc_BufferKeyEncrypt(info, keyData, len, (byte*)password,
             passwordSz, WC_MD5);
+    #else
+        rc = wp_BufferKeyEncrypt(info, keyData, len, (byte*)password,
+            passwordSz, WC_MD5);
+    #endif
         if (rc != 0) {
             ok = 0;
         }

@@ -28,11 +28,15 @@
 
 #include <wolfprovider/alg_funcs.h>
 
+#ifdef HAVE_AES_KEYWRAP
+
 /**
  * Data structure for AES ciphers that wrap.
  */
 typedef struct wp_AesWrapCtx {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     Aes aes;
+#endif
 
     unsigned int wrap:1;
     unsigned int ivSet:1;
@@ -40,6 +44,9 @@ typedef struct wp_AesWrapCtx {
     size_t keyLen;
     size_t ivLen;
     unsigned char iv[AES_IV_SIZE];
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+    unsigned char key[AES_256_KEY_SIZE];
+#endif
 } wp_AesWrapCtx;
 
 
@@ -55,7 +62,11 @@ static int wp_aes_wrap_set_ctx_params(wp_AesWrapCtx *ctx,
  */
 static void wp_aes_wrap_freectx(wp_AesWrapCtx *ctx)
 {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     wc_AesFree(&ctx->aes);
+#else
+    OPENSSL_cleanse(ctx->key, sizeof(ctx->key));
+#endif
     OPENSSL_clear_free(ctx, sizeof(*ctx));
 }
 
@@ -249,11 +260,15 @@ static int wp_aes_wrap_init(wp_AesWrapCtx *ctx, const unsigned char *key,
             ok = 0;
         }
         if (ok) {
+        #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
             int rc = wc_AesSetKey(&ctx->aes, key, ctx->keyLen, iv,
                 wrap ? AES_ENCRYPTION : AES_DECRYPTION);
             if (rc != 0) {
                 ok = 0;
             }
+        #else
+            XMEMCPY(ctx->key, key, keyLen);
+        #endif
         }
     }
 
@@ -338,6 +353,7 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
             iv = NULL;
         }
 
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         if (ctx->wrap) {
             rc = wc_AesKeyWrap_ex(&ctx->aes, in, inLen, out, outSz, iv);
             if (rc <= 0) {
@@ -350,6 +366,21 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
                 ok = 0;
             }
         }
+    #else
+        if (ctx->wrap) {
+            rc = wc_AesKeyWrap(ctx->key, ctx->keyLen, in, inLen, out, outSz,
+                iv);
+            if (rc <= 0) {
+                ok = 0;
+            }
+        }
+        else {
+            rc = wc_AesKeyUnWrap(ctx->key, ctx->keyLen, in, inLen, out, outSz,
+                iv);
+            if (rc <= 0) {
+                ok = 0;
+            }
+    #endif
 
         if (ok) {
             *outLen = rc;
@@ -562,3 +593,4 @@ IMPLEMENT_AES_WRAP(wrap, wrap, WRAP, 192, 128)
 /** wp_aes128wrap_functions */
 IMPLEMENT_AES_WRAP(wrap, wrap, WRAP, 128, 128)
 
+#endif

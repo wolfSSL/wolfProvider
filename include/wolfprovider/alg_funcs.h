@@ -46,7 +46,9 @@
 #include <wolfssl/wolfcrypt/asn_public.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
-#include <wolfssl/wolfcrypt/kdf.h>
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+    #include <wolfssl/wolfcrypt/kdf.h>
+#endif
 
 #include <wolfprovider/internal.h>
 #include <wolfprovider/wp_logging.h>

@@ -24,6 +24,7 @@
 #include <openssl/core_names.h>
 #include <openssl/params.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
 /** Flag indicates the algorithm is an eXtendable Output Function. */
@@ -453,6 +454,7 @@ IMPLEMENT_DIGEST(wp_sha512, wc_Sha512,
                  wc_InitSha512_ex, wc_Sha512Update, wc_Sha512Final,
                  wc_Sha512Copy, wc_Sha512Free)
 
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
 IMPLEMENT_DIGEST(wp_sha512_224, wc_Sha512_224,
                  WC_SHA512_224_BLOCK_SIZE, WC_SHA512_224_DIGEST_SIZE,
                  WP_SHA2_FLAGS,
@@ -464,6 +466,7 @@ IMPLEMENT_DIGEST(wp_sha512_256, wc_Sha512_256,
                  WP_SHA2_FLAGS,
                  wc_InitSha512_256_ex, wc_Sha512_256Update, wc_Sha512_256Final,
                  wc_Sha512_256Copy, wc_Sha512_256Free)
+#endif
 
 
 /*******************************************************************************
@@ -662,6 +665,12 @@ const OSSL_DISPATCH name##_functions[] = {                                     \
     { 0,                                  NULL                              }  \
 };
 
+/*******************************************************************************
+ * SHAKE
+ ******************************************************************************/
+
+#ifdef WP_HAVE_SHAKE_256
+
 /**
  * Get the table of supported settable parameters for XOF.
  *
@@ -680,10 +689,6 @@ static const OSSL_PARAM* wp_xof_settable_ctx_params(void* ctx,
     (void)provCtx;
     return wp_xof_supported_settable_ctx_params;
 }
-
-/*******************************************************************************
- * SHAKE
- ******************************************************************************/
 
 /** All SHAKE algorithms are eXtendable Output Functions. */
 #define WP_SHAKE_FLAGS  WP_DIGEST_FLAG_XOF
@@ -708,4 +713,6 @@ IMPLEMENT_XOF(shake, wp_shake_256, wc_Shake, wp_ShakeCtx,
               WP_SHAKE_FLAGS,
               wc_InitShake256, wc_Shake256_Update, wc_Shake256_Final,
               wc_Shake256_Copy, wc_Shake256_Free)
+
+#endif
 
