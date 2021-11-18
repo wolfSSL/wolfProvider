@@ -93,6 +93,12 @@ typedef struct wp_AeadCtx {
     size_t aadLen;
     /** CCM is not streaming and needs to cache AAD data. */
     unsigned char* aad;
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    /** Length of AAD data cached.  */
+    size_t inLen;
+    /** CCM is not streaming and needs to cache AAD data. */
+    unsigned char* in;
+#endif
 } wp_AeadCtx;
 
 
@@ -250,6 +256,8 @@ static int wp_aead_tls_init(wp_AeadCtx* ctx, unsigned char* aad, size_t aadLen)
     return tagLen;
 }
 
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM) || \
+    defined(WP_HAVE_AESCCM)
 /**
  * Cache more Additional Authentication Data in AEAD context object.
  *
@@ -282,6 +290,39 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
 
     return ok;
 }
+#endif
+
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+/**
+ * Cache more input data in AEAD context object.
+ *
+ * @param [in, out] ctx    AEAD context object.
+ * @param [in]      in     More AAD data.
+ * @parma [in]      inLen  Length of new AAD data.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_aead_cache_in(wp_AeadCtx *ctx, const unsigned char *in,
+    size_t inLen)
+{
+    int ok = 1;
+    unsigned char *p;
+
+    if (inLen > 0) {
+        p = (unsigned char*)OPENSSL_realloc(ctx->in, ctx->inLen + inLen);
+        if (p == NULL) {
+            ok = 0;
+        }
+        if (ok) {
+            ctx->in = p;
+            XMEMCPY(ctx->in + ctx->inLen, in, inLen);
+            ctx->inLen += inLen;
+        }
+    }
+
+    return ok;
+}
+#endif
 
 /**
  * Get the AEAD context parameters.
@@ -1113,6 +1154,7 @@ static int wp_aesgcm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
 }
 
 #ifdef WOLFSSL_AESGCM_STREAM
+
 /**
  * Streaming update of AES GCM cipher.
  *
@@ -1233,6 +1275,7 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
 
     return ok;
 }
+
 #else
 
 /**
@@ -1240,13 +1283,13 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
  *
  * @param [in, out] ctx      AEAD context object.
  * @param [out]     out      Buffer to hold decrypted/encrypted data.
+ * @param [out]     outLen   Length of data in output buffer.
  * @param [in]      in       Data to be encrypted/decrypted.
  * @param [in]      inLen    Length of data to be encrypted/decrypted.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out,
-    const unsigned char *in, size_t inLen)
+static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen)
 {
     int ok = 1;
     int rc;
@@ -1265,16 +1308,19 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out,
         if (ok) {
             ctx->ivSet = 1;
             /* IV coming out in this call. */
-            rc = wc_AesGcmEncrypt_ex(&ctx->aes, out, in, (word32)inLen,
-                ctx->iv, ctx->ivLen, ctx->buf, ctx->tagLen, ctx->aad,
-                ctx->aadLen);
+            rc = wc_AesGcmEncrypt_ex(&ctx->aes, out, ctx->in,
+                (word32)ctx->inLen, ctx->iv, ctx->ivLen, ctx->buf, ctx->tagLen,
+                ctx->aad, ctx->aadLen);
             if (rc != 0) {
                 ok = 0;
+            }
+            if (ok) {
+                ctx->tagAvail = 1;
             }
         }
     }
     else {
-        rc = wc_AesGcmDecrypt(&ctx->aes, out, in, (word32)inLen,
+        rc = wc_AesGcmDecrypt(&ctx->aes, out, ctx->in, (word32)ctx->inLen,
             ctx->iv, ctx->ivLen, ctx->buf, ctx->tagLen, ctx->aad,
             ctx->aadLen);
         if (rc == AES_GCM_AUTH_E) {
@@ -1288,17 +1334,23 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out,
             XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
         }
     }
+    if (ok) {
+        *outLen = ctx->inLen;
+    }
 
     OPENSSL_free(ctx->aad);
     ctx->aad = NULL;
     ctx->aadLen = 0;
     ctx->aadSet = 0;
+    OPENSSL_free(ctx->in);
+    ctx->in = NULL;
+    ctx->inLen = 0;
 
     return ok;
 }
 
 /**
- * Streaming update of AES CCM cipher.
+ * Streaming update of AES GCM cipher.
  *
  * @param [in, out] ctx      AEAD context object.
  * @param [out]     out      Buffer to hold encrypted/decrypted data.
@@ -1335,11 +1387,8 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
             ok = 0;
         }
         else if (inLen > 0) {
-            if (!wp_aesgcm_encdec(ctx, out, in, inLen)) {
+            if (!wp_aead_cache_in(ctx, in, inLen)) {
                 ok = 0;
-            }
-            if (ok) {
-                oLen = inLen;
             }
         }
 
@@ -1350,7 +1399,7 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
 }
 
 /**
- * Streaming final of AES CCM cipher.
+ * Streaming final of AES GCM cipher.
  *
  * @param [in, out] ctx      AEAD context object.
  * @param [out]     out      Buffer to hold encrypted/decrypted data.
@@ -1372,13 +1421,8 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
         ok = 0;
     }
     else {
-        if (ctx->aadSet && (!wp_aesgcm_encdec(ctx, out, NULL, 0))) {
-            ok = 0;
-        }
-        if (ok) {
-            ctx->ivSet = 0;
-            *outLen = 0;
-        }
+        ok = wp_aesgcm_encdec(ctx, out, outLen);
+        ctx->ivSet = 0;
     }
 
     return ok;

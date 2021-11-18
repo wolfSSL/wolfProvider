@@ -47,4 +47,4 @@
 /scripts/log/*.log
 *.gcno
 *.gcda
-openssl*
+/openssl*

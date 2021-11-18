@@ -101,16 +101,20 @@ static int test_aes_tag_enc(const EVP_CIPHER *cipher,
     if (err == 0 && len > 0) {
         /* Update with msg, if len > 0 (not GMAC) */
         err = EVP_EncryptUpdate(ctx, enc, &encLen, msg, len) != 1;
+    #ifdef WOLFSSL_AESGCM_STREAM
         if (encLen != len) {
             err = 1;
         }
+    #endif
     }
     if (err == 0) {
         err = EVP_EncryptFinal_ex(ctx, enc + encLen, &encLen) != 1;
+    #ifdef WOLFSSL_AESGCM_STREAM
         if (encLen != 0) {
             /* should be no more data left */
             err = 1;
         }
+    #endif
     }
     if (err == 0) {
         err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tagLen, tag) != 1;
