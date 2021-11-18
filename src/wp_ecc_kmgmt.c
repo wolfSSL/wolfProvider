@@ -28,7 +28,10 @@
 #include <openssl/ec.h>
 #include <openssl/obj_mac.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+#ifdef WP_HAVE_ECC
 
 /* Note: Explicit parameters are not supported. A predefined curve MUST be used.
  */
@@ -2784,3 +2787,4 @@ const OSSL_DISPATCH wp_ecc_epki_pem_encoder_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_ECC */

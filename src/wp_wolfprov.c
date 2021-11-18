@@ -208,23 +208,36 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
 
 /* List of digest algorithm implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_digests[] = {
+#ifdef WP_HAVE_MD5
     /* MD5 */
     { WP_NAMES_MD5, WOLFPROV_PROPERTIES, wp_md5_functions,
       "" },
+#endif
+#ifdef WP_HAVE_MD5_SHA1
     /* MD5-SHA1 */
     { WP_NAMES_MD5_SHA1, WOLFPROV_PROPERTIES, wp_md5_sha1_functions,
       "" },
+#endif
+#ifdef WP_HAVE_SHA1
     /* SHA-1 */
     { WP_NAMES_SHA1, WOLFPROV_PROPERTIES, wp_sha1_functions,
       "" },
+#endif
 
     /* SHA-2 */
+#ifdef WP_HAVE_SHA224
     { WP_NAMES_SHA2_224, WOLFPROV_PROPERTIES, wp_sha224_functions,
       "" },
+#endif
+#ifdef WP_HAVE_SHA256
     { WP_NAMES_SHA2_256, WOLFPROV_PROPERTIES, wp_sha256_functions,
       "" },
+#endif
+#ifdef WP_HAVE_SHA384
     { WP_NAMES_SHA2_384, WOLFPROV_PROPERTIES, wp_sha384_functions,
       "" },
+#endif
+#ifdef WP_HAVE_SHA512
     { WP_NAMES_SHA2_512, WOLFPROV_PROPERTIES, wp_sha512_functions,
       "" },
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
@@ -235,8 +248,10 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
       wp_sha512_256_functions,
       "" },
 #endif
+#endif /* WP_HAVE_SHA512 */
 
     /* SHA-3 */
+#ifdef WP_HAVE_SHA3
     { WP_NAMES_SHA3_224, WOLFPROV_PROPERTIES, wp_sha3_224_functions,
       "" },
     { WP_NAMES_SHA3_256, WOLFPROV_PROPERTIES, wp_sha3_256_functions,
@@ -245,6 +260,7 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
       "" },
     { WP_NAMES_SHA3_512, WOLFPROV_PROPERTIES, wp_sha3_512_functions,
       "" },
+#endif
 
 #ifdef WP_HAVE_SHAKE_256
     /* SHAKE */
@@ -322,10 +338,14 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
 
 /* List of MAC algorithm implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_macs[] = {
+#ifdef WP_HAVE_HMAC
     { WP_NAMES_HMAC, WOLFPROV_PROPERTIES, wp_hmac_functions,
       "" },
+#endif
+#ifdef WP_HAVE_CMAC
     { WP_NAMES_CMAC, WOLFPROV_PROPERTIES, wp_cmac_functions,
       "" },
+#endif
 #ifdef WP_HAVE_AESGCM
     { WP_NAMES_GMAC, WOLFPROV_PROPERTIES, wp_gmac_functions,
       "" },
@@ -369,13 +389,17 @@ static const OSSL_ALGORITHM wolfprov_rands[] = {
 /* List of key gen/import/export implementations available in wolfSSL provider.
  */
 static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
+#ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WOLFPROV_PROPERTIES, wp_rsa_keymgmt_functions,
       "RSA" },
     { WP_NAMES_RSA_PSS, WOLFPROV_PROPERTIES, wp_rsapss_keymgmt_functions,
       "RSA_PSS" },
+#endif
 
+#ifdef WP_HAVE_ECC
     { WP_NAMES_EC, WOLFPROV_PROPERTIES, wp_ecc_keymgmt_functions,
       "ECC" },
+#endif
 
 #ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WOLFPROV_PROPERTIES, wp_x25519_keymgmt_functions,
@@ -395,18 +419,26 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
       "X448" },
 #endif
 
+#ifdef WP_HAVE_DH
     { WP_NAMES_DH, WOLFPROV_PROPERTIES, wp_dh_keymgmt_functions,
       "DH" },
     { WP_NAMES_DHX, WOLFPROV_PROPERTIES, wp_dh_keymgmt_functions,
       "DHX" },
+#endif
 
+#ifdef WP_HAVE_HMAC
     { WP_NAMES_HMAC, WOLFPROV_PROPERTIES, wp_hmac_keymgmt_functions,
       "HMAC" },
+#endif
+#ifdef WP_HAVE_CMAC
     { WP_NAMES_CMAC, WOLFPROV_PROPERTIES, wp_cmac_keymgmt_functions,
       "CMAC" },
+#endif
 
+#ifdef WP_HAVE_HKDF
     { WP_NAMES_HKDF, WOLFPROV_PROPERTIES, wp_kdf_keymgmt_functions,
       "HKDF" },
+#endif
     { WP_NAMES_TLS1_PRF, WOLFPROV_PROPERTIES, wp_kdf_keymgmt_functions,
       "HKDF" },
     { WP_NAMES_TLS1_3_KDF, WOLFPROV_PROPERTIES, wp_kdf_keymgmt_functions,
@@ -418,8 +450,10 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
 /* List of key exchange algorithm implementations available in wolfSSL provider.
  */
 static const OSSL_ALGORITHM wolfprov_keyexch[] = {
+#ifdef WP_HAVE_ECDH
     { WP_NAMES_ECDH, WOLFPROV_PROPERTIES, wp_ecdh_keyexch_functions,
       "" },
+#endif
 #ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WOLFPROV_PROPERTIES, wp_x25519_keyexch_functions,
       "" },
@@ -428,8 +462,10 @@ static const OSSL_ALGORITHM wolfprov_keyexch[] = {
     { WP_NAMES_X448, WOLFPROV_PROPERTIES, wp_x448_keyexch_functions,
       "" },
 #endif
+#ifdef WP_HAVE_DH
     { WP_NAMES_DH, WOLFPROV_PROPERTIES, wp_dh_keyexch_functions,
       "" },
+#endif
 
     { WP_NAMES_HKDF, WOLFPROV_PROPERTIES, wp_hkdf_keyexch_functions,
       "" },
@@ -441,10 +477,14 @@ static const OSSL_ALGORITHM wolfprov_keyexch[] = {
 
 /* List of signature algorithm implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_signature[] = {
+#ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WOLFPROV_PROPERTIES, wp_rsa_signature_functions,
       "" },
+#endif
+#ifdef WP_HAVE_ECDSA
     { WP_NAMES_ECDSA, WOLFPROV_PROPERTIES, wp_ecdsa_signature_functions,
       "" },
+#endif
 #ifdef WP_HAVE_ED25519
     { WP_NAMES_ED25519, WOLFPROV_PROPERTIES, wp_ed25519_signature_functions,
       "" },
@@ -453,10 +493,14 @@ static const OSSL_ALGORITHM wolfprov_signature[] = {
     { WP_NAMES_ED448, WOLFPROV_PROPERTIES, wp_ed448_signature_functions,
       "" },
 #endif
+#ifdef WP_HAVE_HMAC
     { WP_NAMES_HMAC, WOLFPROV_PROPERTIES, wp_hmac_signature_functions,
       "" },
+#endif
+#ifdef WP_HAVE_CMAC
     { WP_NAMES_CMAC, WOLFPROV_PROPERTIES, wp_cmac_signature_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -464,8 +508,10 @@ static const OSSL_ALGORITHM wolfprov_signature[] = {
 /* List of asymmetric encryption/decryption algorithm implementations available
  * in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_asym_cipher[] = {
+#ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WOLFPROV_PROPERTIES, wp_rsa_asym_cipher_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -473,8 +519,10 @@ static const OSSL_ALGORITHM wolfprov_asym_cipher[] = {
 /* List of asymmetric key encryption mechanism algorithm implementations
  * available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_asym_kem[] = {
+#ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WOLFPROV_PROPERTIES, wp_rsa_asym_kem_functions,
       "" },
+#endif
     { NULL, NULL, NULL, NULL }
 };
 
@@ -485,6 +533,7 @@ static const OSSL_ALGORITHM wolfprov_asym_kem[] = {
 
 /* List of ASN.1 encoding implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_encoder[] = {
+#ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_rsa_spki_der_encoder_functions,
       "" },
@@ -524,7 +573,9 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
       wp_rsapss_pki_pem_encoder_functions,
       "" },
 #endif
+#endif /* WP_HAVE_RSA */
 
+#ifdef WP_HAVE_DH
     { WP_NAMES_DH, WP_ENCODER_PROPERTIES(type-specific, der),
       wp_dh_type_specific_der_encoder_functions,
       "" },
@@ -549,7 +600,9 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_DH, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_dh_epki_pem_encoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_ECC
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(type-specific, der),
       wp_ecc_type_specific_der_encoder_functions,
       "" },
@@ -574,6 +627,7 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_ecc_epki_pem_encoder_functions,
       "" },
+#endif
 
 #ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
@@ -725,6 +779,7 @@ const OSSL_DISPATCH wp_dummy_decoder_functions[] = {
 
 /* List of ASN.1 decoding implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_decoder[] = {
+#ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_rsa_spki_decoder_functions,
       "" },
@@ -740,7 +795,9 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
     { WP_NAMES_RSA_PSS, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_rsapss_pki_decoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_DH
     { WP_NAMES_DH, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_dh_spki_decoder_functions,
       "" },
@@ -750,7 +807,9 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
     { WP_NAMES_DH, WP_DECODER_PROPERTIES(type-specific),
       wp_dh_type_specific_decoder_functions,
       "" },
+#endif
 
+#ifdef WP_HAVE_ECC
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_ecc_spki_decoder_functions,
       "" },
@@ -760,6 +819,7 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(type-specific),
       wp_ecc_type_specific_decoder_functions,
       "" },
+#endif
 
 #ifdef WP_HAVE_X25519
     { WP_NAMES_X25519, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),

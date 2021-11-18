@@ -29,6 +29,7 @@
 #include <openssl/store.h>
 #include <openssl/decoder.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
 /* TODO: support directory access. */
@@ -297,27 +298,33 @@ typedef struct wp_DecoderInfo {
 } wp_DecoderInfo;
 
 static const wp_DecoderInfo wp_decoders[] = {
+#ifdef WP_HAVE_RSA
     { "RSA"    , "structure=SubjectPublicKeyInfo"    },
     { "RSA"    , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_DH
     { "DH"     , "structure=type-specific"           },
     { "DH"     , "structure=SubjectPublicKeyInfo"    },
     { "DH"     , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_ECC
     { "EC"     , "structure=type-specific"           },
     { "EC"     , "structure=SubjectPublicKeyInfo"    },
     { "EC"     , "structure=PrivateKeyInfo"          },
-#ifdef HAVE_CURVE25519
+#endif
+#ifdef WP_HAVE_X25519
     { "X25519" , "structure=SubjectPublicKeyInfo"    },
     { "X25519" , "structure=PrivateKeyInfo"          },
 #endif
-#ifdef HAVE_ED25519
+#ifdef WP_HAVE_ED25519
     { "ED25519", "structure=SubjectPublicKeyInfo"    },
     { "ED25519", "structure=PrivateKeyInfo"          },
 #endif
-#ifdef HAVE_CURVE448
+#ifdef WP_HAVE_X448
     { "X448"   , "structure=SubjectPublicKeyInfo"    },
     { "X448"   , "structure=PrivateKeyInfo"          },
 #endif
-#ifdef HAVE_ED448
+#ifdef WP_HAVE_ED448
     { "ED448"  , "structure=SubjectPublicKeyInfo"    },
     { "ED448"  , "structure=PrivateKeyInfo"          },
 #endif

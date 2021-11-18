@@ -26,7 +26,10 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+#ifdef WP_HAVE_DH
 
 /** No KDF applied to derived secret. */
 #define WP_KDF_NONE       0
@@ -216,6 +219,7 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
         ok = 0;
     }
     if (ok) {
+#ifdef HAVE_X963_KDF
         int rc;
         /* TODO: support X9.42 KDF that includes ASN.1 encoding. */
         rc = wc_X963_KDF(ctx->kdfMd, sec, secLen, ctx->ukm, ctx->ukmLen,
@@ -226,6 +230,13 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
         else {
             *keyLen = ctx->keyLen;
         }
+#else
+        (void)key;
+        (void)keyLen;
+        (void)sec;
+        (void)secLen;
+        ok = 0;
+#endif
     }
 
     return ok;
@@ -638,4 +649,6 @@ const OSSL_DISPATCH wp_dh_keyexch_functions[] = {
     { OSSL_FUNC_KEYEXCH_GETTABLE_CTX_PARAMS, (DFUNC)wp_dh_gettable_ctx_params },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_DH */
 

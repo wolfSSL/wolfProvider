@@ -28,8 +28,10 @@
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#ifdef WP_HAVE_RSA
 
 /** Supported selections (key parts) in this key manager for RSA. */
 #define WP_RSA_POSSIBLE_SELECTIONS                                             \
@@ -58,6 +60,9 @@ OSSL_PARAM_BN(OSSL_PKEY_PARAM_RSA_COEFFICIENT1, NULL, 0)
 #define WP_RSA_PARAM_NUMS_CNT       8
 /** Count of public RSA numbers that are in parameters. */
 #define WP_RSA_PARAM_PUB_NUMS_CNT   2
+
+/** Default RSA digest */
+#define WP_RSA_DEFAULT_MD          "SHA256"
 
 /** Default RSA PSS digest. */
 #define WP_RSA_PSS_DIGEST_DEF       WC_HASH_TYPE_SHA
@@ -134,6 +139,8 @@ struct wp_Rsa {
 
     /** Extra PSS parameters. */
     wp_RsaPssParams pssParams;
+    /** PSS parameters set. */
+    int pssDefSet;
 };
 
 /**
@@ -405,6 +412,7 @@ static wp_Rsa* wp_rsa_dup(const wp_Rsa* src, int selection)
             dst->hasPub    = 1;
             dst->hasPriv   = copyPriv;
             dst->pssParams = src->pssParams;
+            dst->pssDefSet = src->pssDefSet;
         }
 
         if (!ok) {
@@ -780,10 +788,18 @@ static int wp_rsa_get_params(wp_Rsa* rsa, OSSL_PARAM params[])
             ok = 0;
         }
     }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_DEFAULT_DIGEST);
+        if ((p != NULL) && ((rsa->type != RSA_FLAG_TYPE_RSASSAPSS) ||
+            (!rsa->pssDefSet)) && (!OSSL_PARAM_set_utf8_string(p,
+                WP_RSA_DEFAULT_MD))) {
+            ok = 0;
+        }
+    }
     if (ok && (!wp_rsa_get_params_key_data(rsa, params))) {
         ok = 0;
     }
-    if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS) &&
+    if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS) && rsa->pssDefSet &&
         (!wp_rsa_get_params_pss(&rsa->pssParams, params))) {
         ok = 0;
     }
@@ -942,7 +958,6 @@ static int wp_rsa_import(wp_Rsa* rsa, int selection, const OSSL_PARAM params[])
     int ok = 1;
     int importPriv =  (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
     int importPub =  (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
-    int defaultsSet = 0;
 
     if ((!wolfssl_prov_is_running()) || (rsa == NULL)) {
         ok = 0;
@@ -956,13 +971,13 @@ static int wp_rsa_import(wp_Rsa* rsa, int selection, const OSSL_PARAM params[])
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS) != 0) &&
         (rsa->type == RSA_FLAG_TYPE_RSASSAPSS) &&
-        (!wp_rsa_pss_params_set_params(&rsa->pssParams, &defaultsSet, params,
+        (!wp_rsa_pss_params_set_params(&rsa->pssParams, &rsa->pssDefSet, params,
          rsa->provCtx->libCtx))) {
         ok = 0;
     }
     if (ok) {
-        rsa->bits = mp_count_bits(&rsa->key.n);
-        rsa->hasPub = importPub;
+        rsa->bits    = mp_count_bits(&rsa->key.n);
+        rsa->hasPub  = importPub;
         rsa->hasPriv = importPriv;
     }
 
@@ -1137,7 +1152,7 @@ static int wp_rsa_export(wp_Rsa* rsa, int selection, OSSL_CALLBACK* paramCb,
         }
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS) != 0) &&
-        (rsa->type == RSA_FLAG_TYPE_RSASSAPSS) &&
+        (rsa->type == RSA_FLAG_TYPE_RSASSAPSS) && rsa->pssDefSet &&
         (!wp_rsa_pss_params_export(&rsa->pssParams, params, &paramSz))) {
         ok = 0;
     }
@@ -2994,4 +3009,6 @@ const OSSL_DISPATCH wp_rsapss_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_RSA */
 

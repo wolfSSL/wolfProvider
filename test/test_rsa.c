@@ -314,6 +314,7 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
             padMode, md, mgf1Md);
     }
 
+#ifdef WP_HAVE_SHA256
     /* OpenSSL doesn't allow RSA signatures with no padding. */
     if ((err == 0) && (padMode != RSA_NO_PADDING)) {
         PRINT_MSG("Test creating/verifying a signature");
@@ -345,6 +346,7 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
         err = test_digest_verify(pkey, osslLibCtx, buf, bufLen, "SHA-256",
              rsaSig, rsaSigLen, padMode);
     }
+#endif
 
     EVP_PKEY_free(pkey);
 
@@ -432,16 +434,20 @@ int test_rsa_sign_verify_pss(void *data)
 
     /* Use SHA-1 (default) for MD and MGF1 MD. */
     err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, NULL, NULL) == 1;
+#ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD and MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
                                        EVP_sha256()) == 1;
     }
+#endif
+#if defined(WP_HAVE_SHA384) && defined(WP_AHVE_SHA512)
     if (err == 0) {
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha384(),
                                        EVP_sha512()) == 1;
     }
+#endif
 
     return err;
 }
@@ -561,18 +567,22 @@ int test_rsa_enc_dec_oaep(void *data)
     /* Use SHA-1 (default) for MD and MGF1 MD. */
     err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
                            RSA_PKCS1_OAEP_PADDING, NULL, NULL) == 1;
+#ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD and MGF1 MD. */
         err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
                                RSA_PKCS1_OAEP_PADDING, EVP_sha256(),
                                EVP_sha256()) == 1;
     }
+#endif
+#ifdef WP_HAVE_SHA384
     if (err == 0) {
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
         err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
                                RSA_PKCS1_OAEP_PADDING, EVP_sha384(),
                                EVP_sha512()) == 1;
     }
+#endif
 
     return err;
 }

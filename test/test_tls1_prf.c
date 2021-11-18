@@ -233,6 +233,7 @@ static int test_tls1_prf_hexstr_calc(OSSL_LIB_CTX* libCtx, unsigned char *key,
     return err;
 }
 
+#if defined(WP_HAVE_SHA256) || defined(WP_HAVE_SHA384)
 static int test_tls1_prf_str_md(const char *md)
 {
     int err = 0;
@@ -284,6 +285,7 @@ static int test_tls1_prf_str_md(const char *md)
     }
     return err;
 }
+#endif
 
 static int test_tls1_prf_fail_calc(OSSL_LIB_CTX* libCtx)
 {
@@ -352,20 +354,32 @@ static int test_tls1_prf_fail()
 
 int test_tls1_prf(void *data)
 {
-    int err;
+    int err = 0;
 
     (void)data;
 
+#ifdef WP_HAVE_MD5_SHA1
     err = test_tls1_prf_md(EVP_md5_sha1());
+#endif
+#ifdef WP_HAVE_SHA256
     if (err == 0) {
         err = test_tls1_prf_md(EVP_sha256());
     }
+#endif
+#ifdef WP_HAVE_SHA384
     if (err == 0) {
         err = test_tls1_prf_md(EVP_sha384());
     }
+#endif
+#if defined(WP_HAVE_SHA256)
     if (err == 0) {
         err = test_tls1_prf_str_md("sha256");
     }
+#elif defined(WP_HAVE_SHA384
+    if (err == 0) {
+        err = test_tls1_prf_str_md("sha384");
+    }
+#endif
     if (err == 0) {
         err = test_tls1_prf_fail();
     }

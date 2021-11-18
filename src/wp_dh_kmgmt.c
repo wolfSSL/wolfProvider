@@ -31,6 +31,8 @@
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#ifdef WP_HAVE_DH
+
 /** Supported selections (key parts) in this key manager for DH. */
 #define WP_DH_POSSIBLE_SELECTIONS                                              \
     (OSSL_KEYMGMT_SELECT_KEYPAIR | OSSL_KEYMGMT_SELECT_ALL_PARAMETERS)
@@ -2889,3 +2891,4 @@ const OSSL_DISPATCH wp_dh_epki_pem_encoder_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_DH */
