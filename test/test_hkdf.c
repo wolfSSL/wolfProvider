@@ -339,6 +339,7 @@ static int test_hkdf_str_md(const char *md, const char *mode)
 static int test_hkdf_fail_calc(OSSL_LIB_CTX* libCtx)
 {
     int err = 0;
+#ifdef WP_HAVE_SHA256
     EVP_PKEY_CTX *ctx = NULL;
     unsigned char key[1] = { 0 };
 
@@ -395,6 +396,7 @@ static int test_hkdf_fail_calc(OSSL_LIB_CTX* libCtx)
     }
 
     EVP_PKEY_CTX_free(ctx);
+#endif
     return err;
 }
 
@@ -432,13 +434,21 @@ int test_hkdf(void *data)
     (void)data;
 
     for (i = 0; (err == 0) && (i < NUM_MODES); i++) {
+    #ifdef WP_HAVE_SHA256
         err = test_hkdf_md(EVP_sha256(), mode[i]);
+    #endif
+    #ifdef WP_HAVE_SHA384
         if (err == 0) {
             err = test_hkdf_md(EVP_sha384(), mode[i]);
         }
+    #endif
     }
     for (i = 0; (err == 0) && (i < NUM_MODES); i++) {
+    #ifdef WP_HAVE_SHA256
         err = test_hkdf_str_md("sha256", modeStr[i]);
+    #elif defined(WP_HAVE_SHA384)
+        err = test_hkdf_str_md("sha384", modeStr[i]);
+    #endif
     }
     if (err == 0) {
         err = test_hkdf_fail();

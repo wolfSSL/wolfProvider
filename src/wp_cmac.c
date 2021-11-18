@@ -27,8 +27,11 @@
 #include <openssl/evp.h>
 #include <openssl/cmac.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
+
+#ifdef WP_HAVE_CMAC
 
 /**
  * CMAC context structure when using wolfSSL for implementation.
@@ -463,4 +466,6 @@ const OSSL_DISPATCH wp_cmac_functions[] = {
     { OSSL_FUNC_MAC_SET_CTX_PARAMS,      (DFUNC)wp_cmac_set_ctx_params      },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_CMAC */
 

@@ -26,8 +26,10 @@
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#ifdef WP_HAVE_RSA
 
 /* This define taken from ssl.h.
  * Can't include this header as it re-declares OpenSSL types.
@@ -886,3 +888,4 @@ const OSSL_DISPATCH wp_rsa_asym_cipher_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_RSA */

@@ -26,8 +26,10 @@
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#ifdef WP_HAVE_RSA
 
 /** Type of RSA KEM operation is Secret-Value Encapsulation. */
 #define WP_RSA_KEM_OP_RSASVE    1
@@ -559,4 +561,6 @@ const OSSL_DISPATCH wp_rsa_asym_kem_functions[] = {
     { OSSL_FUNC_KEM_SETTABLE_CTX_PARAMS, (DFUNC)wp_rsakem_settable_ctx_params },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_RSA */
 

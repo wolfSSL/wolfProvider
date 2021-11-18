@@ -25,8 +25,10 @@
 #include <openssl/params.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#if defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC)
 
 /**
  * MAC signature context.
@@ -329,6 +331,8 @@ static const OSSL_PARAM *wp_mac_settable_ctx_params(wp_MacSigCtx *ctx,
  * HMAC
  */
 
+#ifdef WP_HAVE_HMAC
+
 static wp_MacSigCtx* wp_hmac_ctx_new(WOLFPROV_CTX* provCtx,
     const char* propQuery)
 {
@@ -350,9 +354,13 @@ const OSSL_DISPATCH wp_hmac_signature_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_HMAC */
+
 /*
  * CMAC
  */
+
+#ifdef WP_HAVE_CMAC
 
 static wp_MacSigCtx* wp_cmac_ctx_new(WOLFPROV_CTX* provCtx,
     const char* propQuery)
@@ -375,3 +383,6 @@ const OSSL_DISPATCH wp_cmac_signature_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_CMAC */
+
+#endif /* WP_HAVE_HMAC || WP_HAVE_CMAC */

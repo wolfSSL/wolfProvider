@@ -29,15 +29,19 @@
 #include <wolfssl/wolfcrypt/settings.h>
 
 #define WP_HAVE_DIGEST
+#if !defined(NO_MD5)
+    #define WP_HAVE_MD5
+    #if !defined(NO_SHA)
+        #define WP_HAVE_MD5_SHA1
+    #endif
+#endif
 #if !defined(NO_SHA)
     #define WP_HAVE_SHA1
 #endif
 #ifdef WOLFSSL_SHA224
     #define WP_HAVE_SHA224
 #endif
-#ifndef NO_SHA256
-    #define WP_HAVE_SHA256
-#endif
+#define WP_HAVE_SHA256
 #ifdef WOLFSSL_SHA384
     #define WP_HAVE_SHA384
 #endif
@@ -51,6 +55,7 @@
     #define WP_HAVE_SHA512_256
 #endif
 #ifdef WOLFSSL_SHA3
+    #define WP_HAVE_SHA3
     #define WP_HAVE_SHA3_224
     #define WP_HAVE_SHA3_256
     #define WP_HAVE_SHA3_384

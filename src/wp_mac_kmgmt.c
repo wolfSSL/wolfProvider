@@ -26,8 +26,10 @@
 #include <openssl/core_names.h>
 #include <openssl/params.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#if defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC)
 
 /**
  * MAC key object. Used for HMAC and CMAC.
@@ -627,10 +629,11 @@ static int wp_mac_get_params(wp_Mac* mac, OSSL_PARAM params[])
     return ok;
 }
 
-
 /*
  * HMAC
  */
+
+#ifdef WP_HAVE_HMAC
 
 /**
  * Create a new HMAC key object.
@@ -767,9 +770,13 @@ const OSSL_DISPATCH wp_hmac_keymgmt_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_HMAC */
+
 /*
  * CMAC
  */
+
+#ifdef WP_HAVE_CMAC
 
 /**
  * Create a new CMAC key object.
@@ -906,4 +913,8 @@ const OSSL_DISPATCH wp_cmac_keymgmt_functions[] = {
     { OSSL_FUNC_KEYMGMT_EXPORT_TYPES,      (DFUNC)wp_cmac_export_types        },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_CMAC */
+
+#endif /* WP_HAVE_HMAC || WP_HAVE_CMAC */
 
