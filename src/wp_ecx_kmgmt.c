@@ -581,9 +581,9 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
 {
     int ok = 1;
     int rc;
-    unsigned char key1[WP_MAX_KEY_SIZE];
+    unsigned char key1[WP_MAX_KEY_SIZE] = "";
     word32 len1;
-    unsigned char key2[WP_MAX_KEY_SIZE];
+    unsigned char key2[WP_MAX_KEY_SIZE] = "";
     word32 len2;
 
     ok &= ecx1->hasPriv && ecx2->hasPriv;
@@ -623,9 +623,9 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
 {
     int ok = 1;
     int rc;
-    unsigned char key1[WP_MAX_KEY_SIZE];
+    unsigned char key1[WP_MAX_KEY_SIZE] = "";
     word32 len1;
-    unsigned char key2[WP_MAX_KEY_SIZE];
+    unsigned char key2[WP_MAX_KEY_SIZE] = "";
     word32 len2;
 
     ok &= ecx1->hasPub && ecx2->hasPub;
@@ -698,7 +698,7 @@ static int wp_ecx_validate_pub_key(const wp_Ecx* ecx)
 {
     int ok = 1;
     int rc;
-    unsigned char key[CURVE448_KEY_SIZE];
+    unsigned char key[CURVE448_KEY_SIZE] = "";
     word32 len = ecx->data->len;
 
     ok &= ecx->hasPub;

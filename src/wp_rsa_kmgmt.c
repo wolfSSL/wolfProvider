@@ -514,7 +514,7 @@ static int wp_rsa_pss_params_set_digest(wp_RsaPssParams* pss,
             ok = 0;
         }
     }
-    if (ok && (mdName != NULL)) {
+    if (ok) {
         ok = wp_rsa_pss_params_setup_md(pss, mdName, mdProps, libCtx);
     }
 

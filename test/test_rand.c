@@ -22,6 +22,8 @@
 
 #ifdef WP_HAVE_RANDOM
 
+static int test_random_api(void);
+
 static int test_random_api()
 {
     int err;

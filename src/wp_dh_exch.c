@@ -299,7 +299,7 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
 {
     int ok = 1;
     int done = 0;
-    unsigned char* out;
+    unsigned char* out = NULL;
     size_t outLen = 0;
     unsigned char* tmp = NULL;
     size_t maxLen = 0;

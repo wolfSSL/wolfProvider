@@ -26,6 +26,8 @@
 
 #include "unit.h"
 
+static void usage(void);
+
 OSSL_LIB_CTX* wpLibCtx = NULL;
 OSSL_LIB_CTX* osslLibCtx = NULL;
 

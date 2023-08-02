@@ -22,6 +22,8 @@
 
 #ifdef WP_HAVE_TLS1_PRF
 
+static int test_tls1_prf_fail(void);
+
 static int test_tls1_prf_calc(OSSL_LIB_CTX* libCtx, unsigned char *key,
     int keyLen, const EVP_MD *md)
 {

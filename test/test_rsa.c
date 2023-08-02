@@ -394,18 +394,18 @@ int test_rsa_sign_sha1(void *data)
 
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
-        err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), EVP_sha1(),
+        err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), (const char*)EVP_sha1(),
                                rsaSig, &rsaSigLen, 0);
     }
     if (err == 0) {
         PRINT_MSG("Verify with wolfprovider");
-        err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), EVP_sha1(),
+        err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), (const char*)EVP_sha1(),
                                  rsaSig, rsaSigLen, 0);
     }
     if (err == 0) {
         PRINT_MSG("Sign with wolfprovider");
         rsaSigLen = RSA_size(rsaKey);
-        err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), EVP_sha1(),
+        err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), (const char*)EVP_sha1(),
                               rsaSig, &rsaSigLen, 0) != 1;
     }
     EVP_PKEY_free(pkey);

@@ -22,6 +22,8 @@
 
 #ifdef WP_HAVE_HKDF
 
+static int test_hkdf_fail(void);
+
 static int test_hkdf_calc(OSSL_LIB_CTX* libCtx, unsigned char *key, int keyLen,
     const EVP_MD *md, int mode)
 {

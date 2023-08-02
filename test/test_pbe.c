@@ -120,6 +120,10 @@ static const unsigned char pbeParamPbes2Aes256Cbc[] = {
                       0x60,0x86,0x48,0x01,0x65,0x03,0x04,0x01,0x2A,
 };
 
+static int test_pbe_sha1_des3_pbkdf1(void);
+static int test_pbe_pbes2_aes128_cbc(void);
+static int test_pbe_pbes2_aes256_cbc(void);
+
 static int test_pbe_encipher(ASN1_OBJECT *obj, ASN1_TYPE *param,
     const unsigned char *in, size_t inLen, unsigned char *out, int *outLen,
     int enc_dec)

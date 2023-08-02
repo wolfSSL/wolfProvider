@@ -67,7 +67,7 @@ sudo make install
 git clone https://github.com/wolfssl/wolfssl.git
 cd wolfssl
 ./autogen.sh
-./configure --enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-des3 --enable-aesctr --enable-aesccm --enable-x963kdf CPPFLAGS="-DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER --enable-certgen --enable-aeskeywrap --enable-enckeys
+./configure --enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-des3 --enable-aesctr --enable-aesccm --enable-x963kdf CPPFLAGS="-DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DWOLFSSL_DH_EXTRA -DUSE_ECC_B_PARAM -DWOLFSSL_RSA_KEY_CHECK" --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-aesgcm-stream --enable-shake256 --enable-shake128 --enable-curve25519 --enable-curve448 --enable-ed448 --enable-ed25519
 make
 sudo make install
 ```
@@ -79,6 +79,7 @@ Remove `-DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER` and add `--enab
 ### wolfProvider
 
 ```
+git clone https://github.com/wolfSSL/wolfProvider.git
 ./autogen.sh
 ./configure
 make
