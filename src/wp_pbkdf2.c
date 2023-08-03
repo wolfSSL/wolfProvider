@@ -258,9 +258,11 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     if (ok) {
         int rc;
 
+        PRIVATE_KEY_UNLOCK();
         rc = wc_PBKDF2_ex(key, ctx->password, ctx->passwordSz, ctx->salt,
             ctx->saltSz, ctx->iterations, keyLen, ctx->mdType, NULL,
             INVALID_DEVID);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
@@ -366,9 +368,11 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     if (ok) {
         int rc;
 
+        PRIVATE_KEY_UNLOCK();
         rc = wc_PKCS12_PBKDF_ex(key, ctx->password, ctx->passwordSz, ctx->salt,
             ctx->saltSz, ctx->iterations, keyLen, ctx->mdType, ctx->keyUse,
             NULL);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }

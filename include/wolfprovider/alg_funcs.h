@@ -189,6 +189,7 @@ void wp_ecc_free(wp_Ecc* ecc);
 ecc_key* wp_ecc_get_key(wp_Ecc* ecc);
 WC_RNG* wp_ecc_get_rng(wp_Ecc* ecc);
 int wp_ecc_get_size(wp_Ecc* ecc);
+int wp_ecc_check_usage(wp_Ecc* ecc);
 
 /* Internal ECX types and functions. */
 typedef struct wp_Ecx wp_Ecx;

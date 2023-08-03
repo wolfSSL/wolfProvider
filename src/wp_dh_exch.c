@@ -272,9 +272,13 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
         ok = 0;
     }
     if (ok) {
+        int rc;
+
         /* Calculate secret. */
-        int rc = wc_DhAgree(wp_dh_get_key(ctx->key), secret, &len, priv, privSz,
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_DhAgree(wp_dh_get_key(ctx->key), secret, &len, priv, privSz,
             pub, pubSz);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
@@ -310,7 +314,7 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
 {
     int ok = 1;
     int done = 0;
-    unsigned char* out;
+    unsigned char* out = NULL;
     size_t outLen = 0;
     unsigned char* tmp = NULL;
     size_t maxLen = 0;

@@ -1424,7 +1424,7 @@ int test_ec_load_key(void* data)
         pkey = OSSL_STORE_INFO_get1_PKEY(info);
         err = pkey == NULL;
     }
-    
+
     EVP_PKEY_free(pkey);
     OSSL_STORE_INFO_free(info);
     OSSL_STORE_close(ctx);
@@ -1459,7 +1459,7 @@ int test_ec_load_cert(void* data)
         cert = OSSL_STORE_INFO_get1_CERT(info);
         err = cert == NULL;
     }
-    
+
     X509_free(cert);
     OSSL_STORE_INFO_free(info);
     OSSL_STORE_close(ctx);

@@ -89,6 +89,10 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
 {
     WOLFPROV_CTX* ctx;
 
+#ifdef WC_RNG_SEED_CB
+    wc_SetSeed_Cb(wc_GenerateSeed);
+#endif
+
     ctx = (WOLFPROV_CTX*)OPENSSL_zalloc(sizeof(WOLFPROV_CTX));
     if ((ctx != NULL) && (wc_InitRng(&ctx->rng) != 0)) {
         OPENSSL_free(ctx);
@@ -241,12 +245,16 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
     { WP_NAMES_SHA2_512, WOLFPROV_PROPERTIES, wp_sha512_functions,
       "" },
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#ifndef WOLFSSL_NOSHA512_224
     { WP_NAMES_SHA2_512_224, WOLFPROV_PROPERTIES,
       wp_sha512_224_functions,
       "" },
+#endif /* !WOLFSSL_NOSHA512_224 */
+#ifndef WOLFSSL_NOSHA512_256
     { WP_NAMES_SHA2_512_256, WOLFPROV_PROPERTIES,
       wp_sha512_256_functions,
       "" },
+#endif /* !WOLFSSL_NOSHA512_256 */
 #endif
 #endif /* WP_HAVE_SHA512 */
 

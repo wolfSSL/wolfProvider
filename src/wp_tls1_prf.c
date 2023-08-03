@@ -168,20 +168,24 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
     if (ok) {
         int rc;
         if (ctx->mdType == WC_HASH_TYPE_MD5_SHA) {
+            PRIVATE_KEY_UNLOCK();
             rc = wc_PRF_TLSv1(key, (word32)keyLen, ctx->secret,
                 (word32)(ctx->secretSz), (byte*)"", 0, ctx->seed,
                 (word32)(ctx->seedSz), NULL, INVALID_DEVID);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
         }
         else {
+            PRIVATE_KEY_UNLOCK();
             rc = wc_PRF_TLS(key, (word32)keyLen, ctx->secret,
                 (word32)(ctx->secretSz), (byte*)"", 0, ctx->seed,
                 (word32)(ctx->seedSz), 1,
                 ((ctx->mdType == WC_HASH_TYPE_SHA256) ? sha256_mac :
                                                         sha384_mac), NULL,
                 INVALID_DEVID);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }

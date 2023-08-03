@@ -363,13 +363,13 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
     int ok = 0;
 
     if (ctx->mode == EVP_CIPH_CTR_MODE) {
-        int rc = wc_AesSetIV(&ctx->aes, ctx->iv);
+        int rc;
+
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        rc = wc_AesCtrEncrypt(&ctx->aes, out, in, inLen);
         if (rc == 0) {
-            rc = wc_AesCtrEncrypt(&ctx->aes, out, in, inLen);
-            if (rc == 0) {
-                XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
-                ok = 1;
-            }
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+            ok = 1;
         }
     }
 

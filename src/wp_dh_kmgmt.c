@@ -104,8 +104,13 @@ typedef struct wp_DhGroupMap {
     int id;
     /** Number of bits in prime. */
     int bits;
+#ifdef HAVE_PUBLIC_FFDHE
     /** Function to get group parameters from wolfSSL. */
     const DhParams*(*get)(void);
+#else
+    /** Name to use with wolfCrypt to get parameters. */
+    int wcName;
+#endif
 } wp_DhGroupMap;
 
 
@@ -116,22 +121,38 @@ static int wp_dh_gen_set_params(wp_DhGenCtx* ctx, const OSSL_PARAM params[]);
  * DH group mapping.
  */
 
+#ifdef HAVE_PUBLIC_FFDHE
+    /* wolfCrypt Get function for each supported DH group. */
+    #define WC_FFDHE2048    wc_Dh_ffdhe2048_Get
+    #define WC_FFDHE3072    wc_Dh_ffdhe3072_Get
+    #define WC_FFDHE4096    wc_Dh_ffdhe4096_Get
+    #define WC_FFDHE6144    wc_Dh_ffdhe6144_Get
+    #define WC_FFDHE8192    wc_Dh_ffdhe8192_Get
+#else
+    /* wolfCrypt Name for each supported DH group. */
+    #define WC_FFDHE2048    WC_FFDHE_2048
+    #define WC_FFDHE3072    WC_FFDHE_3072
+    #define WC_FFDHE4096    WC_FFDHE_4096
+    #define WC_FFDHE6144    WC_FFDHE_6144
+    #define WC_FFDHE8192    WC_FFDHE_8192
+#endif
+
 /** Mapping of OpenSSL string to wolfSSL DH group information. */
 static const wp_DhGroupMap wp_dh_group_map[] = {
 #ifdef HAVE_FFDHE_2048
-    { SN_ffdhe2048, WOLFSSL_FFDHE_2048, 2048, wc_Dh_ffdhe2048_Get },
+    { SN_ffdhe2048, WOLFSSL_FFDHE_2048, 2048, WC_FFDHE2048 },
 #endif
 #ifdef HAVE_FFDHE_3072
-    { SN_ffdhe3072, WOLFSSL_FFDHE_3072, 3072, wc_Dh_ffdhe3072_Get },
+    { SN_ffdhe3072, WOLFSSL_FFDHE_3072, 3072, WC_FFDHE3072 },
 #endif
 #ifdef HAVE_FFDHE_4096
-    { SN_ffdhe4096, WOLFSSL_FFDHE_4096, 4096, wc_Dh_ffdhe4096_Get },
+    { SN_ffdhe4096, WOLFSSL_FFDHE_4096, 4096, WC_FFDHE4096 },
 #endif
 #ifdef HAVE_FFDHE_6144
-    { SN_ffdhe6144, WOLFSSL_FFDHE_6144, 6144, wc_Dh_ffdhe6144_Get },
+    { SN_ffdhe6144, WOLFSSL_FFDHE_6144, 6144, WC_FFDHE6144 },
 #endif
 #ifdef HAVE_FFDHE_8192
-    { SN_ffdhe8192, WOLFSSL_FFDHE_8192, 8192, wc_Dh_ffdhe8192_Get },
+    { SN_ffdhe8192, WOLFSSL_FFDHE_8192, 8192, WC_FFDHE8192 },
 #endif
 };
 
@@ -155,11 +176,14 @@ static int wp_dh_map_group_name(wp_Dh* dh, const char* name)
 
     for (i = 0; i < WP_DH_GROUP_MAP_SZ; i++) {
         if (strcasecmp(wp_dh_group_map[i].name, name) == 0) {
+    #ifdef HAVE_PUBLIC_FFDHE
             const DhParams* params;
+    #endif
             int rc;
 
             dh->id   = wp_dh_group_map[i].id;
             dh->bits = wp_dh_group_map[i].bits;
+    #ifdef HAVE_PUBLIC_FFDHE
             params = wp_dh_group_map[i].get();
             rc = mp_read_unsigned_bin(&dh->key.p, params->p, params->p_len);
             if (rc != 0) {
@@ -179,6 +203,12 @@ static int wp_dh_map_group_name(wp_Dh* dh, const char* name)
                 }
             }
         #endif
+    #else
+            rc = wc_DhSetNamedKey(&dh->key, wp_dh_group_map[i].wcName);
+            if (rc != 0) {
+                ok = 0;
+            }
+    #endif
             break;
         }
     }
@@ -1520,8 +1550,10 @@ static int wp_dh_gen_keypair(wp_DhGenCtx *ctx, wp_Dh* dh)
         /* TODO: don't want to check parameters in older versions! */
         dh->key.trustedGroup = 1;
     #endif
+        PRIVATE_KEY_UNLOCK();
         rc = wc_DhGenerateKeyPair(&dh->key, &ctx->rng, dh->priv, &privSz,
             dh->pub, &pubSz);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
@@ -1812,7 +1844,7 @@ static int wp_dh_enc_dec_set_ctx_params(wp_DhEncDecCtx* ctx,
     return ok;
 }
 
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#if (LIBWOLFSSL_VERSION_HEX >= 0x05000000 && defined(WOLFSSL_DH_EXTRA))
 extern int wc_DhPublicKeyDecode(const byte* input, word32* inOutIdx, DhKey* key,
     word32 inSz);
 
@@ -2099,7 +2131,7 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     return ok;
 }
 
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#if (LIBWOLFSSL_VERSION_HEX >= 0x05000000 && defined(WOLFSSL_DH_EXTRA))
 /**
  * Get the Parameters encoding size for the key.
  *
@@ -2267,6 +2299,7 @@ static int wp_dh_encode_pki(const wp_Dh *dh, unsigned char* keyData,
     return ok;
 }
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
 /**
  * Get the Encrypted PKCS#8 encoding size for the key.
  *
@@ -2328,6 +2361,7 @@ static int wp_dh_encode_epki(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
     return ok;
 }
 #endif
+#endif
 
 /**
  * Encode the DH key.
@@ -2347,7 +2381,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg)
 {
     int ok = 1;
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#if (LIBWOLFSSL_VERSION_HEX >= 0x05000000 && defined(WOLFSSL_DH_EXTRA))
     int rc;
     BIO* out = wp_corebio_get_bio(cBio);
     unsigned char* keyData = NULL;
@@ -2384,12 +2418,14 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             ok = 0;
         }
     }
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         if (!wp_dh_encode_epki_size(key, &derLen)) {
             ok = 0;
         }
     }
+#endif
 
     if (ok) {
         keyLen = derLen;
@@ -2417,6 +2453,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             ok = 0;
         }
     }
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         if (!wp_dh_encode_epki(ctx, key, derData, &derLen, pwCb, pwCbArg,
@@ -2424,6 +2461,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             ok = 0;
         }
     }
+#endif
 
     if (ok && (ctx->encoding == WP_FORMAT_DER)) {
         keyLen = derLen;

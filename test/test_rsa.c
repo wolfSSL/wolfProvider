@@ -429,7 +429,7 @@ int test_rsa_sign_verify_pkcs1(void *data)
 int test_rsa_sign_verify_pss(void *data)
 {
     int err = 0;
-    
+
     (void)data;
 
     /* Use SHA-1 (default) for MD and MGF1 MD. */

@@ -399,8 +399,10 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
         else
 #endif /* WC_RSA_BLINDING */
         if (ctx->padMode == RSA_PKCS1_PADDING) {
+            PRIVATE_KEY_UNLOCK();
             rc = wc_RsaPrivateDecrypt(in, (word32)inLen, out, (word32)outSize,
                 wp_rsa_get_key(ctx->rsa));
+            PRIVATE_KEY_LOCK();
             if (rc < 0) {
                 ok = 0;
             }
@@ -410,9 +412,11 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 ctx->oaepHashType = WC_HASH_TYPE_SHA;
                 ctx->mgf = WC_MGF1SHA1;
             }
+            PRIVATE_KEY_UNLOCK();
             rc = wc_RsaPrivateDecrypt_ex(in, (word32)inLen, out,
                 (word32)outSize, wp_rsa_get_key(ctx->rsa), WC_RSA_OAEP_PAD,
                 ctx->oaepHashType, ctx->mgf, ctx->label, ctx->labelLen);
+            PRIVATE_KEY_LOCK();
             if (rc < 0) {
                 ok = 0;
             }
@@ -426,8 +430,10 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 byte negMask;
 
                 XMEMSET(out, 0, outSize);
+                PRIVATE_KEY_UNLOCK();
                 rc = wc_RsaPrivateDecrypt(in, (word32)inLen, out,
                     (word32)outSize, wp_rsa_get_key(ctx->rsa));
+                PRIVATE_KEY_LOCK();
 
                 /* Constant time checking of master secret. */
                 mask  = wp_ct_byte_mask_eq(out[0], ctx->clientVersion >> 8);

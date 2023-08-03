@@ -25,6 +25,7 @@
 #include <wolfprovider/internal.h>
 
 #include <wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/pwdbased.h>
 
 /**
  * Get the wolfSSL random number generator from the provider context.
@@ -146,14 +147,18 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid)
         case NID_sha512:
             hashType = WC_HASH_TYPE_SHA512;
             break;
-    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+    #ifndef WOLFSSL_NOSHA512_224
         case NID_sha512_224:
             hashType = WC_HASH_TYPE_SHA512_224;
             break;
+    #endif
+    #ifndef WOLFSSL_NOSHA512_256
         case NID_sha512_256:
             hashType = WC_HASH_TYPE_SHA512_256;
             break;
     #endif
+#endif
         case NID_sha3_224:
             hashType = WC_HASH_TYPE_SHA3_224;
             break;
@@ -286,13 +291,17 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
         break;
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#ifndef WOLFSSL_NOSHA512_224
     case WC_HASH_TYPE_SHA512_224:
         rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
         break;
+#endif /* !WOLFSSL_NOSHA512_224 */
+#ifndef WOLFSSL_NOSHA512_256
     case WC_HASH_TYPE_SHA512_256:
         rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
         break;
-#endif
+#endif /* !WOLFSSL_NOSHA512_256 */
+#endif /* LIBWOLFSSL_VERSION_HEX >= 0x05000000 */
 #else
     case WC_HASH_TYPE_SHA512:
     case WC_HASH_TYPE_SHA512_224:
@@ -328,8 +337,12 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
     case WC_HASH_TYPE_BLAKE2B:
     case WC_HASH_TYPE_BLAKE2S:
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#ifndef WOLFSSL_NO_SHAKE128
     case WC_HASH_TYPE_SHAKE128:
+#endif
+#ifndef WOLFSSL_NO_SHAKE256
     case WC_HASH_TYPE_SHAKE256:
+#endif
 #endif
     default:
         ok = 0;
@@ -421,6 +434,22 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
 }
 
 #ifndef WOLFSSL_ENCRYPTED_KEYS
+/*
+ * wolfProvider version of EncryptedInfo.
+ */
+typedef struct wp_EncryptedInfo {
+    /* Cipher identifier. */
+    int    cipherType;
+    /* Length of IV. */
+    word32 ivSz;
+    /* Length of key. */
+    word32 keySz;
+    /* Name of cipher alglorithm. */
+    char   name[NAME_SZ];
+    /* IV for encryption. */
+    byte   iv[IV_SZ];
+} wp_EncryptedInfo;
+
 #if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
     static wcchar kEncTypeAesCbc128 = "AES-128-CBC";
 #endif
@@ -431,7 +460,7 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     static wcchar kEncTypeAesCbc256 = "AES-256-CBC";
 #endif
 
-static int wp_EncryptedInfoGet(EncryptedInfo* info, const char* cipherInfo)
+static int wp_EncryptedInfoGet(wp_EncryptedInfo* info, const char* cipherInfo)
 {
     int ret = 0;
 
@@ -468,12 +497,10 @@ static int wp_EncryptedInfoGet(EncryptedInfo* info, const char* cipherInfo)
     }
     return ret;
 }
-#endif
 
-#ifndef WOLFSSL_ENCRYPTED_KEYS
 #define PKCS5_SALT_SZ   8
 
-static int wp_BufferKeyEncrypt(EncryptedInfo* info, byte* der, word32 derSz,
+static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
     const byte* password, int passwordSz, int hashType)
 {
     int ret = NOT_COMPILED_IN;
@@ -529,7 +556,7 @@ static int wp_BufferKeyEncrypt(EncryptedInfo* info, byte* der, word32 derSz,
 
     return ret;
 }
-#endif
+#endif /* WOLFSSL_ENCRYPTED_KEYS */
 
 /**
  * Encrypt the PKCS #8 key.
@@ -557,7 +584,11 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
     int ok = 1;
     int rc;
     word32 len = *keyLen;
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     EncryptedInfo info[1];
+#else
+    wp_EncryptedInfo info[1];
+#endif
     word32 cipherInfoSz;
     char password[1024];
     size_t passwordSz = sizeof(password);

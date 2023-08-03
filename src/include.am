@@ -39,4 +39,5 @@ libwolfprov_la_SOURCES += src/wp_file_store.c
 libwolfprov_la_SOURCES += src/wp_internal.c
 libwolfprov_la_SOURCES += src/wp_params.c
 libwolfprov_la_SOURCES += src/wp_logging.c
+libwolfprov_la_SOURCES += src/wp_fips.c
 

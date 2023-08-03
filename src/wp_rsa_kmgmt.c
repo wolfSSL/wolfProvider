@@ -30,6 +30,7 @@
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+#include <wolfprovider/wp_fips.h>
 
 #ifdef WP_HAVE_RSA
 
@@ -170,7 +171,6 @@ typedef struct wp_RsaGenCtx {
 /* Prototype for generation initialization. */
 static int wp_rsa_gen_set_params(wp_RsaGenCtx* ctx, const OSSL_PARAM params[]);
 
-
 /**
  * Increment reference count for key.
  *
@@ -239,21 +239,23 @@ int wp_rsa_get_bits(wp_Rsa* rsa)
 /**
  * Check the RSA key size is valid.
  *
- * @param [in] rsa        RSA key object.
+ * @param [in] keySize    RSA key size in bits.
  * @param [in] allow1024  Whether to allow 1024-bit RSA keys.
  * @return  1 when valid.
  * @return  0 when not valid.
  */
-int wp_rsa_check_key_size(wp_Rsa* rsa, int allow1024)
+static int wp_rsa_check_key_size_int(int keySize, int allow1024)
 {
     int ok = 1;
-    int keySize = wc_RsaEncryptSize(&rsa->key) * 8;
 
     if ((keySize < RSA_MIN_SIZE) || (keySize > RSA_MAX_SIZE)) {
         ok = 0;
     }
 #ifdef HAVE_FIPS
-    if (!allow1024 && keySize <= 2048) {
+    if (!allow1024 && keySize < 2048) {
+        ok = 0;
+    }
+    else if (keySize > 4096) {
         ok = 0;
     }
 #else
@@ -261,6 +263,31 @@ int wp_rsa_check_key_size(wp_Rsa* rsa, int allow1024)
 #endif
 
     return ok;
+}
+
+/**
+ * Check the RSA key size is valid.
+ *
+ * @param [in] rsa        RSA key object.
+ * @param [in] allow1024  Whether to allow 1024-bit RSA keys.
+ * @return  1 when valid.
+ * @return  0 when not valid.
+ */
+int wp_rsa_check_key_size(wp_Rsa* rsa, int allow1024)
+{
+    return wp_rsa_check_key_size_int(rsa->bits, allow1024);
+}
+
+/**
+ * Check the RSA key size is valid.
+ *
+ * @param [in] rsagen     RSA generation context object.
+ * @return  1 when valid.
+ * @return  0 when not valid.
+ */
+static int wp_rsagen_check_key_size(wp_RsaGenCtx* rsagen)
+{
+    return wp_rsa_check_key_size_int(rsagen->bits, 0);
 }
 
 /**
@@ -527,7 +554,7 @@ static int wp_rsa_pss_params_set_digest(wp_RsaPssParams* pss,
             ok = 0;
         }
     }
-    if (ok && (mdName != NULL)) {
+    if (ok) {
         ok = wp_rsa_pss_params_setup_md(pss, mdName, mdProps, libCtx);
     }
 
@@ -876,19 +903,21 @@ static int wp_rsa_match(const wp_Rsa* rsa1, const wp_Rsa* rsa2, int selection)
 static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
 {
     int ok = 1;
-    int rc;
     int checkPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
     int checkPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
 
     (void)checkType;
 
+#ifdef WOLFSSL_RSA_KEY_CHECK
     if (checkPub && checkPriv) {
-        rc = wc_CheckRsaKey((RsaKey*)&rsa->key);
+        int rc = wc_CheckRsaKey((RsaKey*)&rsa->key);
         if (rc != 0) {
             ok = 0;
         }
     }
-    else if (checkPriv) {
+    else
+#endif
+    if (checkPriv) {
         if (mp_isone(&rsa->key.d) || mp_iszero((mp_int*)&rsa->key.d) ||
             (mp_cmp((mp_int*)&rsa->key.d, (mp_int*)&rsa->key.n) != MP_LT)) {
             ok = 0;
@@ -1250,7 +1279,7 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
     (void)cb;
     (void)cbArg;
 
-    if (wolfssl_prov_is_running()) {
+    if (wolfssl_prov_is_running() && wp_rsagen_check_key_size(ctx)) {
         rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
         if (rsa != NULL) {
             int rc = wc_MakeRsaKey(&rsa->key, ctx->bits, ctx->e, &ctx->rng);
@@ -1301,6 +1330,9 @@ static int wp_rsa_gen_set_params(wp_RsaGenCtx* ctx, const OSSL_PARAM params[])
         p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_BITS);
         if (p != NULL) {
             if (!OSSL_PARAM_get_size_t(p, &ctx->bits)) {
+                ok = 0;
+            }
+            else if (!wp_rsagen_check_key_size(ctx)) {
                 ok = 0;
             }
             else if ((ctx->bits < RSA_MIN_SIZE) || (ctx->bits > RSA_MAX_SIZE)) {
@@ -2046,7 +2078,6 @@ static int wp_rsa_encode_pub(const wp_Rsa* rsa, unsigned char* keyData,
     if (ret <= 0) {
         ok = 0;
     }
-    
 #endif
     if (ok) {
         *keyLen = ret;
@@ -2193,6 +2224,7 @@ static int wp_rsa_encode_priv(const wp_Rsa* rsa, unsigned char* keyData,
     return ok;
 }
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
 /**
  * Get the Encrypted PKCS#8 encoding size for the key.
  *
@@ -2244,6 +2276,7 @@ static int wp_rsa_encode_epki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
 
     return ok;
 }
+#endif
 
 /**
  * Encode the RSA key.
@@ -2277,6 +2310,8 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 
     (void)params;
     (void)selection;
+    (void)pwCb;
+    (void)pwCbArg;
 
     if (out == NULL) {
         ok = 0;
@@ -2292,11 +2327,13 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             ok = 0;
         }
     }
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         if (!wp_rsa_encode_epki_size(key, &derLen)) {
             ok = 0;
         }
     }
+#endif
     else if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
             if (!wp_rsa_encode_priv_size(key, &derLen)) {
@@ -2329,6 +2366,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             ok = 0;
         }
     }
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         if (!wp_rsa_encode_epki(ctx, key, derData, &derLen, pwCb, pwCbArg,
@@ -2336,6 +2374,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             ok = 0;
         }
     }
+#endif
     else if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
             private = 1;

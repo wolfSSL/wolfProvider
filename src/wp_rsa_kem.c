@@ -199,7 +199,6 @@ static int wp_rsakem_decapsulate_init(wp_RsaKemCtx* ctx, wp_Rsa* rsa,
     return wp_rsakem_init(ctx, rsa, params, EVP_PKEY_OP_DECAPSULATE);
 }
 
-#if LIBWOLFSSL_VERSION_HEX < 0x05000000
 static int wp_mp_rand(mp_int* a, int digits, WC_RNG* rng)
 {
     int cnt = digits * sizeof(mp_digit);
@@ -208,7 +207,6 @@ static int wp_mp_rand(mp_int* a, int digits, WC_RNG* rng)
 
     return wc_RNG_GenerateBlock(rng, (byte*)a->dp, cnt);
 }
-#endif
 
 /**
  * Generate a number between 2 and n-2 (1 < r < n-1).
@@ -242,11 +240,7 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
     }
     while (ok) {
         /* r = random number with all words filled. */
-    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-        rc = mp_rand(&r, mod.used, &ctx->rng);
-    #else
         rc = wp_mp_rand(&r, mod.used, &ctx->rng);
-    #endif
         if (rc != 0) {
             ok = 0;
         }
@@ -410,8 +404,12 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
     /* Step 3: out = RSADP((n,d), in) */
     if (ok && (out != NULL)) {
         word32 oLen = nLen;
-        int rc = wc_RsaDirect((byte*)in, inLen, out, &oLen, rsa,
+        int rc;
+
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_RsaDirect((byte*)in, inLen, out, &oLen, rsa,
             RSA_PRIVATE_DECRYPT, &ctx->rng);
+        PRIVATE_KEY_LOCK();
         if (rc < 0) {
             ok = 0;
         }

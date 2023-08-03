@@ -264,11 +264,15 @@ static int wp_ecdh_derive_secret(wp_EcdhCtx* ctx, unsigned char* secret,
         wc_ecc_set_flags(wp_ecc_get_key(ctx->key), WC_ECC_FLAG_COFACTOR);
     }
 #endif
-    /* Calculate secret. */
-    rc = wc_ecc_shared_secret(wp_ecc_get_key(ctx->key),
-        wp_ecc_get_key(ctx->peer), secret, &len);
-    if (rc != 0) {
-        ok = 0;
+    if ((ok = wp_ecc_check_usage(ctx->key))) {
+        /* Calculate secret. */
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_ecc_shared_secret(wp_ecc_get_key(ctx->key),
+            wp_ecc_get_key(ctx->peer), secret, &len);
+        PRIVATE_KEY_LOCK();
+        if (rc != 0) {
+            ok = 0;
+        }
     }
     if (ok) {
         *secLen = len;

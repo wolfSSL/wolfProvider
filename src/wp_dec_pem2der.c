@@ -86,6 +86,7 @@ static word32 wp_pem2der_find_header(unsigned char* data, word32 len)
     return idx;
 }
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
 /**
  * Password callback data.
  */
@@ -123,6 +124,7 @@ static int wp_pem_password_cb(char* passwd, int sz, int rw, void* userdata)
 
     return ret;
 }
+#endif /* WOLFSSL_ENCRYPTED_KEYS */
 
 /**
  * Convert PEM encoded EC parameters to DER.
@@ -202,7 +204,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     DerBuffer* der = NULL;
     OSSL_PARAM params[5];
     OSSL_PARAM* p = params;
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     wp_PasswordCbData wpPwCb = { pwCb, pwCbArg };
+#endif
+
+    (void)pwCb;
+    (void)pwCbArg;
 
     XMEMSET(&info, 0, sizeof(info));
 
@@ -221,10 +228,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataType = "RSA";
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         if (XMEMCMP(data + 32, "Proc-Type", 9) == 0) {
             info.passwd_cb = wp_pem_password_cb;
             info.passwd_userdata = (void*)&wpPwCb;
         }
+    #endif
     }
     else if (XMEMCMP(data, "-----BEGIN EC PARAMETERS-----", 29) == 0) {
         dataType = "EC";
@@ -240,10 +249,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataType = "EC";
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         if (XMEMCMP(data + 31, "Proc-Type", 9) == 0) {
             info.passwd_cb = wp_pem_password_cb;
             info.passwd_userdata = (void*)&wpPwCb;
         }
+    #endif
     }
     else if (XMEMCMP(data, "-----BEGIN PRIVATE KEY-----", 27) == 0) {
         type = PKCS8_PRIVATEKEY_TYPE;
@@ -263,6 +274,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
     }
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (XMEMCMP(data, "-----BEGIN ENCRYPTED PRIVATE KEY-----", 37) == 0) {
         type = PKCS8_ENC_PRIVATEKEY_TYPE;
         dataType = NULL;
@@ -272,6 +284,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         info.passwd_cb = wp_pem_password_cb;
         info.passwd_userdata = (void*)&wpPwCb;
     }
+#endif
     else {
         ok = 0;
     }

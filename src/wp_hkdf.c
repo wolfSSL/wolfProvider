@@ -197,8 +197,10 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
                 ok = 0;
             }
             if (ok) {
+                PRIVATE_KEY_UNLOCK();
                 rc = wc_HKDF_Extract(ctx->mdType, ctx->salt,
                     (word32)ctx->saltSz, ctx->key, (word32)ctx->keySz, key);
+                PRIVATE_KEY_LOCK();
                 if (rc != 0) {
                     ok = 0;
                 }
@@ -206,8 +208,10 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
             break;
 
         case EVP_KDF_HKDF_MODE_EXPAND_ONLY:
+            PRIVATE_KEY_UNLOCK();
             rc = wc_HKDF_Expand(ctx->mdType, ctx->key, (word32)ctx->keySz,
                 ctx->info, (word32)ctx->infoSz, key, (word32)keyLen);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
@@ -215,9 +219,11 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
 
         case EVP_KDF_HKDF_MODE_EXTRACT_AND_EXPAND:
         default:
+            PRIVATE_KEY_UNLOCK();
             rc = wc_HKDF(ctx->mdType, ctx->key, (word32)ctx->keySz, ctx->salt,
                 (word32)ctx->saltSz, ctx->info, (word32)ctx->infoSz, key,
                 (word32)keyLen);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }

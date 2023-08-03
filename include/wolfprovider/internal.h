@@ -48,7 +48,7 @@
 /** Maximum supported cipher name size. */
 #define WP_MAX_CIPH_NAME_SIZE   15
 /** Maximum supported cipher name size. */
-#define WP_MAX_MAC_NAME_SIZE    6 
+#define WP_MAX_MAC_NAME_SIZE    6
 
 /** Maximum supported digest name size. */
 #define WP_MAX_PROPS_SIZE       80
