@@ -338,7 +338,7 @@ static int test_tls1_prf_fail_calc(OSSL_LIB_CTX* libCtx)
     return err;
 }
 
-static int test_tls1_prf_fail()
+static int test_tls1_prf_fail(void)
 {
     int err;
 

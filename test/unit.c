@@ -262,7 +262,7 @@ TEST_CASE test_case[] = {
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
 
-static void usage()
+static void usage(void)
 {
     printf("\n");
     printf("Usage: unit.test [options]\n");

@@ -400,7 +400,7 @@ static int test_hkdf_fail_calc(OSSL_LIB_CTX* libCtx)
     return err;
 }
 
-static int test_hkdf_fail()
+static int test_hkdf_fail(void)
 {
     int err;
 
