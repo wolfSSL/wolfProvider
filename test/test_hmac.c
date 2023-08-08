@@ -98,7 +98,7 @@ static int test_mac_gen_mac(OSSL_LIB_CTX* libCtx, const char* md,
         err = (EVP_MAC_final(mctx, mac, &outLen, *macLen)) != 1;
     }
     if (err == 0) {
-        *macLen = outLen;
+        *macLen = (int)outLen;
         PRINT_BUFFER("MAC", mac, *macLen);
     }
 

@@ -119,7 +119,7 @@ static int wp_pem_password_cb(char* passwd, int sz, int rw, void* userdata)
         ret = -1;
     }
     else {
-        ret = len;
+        ret = (int)len;
     }
 
     return ret;
@@ -164,8 +164,8 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
         }
     }
     if (ok) {
-        rc = Base64_Decode((byte*)base64Data, base64Len, (*pDer)->buffer,
-            &(*pDer)->length);
+        rc = Base64_Decode((byte*)base64Data, (word32)base64Len,
+            (*pDer)->buffer, &(*pDer)->length);
         if (rc < 0) {
             ok = 0;
         }

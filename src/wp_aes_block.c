@@ -317,7 +317,7 @@ static int wp_aes_block_init(wp_AesBlockCtx *ctx, const unsigned char *key,
             ok = 0;
         }
         if (ok) {
-            int rc = wc_AesSetKey(&ctx->aes, key, ctx->keyLen, iv,
+            int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
                 enc ? AES_ENCRYPTION : AES_DECRYPTION);
             if (rc != 0) {
                 ok = 0;
@@ -391,10 +391,10 @@ static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
 #ifdef WP_HAVE_AESCBC
     if (ctx->mode == EVP_CIPH_CBC_MODE) {
         if (ctx->enc) {
-            rc = wc_AesCbcEncrypt(&ctx->aes, out, in, inLen);
+            rc = wc_AesCbcEncrypt(&ctx->aes, out, in, (word32)inLen);
         }
         else {
-            rc = wc_AesCbcDecrypt(&ctx->aes, out, in, inLen);
+            rc = wc_AesCbcDecrypt(&ctx->aes, out, in, (word32)inLen);
         }
         XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
     }
@@ -403,10 +403,10 @@ static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
 #ifdef WP_HAVE_AESECB
     if (ctx->mode == EVP_CIPH_ECB_MODE) {
         if (ctx->enc) {
-            rc = wc_AesEcbEncrypt(&ctx->aes, out, in, inLen);
+            rc = wc_AesEcbEncrypt(&ctx->aes, out, in, (word32)inLen);
         }
         else {
-            rc = wc_AesEcbDecrypt(&ctx->aes, out, in, inLen);
+            rc = wc_AesEcbDecrypt(&ctx->aes, out, in, (word32)inLen);
         }
     }
     else

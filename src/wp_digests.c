@@ -149,7 +149,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
 {                                                                              \
     int ok = 1;                                                                \
-    int rc = upd(ctx, in, inLen);                                              \
+    int rc = upd(ctx, in, (word32)inLen);                                      \
     if (rc != 0) {                                                             \
         ok = 0;                                                                \
     }                                                                          \

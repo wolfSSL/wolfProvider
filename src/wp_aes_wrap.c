@@ -261,7 +261,7 @@ static int wp_aes_wrap_init(wp_AesWrapCtx *ctx, const unsigned char *key,
         }
         if (ok) {
         #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-            int rc = wc_AesSetKey(&ctx->aes, key, ctx->keyLen, iv,
+            int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
                 wrap ? AES_ENCRYPTION : AES_DECRYPTION);
             if (rc != 0) {
                 ok = 0;
@@ -343,7 +343,7 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
     }
     else if (ok) {
         int rc;
-        word32 outSz = outSize;
+        word32 outSz = (word32)outSize;
         unsigned char* iv;
 
         if (ctx->ivSet) {
@@ -355,13 +355,14 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
 
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         if (ctx->wrap) {
-            rc = wc_AesKeyWrap_ex(&ctx->aes, in, inLen, out, outSz, iv);
+            rc = wc_AesKeyWrap_ex(&ctx->aes, in, (word32)inLen, out, outSz, iv);
             if (rc <= 0) {
                 ok = 0;
             }
         }
         else {
-            rc = wc_AesKeyUnWrap_ex(&ctx->aes, in, inLen, out, outSz, iv);
+            rc = wc_AesKeyUnWrap_ex(&ctx->aes, in, (word32)inLen, out, outSz,
+                iv);
             if (rc <= 0) {
                 ok = 0;
             }

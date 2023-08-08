@@ -287,7 +287,7 @@ int wp_rsa_check_key_size(wp_Rsa* rsa, int allow1024)
  */
 static int wp_rsagen_check_key_size(wp_RsaGenCtx* rsagen)
 {
-    return wp_rsa_check_key_size_int(rsagen->bits, 0);
+    return wp_rsa_check_key_size_int((int)rsagen->bits, 0);
 }
 
 /**
@@ -1282,14 +1282,15 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
     if (wolfssl_prov_is_running() && wp_rsagen_check_key_size(ctx)) {
         rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
         if (rsa != NULL) {
-            int rc = wc_MakeRsaKey(&rsa->key, ctx->bits, ctx->e, &ctx->rng);
+            int rc = wc_MakeRsaKey(&rsa->key, (int)ctx->bits, ctx->e,
+                &ctx->rng);
             if (rc != 0) {
                 wp_rsa_free(rsa);
                 rsa = NULL;
             }
             else {
                 rsa->type      = ctx->type;
-                rsa->bits      = ctx->bits;
+                rsa->bits      = (int)ctx->bits;
                 rsa->hasPub    = 1;
                 rsa->hasPriv   = 1;
                 rsa->pssParams = ctx->pssParams;
@@ -2012,7 +2013,7 @@ static int wp_rsa_encode_spki(const wp_Rsa* rsa, unsigned char* keyData,
     int ok = 1;
     int ret;
 
-    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2068,7 +2069,8 @@ static int wp_rsa_encode_pub(const wp_Rsa* rsa, unsigned char* keyData,
     int ret;
 
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-    ret = wc_RsaKeyToPublicDer_ex((RsaKey*)&rsa->key, keyData, *keyLen, 0);
+    ret = wc_RsaKeyToPublicDer_ex((RsaKey*)&rsa->key, keyData, (word32)*keyLen,
+        0);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2151,16 +2153,16 @@ static int wp_rsa_encode_pki(const wp_Rsa* rsa, unsigned char* keyData,
         }
     }
     if (ok) {
-        ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, pkcs1Data, pkcs1Len);
+        ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, pkcs1Data, (word32)pkcs1Len);
         if (ret <= 0) {
             ok = 0;
         }
     }
     if (ok) {
         pkcs1Len = ret;
-        len = *keyLen;
-        ret = wc_CreatePKCS8Key(keyData, &len, pkcs1Data, pkcs1Len, RSAk, NULL,
-            0);
+        len = (word32)*keyLen;
+        ret = wc_CreatePKCS8Key(keyData, &len, pkcs1Data, (word32)pkcs1Len,
+            RSAk, NULL, 0);
         if (ret <= 0) {
             ok = 0;
         }
@@ -2213,7 +2215,7 @@ static int wp_rsa_encode_priv(const wp_Rsa* rsa, unsigned char* keyData,
     int ok = 1;
     int ret;
 
-    ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2270,7 +2272,7 @@ static int wp_rsa_encode_epki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
     /* Encode key. */
     ok = wp_rsa_encode_pki(rsa, keyData, &len);
     if (ok && (!wp_encrypt_key(ctx->provCtx, ctx->cipherName, keyData, keyLen,
-            len, pwCb, pwCbArg, cipherInfo))) {
+            (word32)len, pwCb, pwCbArg, cipherInfo))) {
         ok = 0;
     }
 
@@ -2393,7 +2395,8 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         keyLen = derLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, derLen, NULL, 0, cipherInfo, pemType);
+        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo,
+            pemType);
         if (rc <= 0) {
             ok = 0;
         }
@@ -2405,7 +2408,8 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             }
         }
         if (ok) {
-            rc = wc_DerToPemEx(derData, derLen, pemData, pemLen, NULL, pemType);
+            rc = wc_DerToPemEx(derData, (word32)derLen, pemData, (word32)pemLen,
+                NULL, pemType);
             if (rc <= 0) {
                 ok = 0;
             }
@@ -2416,7 +2420,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         }
     }
     if (ok) {
-        rc = BIO_write(out, keyData, keyLen);
+        rc = BIO_write(out, keyData, (int)keyLen);
         if (rc <= 0) {
             ok = 0;
         }

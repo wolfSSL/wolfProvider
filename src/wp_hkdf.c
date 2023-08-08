@@ -520,7 +520,7 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     ctx->infoSz = idx;
 
     rc = wc_HKDF_Expand(ctx->mdType, inKey, (word32)inKeyLen, ctx->info,
-        (word32)ctx->infoSz, key, keyLen);
+        (word32)ctx->infoSz, key, (word32)keyLen);
     if (rc != 0) {
         ok = 0;
     }
@@ -566,7 +566,7 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
         salt = secret;
         saltLen = ctx->mdLen;
         /* Calculate the digest of an empty string. */
-        rc = wc_Hash(ctx->mdType, zeros, 0, secret, ctx->mdLen);
+        rc = wc_Hash(ctx->mdType, zeros, 0, secret, (word32)ctx->mdLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -578,7 +578,8 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
 
     if (ok) {
         (void)keyLen;
-        rc = wc_HKDF_Extract(ctx->mdType, salt, saltLen, inKey, inKeyLen, key);
+        rc = wc_HKDF_Extract(ctx->mdType, salt, (word32)saltLen, inKey,
+            (word32)inKeyLen, key);
         if (rc != 0) {
             ok = 0;
         }

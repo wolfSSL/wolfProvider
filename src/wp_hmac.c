@@ -240,7 +240,7 @@ static int wp_hmac_update(wp_HmacCtx* macCtx, const unsigned char* data,
     int ok = 1;
     int rc;
 
-    rc = wc_HmacUpdate(&macCtx->hmac, data, dataLen);
+    rc = wc_HmacUpdate(&macCtx->hmac, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }

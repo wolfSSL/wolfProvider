@@ -321,7 +321,7 @@ int wp_dh_get_priv(wp_Dh* dh, unsigned char** priv, word32* privSz)
     }
     else {
         *priv   = dh->priv;
-        *privSz = dh->privSz;
+        *privSz = (word32)dh->privSz;
     }
 
     return ok;
@@ -348,7 +348,7 @@ int wp_dh_get_pub(wp_Dh* dh, unsigned char** pub, word32* pubSz)
     }
     else {
         *pub   = dh->pub;
-        *pubSz = dh->pubSz;
+        *pubSz = (word32)dh->pubSz;
     }
 
     return ok;
@@ -845,7 +845,7 @@ static int wp_dh_validate_pub_key_quick(const wp_Dh* dh)
         }
     }
     if (ok) {
-        rc = wc_DhCheckPubValue(prime, primeSz, dh->pub, dh->pubSz);
+        rc = wc_DhCheckPubValue(prime, primeSz, dh->pub, (word32)dh->pubSz);
         if (rc != 0) {
             ok = 0;
         }
@@ -887,14 +887,14 @@ static int wp_dh_validate(const wp_Dh* dh, int selection, int checkType)
         (void)checkType;
     #endif
         {
-            rc = wc_DhCheckPubKey((DhKey*)&dh->key, dh->pub, dh->pubSz);
+            rc = wc_DhCheckPubKey((DhKey*)&dh->key, dh->pub, (word32)dh->pubSz);
             if (rc != 0) {
                 ok = 0;
             }
         }
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
-        rc = wc_DhCheckPrivKey((DhKey*)&dh->key, dh->priv, dh->privSz);
+        rc = wc_DhCheckPrivKey((DhKey*)&dh->key, dh->priv, (word32)dh->privSz);
         if (rc != 0) {
             ok = 0;
         }
@@ -1544,8 +1544,8 @@ static int wp_dh_gen_keypair(wp_DhGenCtx *ctx, wp_Dh* dh)
     }
     if (ok) {
         /* Use wolfSSL to generate key pair. */
-        pubSz = dh->pubSz;
-        privSz = dh->privSz;
+        pubSz = (word32)dh->pubSz;
+        privSz = (word32)dh->privSz;
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         /* TODO: don't want to check parameters in older versions! */
         dh->key.trustedGroup = 1;
@@ -1959,7 +1959,7 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
         }
     }
     if (ok) {
-        rc = wc_DhAgree(&dh->key, dh->pub, &idx, dh->priv, dh->privSz,
+        rc = wc_DhAgree(&dh->key, dh->pub, &idx, dh->priv, (word32)dh->privSz,
             base, 1);
         if (rc != 0) {
             ok = 0;
@@ -2172,7 +2172,7 @@ static int wp_dh_encode_params(const wp_Dh *dh, unsigned char* keyData,
 {
     int ok = 1;
     int ret;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 
     ret = wc_DhParamsToDer((DhKey*)&dh->key, keyData, &len);
     if (ret <= 0) {
@@ -2225,7 +2225,7 @@ static int wp_dh_encode_spki(const wp_Dh *dh, unsigned char* keyData,
 {
     int ok = 1;
     int ret;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 
     ret = wc_DhPubKeyToDer((DhKey*)&dh->key, keyData, &len);
     if (ret <= 0) {
@@ -2282,7 +2282,7 @@ static int wp_dh_encode_pki(const wp_Dh *dh, unsigned char* keyData,
 {
     int ok = 1;
     int ret;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 
     ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, keyData, &len);
     if (ret <= 0) {
@@ -2346,7 +2346,7 @@ static int wp_dh_encode_epki(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
 {
     int ok = 1;
     int rc;
-    word32 pkcs8Len = *keyLen;
+    word32 pkcs8Len = (word32)*keyLen;
 
     /* Encode key. */
     rc = wc_DhPrivKeyToDer((DhKey*)&dh->key, keyData, &pkcs8Len);
@@ -2467,7 +2467,8 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         keyLen = derLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, derLen, NULL, 0, cipherInfo, pemType);
+        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo,
+            pemType);
         if (rc <= 0) {
             ok = 0;
         }
@@ -2479,8 +2480,8 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             }
         }
         if (ok) {
-            rc = wc_DerToPemEx(derData, derLen, pemData, pemLen, cipherInfo,
-                pemType);
+            rc = wc_DerToPemEx(derData, (word32)derLen, pemData, (word32)pemLen,
+                cipherInfo, pemType);
             if (rc <= 0) {
                 ok = 0;
             }
@@ -2491,7 +2492,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
     if (ok) {
-        rc = BIO_write(out, keyData, keyLen);
+        rc = BIO_write(out, keyData, (int)keyLen);
         if (rc <= 0) {
             ok = 0;
         }

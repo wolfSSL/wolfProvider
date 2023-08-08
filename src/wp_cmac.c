@@ -217,7 +217,7 @@ static int wp_cmac_update(wp_CmacCtx* macCtx, const unsigned char* data,
     int ok = 1;
     int rc;
 
-    rc = wc_CmacUpdate(&macCtx->cmac, data, dataLen);
+    rc = wc_CmacUpdate(&macCtx->cmac, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }

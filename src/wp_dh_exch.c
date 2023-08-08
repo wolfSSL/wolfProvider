@@ -222,8 +222,8 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
 #ifdef HAVE_X963_KDF
         int rc;
         /* TODO: support X9.42 KDF that includes ASN.1 encoding. */
-        rc = wc_X963_KDF(ctx->kdfMd, sec, secLen, ctx->ukm, ctx->ukmLen,
-            key, (word32)ctx->keyLen);
+        rc = wc_X963_KDF(ctx->kdfMd, sec, (word32)secLen, ctx->ukm,
+            (word32)ctx->ukmLen, key, (word32)ctx->keyLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -257,7 +257,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
     size_t* secLen, size_t maxLen)
 {
     int ok = 1;
-    word32 len = *secLen;
+    word32 len = (word32)*secLen;
     unsigned char* priv;
     word32 privSz;
     unsigned char* pub;
@@ -287,7 +287,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
             if (ctx->pad && (len != maxLen)) {
                 XMEMMOVE(secret + maxLen - len, secret, len);
                 XMEMSET(secret, 0, maxLen - len);
-                len = maxLen;
+                len = (word32)maxLen;
             }
             /* Return length of data in buffer. */
             *secLen = len;

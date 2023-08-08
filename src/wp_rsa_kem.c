@@ -407,7 +407,7 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
         int rc;
 
         PRIVATE_KEY_UNLOCK();
-        rc = wc_RsaDirect((byte*)in, inLen, out, &oLen, rsa,
+        rc = wc_RsaDirect((byte*)in, (word32)inLen, out, &oLen, rsa,
             RSA_PRIVATE_DECRYPT, &ctx->rng);
         PRIVATE_KEY_LOCK();
         if (rc < 0) {

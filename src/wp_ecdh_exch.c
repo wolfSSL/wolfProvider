@@ -222,8 +222,8 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
     if (ok) {
 #ifdef HAVE_X963_KDF
         int rc;
-        rc = wc_X963_KDF(ctx->kdfMd, secret, secLen, ctx->ukm, ctx->ukmLen,
-            key, (word32)ctx->keyLen);
+        rc = wc_X963_KDF(ctx->kdfMd, secret, (word32)secLen, ctx->ukm,
+            (word32)ctx->ukmLen, key, (word32)ctx->keyLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -257,7 +257,7 @@ static int wp_ecdh_derive_secret(wp_EcdhCtx* ctx, unsigned char* secret,
 {
     int ok = 1;
     int rc;
-    word32 len = *secLen;
+    word32 len = (word32)*secLen;
 
 #ifdef HAVE_ECC_CDH
     if (ctx->cofactor) {

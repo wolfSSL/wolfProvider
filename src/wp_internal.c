@@ -583,7 +583,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
 #ifdef WP_HAVE_MD5
     int ok = 1;
     int rc;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 #ifdef WOLFSSL_ENCRYPTED_KEYS
     EncryptedInfo info[1];
 #else
@@ -633,10 +633,10 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         /* Encrypt key and padding. */
     #ifdef WOLFSSL_ENCRYPTED_KEYS
         rc = wc_BufferKeyEncrypt(info, keyData, len, (byte*)password,
-            passwordSz, WC_MD5);
+            (int)passwordSz, WC_MD5);
     #else
         rc = wp_BufferKeyEncrypt(info, keyData, len, (byte*)password,
-            passwordSz, WC_MD5);
+            (int)passwordSz, WC_MD5);
     #endif
         if (rc != 0) {
             ok = 0;

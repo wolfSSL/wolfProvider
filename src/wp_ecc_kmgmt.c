@@ -548,7 +548,8 @@ static int wp_ecc_set_params_enc_pub_key(wp_Ecc *ecc, const OSSL_PARAM params[],
         ok = 0;
     }
     if (ok && (data != NULL)) {
-        int rc = wc_ecc_import_x963_ex(data, len, &ecc->key, ecc->curveId);
+        int rc = wc_ecc_import_x963_ex(data, (word32)len, &ecc->key,
+            ecc->curveId);
         if (rc != 0) {
             ok = 0;
         }
@@ -675,7 +676,7 @@ static int wp_ecc_get_params_enc_pub_key(wp_Ecc* ecc, OSSL_PARAM params[],
     p = OSSL_PARAM_locate(params, key);
     if (p != NULL) {
         int rc;
-        word32 outLen = p->return_size;
+        word32 outLen = (word32)p->return_size;
 
         if (p->data == NULL) {
             outLen = 1 + 2 * ((ecc->bits + 7) / 8);
@@ -2120,7 +2121,7 @@ static int wp_ecc_encode_priv(const wp_Ecc *ecc, unsigned char* keyData,
 {
     int ok = 1;
     int rc;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 
     rc = wc_EccKeyToDer((ecc_key*)&ecc->key, keyData, len);
     if (rc <= 0) {
@@ -2172,7 +2173,7 @@ static int wp_ecc_encode_spki(const wp_Ecc *ecc, unsigned char* keyData,
 {
     int ok = 1;
     int rc;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 
     rc = wc_EccPublicKeyToDer((ecc_key*)&ecc->key, keyData, len, 1);
     if (rc <= 0) {
@@ -2225,7 +2226,7 @@ static int wp_ecc_encode_pki(const wp_Ecc *ecc, unsigned char* keyData,
 {
     int ok = 1;
     int rc;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 
     /* TODO: for older versions, curve is always included! */
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, keyData, &len);
@@ -2285,7 +2286,7 @@ static int wp_ecc_encode_epki(const wp_EccEncDecCtx* ctx, const wp_Ecc *ecc,
 {
     int ok = 1;
     int rc;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
 
     /* Encode key. */
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, keyData, &len);
@@ -2420,7 +2421,8 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         keyLen = derLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, derLen, NULL, 0, cipherInfo, pemType);
+        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo,
+            pemType);
         if (rc <= 0) {
             ok = 0;
         }
@@ -2432,8 +2434,8 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             }
         }
         if (ok) {
-            rc = wc_DerToPemEx(derData, derLen, pemData, pemLen, cipherInfo,
-                pemType);
+            rc = wc_DerToPemEx(derData, (word32)derLen, pemData, (word32)pemLen,
+                cipherInfo, pemType);
             if (rc <= 0) {
                 ok = 0;
             }
@@ -2451,7 +2453,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
     if (ok) {
-        rc = BIO_write(out, keyData, keyLen);
+        rc = BIO_write(out, keyData, (int)keyLen);
         if (rc <= 0) {
             ok = 0;
         }

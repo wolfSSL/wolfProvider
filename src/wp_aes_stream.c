@@ -285,7 +285,7 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
         }
         if (ok) {
             /* Decryption is the same as encryption with CTR mode. */
-            int rc = wc_AesSetKey(&ctx->aes, key, ctx->keyLen, iv,
+            int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
                 AES_ENCRYPTION);
             if (rc != 0) {
                 ok = 0;
@@ -366,7 +366,7 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
         int rc;
 
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
-        rc = wc_AesCtrEncrypt(&ctx->aes, out, in, inLen);
+        rc = wc_AesCtrEncrypt(&ctx->aes, out, in, (word32)inLen);
         if (rc == 0) {
             XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
             ok = 1;

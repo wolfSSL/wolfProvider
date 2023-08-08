@@ -532,8 +532,8 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
     }
     if (ok) {
         PRIVATE_KEY_UNLOCK();
-        rc = wc_RsaSSL_Sign(tbs, tbsLen, sig, sigSize, wp_rsa_get_key(ctx->rsa),
-            &ctx->rng);
+        rc = wc_RsaSSL_Sign(tbs, (word32)tbsLen, sig, (word32)sigSize,
+            wp_rsa_get_key(ctx->rsa), &ctx->rng);
         PRIVATE_KEY_LOCK();
         if (rc <= 0) {
             ok = 0;
@@ -607,7 +607,7 @@ static int wp_rsa_sign_no_pad(wp_RsaSigCtx* ctx, unsigned char* sig,
         ok = 0;
     }
     if (ok) {
-        word32 len = sigSize;
+        word32 len = (word32)sigSize;
         int rc;
 
         PRIVATE_KEY_UNLOCK();
@@ -816,7 +816,7 @@ static int wp_rsa_verify_no_pad(wp_RsaSigCtx* ctx, const unsigned char* sig,
 {
     int ok = 1;
     int rc;
-    word32 len = sigLen;
+    word32 len = (word32)sigLen;
 
     rc = wc_RsaDirect((byte*)sig, (word32)sigLen, decryptedSig, &len,
         wp_rsa_get_key(ctx->rsa), RSA_PUBLIC_DECRYPT, &ctx->rng);
@@ -969,7 +969,7 @@ static int wp_rsa_digest_signverify_update(wp_RsaSigCtx* ctx,
     const unsigned char* data, size_t dataLen)
 {
     int ok = 1;
-    int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, dataLen);
+    int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }

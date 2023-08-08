@@ -258,9 +258,9 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
             if (sigSize == (size_t)-1) {
                 sigSize = *sigLen;
             }
-            len = sigSize;
+            len = (word32)sigSize;
             PRIVATE_KEY_UNLOCK();
-            rc = wc_ecc_sign_hash(tbs, tbsLen, sig, &len,
+            rc = wc_ecc_sign_hash(tbs, (word32)tbsLen, sig, &len,
                 wp_ecc_get_rng(ctx->ecc), wp_ecc_get_key(ctx->ecc));
             PRIVATE_KEY_LOCK();
             if (rc != 0) {
@@ -320,8 +320,8 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
     }
     else {
         int res;
-        int rc = wc_ecc_verify_hash(sig, sigLen, tbs, tbsLen, &res,
-            wp_ecc_get_key(ctx->ecc));
+        int rc = wc_ecc_verify_hash(sig, (word32)sigLen, tbs, (word32)tbsLen,
+            &res, wp_ecc_get_key(ctx->ecc));
         if (rc != 0) {
             ok = 0;
         }
@@ -467,7 +467,7 @@ static int wp_ecdsa_digest_signverify_update(wp_EcdsaSigCtx *ctx,
     const unsigned char *data, size_t dataLen)
 {
     int ok = 1;
-    int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, dataLen);
+    int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }

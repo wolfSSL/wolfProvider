@@ -126,7 +126,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
     }
     if (ok ) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-        ctx->rng = wc_rng_new((byte*)pStr, pStrLen, NULL);
+        ctx->rng = wc_rng_new((byte*)pStr, (word32)pStrLen, NULL);
         if (ctx->rng == NULL) {
             ok = 0;
         }

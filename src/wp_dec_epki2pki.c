@@ -202,9 +202,9 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     }
     if ((!done) && ok) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-        rc = wc_DecryptPKCS8Key(data, len, password, passwordLen);
+        rc = wc_DecryptPKCS8Key(data, len, password, (int)passwordLen);
     #else
-        rc = wp_DecryptPKCS8Key(data, len, password, passwordLen);
+        rc = wp_DecryptPKCS8Key(data, len, password, (int)passwordLen);
     #endif
         if (rc <= 0) {
             ok = 0;

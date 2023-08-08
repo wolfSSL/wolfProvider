@@ -256,8 +256,8 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
 
     if (ok) {
         /* One-shot API for creating GMAC. */
-        rc = wc_GmacUpdate(&macCtx->gmac, macCtx->iv, macCtx->ivLen,
-            macCtx->data, macCtx->dataLen, out, (word32)outSize);
+        rc = wc_GmacUpdate(&macCtx->gmac, macCtx->iv, (word32)macCtx->ivLen,
+            macCtx->data, (word32)macCtx->dataLen, out, (word32)outSize);
         if (rc != 0) {
             ok = 0;
         }
