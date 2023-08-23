@@ -32,16 +32,14 @@ OPENSSL_SERVER_PID=-1
 WP_OPENSSL_SERVER_PID=-1
 
 kill_servers() {
-    SERVER_PID=$OPENSSL_SERVER_PID
-    check_process_running
+    check_process_running $OPENSSL_SERVER_PID
     if [ "$PS_EXIT" = "0" ]; then
-        (kill -INT $SERVER_PID) >/dev/null 2>&1
+        (kill -INT $OPENSSL_SERVER_PID) >/dev/null 2>&1
     fi
 
-    SERVER_PID=$WP_OPENSSL_SERVER_PID
-    check_process_running
+    check_process_running $WP_OPENSSL_SERVER_PID
     if [ "$PS_EXIT" = "0" ]; then
-        (kill -INT $SERVER_PID) >/dev/null 2>&1
+        (kill -INT $WP_OPENSSL_SERVER_PID) >/dev/null 2>&1
     fi
 }
 
@@ -144,7 +142,7 @@ TLS1_PSK_CIPHERS=(
 )
 
 check_process_running() {
-    ps -p $SERVER_PID > /dev/null
+    ps -p $1 > /dev/null
     PS_EXIT=$?
 }
 
@@ -167,8 +165,7 @@ start_openssl_server() {
 
     sleep 0.1
 
-    SERVER_PID=$OPENSSL_SERVER_PID
-    check_process_running
+    check_process_running $OPENSSL_SERVER_PID
     if [ "$PS_EXIT" != "0" ]; then
         printf "OpenSSL server failed to start\n"
         do_cleanup
@@ -191,8 +188,7 @@ start_wp_openssl_server() {
 
     sleep 0.1
 
-    SERVER_PID=$WP_OPENSSL_SERVER_PID
-    check_process_running
+    check_process_running $WP_OPENSSL_SERVER_PID
     if [ "$PS_EXIT" != "0" ]; then
         printf "server failed to start\n"
         printf "OpenSSL server using wolfProvider failed to start\n"
@@ -214,8 +210,7 @@ start_openssl_server() {
 
     sleep 0.1
 
-    SERVER_PID=$OPENSSL_SERVER_PID
-    check_process_running
+    check_process_running $OPENSSL_SERVER_PID
     if [ "$PS_EXIT" != "0" ]; then
         printf "OpenSSL server failed to start\n"
         do_cleanup
@@ -238,8 +233,7 @@ start_wp_openssl_server() {
 
     sleep 0.1
 
-    SERVER_PID=$WP_OPENSSL_SERVER_PID
-    check_process_running
+    check_process_running $WP_OPENSSL_SERVER_PID
     if [ "$PS_EXIT" != "0" ]; then
         printf "server failed to start\n"
         printf "OpenSSL server using wolfProvider failed to start\n"
