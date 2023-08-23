@@ -730,7 +730,7 @@ static int wp_ecx_validate_pub_key(const wp_Ecx* ecx)
 {
     int ok = 1;
     int rc;
-    unsigned char key[WP_MAX_KEY_SIZE];
+    unsigned char key[WP_MAX_KEY_SIZE] = {0};
     word32 len = ecx->data->len;
 
     ok &= ecx->hasPub;
