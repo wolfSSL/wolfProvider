@@ -196,51 +196,6 @@ start_wp_openssl_server() {
         exit 1
     fi
 }
-start_openssl_server() {
-    generate_port
-    export OPENSSL_PORT=$port
-
-    ($OPENSSL_BIN s_server -www \
-         -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
-         -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
-         -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         >$LOG_SERVER 2>&1
-    ) &
-    OPENSSL_SERVER_PID=$!
-
-    sleep 0.1
-
-    check_process_running $OPENSSL_SERVER_PID
-    if [ "$PS_EXIT" != "0" ]; then
-        printf "OpenSSL server failed to start\n"
-        do_cleanup
-        exit 1
-    fi
-}
-
-start_wp_openssl_server() {
-    generate_port
-    export WP_OPENSSL_PORT=$port
-
-    ($OPENSSL_BIN s_server -www \
-         -provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME \
-         -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
-         -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
-         -accept $WP_OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         >$LOG_WP_SERVER 2>&1
-    ) &
-    WP_OPENSSL_SERVER_PID=$!
-
-    sleep 0.1
-
-    check_process_running $WP_OPENSSL_SERVER_PID
-    if [ "$PS_EXIT" != "0" ]; then
-        printf "server failed to start\n"
-        printf "OpenSSL server using wolfProvider failed to start\n"
-        do_cleanup
-        exit 1
-    fi
-}
 
 do_wp_client() {
     printf "\t\t$CIPHER ... "
