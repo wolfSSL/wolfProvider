@@ -37,6 +37,7 @@ kill_servers() {
 }
 
 do_cleanup() {
+    sleep 0.5 # flush buffers
     kill_servers
 }
 
@@ -142,7 +143,7 @@ generate_port() {
 }
 
 start_openssl_server() { # usage: start_openssl_server [extraArgs]
-    ($OPENSSL_BIN s_server -www $1 \
+    (stdbuf -oL -eL $OPENSSL_BIN s_server -www $1 \
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
@@ -164,7 +165,7 @@ do_client() { # usage: do_client [extraArgs]
     printf "\n$CIPHER ...\n" >>$LOG_FILE
     if [ "$TLS_VERSION" != "-tls1_3" ]; then
         (echo -n | \
-         $OPENSSL_BIN s_client $1 \
+         stdbuf -oL -eL $OPENSSL_BIN s_client $1 \
              -cipher $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
@@ -172,7 +173,7 @@ do_client() { # usage: do_client [extraArgs]
         )
     else
         (echo -n | \
-         $OPENSSL_BIN s_client $1 \
+         stdbuf -oL -eL $OPENSSL_BIN s_client $1 \
              -ciphersuites $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
