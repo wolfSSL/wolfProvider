@@ -22,9 +22,6 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 CERT_DIR=$SCRIPT_DIR/../certs
 LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
-LOG_SERVER=$SCRIPT_DIR/wp-cs-test-server.log
-LOG_CLIENT=$SCRIPT_DIR/wp-cs-test-client.log
-TMP_LOG=$SCRIPT_DIR/wp-cs-test-tmp.log
 
 OPENSSL_SERVER_PID=-1
 
@@ -149,7 +146,7 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         2>&1 | tee -a $LOG_SERVER | prepend "[server] " >>$LOG_FILE
+         2>&1 | prepend "[server] " >>$LOG_FILE
     ) &
     OPENSSL_SERVER_PID=$!
 
@@ -164,13 +161,14 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
 
 do_client() { # usage: do_client [extraArgs]
     printf "\t\t$CIPHER ... "
+    printf "\n$CIPHER ...\n" >>$LOG_FILE
     if [ "$TLS_VERSION" != "-tls1_3" ]; then
         (echo -n | \
          $OPENSSL_BIN s_client $1 \
              -cipher $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             2>&1 | tee -a $LOG_CLIENT | prepend "[client] " >>$LOG_FILE
+             2>&1 | prepend "[client] " >>$LOG_FILE
         )
     else
         (echo -n | \
@@ -178,13 +176,13 @@ do_client() { # usage: do_client [extraArgs]
              -ciphersuites $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             2>&1 | tee -a $LOG_CLIENT | prepend "[client] " >>$LOG_FILE
+             2>&1 | prepend "[client] " >>$LOG_FILE
         )
     fi
     if [ "$?" = "0" ]; then
-        printf "pass\n"
+        printf "pass\n" | tee -a $LOG_FILE
     else
-        printf "fail\n"
+        printf "fail\n" | tee -a $LOG_FILE
         FAIL=$((FAIL+1))
     fi
 }
@@ -247,19 +245,17 @@ FAIL=0
 WOLFPROV_NAME="libwolfprov"
 WOLFPROV_PATH=$PWD/.libs
 
-rm -f $LOG_CLIENT
-
 CURVES=prime256v1
 #CURVES=X25519
 OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
 OPENSSL_PORT=$(generate_port)
 
-printf "\tClient testing\n"
+printf "\tClient testing\n" | tee $LOG_FILE
 start_openssl_server
 do_client_test "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 kill_servers
 
-printf "\tServer testing\n"
+printf "\tServer testing\n" | tee -a $LOG_FILE
 start_openssl_server "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 do_client_test
 kill_servers
