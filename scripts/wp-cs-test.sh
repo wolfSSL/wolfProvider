@@ -32,7 +32,7 @@ prepend() { # Usage: cmd 2>&1 | prepend "sometext "
 
 kill_servers() {
     if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
-        (kill -INT $OPENSSL_SERVER_PID) >/dev/null 2>&1
+        (kill -9 $OPENSSL_SERVER_PID) >/dev/null 2>&1
     fi
 }
 
@@ -143,13 +143,12 @@ generate_port() {
 }
 
 start_openssl_server() { # usage: start_openssl_server [extraArgs]
-    (stdbuf -oL -eL $OPENSSL_BIN s_server -www $1 \
+    stdbuf -oL -eL $OPENSSL_BIN s_server -www $1 \
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         2>&1 | prepend "[server] " >>$LOG_FILE
-    ) &
-    OPENSSL_SERVER_PID=$!
+         2>&1 | prepend "[server] " >>$LOG_FILE &
+    OPENSSL_SERVER_PID=$(($! - 1))
 
     sleep 0.1
 
