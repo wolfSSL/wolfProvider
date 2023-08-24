@@ -21,18 +21,20 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 CERT_DIR=$SCRIPT_DIR/../certs
-LOG_DIR=$SCRIPT_DIR/log
-LOG_FILE=$LOG_DIR/wp-cs-test.log
-LOG_SERVER=$LOG_DIR/wp-cs-test-server.log
-LOG_WP_SERVER=$LOG_DIR/wp-cs-test-wp-server.log
-LOG_CLIENT=$LOG_DIR/wp-cs-test-client.log
-TMP_LOG=$LOG_DIR/wp-cs-test-tmp.log
+LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
+LOG_SERVER=$SCRIPT_DIR/wp-cs-test-server.log
+LOG_CLIENT=$SCRIPT_DIR/wp-cs-test-client.log
+TMP_LOG=$SCRIPT_DIR/wp-cs-test-tmp.log
 
 OPENSSL_SERVER_PID=-1
 
+set -o pipefail # pass failures up the pipe
+prepend() { # Usage: cmd 2>&1 | prepend "sometext "
+    while read line; do echo "${1}${line}"; done
+}
+
 kill_servers() {
-    check_process_running $OPENSSL_SERVER_PID
-    if [ "$PS_EXIT" = "0" ]; then
+    if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
         (kill -INT $OPENSSL_SERVER_PID) >/dev/null 2>&1
     fi
 }
@@ -134,7 +136,7 @@ TLS1_PSK_CIPHERS=(
 
 check_process_running() {
     ps -p $1 > /dev/null
-    PS_EXIT=$?
+    echo $?
 }
 
 # need a unique port since may run the same time as testsuite
@@ -143,20 +145,17 @@ generate_port() {
 }
 
 start_openssl_server() { # usage: start_openssl_server [extraArgs]
-    export OPENSSL_PORT=$(generate_port)
-
     ($OPENSSL_BIN s_server -www $1 \
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         >$LOG_SERVER 2>&1
+         2>&1 | tee -a $LOG_SERVER | prepend "[server] " >>$LOG_FILE
     ) &
     OPENSSL_SERVER_PID=$!
 
     sleep 0.1
 
-    check_process_running $OPENSSL_SERVER_PID
-    if [ "$PS_EXIT" != "0" ]; then
+    if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
         printf "OpenSSL server failed to start\n"
         do_cleanup
         exit 1
@@ -171,7 +170,7 @@ do_client() { # usage: do_client [extraArgs]
              -cipher $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             >>$LOG_CLIENT 2>&1
+             2>&1 | tee -a $LOG_CLIENT | prepend "[client] " >>$LOG_FILE
         )
     else
         (echo -n | \
@@ -179,7 +178,7 @@ do_client() { # usage: do_client [extraArgs]
              -ciphersuites $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             >>$LOG_CLIENT 2>&1
+             2>&1 | tee -a $LOG_CLIENT | prepend "[client] " >>$LOG_FILE
         )
     fi
     if [ "$?" = "0" ]; then
@@ -191,10 +190,6 @@ do_client() { # usage: do_client [extraArgs]
 }
 
 do_client_test() {
-    printf "\tServer testing\n"
-    CHECK_CLIENT=
-    CHECK_SERVER=1
-
     #TLS_VERSION=-tls1
     #printf "\t$TLS_VERSION\n"
     #for CIPHER in ${TLS1_CIPHERS[@]}
@@ -257,11 +252,14 @@ rm -f $LOG_CLIENT
 CURVES=prime256v1
 #CURVES=X25519
 OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
+OPENSSL_PORT=$(generate_port)
 
+printf "\tClient testing\n"
 start_openssl_server
 do_client_test "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 kill_servers
 
+printf "\tServer testing\n"
 start_openssl_server "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 do_client_test
 kill_servers
