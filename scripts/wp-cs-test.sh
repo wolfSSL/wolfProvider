@@ -188,32 +188,28 @@ do_client() { # usage: do_client [extraArgs]
     fi
 }
 
-do_client_test() {
-    #TLS_VERSION=-tls1
-    #printf "\t$TLS_VERSION\n"
-    #for CIPHER in ${TLS1_CIPHERS[@]}
-    #do
-    #    do_client "$1"
-    #done
-
-    #TLS_VERSION=-tls1_1
-    #printf "\t$TLS_VERSION\n"
-    #for CIPHER in ${TLS1_CIPHERS[@]}
-    #do
-    #    do_client "$1"
-    #done
+do_client_test() { # usage: do_client_test [extraArgs]
+#    TLS_VERSION=-tls1
+#    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+#    for CIPHER in ${TLS1_CIPHERS[@]}; do
+#        do_client "$1"
+#    done
+#
+#    TLS_VERSION=-tls1_1
+#    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+#    for CIPHER in ${TLS1_CIPHERS[@]}; do
+#        do_client "$1"
+#    done
 
     TLS_VERSION=-tls1_2
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS12_CIPHERS[@]}
-    do
+    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+    for CIPHER in ${TLS12_CIPHERS[@]}; do
         do_client "$1"
     done
 
     TLS_VERSION=-tls1_3
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS13_CIPHERS[@]}
-    do
+    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+    for CIPHER in ${TLS13_CIPHERS[@]}; do
         do_client "$1"
     done
 }
