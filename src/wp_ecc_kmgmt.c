@@ -1486,7 +1486,7 @@ static int wp_ecc_gen_set_template(wp_EccGenCtx* ctx, wp_Ecc* ecc)
     }
     if (ok) {
         XSTRNCPY(ctx->curveName, name, sizeof(ctx->curveName)-1);
-        ctx->curveName[WP_MAX_EC_GROUP_NAME_SZ-1] = '\0';
+        ctx->curveName[sizeof(ctx->curveName)-1] = '\0';
     }
 
     return ok;

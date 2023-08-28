@@ -23,6 +23,7 @@
 #endif
 
 #include <wolfprovider/wp_wolfprov.h>
+#include <openssl/err.h>
 
 #include "unit.h"
 
@@ -593,6 +594,7 @@ int main(int argc, char* argv[])
         wpProv = OSSL_PROVIDER_load(wpLibCtx, name);
         if (wpProv == NULL) {
             PRINT_ERR_MSG("Failed to find wolf provider!\n");
+            ERR_print_errors_fp(stderr);
             err = 1;
         }
 
@@ -600,6 +602,7 @@ int main(int argc, char* argv[])
         osslProv = OSSL_PROVIDER_load(osslLibCtx, "default");
         if (osslProv == NULL) {
             PRINT_ERR_MSG("Failed to find default provider!\n");
+            ERR_print_errors_fp(stderr);
             err = 1;
         }
     }

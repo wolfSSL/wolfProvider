@@ -21,34 +21,24 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 CERT_DIR=$SCRIPT_DIR/../certs
-LOG_DIR=$SCRIPT_DIR/log
-LOG_FILE=$LOG_DIR/wp-cs-test.log
-LOG_SERVER=$LOG_DIR/wp-cs-test-server.log
-LOG_WP_SERVER=$LOG_DIR/wp-cs-test-wp-server.log
-LOG_CLIENT=$LOG_DIR/wp-cs-test-client.log
-TMP_LOG=$LOG_DIR/wp-cs-test-tmp.log
+LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
 
 OPENSSL_SERVER_PID=-1
-WP_OPENSSL_SERVER_PID=-1
+
+set -o pipefail # pass failures up the pipe
+prepend() { # Usage: cmd 2>&1 | prepend "sometext "
+    while read line; do echo "${1}${line}"; done
+}
 
 kill_servers() {
-    SERVER_PID=$OPENSSL_SERVER_PID
-    check_process_running
-    if [ "$PS_EXIT" = "0" ]; then
-        (kill -INT $SERVER_PID) >/dev/null 2>&1
-    fi
-
-    SERVER_PID=$WP_OPENSSL_SERVER_PID
-    check_process_running
-    if [ "$PS_EXIT" = "0" ]; then
-        (kill -INT $SERVER_PID) >/dev/null 2>&1
+    if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
+        (kill -9 $OPENSSL_SERVER_PID) >/dev/null 2>&1
     fi
 }
 
 do_cleanup() {
+    sleep 0.5 # flush buffers
     kill_servers
-
-    rm -f $TMP_LOG
 }
 
 do_trap() {
@@ -57,7 +47,6 @@ do_trap() {
     date
     exit 1
 }
-
 
 trap do_trap INT TERM
 
@@ -144,245 +133,83 @@ TLS1_PSK_CIPHERS=(
 )
 
 check_process_running() {
-    ps -p $SERVER_PID > /dev/null
-    PS_EXIT=$?
+    ps -p $1 > /dev/null
+    echo $?
 }
 
 # need a unique port since may run the same time as testsuite
 generate_port() {
-    port=$(($(od -An -N2 /dev/random) % (65535-49512) + 49512))
+    echo $(($(od -An -N2 /dev/random) % (65535-49512) + 49512))
 }
 
-start_openssl_server() {
-    generate_port
-    export OPENSSL_PORT=$port
-
-    ($OPENSSL_BIN s_server -www \
+start_openssl_server() { # usage: start_openssl_server [extraArgs]
+    stdbuf -oL -eL $OPENSSL_BIN s_server -www $1 \
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         >$LOG_SERVER 2>&1
-    ) &
-    OPENSSL_SERVER_PID=$!
+         2>&1 | prepend "[server] " >>$LOG_FILE &
+    OPENSSL_SERVER_PID=$(($! - 1))
 
     sleep 0.1
 
-    SERVER_PID=$OPENSSL_SERVER_PID
-    check_process_running
-    if [ "$PS_EXIT" != "0" ]; then
+    if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
         printf "OpenSSL server failed to start\n"
         do_cleanup
         exit 1
     fi
 }
 
-start_wp_openssl_server() {
-    generate_port
-    export WP_OPENSSL_PORT=$port
-
-    ($OPENSSL_BIN s_server -www \
-         -provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME \
-         -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
-         -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
-         -accept $WP_OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         >$LOG_WP_SERVER 2>&1
-    ) &
-    WP_OPENSSL_SERVER_PID=$!
-
-    sleep 0.1
-
-    SERVER_PID=$WP_OPENSSL_SERVER_PID
-    check_process_running
-    if [ "$PS_EXIT" != "0" ]; then
-        printf "server failed to start\n"
-        printf "OpenSSL server using wolfProvider failed to start\n"
-        do_cleanup
-        exit 1
-    fi
-}
-start_openssl_server() {
-    generate_port
-    export OPENSSL_PORT=$port
-
-    ($OPENSSL_BIN s_server -www \
-         -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
-         -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
-         -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         >$LOG_SERVER 2>&1
-    ) &
-    OPENSSL_SERVER_PID=$!
-
-    sleep 0.1
-
-    SERVER_PID=$OPENSSL_SERVER_PID
-    check_process_running
-    if [ "$PS_EXIT" != "0" ]; then
-        printf "OpenSSL server failed to start\n"
-        do_cleanup
-        exit 1
-    fi
-}
-
-start_wp_openssl_server() {
-    generate_port
-    export WP_OPENSSL_PORT=$port
-
-    ($OPENSSL_BIN s_server -www \
-         -provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME \
-         -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
-         -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
-         -accept $WP_OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         >$LOG_WP_SERVER 2>&1
-    ) &
-    WP_OPENSSL_SERVER_PID=$!
-
-    sleep 0.1
-
-    SERVER_PID=$WP_OPENSSL_SERVER_PID
-    check_process_running
-    if [ "$PS_EXIT" != "0" ]; then
-        printf "server failed to start\n"
-        printf "OpenSSL server using wolfProvider failed to start\n"
-        do_cleanup
-        exit 1
-    fi
-}
-
-do_wp_client() {
+do_client() { # usage: do_client [extraArgs]
     printf "\t\t$CIPHER ... "
+    printf "\n$CIPHER ...\n" >>$LOG_FILE
     if [ "$TLS_VERSION" != "-tls1_3" ]; then
         (echo -n | \
-         $OPENSSL_BIN s_client \
-             -provider-path $WOLFPROV_PATH \
-             -provider $WOLFPROV_NAME \
+         stdbuf -oL -eL $OPENSSL_BIN s_client $1 \
              -cipher $CIPHER $TLS_VERSION \
-             -curves $CURVES \
              -connect localhost:$OPENSSL_PORT \
-             >$TMP_LOG 2>&1
+             -curves $CURVES \
+             2>&1 | prepend "[client] " >>$LOG_FILE
         )
     else
         (echo -n | \
-         $OPENSSL_BIN s_client \
-             -provider-path $WOLFPROV_PATH \
-             -provider $WOLFPROV_NAME \
+         stdbuf -oL -eL $OPENSSL_BIN s_client $1 \
              -ciphersuites $CIPHER $TLS_VERSION \
-             -curves $CURVES \
              -connect localhost:$OPENSSL_PORT \
-             >$TMP_LOG 2>&1
+             -curves $CURVES \
+             2>&1 | prepend "[client] " >>$LOG_FILE
         )
     fi
     if [ "$?" = "0" ]; then
-        printf "pass\n"
+        printf "pass\n" | tee -a $LOG_FILE
     else
-        printf "fail\n"
+        printf "fail\n" | tee -a $LOG_FILE
         FAIL=$((FAIL+1))
     fi
-
-    #check_log
-
-    cat $TMP_LOG >>$LOG_CLIENT
 }
 
-do_client() {
-    printf "\t\t$CIPHER ... "
-    if [ "$TLS_VERSION" != "-tls1_3" ]; then
-        (echo -n | \
-         $OPENSSL_BIN s_client \
-             -cipher $CIPHER $TLS_VERSION \
-             -connect localhost:$WP_OPENSSL_PORT \
-             -curves $CURVES \
-             >>$LOG_CLIENT 2>&1
-        )
-    else
-        (echo -n | \
-         $OPENSSL_BIN s_client \
-             -ciphersuites $CIPHER $TLS_VERSION \
-             -connect localhost:$WP_OPENSSL_PORT \
-             -curves $CURVES \
-             >>$LOG_CLIENT 2>&1
-        )
-    fi
-    if [ "$?" = "0" ]; then
-        printf "pass\n"
-    else
-        printf "fail\n"
-        FAIL=$((FAIL+1))
-    fi
-
-    NEW_LINES=`wc -l $LOG_WP_SERVER | awk '{print $1}'`
-    tail --lines=$((NEW_LINES-LOG_LINES)) $LOG_WP_SERVER >$TMP_LOG
-
-    #check_log
-
-    LOG_LINES=$NEW_LINES
-}
-
-do_wp_client_test() {
-    printf "\tClient testing\n"
-    CHECK_CLIENT=1
-    CHECK_SERVER=
-
-    #TLS_VERSION=-tls1
-    #printf "\t$TLS_VERSION\n"
-    #for CIPHER in ${TLS1_CIPHERS[@]}
-    #do
-    #    do_wp_client
-    #done
-
-    #TLS_VERSION=-tls1_1
-    #printf "\t$TLS_VERSION\n"
-    #for CIPHER in ${TLS1_CIPHERS[@]}
-    #do
-    #    do_wp_client
-    #done
+do_client_test() { # usage: do_client_test [extraArgs]
+#    TLS_VERSION=-tls1
+#    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+#    for CIPHER in ${TLS1_CIPHERS[@]}; do
+#        do_client "$1"
+#    done
+#
+#    TLS_VERSION=-tls1_1
+#    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+#    for CIPHER in ${TLS1_CIPHERS[@]}; do
+#        do_client "$1"
+#    done
 
     TLS_VERSION=-tls1_2
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS12_CIPHERS[@]}
-    do
-        do_wp_client
+    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+    for CIPHER in ${TLS12_CIPHERS[@]}; do
+        do_client "$1"
     done
 
     TLS_VERSION=-tls1_3
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS13_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-}
-
-do_client_test() {
-    printf "\tServer testing\n"
-    CHECK_CLIENT=
-    CHECK_SERVER=1
-    LOG_LINES=0
-
-    #TLS_VERSION=-tls1
-    #printf "\t$TLS_VERSION\n"
-    #for CIPHER in ${TLS1_CIPHERS[@]}
-    #do
-    #    do_client
-    #done
-
-    #TLS_VERSION=-tls1_1
-    #printf "\t$TLS_VERSION\n"
-    #for CIPHER in ${TLS1_CIPHERS[@]}
-    #do
-    #    do_client
-    #done
-
-    TLS_VERSION=-tls1_2
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS12_CIPHERS[@]}
-    do
-        do_client
-    done
-
-    TLS_VERSION=-tls1_3
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS13_CIPHERS[@]}
-    do
-        do_client
+    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+    for CIPHER in ${TLS13_CIPHERS[@]}; do
+        do_client "$1"
     done
 }
 
@@ -414,16 +241,21 @@ FAIL=0
 WOLFPROV_NAME="libwolfprov"
 WOLFPROV_PATH=$PWD/.libs
 
-rm -f $LOG_CLIENT
-
 CURVES=prime256v1
 #CURVES=X25519
 OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
+OPENSSL_PORT=$(generate_port)
+
+printf "\tClient testing\n" | tee $LOG_FILE
 start_openssl_server
-do_wp_client_test
-start_wp_openssl_server
+do_client_test "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
+kill_servers
+
+printf "\tServer testing\n" | tee -a $LOG_FILE
+start_openssl_server "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 do_client_test
 kill_servers
+
 do_cleanup
 
 if [ "$FAIL" = "0" ]; then
