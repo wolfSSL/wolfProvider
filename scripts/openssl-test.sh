@@ -280,6 +280,9 @@ if [ ! -d "$LOGDIR" ]; then
     mkdir $LOGDIR
 fi
 
+# Fresh start
+rm -f $LOGFILE
+
 if [ "$MAKE_JOBS" = "" ]; then
     MAKE_JOBS=4
 fi

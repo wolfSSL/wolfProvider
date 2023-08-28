@@ -27,13 +27,13 @@ download_openssl_300() {
     OPENSSL_3_0_0_GIT="git@github.com:openssl/openssl.git"
     printf "\tClone OpenSSL 3.0.0 ... "
     git clone --depth=1 -b ${OPENSSL_3_0_0_TAG} ${OPENSSL_3_0_0_GIT} \
-         ${OPENSSL_3_0_0_SOURCE} &> $LOGFILE
+         ${OPENSSL_3_0_0_SOURCE} &>> $LOGFILE
     printf "Done.\n"
 }
 
 build_openssl_300() {
     printf "\tConfigure OpenSSL 3.0.0 ... "
-    ./config shared --prefix=${OPENSSL_3_0_0_INSTALL} &> $LOGFILE
+    ./config shared --prefix=${OPENSSL_3_0_0_INSTALL} &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
@@ -42,7 +42,7 @@ build_openssl_300() {
     printf "Done.\n"
 
     printf "\tBuild OpenSSL 3.0.0 ... "
-    make -j$MAKE_JOBS &> $LOGFILE
+    make -j$MAKE_JOBS &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
@@ -53,7 +53,7 @@ build_openssl_300() {
 
 install_openssl_300() {
     printf "\tInstalling OpenSSL 3.0.0 ... "
-    make -j$MAKE_JOBS install &> $LOGFILE
+    make -j$MAKE_JOBS install &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
