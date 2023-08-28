@@ -24,10 +24,15 @@
 #
 
 download_openssl_300() {
-    OPENSSL_3_0_0_GIT="git@github.com:openssl/openssl.git"
+    OPENSSL_3_0_0_GIT="https://github.com/openssl/openssl.git"
     printf "\tClone OpenSSL 3.0.0 ... "
     git clone --depth=1 -b ${OPENSSL_3_0_0_TAG} ${OPENSSL_3_0_0_GIT} \
          ${OPENSSL_3_0_0_SOURCE} &>> $LOGFILE
+    if [ $? != 0 ]; then
+        printf "ERROR.\n"
+        do_cleanup
+        exit 1
+    fi
     printf "Done.\n"
 }
 
