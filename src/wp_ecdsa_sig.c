@@ -26,7 +26,11 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+
+#ifdef WP_HAVE_ECDSA
 
 /**
  * ECDSA signature context.
@@ -115,78 +119,6 @@ static void wp_ecdsa_freectx(wp_EcdsaSigCtx* ctx)
         OPENSSL_free(ctx->propQuery);
         OPENSSL_free(ctx);
     }
-}
-
-
-/**
- * Copies the underlying hash algorithm object.
- *
- * @param [in]  src       Hash object to copy.
- * @param [out] dst       Hash object to copy into.
- * @param [in]  hashType  Type of hash algorithm.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst,
-    enum wc_HashType hashType)
-{
-    int ok = 1;
-    int rc = 0;
-
-    switch (hashType) {
-    case WC_HASH_TYPE_MD5:
-        rc = wc_Md5Copy(&src->md5, &dst->md5);
-        break;
-    case WC_HASH_TYPE_SHA:
-        rc = wc_ShaCopy(&src->sha, &dst->sha);
-        break;
-    case WC_HASH_TYPE_SHA224:
-        rc = wc_Sha224Copy(&src->sha224, &dst->sha224);
-        break;
-    case WC_HASH_TYPE_SHA256:
-        rc = wc_Sha256Copy(&src->sha256, &dst->sha256);
-        break;
-    case WC_HASH_TYPE_SHA384:
-        rc = wc_Sha384Copy(&src->sha384, &dst->sha384);
-        break;
-    case WC_HASH_TYPE_SHA512:
-        rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
-        break;
-    case WC_HASH_TYPE_SHA512_224:
-        rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
-        break;
-    case WC_HASH_TYPE_SHA512_256:
-        rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
-        break;
-    case WC_HASH_TYPE_SHA3_224:
-        rc = wc_Sha3_224_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_SHA3_256:
-        rc = wc_Sha3_256_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_SHA3_384:
-        rc = wc_Sha3_384_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_SHA3_512:
-        rc = wc_Sha3_512_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_NONE:
-    case WC_HASH_TYPE_MD2:
-    case WC_HASH_TYPE_MD4:
-    case WC_HASH_TYPE_MD5_SHA:
-    case WC_HASH_TYPE_BLAKE2B:
-    case WC_HASH_TYPE_BLAKE2S:
-    case WC_HASH_TYPE_SHAKE128:
-    case WC_HASH_TYPE_SHAKE256:
-    default:
-        ok = 0;
-        break;
-    }
-    if (rc != 0) {
-        ok = 0;
-    }
-
-    return ok;
 }
 
 /**
@@ -319,16 +251,18 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
             (tbsLen != (size_t)wc_HashGetDigestSize(ctx->hashType))) {
             ok = 0;
         }
-        else {
+        else if ((ok = wp_ecc_check_usage(ctx->ecc))) {
             int rc;
             word32 len;
 
             if (sigSize == (size_t)-1) {
                 sigSize = *sigLen;
             }
-            len = sigSize;
-            rc = wc_ecc_sign_hash(tbs, tbsLen, sig, &len,
+            len = (word32)sigSize;
+            PRIVATE_KEY_UNLOCK();
+            rc = wc_ecc_sign_hash(tbs, (word32)tbsLen, sig, &len,
                 wp_ecc_get_rng(ctx->ecc), wp_ecc_get_key(ctx->ecc));
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
@@ -386,8 +320,8 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
     }
     else {
         int res;
-        int rc = wc_ecc_verify_hash(sig, sigLen, tbs, tbsLen, &res,
-            wp_ecc_get_key(ctx->ecc));
+        int rc = wc_ecc_verify_hash(sig, (word32)sigLen, tbs, (word32)tbsLen,
+            &res, wp_ecc_get_key(ctx->ecc));
         if (rc != 0) {
             ok = 0;
         }
@@ -533,7 +467,7 @@ static int wp_ecdsa_digest_signverify_update(wp_EcdsaSigCtx *ctx,
     const unsigned char *data, size_t dataLen)
 {
     int ok = 1;
-    int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, dataLen);
+    int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }
@@ -912,4 +846,6 @@ const OSSL_DISPATCH wp_ecdsa_signature_functions[] = {
                                      (DFUNC)wp_ecdsa_settable_ctx_md_params   },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_ECDSA */
 

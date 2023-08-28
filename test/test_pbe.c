@@ -22,28 +22,39 @@
 
 #ifdef WP_HAVE_PBE
 
+#if (!defined(NO_DES3) && defined(WP_HAVE_SHA1)) || \
+    (defined(WP_HAVE_SHA256) && defined(WP_HAVE_AESCBC)) || \
+    (defined(WP_HAVE_SHA384) && defined(WP_HAVE_AESCBC))
 static const unsigned char pbeData[] = {
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
 };
+#endif
+#if !defined(NO_DES3) && defined(WP_HAVE_SHA1)
 static const unsigned char pbeEncSha1Des3[] = {
-    0x30, 0xe7, 0x72, 0x5d, 0xf8, 0xb3, 0x56, 0x58,
-    0xbb, 0xa6, 0x1b, 0x58, 0x16, 0x36, 0x09, 0xab,
-    0x7a, 0x23, 0x22, 0x4c, 0x23, 0x5a, 0x16, 0x10
+    0x21, 0x8f, 0xbe, 0x10, 0x39, 0x45, 0xe0, 0x3c,
+    0x60, 0xab, 0x31, 0x39, 0xe0, 0x3e, 0x00, 0xc5,
+    0x0b, 0x21, 0x37, 0x70, 0xc8, 0x92, 0x1f, 0x70
 };
+#endif
+#if defined(WP_HAVE_SHA256) && defined(WP_HAVE_AESCBC)
 static const unsigned char pbeEncAes128Cbc[] = {
-    0x86, 0xc4, 0xa8, 0x5f, 0x76, 0x62, 0xfa, 0xf7,
-    0x5a, 0x54, 0xbc, 0xbf, 0x03, 0xa6, 0x9b, 0x48,
-    0x72, 0x00, 0x1d, 0xd9, 0x1d, 0xca, 0xab, 0xd7,
-    0xb2, 0xea, 0x47, 0x9a, 0x7e, 0x95, 0x25, 0x64
+    0x03, 0x2f, 0xe3, 0xa9, 0x02, 0x95, 0xed, 0x66,
+    0xad, 0xe9, 0x19, 0xed, 0xe9, 0xb7, 0xf4, 0xc8,
+    0xc6, 0x63, 0x9a, 0xbc, 0x0c, 0xde, 0x71, 0xbd,
+    0x22, 0x0d, 0xc8, 0xf1, 0x04, 0xcd, 0xe7, 0x28
 };
+#endif
+#if defined(WP_HAVE_SHA384) && defined(WP_HAVE_AESCBC)
 static const unsigned char pbeEncAes256Cbc[] = {
-    0xc4, 0x7b, 0x8b, 0x32, 0x05, 0x60, 0xbb, 0xef,
-    0x6e, 0xf0, 0x98, 0x39, 0x96, 0x6e, 0xf8, 0x6e,
-    0xb2, 0x37, 0xa4, 0x3c, 0xd6, 0x82, 0x21, 0x4c,
-    0x25, 0x13, 0xd4, 0xd7, 0x92, 0xac, 0x90, 0xf1
+    0x67, 0x62, 0xb8, 0x31, 0xbb, 0xdd, 0x16, 0x17,
+    0x88, 0x4f, 0x01, 0x8b, 0x10, 0x43, 0xd0, 0xb5,
+    0xe1, 0x5a, 0x6f, 0x1f, 0xff, 0x39, 0x88, 0x4d,
+    0x6b, 0x96, 0xfa, 0x32, 0xf7, 0x60, 0x89, 0x6c
 };
+#endif
 
+#if !defined(NO_DES3) && defined(WP_HAVE_SHA1)
 /* Format of parameters:
  *    SEQ
  *      OCT <salt>
@@ -55,8 +66,9 @@ static const unsigned char pbeParamPbe[] = {
                 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
           0x02, 0x02, 0x27, 0x10
 };
+#endif
 
-
+#if defined(WP_HAVE_SHA256) && defined(WP_HAVE_AESCBC)
 /* Format of parameters:
  *  SEQ {pbes2}
  *    SEQ {kdf}
@@ -88,7 +100,9 @@ static const unsigned char pbeParamPbes2Aes128Cbc[] = {
                 0x06, 0x09,
                       0x60,0x86,0x48,0x01,0x65,0x03,0x04,0x01,0x02,
 };
+#endif
 
+#if defined(WP_HAVE_SHA384) && defined(WP_HAVE_AESCBC)
 /* Format of parameters:
  *  SEQ {pbes2}
  *    SEQ {kdf}
@@ -119,7 +133,9 @@ static const unsigned char pbeParamPbes2Aes256Cbc[] = {
                 0x06, 0x09,
                       0x60,0x86,0x48,0x01,0x65,0x03,0x04,0x01,0x2A,
 };
+#endif
 
+#if defined(WP_HAVE_AESCBC) || !defined(NO_DES3)
 static int test_pbe_encipher(ASN1_OBJECT *obj, ASN1_TYPE *param,
     const unsigned char *in, size_t inLen, unsigned char *out, int *outLen,
     int enc_dec)
@@ -135,8 +151,8 @@ static int test_pbe_encipher(ASN1_OBJECT *obj, ASN1_TYPE *param,
         err = 1;
     }
     if (!err) {
-        rc = EVP_PBE_CipherInit_ex(obj, "password", 8, param, ctx, enc_dec,
-            wpLibCtx, NULL);
+        rc = EVP_PBE_CipherInit_ex(obj, "password12345678", 16, param, ctx,
+            enc_dec, wpLibCtx, NULL);
         if (rc != 1) {
             PRINT_MSG("Failed to initialize PBE cipher");
             err = 1;
@@ -206,7 +222,9 @@ static int test_pbe_op(int nid, const unsigned char* params, int paramsLen,
 
     return err;
 }
+#endif
 
+#if !defined(NO_DES3) && defined(WP_HAVE_SHA1)
 static int test_pbe_sha1_des3_pbkdf1_op(const unsigned char *in, size_t inLen,
     unsigned char *out, int *outLen, int enc_dec)
 {
@@ -214,7 +232,7 @@ static int test_pbe_sha1_des3_pbkdf1_op(const unsigned char *in, size_t inLen,
         sizeof(pbeParamPbe), in, inLen, out, outLen, enc_dec);
 }
 
-static int test_pbe_sha1_des3_pbkdf1()
+static int test_pbe_sha1_des3_pbkdf1(void)
 {
     int err;
     unsigned char pbeEnc[sizeof(pbeData) + 8];
@@ -249,7 +267,9 @@ static int test_pbe_sha1_des3_pbkdf1()
 
     return err;
 }
+#endif
 
+#if defined(WP_HAVE_SHA256) && defined(WP_HAVE_AESCBC)
 static int test_pbe_pbes2_aes128_cbc_op(const unsigned char *in, size_t inLen,
     unsigned char *out, int *outLen, int enc_dec)
 {
@@ -257,7 +277,7 @@ static int test_pbe_pbes2_aes128_cbc_op(const unsigned char *in, size_t inLen,
         sizeof(pbeParamPbes2Aes128Cbc), in, inLen, out, outLen, enc_dec);
 }
 
-static int test_pbe_pbes2_aes128_cbc()
+static int test_pbe_pbes2_aes128_cbc(void)
 {
     int err;
     unsigned char pbeEnc[sizeof(pbeData) + 16];
@@ -292,7 +312,9 @@ static int test_pbe_pbes2_aes128_cbc()
 
     return err;
 }
+#endif
 
+#if defined(WP_HAVE_SHA384) && defined(WP_HAVE_AESCBC)
 static int test_pbe_pbes2_aes256_cbc_op(const unsigned char *in, size_t inLen,
     unsigned char *out, int *outLen, int enc_dec)
 {
@@ -300,7 +322,7 @@ static int test_pbe_pbes2_aes256_cbc_op(const unsigned char *in, size_t inLen,
         sizeof(pbeParamPbes2Aes256Cbc), in, inLen, out, outLen, enc_dec);
 }
 
-static int test_pbe_pbes2_aes256_cbc()
+static int test_pbe_pbes2_aes256_cbc(void)
 {
     int err;
     unsigned char pbeEnc[sizeof(pbeData) + 16];
@@ -335,10 +357,11 @@ static int test_pbe_pbes2_aes256_cbc()
 
     return err;
 }
+#endif
 
 int test_pbe(void *data)
 {
-    int err;
+    int err = 0;
 
     (void)data;
 
@@ -347,15 +370,21 @@ int test_pbe(void *data)
 #endif
 
     PRINT_MSG("PBE DES-EDE3-CBC SHA-1");
+#if !defined(NO_DES3) && defined(WP_HAVE_SHA1)
     err = test_pbe_sha1_des3_pbkdf1();
+#endif
+#if defined(WP_HAVE_SHA256) && defined(WP_HAVE_AESCBC)
     if (err == 0) {
         PRINT_MSG("PBES2 AES128-CBC HMAC-SHA-256");
         err = test_pbe_pbes2_aes128_cbc();
     }
+#endif
+#if defined(WP_HAVE_SHA384) && defined(WP_HAVE_AESCBC)
     if (err == 0) {
         PRINT_MSG("PBES2 AES256-CBC HMAC-SHA-384");
         err = test_pbe_pbes2_aes256_cbc();
     }
+#endif
 
     return err;
 }

@@ -27,14 +27,19 @@
 #include <openssl/kdf.h>
 #include <openssl/err.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
+
+
+#ifdef WP_HAVE_TLS1_PRF
 
 /** Maximum supported seed size. */
 #define WP_MAX_SEED_SIZE        256
 
+
 /**
- * TLS v1.* PRF context structure.
+ * TLS v1.1 and v1.2 PRF context structure.
  */
 typedef struct wp_Tls1Prf_Ctx {
     /** wolfSSL provider context. */
@@ -53,9 +58,11 @@ typedef struct wp_Tls1Prf_Ctx {
     size_t seedSz;
 } wp_Tls1Prf_Ctx;
 
+
 /* Prototyped for the derive function. */
 static int wp_kdf_tls1_prf_set_ctx_params(wp_Tls1Prf_Ctx* ctx,
     const OSSL_PARAM params[]);
+
 
 /**
  * Create a new TLS1 PRF context object.
@@ -161,20 +168,24 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
     if (ok) {
         int rc;
         if (ctx->mdType == WC_HASH_TYPE_MD5_SHA) {
+            PRIVATE_KEY_UNLOCK();
             rc = wc_PRF_TLSv1(key, (word32)keyLen, ctx->secret,
                 (word32)(ctx->secretSz), (byte*)"", 0, ctx->seed,
                 (word32)(ctx->seedSz), NULL, INVALID_DEVID);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
         }
         else {
+            PRIVATE_KEY_UNLOCK();
             rc = wc_PRF_TLS(key, (word32)keyLen, ctx->secret,
                 (word32)(ctx->secretSz), (byte*)"", 0, ctx->seed,
                 (word32)(ctx->seedSz), 1,
                 ((ctx->mdType == WC_HASH_TYPE_SHA256) ? sha256_mac :
                                                         sha384_mac), NULL,
                 INVALID_DEVID);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
@@ -190,7 +201,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
  * Purely additive.
  *
  * @param [in, out] ctx     TLS1 PRF context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -335,3 +346,4 @@ const OSSL_DISPATCH wp_kdf_tls1_prf_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WOLFSSL_HAVE_PRF */

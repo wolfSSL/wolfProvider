@@ -101,16 +101,20 @@ static int test_aes_tag_enc(const EVP_CIPHER *cipher,
     if (err == 0 && len > 0) {
         /* Update with msg, if len > 0 (not GMAC) */
         err = EVP_EncryptUpdate(ctx, enc, &encLen, msg, len) != 1;
+    #ifdef WOLFSSL_AESGCM_STREAM
         if (encLen != len) {
             err = 1;
         }
+    #endif
     }
     if (err == 0) {
         err = EVP_EncryptFinal_ex(ctx, enc + encLen, &encLen) != 1;
+    #ifdef WOLFSSL_AESGCM_STREAM
         if (encLen != 0) {
             /* should be no more data left */
             err = 1;
         }
+    #endif
     }
     if (err == 0) {
         err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tagLen, tag) != 1;
@@ -252,6 +256,8 @@ static int test_aes_tag(void *data, const char *cipher,
     return err;
 }
 
+#ifdef WP_HAVE_AESGCM
+
 /* AES-GCM GMAC test, empty plaintext, operation only outputs tag value */
 static int test_aes_gcm_gmac(void* data, const char* cipher,
                              int keyLen, int ivLen)
@@ -303,7 +309,11 @@ static int test_aes_gcm_gmac(void* data, const char* cipher,
     return err;
 }
 
+#endif
+
 /******************************************************************************/
+
+#ifdef WP_HAVE_AESGCM
 
 static int test_aes_tag_fixed_enc(const EVP_CIPHER *cipher,
     unsigned char *key, unsigned char *iv, int ivFixedLen, int ivLen,
@@ -414,6 +424,8 @@ static int test_aes_tag_fixed(void *data, const char *cipher,
 
     return err;
 }
+
+#endif
 
 /******************************************************************************/
 

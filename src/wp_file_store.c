@@ -29,6 +29,7 @@
 #include <openssl/store.h>
 #include <openssl/decoder.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
 /* TODO: support directory access. */
@@ -297,22 +298,36 @@ typedef struct wp_DecoderInfo {
 } wp_DecoderInfo;
 
 static const wp_DecoderInfo wp_decoders[] = {
+#ifdef WP_HAVE_RSA
     { "RSA"    , "structure=SubjectPublicKeyInfo"    },
     { "RSA"    , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_DH
     { "DH"     , "structure=type-specific"           },
     { "DH"     , "structure=SubjectPublicKeyInfo"    },
     { "DH"     , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_ECC
     { "EC"     , "structure=type-specific"           },
     { "EC"     , "structure=SubjectPublicKeyInfo"    },
     { "EC"     , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_X25519
     { "X25519" , "structure=SubjectPublicKeyInfo"    },
     { "X25519" , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_ED25519
     { "ED25519", "structure=SubjectPublicKeyInfo"    },
     { "ED25519", "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_X448
     { "X448"   , "structure=SubjectPublicKeyInfo"    },
     { "X448"   , "structure=PrivateKeyInfo"          },
+#endif
+#ifdef WP_HAVE_ED448
     { "ED448"  , "structure=SubjectPublicKeyInfo"    },
     { "ED448"  , "structure=PrivateKeyInfo"          },
+#endif
     { "der"    , NULL                                },
     { "der"    , "structure=EncryptedPrivateKeyInfo" },
 };
@@ -400,9 +415,9 @@ static OSSL_DECODER_CTX* wp_file_setup_decoders(wp_FileCtx* ctx)
  *
  * @param [in, out] ctx       File system context object.
  * @param [in]      objCb     Object callback.
- * @param [in]      objCbArg  Argument ot pass to object callback.
+ * @param [in]      objCbArg  Argument to pass to object callback.
  * @param [in]      pwCb      Password callback.
- * @param [in]      pwCbArg   Argument ot pass to password callback.
+ * @param [in]      pwCbArg   Argument to pass to password callback.
  * @return  1 on success.
  * @return  0 on failure.
  */

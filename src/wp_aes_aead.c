@@ -25,9 +25,12 @@
 #include <openssl/params.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
 #include <wolfssl/wolfcrypt/error-crypt.h>
+
+#if defined(WP_HAVE_AESGCM) || defined(WP_HAVE_AESCCM)
 
 /**
  * Authenticated Encryption with Associated Data structure.
@@ -70,12 +73,14 @@ typedef struct wp_AeadCtx {
     unsigned int ivGen:1;
     /** CCM needs to set IV specially. */
     unsigned int ivSet:1;
-    /** GCM needs to nkow if key has been set. */
+    /** GCM needs to know if key has been set. */
     unsigned int keySet:1;
     /** Cache of authentication status. */
     unsigned int authErr:1;
     /** AAD set with call to update. */
     unsigned int aadSet:1;
+    /** CCM tag available and must be retrieved. */
+    unsigned int tagAvail:1;
 
     /** Buffer to hold TLS AAD or tag. */
     unsigned char buf[AES_BLOCK_SIZE];
@@ -88,6 +93,12 @@ typedef struct wp_AeadCtx {
     size_t aadLen;
     /** CCM is not streaming and needs to cache AAD data. */
     unsigned char* aad;
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    /** Length of AAD data cached.  */
+    size_t inLen;
+    /** CCM is not streaming and needs to cache AAD data. */
+    unsigned char* in;
+#endif
 } wp_AeadCtx;
 
 
@@ -170,6 +181,7 @@ IMPLEMENT_AES_AEAD_NEWCTX(lc, kbits)                                           \
 IMPLEMENT_AES_AEAD_DISPATCH(lc, kbits)
 
 
+#ifdef WP_HAVE_AESGCM
 /* Prototypes for get/set params API. */
 static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
     size_t olen, int inc);
@@ -177,15 +189,18 @@ static int wp_aesgcm_set_rand_iv(wp_AeadCtx *ctx, unsigned char *in,
     size_t inLen);
 static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
     size_t len);
+#endif
+#ifdef WP_HAVE_AESCCM
 static int wp_aesccm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
     size_t len);
+#endif
 
 
 /**
  * Initialize AEAD cipher for use with TLS. Return extra padding (tag length).
  *
  * @param [in, out] ctx     AEAD context object.
- * @param [in]      aad     Additional autentication data.
+ * @param [in]      aad     Additional authentication data.
  * @param [in]      aadLen  Length of AAD in bytes.
  * @return  Length of extra padding in bytes on success.
  * @return  0 on failure.
@@ -238,9 +253,11 @@ static int wp_aead_tls_init(wp_AeadCtx* ctx, unsigned char* aad, size_t aadLen)
         tagLen = 0;
     }
     /* Extra padding: tag appended to record. */
-    return tagLen;
+    return (int)tagLen;
 }
 
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM) || \
+    defined(WP_HAVE_AESCCM)
 /**
  * Cache more Additional Authentication Data in AEAD context object.
  *
@@ -273,6 +290,39 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
 
     return ok;
 }
+#endif
+
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+/**
+ * Cache more input data in AEAD context object.
+ *
+ * @param [in, out] ctx    AEAD context object.
+ * @param [in]      in     More AAD data.
+ * @parma [in]      inLen  Length of new AAD data.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_aead_cache_in(wp_AeadCtx *ctx, const unsigned char *in,
+    size_t inLen)
+{
+    int ok = 1;
+    unsigned char *p;
+
+    if (inLen > 0) {
+        p = (unsigned char*)OPENSSL_realloc(ctx->in, ctx->inLen + inLen);
+        if (p == NULL) {
+            ok = 0;
+        }
+        if (ok) {
+            ctx->in = p;
+            XMEMCPY(ctx->in + ctx->inLen, in, inLen);
+            ctx->inLen += inLen;
+        }
+    }
+
+    return ok;
+}
+#endif
 
 /**
  * Get the AEAD context parameters.
@@ -357,8 +407,10 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
             if (ok && (!OSSL_PARAM_set_octet_string(p, ctx->buf, sz))) {
                 ok = 0;
             }
+            ctx->tagAvail = 0;
         }
     }
+#ifdef WP_HAVE_AESGCM
     if (ok && (ctx->mode == EVP_CIPH_GCM_MODE)) {
         p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TLS1_GET_IV_GEN);
         if (p != NULL) {
@@ -369,6 +421,7 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
             }
         }
     }
+#endif
 
     return ok;
 }
@@ -400,7 +453,7 @@ static int wp_aead_set_param_tag(wp_AeadCtx* ctx,
         else {
             sz = p->data_size;
         }
-        if (ok && (sz == 0 || (p->data != NULL && ctx->enc))) {
+        if (ok && ((sz == 0) || ((p->data != NULL) && ctx->enc))) {
             ok = 0;
         }
         ctx->tagLen = sz;
@@ -429,7 +482,7 @@ static int wp_aead_set_param_iv_len(wp_AeadCtx* ctx,
         if (!OSSL_PARAM_get_size_t(p, &sz)) {
             ok = 0;
         }
-        if (ok & (sz == 0 || sz > sizeof(ctx->aes.reg))) {
+        if (ok & ((sz == 0) || (sz > sizeof(ctx->aes.reg)))) {
             ok = 0;
         }
         if (ok) {
@@ -491,16 +544,20 @@ static int wp_aead_set_param_tls1_iv_fixed(wp_AeadCtx* ctx,
         if (p->data_type != OSSL_PARAM_OCTET_STRING) {
             ok = 0;
         }
+    #ifdef WP_HAVE_AESGCM
         else if (ctx->mode == EVP_CIPH_GCM_MODE) {
             if (wp_aesgcm_tls_iv_set_fixed(ctx, p->data, p->data_size) == 0) {
                 ok = 0;
             }
         }
+    #endif
+    #ifdef WP_HAVE_AESCCM
         else {
             if (wp_aesccm_tls_iv_set_fixed(ctx, p->data, p->data_size) == 0) {
                 ok = 0;
             }
         }
+    #endif
     }
 
     return ok;
@@ -517,6 +574,7 @@ static int wp_aead_set_param_tls1_iv_fixed(wp_AeadCtx* ctx,
 static int wp_aead_set_param_tls1_iv_rand(wp_AeadCtx* ctx,
     const OSSL_PARAM params[])
 {
+#ifdef WP_HAVE_AESGCM
     int ok = 1;
     const OSSL_PARAM* p;
 
@@ -534,6 +592,11 @@ static int wp_aead_set_param_tls1_iv_rand(wp_AeadCtx* ctx,
     }
 
     return ok;
+#else
+    (void)ctx;
+    (void)params;
+    return 1;
+#endif
 }
 
 /**
@@ -681,8 +744,10 @@ static const OSSL_PARAM *wp_aead_gettable_ctx_params(wp_AeadCtx* ctx,
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_UPDATED_IV, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, NULL, 0),
         OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_AEAD_TLS1_AAD_PAD, NULL),
+#ifdef WP_HAVE_AESGCM
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_GET_IV_GEN, NULL,
             0),
+#endif
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -708,8 +773,10 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_AAD, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED, NULL, 0),
+#ifdef WP_HAVE_AESGCM
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV, NULL,
             0),
+#endif
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -717,6 +784,8 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
     return wp_aead_supported_settable_ctx_params;
 }
 
+
+#ifdef WP_HAVE_AESGCM
 
 /*
  * AES-GCM
@@ -745,6 +814,7 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
         ok = 0;
     }
     if (ok) {
+    #ifdef WOLFSSL_AESGCM_STREAM
         int rc;
 
         rc = wc_AesGcmEncryptInit_ex(&ctx->aes, NULL, 0, ctx->iv,
@@ -752,6 +822,9 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
         if (rc != 0) {
             ok = 0;
         }
+    #else
+        XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+    #endif
     }
     if (ok) {
         /* Use all the IV/nonce length if none specified or too much. */
@@ -837,8 +910,8 @@ static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
             }
         #endif
             if (ok) {
-                rc = wc_AesGcmSetIV(&ctx->aes, ctx->ivLen, iv, len,
-                    wp_provctx_get_rng(ctx->provCtx));
+                rc = wc_AesGcmSetIV(&ctx->aes, (word32)ctx->ivLen, iv,
+                    (word32)len, wp_provctx_get_rng(ctx->provCtx));
                 if (rc != 0) {
                     ok = 0;
                 }
@@ -911,7 +984,7 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
     }
 #else
     if (ok && (key != NULL)) {
-        int rc = wc_AesGcmSetKey(aes, key, keyLen);
+        int rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -972,7 +1045,7 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
     }
 #else
     if (ok && (key != NULL)) {
-        int rc = wc_AesGcmSetKey(aes, key, keyLen);
+        int rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -1050,16 +1123,16 @@ static int wp_aesgcm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
         len -= EVP_GCM_TLS_EXPLICIT_IV_LEN + EVP_GCM_TLS_TAG_LEN;
 
         if (ctx->enc) {
-            rc = wc_AesGcmEncrypt(&ctx->aes, out, in, len, ctx->iv,
-                    ctx->ivLen, out + len, EVP_GCM_TLS_TAG_LEN, ctx->buf,
-                    EVP_AEAD_TLS1_AAD_LEN);
+            rc = wc_AesGcmEncrypt(&ctx->aes, out, in, (word32)len, ctx->iv,
+                    (word32)ctx->ivLen, out + len, EVP_GCM_TLS_TAG_LEN,
+                    ctx->buf, EVP_AEAD_TLS1_AAD_LEN);
             if (rc != 0) {
                 ok = 0;
             }
         }
         else {
-            rc = wc_AesGcmDecrypt(&ctx->aes, out, in, len, ctx->iv,
-                    ctx->ivLen, in + len, EVP_GCM_TLS_TAG_LEN, ctx->buf,
+            rc = wc_AesGcmDecrypt(&ctx->aes, out, in, (word32)len, ctx->iv,
+                    (word32)ctx->ivLen, in + len, EVP_GCM_TLS_TAG_LEN, ctx->buf,
                     EVP_AEAD_TLS1_AAD_LEN);
             if (rc != 0) {
                 OPENSSL_cleanse(out, len);
@@ -1081,6 +1154,7 @@ static int wp_aesgcm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
 }
 
 #ifdef WOLFSSL_AESGCM_STREAM
+
 /**
  * Streaming update of AES GCM cipher.
  *
@@ -1201,6 +1275,7 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
 
     return ok;
 }
+
 #else
 
 /**
@@ -1208,13 +1283,13 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
  *
  * @param [in, out] ctx      AEAD context object.
  * @param [out]     out      Buffer to hold decrypted/encrypted data.
+ * @param [out]     outLen   Length of data in output buffer.
  * @param [in]      in       Data to be encrypted/decrypted.
  * @param [in]      inLen    Length of data to be encrypted/decrypted.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out,
-    const unsigned char *in, size_t inLen)
+static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen)
 {
     int ok = 1;
     int rc;
@@ -1225,7 +1300,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out,
 
     if (ctx->enc) {
         if (!ctx->ivSet) {
-            rc = wc_AesGcmSetExtIV(&ctx->aes, ctx->iv, ctx->ivLen);
+            rc = wc_AesGcmSetExtIV(&ctx->aes, ctx->iv, (word32)ctx->ivLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -1233,18 +1308,21 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out,
         if (ok) {
             ctx->ivSet = 1;
             /* IV coming out in this call. */
-            rc = wc_AesGcmEncrypt_ex(&ctx->aes, out, in, (word32)inLen,
-                ctx->iv, ctx->ivLen, ctx->buf, ctx->tagLen, ctx->aad,
-                ctx->aadLen);
+            rc = wc_AesGcmEncrypt_ex(&ctx->aes, out, ctx->in,
+                (word32)ctx->inLen, ctx->iv, (word32)ctx->ivLen, ctx->buf,
+                (word32)ctx->tagLen, ctx->aad, (word32)ctx->aadLen);
             if (rc != 0) {
                 ok = 0;
+            }
+            if (ok) {
+                ctx->tagAvail = 1;
             }
         }
     }
     else {
-        rc = wc_AesGcmDecrypt(&ctx->aes, out, in, (word32)inLen,
-            ctx->iv, ctx->ivLen, ctx->buf, ctx->tagLen, ctx->aad,
-            ctx->aadLen);
+        rc = wc_AesGcmDecrypt(&ctx->aes, out, ctx->in, (word32)ctx->inLen,
+            ctx->iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+            ctx->aad, (word32)ctx->aadLen);
         if (rc == AES_GCM_AUTH_E) {
             ctx->authErr = 1;
             rc = 0;
@@ -1256,17 +1334,23 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out,
             XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
         }
     }
+    if (ok) {
+        *outLen = ctx->inLen;
+    }
 
     OPENSSL_free(ctx->aad);
     ctx->aad = NULL;
     ctx->aadLen = 0;
     ctx->aadSet = 0;
+    OPENSSL_free(ctx->in);
+    ctx->in = NULL;
+    ctx->inLen = 0;
 
     return ok;
 }
 
 /**
- * Streaming update of AES CCM cipher.
+ * Streaming update of AES GCM cipher.
  *
  * @param [in, out] ctx      AEAD context object.
  * @param [out]     out      Buffer to hold encrypted/decrypted data.
@@ -1290,24 +1374,21 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
 
         if ((out == NULL) && (in == NULL)) {
             /* Nothing to do. */
-            oLen = inLen;
+            oLen = (word32)inLen;
         }
         else if ((out == NULL) && (in != NULL)) {
             /* AAD only. */
             ok = wp_aead_cache_aad(ctx, in, inLen);
             if (ok) {
-                oLen = inLen;
+                oLen = (word32)inLen;
             }
         }
         else if (outSize < inLen) {
             ok = 0;
         }
         else if (inLen > 0) {
-            if (!wp_aesgcm_encdec(ctx, out, in, inLen)) {
+            if (!wp_aead_cache_in(ctx, in, inLen)) {
                 ok = 0;
-            }
-            if (ok) {
-                oLen = inLen;
             }
         }
 
@@ -1318,7 +1399,7 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
 }
 
 /**
- * Streaming final of AES CCM cipher.
+ * Streaming final of AES GCM cipher.
  *
  * @param [in, out] ctx      AEAD context object.
  * @param [out]     out      Buffer to hold encrypted/decrypted data.
@@ -1340,13 +1421,8 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
         ok = 0;
     }
     else {
-        if (ctx->aadSet && (!wp_aesgcm_encdec(ctx, out, NULL, 0))) {
-            ok = 0;
-        }
-        if (ok) {
-            ctx->ivSet = 0;
-            *outLen = 0;
-        }
+        ok = wp_aesgcm_encdec(ctx, out, outLen);
+        ctx->ivSet = 0;
     }
 
     return ok;
@@ -1436,6 +1512,9 @@ IMPLEMENT_AES_AEAD(gcm, GCM, AEAD_FLAGS, 128, 8, 96);
 IMPLEMENT_AES_AEAD(gcm, GCM, AEAD_FLAGS, 192, 8, 96);
 IMPLEMENT_AES_AEAD(gcm, GCM, AEAD_FLAGS, 256, 8, 96);
 
+#endif /* WP_HAVE_AESGCM */
+
+#ifdef WP_HAVE_AESCCM
 
 /*
  * AES-CCM
@@ -1491,7 +1570,7 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
         ok = 0;
     }
     if (ok && (key != NULL)) {
-        rc = wc_AesCcmSetKey(&ctx->aes, key, keyLen);
+        rc = wc_AesCcmSetKey(&ctx->aes, key, (word32)keyLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -1597,14 +1676,14 @@ static int wp_aesccm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
         out += EVP_CCM_TLS_EXPLICIT_IV_LEN;
 
         if (ctx->enc) {
-            rc = wc_AesCcmSetNonce(&ctx->aes, ctx->iv, ctx->ivLen);
+            rc = wc_AesCcmSetNonce(&ctx->aes, ctx->iv, (word32)ctx->ivLen);
             if (rc != 0) {
                 ok = 0;
             }
             else {
                 rc = wc_AesCcmEncrypt_ex(&ctx->aes, out, in, (word32)len,
-                    ctx->iv, ctx->ivLen, out + len, ctx->tagLen, ctx->buf,
-                    ctx->tlsAadLen);
+                    ctx->iv, (word32)ctx->ivLen, out + len, (word32)ctx->tagLen,
+                    ctx->buf, (word32)ctx->tlsAadLen);
                 if (rc != 0) {
                     ok = 0;
                 }
@@ -1612,7 +1691,8 @@ static int wp_aesccm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
         }
         else {
             rc = wc_AesCcmDecrypt(&ctx->aes, out, in, (word32)len, ctx->iv,
-                ctx->ivLen, in + len, ctx->tagLen, ctx->buf, ctx->tlsAadLen);
+                (word32)ctx->ivLen, in + len, (word32)ctx->tagLen, ctx->buf,
+                (word32)ctx->tlsAadLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -1651,7 +1731,7 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
 
     if (ctx->enc) {
         if (!ctx->ivSet) {
-            rc = wc_AesCcmSetNonce(&ctx->aes, ctx->iv, ctx->ivLen);
+            rc = wc_AesCcmSetNonce(&ctx->aes, ctx->iv, (word32)ctx->ivLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -1660,8 +1740,8 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
             ctx->ivSet = 1;
             /* IV coming out in this call. */
             rc = wc_AesCcmEncrypt_ex(&ctx->aes, out, in, (word32)inLen,
-                ctx->iv, ctx->ivLen, ctx->buf, ctx->tagLen, ctx->aad,
-                ctx->aadLen);
+                ctx->iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+                ctx->aad, (word32)ctx->aadLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -1669,8 +1749,8 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
     }
     else {
         rc = wc_AesCcmDecrypt(&ctx->aes, out, in, (word32)inLen,
-            ctx->iv, ctx->ivLen, ctx->buf, ctx->tagLen, ctx->aad,
-            ctx->aadLen);
+            ctx->iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+            ctx->aad, (word32)ctx->aadLen);
         if (rc == AES_CCM_AUTH_E) {
             ctx->authErr = 1;
         }
@@ -1709,18 +1789,21 @@ static int wp_aesccm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
     if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
         ok = wp_aesccm_tls_cipher(ctx, out, outLen, in, inLen);
     }
+    else if (ctx->tagAvail) {
+        ok = 0;
+    }
     else {
         int oLen = 0;
 
         if ((out == NULL) && (in == NULL)) {
             /* Nothing to do. */
-            oLen = inLen;
+            oLen = (int)inLen;
         }
         else if ((out == NULL) && (in != NULL)) {
             /* AAD only. */
             ok = wp_aead_cache_aad(ctx, in, inLen);
             if (ok) {
-                oLen = inLen;
+                oLen = (int)inLen;
             }
         }
         else if (outSize < inLen) {
@@ -1731,11 +1814,12 @@ static int wp_aesccm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
                 ok = 0;
             }
             if (ok) {
-                oLen = inLen;
+                ctx->tagAvail = ctx->enc;
+                oLen = (int)inLen;
             }
         }
 
-        *outLen = oLen;
+        *outLen = (size_t)oLen;
     }
 
     return ok;
@@ -1862,3 +1946,6 @@ IMPLEMENT_AES_AEAD(ccm, CCM, AEAD_FLAGS, 128, 8, 96);
 IMPLEMENT_AES_AEAD(ccm, CCM, AEAD_FLAGS, 192, 8, 96);
 IMPLEMENT_AES_AEAD(ccm, CCM, AEAD_FLAGS, 256, 8, 96);
 
+#endif /* WP_HAVE_AESCCM */
+
+#endif /* WP_HAVE_AESGCM || WP_HAVE_AESCCM */

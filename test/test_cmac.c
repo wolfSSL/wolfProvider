@@ -116,7 +116,7 @@ static int test_cmac_gen_mac(OSSL_LIB_CTX* libCtx, const char *c,
         err = (EVP_MAC_final(mctx, out, &outSz, *outLen)) != 1;
     }
     if (err == 0) {
-        *outLen = outSz;
+        *outLen = (int)outSz;
         PRINT_BUFFER("CMAC", out, *outLen);
     }
 

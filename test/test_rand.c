@@ -22,7 +22,7 @@
 
 #ifdef WP_HAVE_RANDOM
 
-static int test_random_api()
+static int test_random_api(void)
 {
     int err;
     unsigned char buf[128];

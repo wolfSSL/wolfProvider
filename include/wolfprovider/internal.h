@@ -26,6 +26,7 @@
     #include "user_settings.h"
 #endif
 #include <wolfssl/options.h>
+#include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/integer.h>
@@ -47,7 +48,7 @@
 /** Maximum supported cipher name size. */
 #define WP_MAX_CIPH_NAME_SIZE   15
 /** Maximum supported cipher name size. */
-#define WP_MAX_MAC_NAME_SIZE    6 
+#define WP_MAX_MAC_NAME_SIZE    6
 
 /** Maximum supported digest name size. */
 #define WP_MAX_PROPS_SIZE       80
@@ -147,6 +148,7 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid);
 int wp_name_to_wc_mgf(OSSL_LIB_CTX* libCtx, const char* name,
     const char* propQ);
 int wp_mgf1_from_hash(int nid);
+int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType);
 
 int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     const char** cipherName);

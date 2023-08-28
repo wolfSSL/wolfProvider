@@ -46,7 +46,9 @@
 #include <wolfssl/wolfcrypt/asn_public.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
-#include <wolfssl/wolfcrypt/kdf.h>
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+    #include <wolfssl/wolfcrypt/kdf.h>
+#endif
 
 #include <wolfprovider/internal.h>
 #include <wolfprovider/wp_logging.h>
@@ -187,6 +189,7 @@ void wp_ecc_free(wp_Ecc* ecc);
 ecc_key* wp_ecc_get_key(wp_Ecc* ecc);
 WC_RNG* wp_ecc_get_rng(wp_Ecc* ecc);
 int wp_ecc_get_size(wp_Ecc* ecc);
+int wp_ecc_check_usage(wp_Ecc* ecc);
 
 /* Internal ECX types and functions. */
 typedef struct wp_Ecx wp_Ecx;
@@ -289,7 +292,10 @@ extern const OSSL_DISPATCH wp_cmac_signature_functions[];
 /* Asymmetric cipher implementations. */
 extern const OSSL_DISPATCH wp_rsa_asym_cipher_functions[];
 
-/* Key Management implemenations. */
+/* KEM implementations. */
+extern const OSSL_DISPATCH wp_rsa_asym_kem_functions[];
+
+/* Key Management implementations. */
 extern const OSSL_DISPATCH wp_rsa_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_rsapss_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_ecc_keymgmt_functions[];
@@ -342,6 +348,8 @@ extern const OSSL_DISPATCH wp_rsa_pki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsa_pki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsa_epki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsa_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_rsa_kp_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_rsa_kp_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsapss_spki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsapss_spki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsapss_pki_der_encoder_functions[];

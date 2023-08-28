@@ -26,7 +26,10 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
 
 /**
  * ECX signature context.
@@ -111,78 +114,6 @@ static void wp_ecx_freectx(wp_EcxSigCtx* ctx)
         OPENSSL_free(ctx->propQuery);
         OPENSSL_free(ctx);
     }
-}
-
-
-/**
- * Copies the underlying hash algorithm object.
- *
- * @param [in]  src       Hash object to copy.
- * @param [out] dst       Hash object to copy into.
- * @param [in]  hashType  Type of hash algorithm.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst,
-    enum wc_HashType hashType)
-{
-    int ok = 1;
-    int rc = 0;
-
-    switch (hashType) {
-    case WC_HASH_TYPE_MD5:
-        rc = wc_Md5Copy(&src->md5, &dst->md5);
-        break;
-    case WC_HASH_TYPE_SHA:
-        rc = wc_ShaCopy(&src->sha, &dst->sha);
-        break;
-    case WC_HASH_TYPE_SHA224:
-        rc = wc_Sha224Copy(&src->sha224, &dst->sha224);
-        break;
-    case WC_HASH_TYPE_SHA256:
-        rc = wc_Sha256Copy(&src->sha256, &dst->sha256);
-        break;
-    case WC_HASH_TYPE_SHA384:
-        rc = wc_Sha384Copy(&src->sha384, &dst->sha384);
-        break;
-    case WC_HASH_TYPE_SHA512:
-        rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
-        break;
-    case WC_HASH_TYPE_SHA512_224:
-        rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
-        break;
-    case WC_HASH_TYPE_SHA512_256:
-        rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
-        break;
-    case WC_HASH_TYPE_SHA3_224:
-        rc = wc_Sha3_224_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_SHA3_256:
-        rc = wc_Sha3_256_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_SHA3_384:
-        rc = wc_Sha3_384_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_SHA3_512:
-        rc = wc_Sha3_512_Copy(&src->sha3, &dst->sha3);
-        break;
-    case WC_HASH_TYPE_NONE:
-    case WC_HASH_TYPE_MD2:
-    case WC_HASH_TYPE_MD4:
-    case WC_HASH_TYPE_MD5_SHA:
-    case WC_HASH_TYPE_BLAKE2B:
-    case WC_HASH_TYPE_BLAKE2S:
-    case WC_HASH_TYPE_SHAKE128:
-    case WC_HASH_TYPE_SHAKE256:
-    default:
-        ok = 0;
-        break;
-    }
-    if (rc != 0) {
-        ok = 0;
-    }
-
-    return ok;
 }
 
 /**
@@ -378,6 +309,8 @@ static const OSSL_PARAM *wp_ecx_gettable_ctx_params(wp_EcxSigCtx *ctx,
     return wp_supported_gettable_ctx_params;
 }
 
+#ifdef WP_HAVE_ED25519
+
 /*
  * Ed25519
  */
@@ -516,6 +449,10 @@ const OSSL_DISPATCH wp_ed25519_signature_functions[] = {
                                             (DFUNC)wp_ecx_gettable_ctx_params },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_ED25519 */
+
+#ifdef WP_HAVE_ED448
 
 /*
  * Ed448
@@ -658,4 +595,8 @@ const OSSL_DISPATCH wp_ed448_signature_functions[] = {
                                             (DFUNC)wp_ecx_gettable_ctx_params },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_ED448 */
+
+#endif /* WP_HAVE_ED25519 || WP_HAVE_ED448 */
 

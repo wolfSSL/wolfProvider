@@ -26,7 +26,10 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+#ifdef WP_HAVE_DH
 
 /** No KDF applied to derived secret. */
 #define WP_KDF_NONE       0
@@ -151,7 +154,7 @@ static wp_DhCtx* wp_dh_dupctx(wp_DhCtx* src)
         }
 
         if (!ok) {
-            /* Free allcoated memory and up referenced objects. */
+            /* Free allocated memory and up referenced objects. */
             wp_dh_free(dst->peer);
             wp_dh_free(dst->key);
             OPENSSL_free(dst);
@@ -216,16 +219,24 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
         ok = 0;
     }
     if (ok) {
+#ifdef HAVE_X963_KDF
         int rc;
         /* TODO: support X9.42 KDF that includes ASN.1 encoding. */
-        rc = wc_X963_KDF(ctx->kdfMd, sec, secLen, ctx->ukm, ctx->ukmLen,
-            key, (word32)ctx->keyLen);
+        rc = wc_X963_KDF(ctx->kdfMd, sec, (word32)secLen, ctx->ukm,
+            (word32)ctx->ukmLen, key, (word32)ctx->keyLen);
         if (rc != 0) {
             ok = 0;
         }
         else {
             *keyLen = ctx->keyLen;
         }
+#else
+        (void)key;
+        (void)keyLen;
+        (void)sec;
+        (void)secLen;
+        ok = 0;
+#endif
     }
 
     return ok;
@@ -235,7 +246,7 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
  * Derive secret from DH keys.
  *
  * @param [in]      ctx     DH key exchange context object.
- * @param [in]      secret  Bufffer to hold secret.
+ * @param [in]      secret  Buffer to hold secret.
  * @param [in, out] secLen  On in, size of buffer in bytes.
  *                          On out, length of secret data in bytes.
  * @param [in]      maxLen  Maximum length of secret.
@@ -246,7 +257,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
     size_t* secLen, size_t maxLen)
 {
     int ok = 1;
-    word32 len = *secLen;
+    word32 len = (word32)*secLen;
     unsigned char* priv;
     word32 privSz;
     unsigned char* pub;
@@ -261,9 +272,13 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
         ok = 0;
     }
     if (ok) {
+        int rc;
+
         /* Calculate secret. */
-        int rc = wc_DhAgree(wp_dh_get_key(ctx->key), secret, &len, priv, privSz,
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_DhAgree(wp_dh_get_key(ctx->key), secret, &len, priv, privSz,
             pub, pubSz);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
@@ -272,7 +287,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
             if (ctx->pad && (len != maxLen)) {
                 XMEMMOVE(secret + maxLen - len, secret, len);
                 XMEMSET(secret, 0, maxLen - len);
-                len = maxLen;
+                len = (word32)maxLen;
             }
             /* Return length of data in buffer. */
             *secLen = len;
@@ -299,7 +314,7 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
 {
     int ok = 1;
     int done = 0;
-    unsigned char* out;
+    unsigned char* out = NULL;
     size_t outLen = 0;
     unsigned char* tmp = NULL;
     size_t maxLen = 0;
@@ -638,4 +653,6 @@ const OSSL_DISPATCH wp_dh_keyexch_functions[] = {
     { OSSL_FUNC_KEYEXCH_GETTABLE_CTX_PARAMS, (DFUNC)wp_dh_gettable_ctx_params },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_DH */
 

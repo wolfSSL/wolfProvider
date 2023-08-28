@@ -27,8 +27,11 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
+
+#ifdef WP_HAVE_HMAC
 
 /**
  * HMAC context structure when using wolfSSL for implementation.
@@ -237,7 +240,7 @@ static int wp_hmac_update(wp_HmacCtx* macCtx, const unsigned char* data,
     int ok = 1;
     int rc;
 
-    rc = wc_HmacUpdate(&macCtx->hmac, data, dataLen);
+    rc = wc_HmacUpdate(&macCtx->hmac, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }
@@ -410,3 +413,4 @@ const OSSL_DISPATCH wp_hmac_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_HMAC */

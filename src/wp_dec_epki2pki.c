@@ -63,6 +63,103 @@ static void wp_epki2pki_freectx(wp_Epki2Pki* ctx)
     (void)ctx;
 }
 
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+/**
+ * Password callback data.
+ */
+typedef struct wp_PasswordCbData {
+    const char* password;
+    size_t passwordLen;
+} wp_PasswordCbData;
+
+/**
+ * wolfSSL PEM password callback.
+ *
+ * @param [out] passwd   Password from user.
+ * @param [in]  sz       Size of password buffer in bytes.
+ * @param [in]  rw       Password for reading or writiing. Unused.
+ * @param [in]  userdaa  User callback data.
+ * @return  -1 on error.
+ * @return  Length of password on success.
+ */
+static int wp_pem_password_cb(char* passwd, int sz, int rw, void* userdata)
+{
+    int ret;
+    wp_PasswordCbData* cbData = (wp_PasswordCbData*)userdata;
+
+    (void)rw;
+
+    if ((size_t)sz < cbData->passwordLen) {
+        ret = -1;
+    }
+    else {
+        XMEMCPY(passwd, cbData->password, cbData->passwordLen);
+        ret = cbData->passwordLen;
+    }
+
+    return ret;
+}
+
+static int wp_DecryptPKCS8Key(byte* input, word32 sz, const char* password,
+    int passwordSz)
+{
+    int ret = 0;
+    unsigned char* pem = NULL;
+    DerBuffer *der = NULL;
+    wp_PasswordCbData cbData = { password, passwordSz };
+    EncryptedInfo info;
+    int algoId;
+
+    pem = OPENSSL_malloc(sz * 2);
+    if (pem == NULL) {
+        ret = MEMORY_E;
+    }
+    if (ret == 0) {
+        ret = wc_DerToPem(input, sz, pem, sz * 2, PKCS8_ENC_PRIVATEKEY_TYPE);
+        if (ret >= 0) {
+            sz = ret;
+            ret = 0;
+        }
+    }
+    if (ret == 0) {
+        info.passwd_cb = wp_pem_password_cb;
+        info.passwd_userdata = (void*)&cbData;
+        ret = wc_PemToDer(pem, sz, PKCS8_ENC_PRIVATEKEY_TYPE, &der, NULL, &info,
+            &algoId);
+    }
+    if (ret == 0) {
+        DerBuffer* pkcs8Der = NULL;
+        word32 pkcs8Sz;
+
+        ret = wc_CreatePKCS8Key(NULL, &pkcs8Sz, der->buffer, der->length,
+            algoId, NULL, 0);
+        if (ret == LENGTH_ONLY_E) {
+            ret = 0;
+        }
+        if (ret == 0) {
+            ret = wc_AllocDer(&pkcs8Der, pkcs8Sz, DYNAMIC_TYPE_KEY, NULL);
+        }
+        if (ret == 0) {
+            ret = wc_CreatePKCS8Key(pkcs8Der->buffer, &pkcs8Der->length,
+                der->buffer, der->length, algoId, NULL, 0);
+            if (ret > 0) {
+                ret = 0;
+            }
+        }
+        wc_FreeDer(&der);
+        der = pkcs8Der;
+    }
+    if (ret == 0) {
+        XMEMCPY(input, der->buffer, der->length);
+        ret = der->length;
+    }
+
+    wc_FreeDer(&der);
+    OPENSSL_free(pem);
+    return ret;
+}
+#endif
+
 /**
  * Decode the EPKI to PKI.
  *
@@ -72,7 +169,7 @@ static void wp_epki2pki_freectx(wp_Epki2Pki* ctx)
  * @param [in]      dataCb     Callback to pass the decoded data to.
  * @param [in]      dataCbArg  Argument to pass to callback.
  * @param [in]      pwCb       Password callback.
- * @param [in]      pwCbArg    Argment to pass to password callback.
+ * @param [in]      pwCbArg    Argument to pass to password callback.
  * @return  1 on success or not data.
  * @return  0 on failure.
  */
@@ -104,7 +201,11 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
         done = 1;
     }
     if ((!done) && ok) {
-        rc = wc_DecryptPKCS8Key(data, len, password, passwordLen);
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+        rc = wc_DecryptPKCS8Key(data, len, password, (int)passwordLen);
+    #else
+        rc = wp_DecryptPKCS8Key(data, len, password, (int)passwordLen);
+    #endif
         if (rc <= 0) {
             ok = 0;
         }

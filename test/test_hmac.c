@@ -98,7 +98,7 @@ static int test_mac_gen_mac(OSSL_LIB_CTX* libCtx, const char* md,
         err = (EVP_MAC_final(mctx, mac, &outLen, *macLen)) != 1;
     }
     if (err == 0) {
-        *macLen = outLen;
+        *macLen = (int)outLen;
         PRINT_BUFFER("MAC", mac, *macLen);
     }
 
@@ -221,6 +221,7 @@ int test_hmac_create(void *data)
 {
     int ret = 0;
     unsigned char pswd[] = "My empire of dirt";
+#ifdef WP_HAVE_SHA1
     unsigned char bigPswd[100];
 
     PRINT_MSG("Testing with SHA1");
@@ -235,27 +236,37 @@ int test_hmac_create(void *data)
         ret = test_hmac_create_helper(data, "SHA-1", bigPswd,
                   sizeof(bigPswd));
     }
+#endif
 
+#ifdef WP_HAVE_SHA224
     if (ret == 0) {
         PRINT_MSG("Testing with SHA224");
         ret = test_hmac_create_helper(data, "SHA-224", pswd, sizeof(pswd));
     }
+#endif
 
+#ifdef WP_HAVE_SHA256
     if (ret == 0) {
         PRINT_MSG("Testing with SHA256");
         ret = test_hmac_create_helper(data, "SHA-256", pswd, sizeof(pswd));
     }
+#endif
 
+#ifdef WP_HAVE_SHA384
     if (ret == 0) {
         PRINT_MSG("Testing with SHA384");
         ret = test_hmac_create_helper(data, "SHA-384", pswd, sizeof(pswd));
     }
+#endif
 
+#ifdef WP_HAVE_SHA512
     if (ret == 0) {
         PRINT_MSG("Testing with SHA512");
         ret = test_hmac_create_helper(data, "SHA-512", pswd, sizeof(pswd));
     }
+#endif
 
+#ifdef WP_HAVE_SHA3
 #ifdef WP_HAVE_SHA3_224
     if (ret == 0) {
         PRINT_MSG("Testing with SHA3-224");
@@ -280,6 +291,7 @@ int test_hmac_create(void *data)
         ret = test_hmac_create_helper(data, "SHA3-512", pswd, sizeof(pswd));
     }
 #endif
+#endif /* WP_HAVE_SHA3 */
     return ret;
 }
 

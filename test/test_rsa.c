@@ -314,6 +314,7 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
             padMode, md, mgf1Md);
     }
 
+#ifdef WP_HAVE_SHA256
     /* OpenSSL doesn't allow RSA signatures with no padding. */
     if ((err == 0) && (padMode != RSA_NO_PADDING)) {
         PRINT_MSG("Test creating/verifying a signature");
@@ -345,6 +346,7 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
         err = test_digest_verify(pkey, osslLibCtx, buf, bufLen, "SHA-256",
              rsaSig, rsaSigLen, padMode);
     }
+#endif
 
     EVP_PKEY_free(pkey);
 
@@ -394,18 +396,18 @@ int test_rsa_sign_sha1(void *data)
 
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
-        err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), EVP_sha1(),
+        err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
                                rsaSig, &rsaSigLen, 0);
     }
     if (err == 0) {
         PRINT_MSG("Verify with wolfprovider");
-        err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), EVP_sha1(),
+        err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
                                  rsaSig, rsaSigLen, 0);
     }
     if (err == 0) {
         PRINT_MSG("Sign with wolfprovider");
         rsaSigLen = RSA_size(rsaKey);
-        err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), EVP_sha1(),
+        err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
                               rsaSig, &rsaSigLen, 0) != 1;
     }
     EVP_PKEY_free(pkey);
@@ -427,21 +429,25 @@ int test_rsa_sign_verify_pkcs1(void *data)
 int test_rsa_sign_verify_pss(void *data)
 {
     int err = 0;
-    
+
     (void)data;
 
     /* Use SHA-1 (default) for MD and MGF1 MD. */
     err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, NULL, NULL) == 1;
+#ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD and MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
                                        EVP_sha256()) == 1;
     }
+#endif
+#if defined(WP_HAVE_SHA384) && defined(WP_AHVE_SHA512)
     if (err == 0) {
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha384(),
                                        EVP_sha512()) == 1;
     }
+#endif
 
     return err;
 }
@@ -538,9 +544,11 @@ int test_rsa_enc_dec_pkcs1(void *data)
 
     (void)data;
 
-    PRINT_MSG("Check that private decrypt fails with invalid key size.");
-    err = test_rsa_enc_dec(rsa_key_der_256, sizeof(rsa_key_der_256),
-                           RSA_PKCS1_PADDING, NULL, NULL) != 1;
+    if (!noKeyLimits) {
+        PRINT_MSG("Check that private decrypt fails with invalid key size.");
+        err = test_rsa_enc_dec(rsa_key_der_256, sizeof(rsa_key_der_256),
+                               RSA_PKCS1_PADDING, NULL, NULL) != 1;
+    }
     if (err == 0) {
         PRINT_MSG("Check that private decrypt works with valid key size.");
         err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
@@ -559,18 +567,22 @@ int test_rsa_enc_dec_oaep(void *data)
     /* Use SHA-1 (default) for MD and MGF1 MD. */
     err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
                            RSA_PKCS1_OAEP_PADDING, NULL, NULL) == 1;
+#ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD and MGF1 MD. */
         err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
                                RSA_PKCS1_OAEP_PADDING, EVP_sha256(),
                                EVP_sha256()) == 1;
     }
+#endif
+#ifdef WP_HAVE_SHA384
     if (err == 0) {
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
         err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
                                RSA_PKCS1_OAEP_PADDING, EVP_sha384(),
                                EVP_sha512()) == 1;
     }
+#endif
 
     return err;
 }
@@ -642,7 +654,7 @@ int test_rsa_pkey_keygen(void *data)
         err = BN_cmp(eCmd, eKey) != 0;
     }
 
-    if (err == 0) {
+    if ((err == 0) && (!noKeyLimits)) {
         PRINT_MSG("Check that ctrl commands to set invalid key gen size fail");
         for (; i < numBad && err != 1; ++i) {
             err = EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN,
@@ -696,7 +708,7 @@ int test_rsa_pkey_invalid_key_size(void *data) {
         err = RAND_bytes(buf, sizeof(buf)) == 0;
     }
 
-    if (err == 0) {
+    if ((err == 0) && (!noKeyLimits)) {
         PRINT_MSG("Check that signing with an invalid key size fails.");
         err = test_pkey_sign(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
             &rsaSigLen, 0, NULL, NULL) == 0;

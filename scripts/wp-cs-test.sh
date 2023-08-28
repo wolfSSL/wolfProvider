@@ -1,12 +1,32 @@
 #!/bin/bash
+#
+# Copyright (C) 2021 wolfSSL Inc.
+#
+# This file is part of wolfProvider.
+#
+# wolfProvider is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# wolfProvider is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+#
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 CERT_DIR=$SCRIPT_DIR/../certs
-LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
-LOG_SERVER=$SCRIPT_DIR/wp-cs-test-server.log
-LOG_WP_SERVER=$SCRIPT_DIR/wp-cs-test-wp-server.log
-LOG_CLIENT=$SCRIPT_DIR/wp-cs-test-client.log
-TMP_LOG=$SCRIPT_DIR/wp-cs-test-tmp.log
+LOG_DIR=$SCRIPT_DIR/log
+LOG_FILE=$LOG_DIR/wp-cs-test.log
+LOG_SERVER=$LOG_DIR/wp-cs-test-server.log
+LOG_WP_SERVER=$LOG_DIR/wp-cs-test-wp-server.log
+LOG_CLIENT=$LOG_DIR/wp-cs-test-client.log
+TMP_LOG=$LOG_DIR/wp-cs-test-tmp.log
 
 OPENSSL_SERVER_PID=-1
 WP_OPENSSL_SERVER_PID=-1
@@ -297,39 +317,6 @@ do_client() {
     LOG_LINES=$NEW_LINES
 }
 
-do_wp_client_test() {
-    printf "\tClient testing\n"
-    CHECK_CLIENT=1
-    CHECK_SERVER=
-
-    TLS_VERSION=-tls1
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS1_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-
-    TLS_VERSION=-tls1_1
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS1_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-
-    TLS_VERSION=-tls1_2
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS12_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-
-    TLS_VERSION=-tls1_3
-    printf "\t$TLS_VERSION\n"
-    for CIPHER in ${TLS13_CIPHERS[@]}
-    do
-        do_wp_client
-    done
-}
 do_wp_client_test() {
     printf "\tClient testing\n"
     CHECK_CLIENT=1

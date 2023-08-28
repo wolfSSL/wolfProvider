@@ -26,8 +26,10 @@
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#ifdef WP_HAVE_RSA
 
 /* This define taken from ssl.h.
  * Can't include this header as it re-declares OpenSSL types.
@@ -55,9 +57,9 @@ static OSSL_ITEM wp_pad_mode[] = {
  */
 typedef struct wp_RsaAsymCtx {
     /** wolfProvider context object. */
-    WOLFPROV_CTX *provCtx;
+    WOLFPROV_CTX* provCtx;
     /** Library context object. */
-    OSSL_LIB_CTX *libCtx;
+    OSSL_LIB_CTX* libCtx;
 
     /** wolfProvider RSA object. */
     wp_Rsa* rsa;
@@ -71,7 +73,7 @@ typedef struct wp_RsaAsymCtx {
 
     /** Hash algorithm to use on data with OAEP. */
     enum wc_HashType oaepHashType;
-    /** wolfSSL id of MGF operation to peform when padding mode is PSS. */
+    /** wolfSSL id of MGF operation to perform when padding mode is PSS. */
     int mgf;
     /** Indicates that the MGF id has been set explicitly. */
     int mgfSet:1;
@@ -93,7 +95,7 @@ typedef struct wp_RsaAsymCtx {
 
 
 /* Prototype for wp_rsaa_signverify_init() to use.  */
-static int wp_rsaa_set_ctx_params(wp_RsaAsymCtx *ctx,
+static int wp_rsaa_set_ctx_params(wp_RsaAsymCtx* ctx,
     const OSSL_PARAM params[]);
 
 /**
@@ -202,7 +204,7 @@ static wp_RsaAsymCtx* wp_rsaa_ctx_dup(wp_RsaAsymCtx* srcCtx)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_init(wp_RsaAsymCtx *ctx, wp_Rsa* rsa,
+static int wp_rsaa_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[], int op)
 {
     int ok = 1;
@@ -216,6 +218,7 @@ static int wp_rsaa_init(wp_RsaAsymCtx *ctx, wp_Rsa* rsa,
         }
         if (ok) {
             wp_rsa_free(ctx->rsa);
+            ctx->rsa = NULL;
             if (!wp_rsa_up_ref(rsa)) {
                 ok = 0;
             }
@@ -243,7 +246,7 @@ static int wp_rsaa_init(wp_RsaAsymCtx *ctx, wp_Rsa* rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_encrypt_init(wp_RsaAsymCtx *ctx, wp_Rsa *rsa,
+static int wp_rsaa_encrypt_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[])
 {
     int ok;
@@ -273,8 +276,8 @@ static int wp_rsaa_encrypt_init(wp_RsaAsymCtx *ctx, wp_Rsa *rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_encrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
-    size_t *outLen, size_t outSize, const unsigned char *in, size_t inLen)
+static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
+    size_t* outLen, size_t outSize, const unsigned char* in, size_t inLen)
 {
     int ok = 1;
 
@@ -308,7 +311,7 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
             }
             rc = wc_RsaPublicEncrypt_ex(in, (word32)inLen, out, (word32)outSize,
                 wp_rsa_get_key(ctx->rsa), &ctx->rng, WC_RSA_OAEP_PAD,
-                ctx->oaepHashType, ctx->mgf, ctx->label, ctx->labelLen);
+                ctx->oaepHashType, ctx->mgf, ctx->label, (word32)ctx->labelLen);
             if (rc < 0) {
                 ok = 0;
             }
@@ -333,7 +336,7 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_decrypt_init(wp_RsaAsymCtx *ctx, wp_Rsa *rsa,
+static int wp_rsaa_decrypt_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[])
 {
     int ok;
@@ -360,8 +363,8 @@ static int wp_rsaa_decrypt_init(wp_RsaAsymCtx *ctx, wp_Rsa *rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_decrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
-    size_t *outLen, size_t outSize, const unsigned char *in, size_t inLen)
+static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
+    size_t* outLen, size_t outSize, const unsigned char* in, size_t inLen)
 {
     int ok = 1;
 
@@ -396,8 +399,10 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
         else
 #endif /* WC_RSA_BLINDING */
         if (ctx->padMode == RSA_PKCS1_PADDING) {
+            PRIVATE_KEY_UNLOCK();
             rc = wc_RsaPrivateDecrypt(in, (word32)inLen, out, (word32)outSize,
                 wp_rsa_get_key(ctx->rsa));
+            PRIVATE_KEY_LOCK();
             if (rc < 0) {
                 ok = 0;
             }
@@ -407,9 +412,11 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
                 ctx->oaepHashType = WC_HASH_TYPE_SHA;
                 ctx->mgf = WC_MGF1SHA1;
             }
+            PRIVATE_KEY_UNLOCK();
             rc = wc_RsaPrivateDecrypt_ex(in, (word32)inLen, out,
                 (word32)outSize, wp_rsa_get_key(ctx->rsa), WC_RSA_OAEP_PAD,
-                ctx->oaepHashType, ctx->mgf, ctx->label, ctx->labelLen);
+                ctx->oaepHashType, ctx->mgf, ctx->label, (word32)ctx->labelLen);
+            PRIVATE_KEY_LOCK();
             if (rc < 0) {
                 ok = 0;
             }
@@ -423,8 +430,10 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
                 byte negMask;
 
                 XMEMSET(out, 0, outSize);
+                PRIVATE_KEY_UNLOCK();
                 rc = wc_RsaPrivateDecrypt(in, (word32)inLen, out,
                     (word32)outSize, wp_rsa_get_key(ctx->rsa));
+                PRIVATE_KEY_LOCK();
 
                 /* Constant time checking of master secret. */
                 mask  = wp_ct_byte_mask_eq(out[0], ctx->clientVersion >> 8);
@@ -465,8 +474,8 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx *ctx, unsigned char *out,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_setup_md(wp_RsaAsymCtx *ctx, const char *mdName,
-    const char *mdProps)
+static int wp_rsaa_setup_md(wp_RsaAsymCtx* ctx, const char* mdName,
+    const char* mdProps)
 {
     int ok = 1;
 
@@ -506,8 +515,8 @@ static int wp_rsaa_setup_md(wp_RsaAsymCtx *ctx, const char *mdName,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_setup_mgf1_md(wp_RsaAsymCtx *ctx, const char *mdName,
-    const char *mdProps)
+static int wp_rsaa_setup_mgf1_md(wp_RsaAsymCtx* ctx, const char* mdName,
+    const char* mdProps)
 {
     int ok = 1;
 
@@ -531,7 +540,7 @@ static int wp_rsaa_setup_mgf1_md(wp_RsaAsymCtx *ctx, const char *mdName,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_get_pad_mode(int padMode, OSSL_PARAM *p)
+static int wp_rsaa_get_pad_mode(int padMode, OSSL_PARAM* p)
 {
     int ok = 1;
 
@@ -560,17 +569,17 @@ static int wp_rsaa_get_pad_mode(int padMode, OSSL_PARAM *p)
 }
 
 /**
- * Put data from RSA signture context object into parameter objects.
+ * Put data from RSA asymmetric cipher context object into parameter objects.
  *
  * @param [in] ctx     RSA asymmetric cipher context object.
  * @param [in] params  Array of parameter objects.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_get_ctx_params(wp_RsaAsymCtx *ctx, OSSL_PARAM *params)
+static int wp_rsaa_get_ctx_params(wp_RsaAsymCtx* ctx, OSSL_PARAM* params)
 {
     int ok = 1;
-    OSSL_PARAM *p;
+    OSSL_PARAM* p;
 
     if (ctx == NULL) {
         ok = 0;
@@ -631,8 +640,8 @@ static int wp_rsaa_get_ctx_params(wp_RsaAsymCtx *ctx, OSSL_PARAM *params)
  * @param [in] provCtx  wolfProvider context object. Unused.
  * @return  Array of parameters.
  */
-static const OSSL_PARAM *wp_rsaa_gettable_ctx_params(wp_RsaAsymCtx *ctx,
-    WOLFPROV_CTX *provCtx)
+static const OSSL_PARAM* wp_rsaa_gettable_ctx_params(wp_RsaAsymCtx* ctx,
+    WOLFPROV_CTX* provCtx)
 {
     /**
      * Parameters that we support getting from the RSA asymmetric cipher
@@ -662,8 +671,8 @@ static const OSSL_PARAM *wp_rsaa_gettable_ctx_params(wp_RsaAsymCtx *ctx,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_set_digest(wp_RsaAsymCtx *ctx, const OSSL_PARAM *p,
-    const OSSL_PARAM *propsParam)
+static int wp_rsaa_set_digest(wp_RsaAsymCtx* ctx, const OSSL_PARAM* p,
+    const OSSL_PARAM* propsParam)
 {
     int ok = 1;
     char mdName[WP_MAX_MD_NAME_SIZE];
@@ -696,7 +705,7 @@ static int wp_rsaa_set_digest(wp_RsaAsymCtx *ctx, const OSSL_PARAM *p,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_set_pad_mode(wp_RsaAsymCtx *ctx, const OSSL_PARAM *p)
+static int wp_rsaa_set_pad_mode(wp_RsaAsymCtx* ctx, const OSSL_PARAM* p)
 {
     int ok = 1;
     int padMode = 0;
@@ -739,8 +748,8 @@ static int wp_rsaa_set_pad_mode(wp_RsaAsymCtx *ctx, const OSSL_PARAM *p)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_set_mgf1_digest(wp_RsaAsymCtx *ctx, const OSSL_PARAM *p,
-    const OSSL_PARAM *propsParam)
+static int wp_rsaa_set_mgf1_digest(wp_RsaAsymCtx* ctx, const OSSL_PARAM* p,
+    const OSSL_PARAM* propsParam)
 {
     int ok = 1;
     char mgfMdName[WP_MAX_MD_NAME_SIZE] = "";
@@ -773,11 +782,11 @@ static int wp_rsaa_set_mgf1_digest(wp_RsaAsymCtx *ctx, const OSSL_PARAM *p,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsaa_set_ctx_params(wp_RsaAsymCtx *ctx, const OSSL_PARAM params[])
+static int wp_rsaa_set_ctx_params(wp_RsaAsymCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
-    const OSSL_PARAM *p;
-    const OSSL_PARAM *propsParam;
+    const OSSL_PARAM* p;
+    const OSSL_PARAM* propsParam;
 
     if (params != NULL) {
         p = OSSL_PARAM_locate_const(params, OSSL_ASYM_CIPHER_PARAM_OAEP_DIGEST);
@@ -844,7 +853,7 @@ static int wp_rsaa_set_ctx_params(wp_RsaAsymCtx *ctx, const OSSL_PARAM params[])
  * @param [in] provCtx  wolfProvider context object. Unused.
  * @return  Array of parameters.
  */
-static const OSSL_PARAM *wp_rsaa_settable_ctx_params(wp_RsaAsymCtx *ctx,
+static const OSSL_PARAM* wp_rsaa_settable_ctx_params(wp_RsaAsymCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
     /**
@@ -867,7 +876,7 @@ static const OSSL_PARAM *wp_rsaa_settable_ctx_params(wp_RsaAsymCtx *ctx,
     return wp_settable_ctx_params;
 }
 
-/** Dspatch table for RSA signing and verification. */
+/** Dspatch table for RSA encryption and decryption. */
 const OSSL_DISPATCH wp_rsa_asym_cipher_functions[] = {
     { OSSL_FUNC_ASYM_CIPHER_NEWCTX,             (DFUNC)wp_rsaa_ctx_new        },
     { OSSL_FUNC_ASYM_CIPHER_FREECTX,            (DFUNC)wp_rsaa_ctx_free       },
@@ -878,10 +887,11 @@ const OSSL_DISPATCH wp_rsa_asym_cipher_functions[] = {
     { OSSL_FUNC_ASYM_CIPHER_DECRYPT,            (DFUNC)wp_rsaa_decrypt        },
     { OSSL_FUNC_ASYM_CIPHER_GET_CTX_PARAMS,     (DFUNC)wp_rsaa_get_ctx_params },
     { OSSL_FUNC_ASYM_CIPHER_GETTABLE_CTX_PARAMS,
-                                        (DFUNC)wp_rsaa_gettable_ctx_params    },
+                                           (DFUNC)wp_rsaa_gettable_ctx_params },
     { OSSL_FUNC_ASYM_CIPHER_SET_CTX_PARAMS,     (DFUNC)wp_rsaa_set_ctx_params },
     { OSSL_FUNC_ASYM_CIPHER_SETTABLE_CTX_PARAMS,
-                                        (DFUNC)wp_rsaa_settable_ctx_params    },
+                                           (DFUNC)wp_rsaa_settable_ctx_params },
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_RSA */

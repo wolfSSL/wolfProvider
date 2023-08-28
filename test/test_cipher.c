@@ -21,7 +21,7 @@
 #include "unit.h"
 
 #if defined(WP_HAVE_DES3CBC) || defined(WP_HAVE_AESCBC) || \
-    defined(WP_HAVE_AESECB)
+    defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR)
 
 static int test_cipher_enc(const EVP_CIPHER *cipher,
                            unsigned char *key, unsigned char *iv,
@@ -55,6 +55,11 @@ static int test_cipher_enc(const EVP_CIPHER *cipher,
 
     return err;
 }
+
+#endif
+
+#if defined(WP_HAVE_DES3CBC) || defined(WP_HAVE_AESCBC) || \
+    defined(WP_HAVE_AESECB)
 
 static int test_cipher_dec(const EVP_CIPHER *cipher,
                            unsigned char *key, unsigned char *iv,
@@ -170,6 +175,11 @@ static int test_cipher_enc_dec(void *data, const char *cipher, int keyLen,
 
     return err;
 }
+
+#endif
+
+#if defined(WP_HAVE_DES3CBC) || defined(WP_HAVE_AESCBC) || \
+    defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR)
 
 
 /******************************************************************************/

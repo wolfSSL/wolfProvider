@@ -40,49 +40,7 @@
 #include <openssl/rand.h>
 #include <openssl/kdf.h>
 
-#include <wolfssl/options.h>
-#ifdef WOLFPROV_USER_SETTINGS
-    #include "user_settings.h"
-#endif
-
-#define WP_HAVE_DIGEST
-#define WP_HAVE_SHA1
-#define WP_HAVE_SHA224
-#define WP_HAVE_SHA256
-#define WP_HAVE_SHA384
-#define WP_HAVE_SHA512
-#define WP_HAVE_SHA3_224
-#define WP_HAVE_SHA3_256
-#define WP_HAVE_SHA3_384
-#define WP_HAVE_SHA3_512
-#define WP_HAVE_SHAKE_256
-#define WP_HAVE_HMAC
-#define WP_HAVE_CMAC
-#define WP_HAVE_GMAC
-#define WP_HAVE_AESECB
-#define WP_HAVE_AESCBC
-#define WP_HAVE_AESCTR
-#define WP_HAVE_AESGCM
-#define WP_HAVE_AESCCM
-#define WP_HAVE_RANDOM
-#define WP_HAVE_HKDF
-#define WP_HAVE_TLS1_PRF
-#define WP_HAVE_PBE
-#define WP_HAVE_DH
-#define WP_HAVE_RSA
-#define WP_HAVE_ECC
-#define WP_HAVE_EC_P192
-#define WP_HAVE_EC_P224
-#define WP_HAVE_EC_P256
-#define WP_HAVE_EC_P384
-#define WP_HAVE_EC_P521
-#define WP_HAVE_X25519
-#define WP_HAVE_X448
-#define WP_HAVE_ECDSA
-#define WP_HAVE_ECDH
-#define WP_HAVE_EC_KEY
-#define WP_HAVE_ECKEYGEN
-
+#include <wolfprovider/settings.h>
 #include <wolfprovider/wp_logging.h>
 
 #ifdef TEST_MULTITHREADED
@@ -126,6 +84,7 @@ int test_logging(void *data);
 
 extern OSSL_LIB_CTX* wpLibCtx;
 extern OSSL_LIB_CTX* osslLibCtx;
+extern int noKeyLimits;
 
 
 #ifdef WP_HAVE_DIGEST

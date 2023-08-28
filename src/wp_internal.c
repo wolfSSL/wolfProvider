@@ -21,9 +21,11 @@
 
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
 
 #include <wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/pwdbased.h>
 
 /**
  * Get the wolfSSL random number generator from the provider context.
@@ -145,12 +147,18 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid)
         case NID_sha512:
             hashType = WC_HASH_TYPE_SHA512;
             break;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+    #ifndef WOLFSSL_NOSHA512_224
         case NID_sha512_224:
             hashType = WC_HASH_TYPE_SHA512_224;
             break;
+    #endif
+    #ifndef WOLFSSL_NOSHA512_256
         case NID_sha512_256:
             hashType = WC_HASH_TYPE_SHA512_256;
             break;
+    #endif
+#endif
         case NID_sha3_224:
             hashType = WC_HASH_TYPE_SHA3_224;
             break;
@@ -170,6 +178,7 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid)
     return hashType;
 }
 
+#ifdef WP_HAVE_RSA
 /**
  * Convert string name of a hash to a wolfCrypt MGF identifier.
  *
@@ -225,6 +234,126 @@ int wp_mgf1_from_hash(int nid)
 
     return mgf;
 }
+#endif
+
+/**
+ * Copies the underlying hash algorithm object.
+ *
+ * @param [in]  src       Hash object to copy.
+ * @param [out] dst       Hash object to copy into.
+ * @param [in]  hashType  Type of hash algorithm.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
+{
+    int ok = 1;
+    int rc = 0;
+
+    switch (hashType) {
+    case WC_HASH_TYPE_MD5:
+#ifdef WP_HAVE_MD5
+        rc = wc_Md5Copy(&src->md5, &dst->md5);
+#else
+        ok = 0;
+#endif
+        break;
+    case WC_HASH_TYPE_SHA:
+#ifdef WP_HAVE_SHA1
+        rc = wc_ShaCopy(&src->sha, &dst->sha);
+#else
+        ok = 0;
+#endif
+        break;
+    case WC_HASH_TYPE_SHA224:
+#ifdef WP_HAVE_SHA224
+        rc = wc_Sha224Copy(&src->sha224, &dst->sha224);
+#else
+        ok = 0;
+#endif
+        break;
+    case WC_HASH_TYPE_SHA256:
+#ifdef WP_HAVE_SHA256
+        rc = wc_Sha256Copy(&src->sha256, &dst->sha256);
+#else
+        ok = 0;
+#endif
+        break;
+    case WC_HASH_TYPE_SHA384:
+#ifdef WP_HAVE_SHA384
+        rc = wc_Sha384Copy(&src->sha384, &dst->sha384);
+#else
+        ok = 0;
+#endif
+        break;
+#ifdef WP_HAVE_SHA512
+    case WC_HASH_TYPE_SHA512:
+        rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
+        break;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#ifndef WOLFSSL_NOSHA512_224
+    case WC_HASH_TYPE_SHA512_224:
+        rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
+        break;
+#endif /* !WOLFSSL_NOSHA512_224 */
+#ifndef WOLFSSL_NOSHA512_256
+    case WC_HASH_TYPE_SHA512_256:
+        rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
+        break;
+#endif /* !WOLFSSL_NOSHA512_256 */
+#endif /* LIBWOLFSSL_VERSION_HEX >= 0x05000000 */
+#else
+    case WC_HASH_TYPE_SHA512:
+    case WC_HASH_TYPE_SHA512_224:
+    case WC_HASH_TYPE_SHA512_256:
+        ok = 0;
+        break;
+#endif /* WP_HAVE_SHA512 */
+#ifdef WP_HAVE_SHA3
+    case WC_HASH_TYPE_SHA3_224:
+        rc = wc_Sha3_224_Copy(&src->sha3, &dst->sha3);
+        break;
+    case WC_HASH_TYPE_SHA3_256:
+        rc = wc_Sha3_256_Copy(&src->sha3, &dst->sha3);
+        break;
+    case WC_HASH_TYPE_SHA3_384:
+        rc = wc_Sha3_384_Copy(&src->sha3, &dst->sha3);
+        break;
+    case WC_HASH_TYPE_SHA3_512:
+        rc = wc_Sha3_512_Copy(&src->sha3, &dst->sha3);
+        break;
+#else
+    case WC_HASH_TYPE_SHA3_224:
+    case WC_HASH_TYPE_SHA3_256:
+    case WC_HASH_TYPE_SHA3_384:
+    case WC_HASH_TYPE_SHA3_512:
+        ok = 0;
+        break;
+#endif
+    case WC_HASH_TYPE_NONE:
+    case WC_HASH_TYPE_MD2:
+    case WC_HASH_TYPE_MD4:
+    case WC_HASH_TYPE_MD5_SHA:
+    case WC_HASH_TYPE_BLAKE2B:
+    case WC_HASH_TYPE_BLAKE2S:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#ifndef WOLFSSL_NO_SHAKE128
+    case WC_HASH_TYPE_SHAKE128:
+#endif
+#ifndef WOLFSSL_NO_SHAKE256
+    case WC_HASH_TYPE_SHAKE256:
+#endif
+#endif
+    default:
+        ok = 0;
+        break;
+    }
+    if (rc != 0) {
+        ok = 0;
+    }
+
+    return ok;
+}
 
 /** Mapping of supported ciphers to key size. */
 typedef struct wp_cipher {
@@ -246,7 +375,7 @@ typedef struct wp_cipher {
     #define AES256CBCb  454
 #endif
 
-/** wolfSSL compatable cipher names and wolfSSL identifiers. */
+/** wolfSSL compatible cipher names and wolfSSL identifiers. */
 static const wp_cipher wp_cipher_names[] = {
     { "AES-128-CBC", AES128CBCb, "AES-128-CBC" },
     { "AES-192-CBC", AES192CBCb, "AES-192-CBC" },
@@ -304,6 +433,131 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     return ok;
 }
 
+#ifndef WOLFSSL_ENCRYPTED_KEYS
+/*
+ * wolfProvider version of EncryptedInfo.
+ */
+typedef struct wp_EncryptedInfo {
+    /* Cipher identifier. */
+    int    cipherType;
+    /* Length of IV. */
+    word32 ivSz;
+    /* Length of key. */
+    word32 keySz;
+    /* Name of cipher alglorithm. */
+    char   name[NAME_SZ];
+    /* IV for encryption. */
+    byte   iv[IV_SZ];
+} wp_EncryptedInfo;
+
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
+    static wcchar kEncTypeAesCbc128 = "AES-128-CBC";
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_192)
+    static wcchar kEncTypeAesCbc192 = "AES-192-CBC";
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_256)
+    static wcchar kEncTypeAesCbc256 = "AES-256-CBC";
+#endif
+
+static int wp_EncryptedInfoGet(wp_EncryptedInfo* info, const char* cipherInfo)
+{
+    int ret = 0;
+
+    if (info == NULL || cipherInfo == NULL)
+        return BAD_FUNC_ARG;
+
+    /* determine cipher information */
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
+    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc128, XSTRLEN(kEncTypeAesCbc128)) == 0) {
+        info->cipherType = WC_CIPHER_AES_CBC;
+        info->keySz = AES_128_KEY_SIZE;
+        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
+    }
+    else
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_192)
+    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc192, XSTRLEN(kEncTypeAesCbc192)) == 0) {
+        info->cipherType = WC_CIPHER_AES_CBC;
+        info->keySz = AES_192_KEY_SIZE;
+        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
+    }
+    else
+#endif
+#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_256)
+    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc256, XSTRLEN(kEncTypeAesCbc256)) == 0) {
+        info->cipherType = WC_CIPHER_AES_CBC;
+        info->keySz = AES_256_KEY_SIZE;
+        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
+    }
+    else
+#endif
+    {
+        ret = NOT_COMPILED_IN;
+    }
+    return ret;
+}
+
+#define PKCS5_SALT_SZ   8
+
+static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
+    const byte* password, int passwordSz, int hashType)
+{
+    int ret = NOT_COMPILED_IN;
+#ifdef WOLFSSL_SMALL_STACK
+    byte* key      = NULL;
+#else
+    byte  key[WC_MAX_SYM_KEY_SIZE];
+#endif
+
+    (void)derSz;
+    (void)passwordSz;
+    (void)hashType;
+
+    if (der == NULL || password == NULL || info == NULL || info->keySz == 0 ||
+            info->ivSz < PKCS5_SALT_SZ) {
+        return BAD_FUNC_ARG;
+    }
+
+#ifdef WOLFSSL_SMALL_STACK
+    key = (byte*)XMALLOC(WC_MAX_SYM_KEY_SIZE, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
+    if (key == NULL) {
+        return MEMORY_E;
+    }
+#endif /* WOLFSSL_SMALL_STACK */
+
+    (void)XMEMSET(key, 0, WC_MAX_SYM_KEY_SIZE);
+
+#ifndef NO_PWDBASED
+    if ((ret = wc_PBKDF1(key, password, passwordSz, info->iv, PKCS5_SALT_SZ, 1,
+                                        info->keySz, hashType)) != 0) {
+#ifdef WOLFSSL_SMALL_STACK
+        XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
+#endif
+        return ret;
+    }
+#endif
+
+#ifndef NO_DES3
+    if (info->cipherType == WC_CIPHER_DES)
+        ret = wc_Des_CbcEncryptWithKey(der, der, derSz, key, info->iv);
+    if (info->cipherType == WC_CIPHER_DES3)
+        ret = wc_Des3_CbcEncryptWithKey(der, der, derSz, key, info->iv);
+#endif /* NO_DES3 */
+#if !defined(NO_AES) && defined(HAVE_AES_CBC)
+    if (info->cipherType == WC_CIPHER_AES_CBC)
+        ret = wc_AesCbcEncryptWithKey(der, der, derSz, key, info->keySz,
+            info->iv);
+#endif /* !NO_AES && HAVE_AES_CBC */
+
+#ifdef WOLFSSL_SMALL_STACK
+    XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
+#endif
+
+    return ret;
+}
+#endif /* WOLFSSL_ENCRYPTED_KEYS */
+
 /**
  * Encrypt the PKCS #8 key.
  *
@@ -326,10 +580,15 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
     unsigned char* keyData, size_t* keyLen, word32 pkcs8Len,
     OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg, byte** cipherInfo)
 {
+#ifdef WP_HAVE_MD5
     int ok = 1;
     int rc;
-    word32 len = *keyLen;
+    word32 len = (word32)*keyLen;
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     EncryptedInfo info[1];
+#else
+    wp_EncryptedInfo info[1];
+#endif
     word32 cipherInfoSz;
     char password[1024];
     size_t passwordSz = sizeof(password);
@@ -343,7 +602,11 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         XSTRNCPY(info->name, cipherName, NAME_SZ-1);
         info->name[NAME_SZ-1] = '\0';
 
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         rc = wc_EncryptedInfoGet(info, info->name);
+    #else
+        rc = wp_EncryptedInfoGet(info, info->name);
+    #endif
         if (rc != 0) {
             ok = 0;
         }
@@ -368,8 +631,13 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         XMEMSET(keyData + pkcs8Len, 0, len - pkcs8Len);
 
         /* Encrypt key and padding. */
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         rc = wc_BufferKeyEncrypt(info, keyData, len, (byte*)password,
-            passwordSz, WC_MD5);
+            (int)passwordSz, WC_MD5);
+    #else
+        rc = wp_BufferKeyEncrypt(info, keyData, len, (byte*)password,
+            (int)passwordSz, WC_MD5);
+    #endif
         if (rc != 0) {
             ok = 0;
         }
@@ -399,6 +667,17 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
     }
 
     return ok;
+#else
+    (void)provCtx;
+    (void)cipherName;
+    (void)keyData;
+    (void)keyLen;
+    (void)pkcs8Len;
+    (void)pwCb;
+    (void)pwCbArg;
+    (void)cipherInfo;
+    return 0;
+#endif
 }
 
 /* TODO: Structure could change! */

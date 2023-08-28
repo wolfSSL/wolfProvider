@@ -30,6 +30,8 @@
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
 
+#ifndef NO_PWDBASED
+
 /** Base set of parameters settable against context  */
 #define WP_PBKDF2_BASE_SETTABLES                                 \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_PROPERTIES, NULL, 0),  \
@@ -136,7 +138,7 @@ static void wp_kdf_pbkdf2_reset(wp_Pbkdf2Ctx* ctx)
  * Set the base PBKDF2 context parameters.
  *
  * @param [in, out] ctx     PBKDF2 context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -256,9 +258,11 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     if (ok) {
         int rc;
 
-        rc = wc_PBKDF2_ex(key, ctx->password, ctx->passwordSz, ctx->salt,
-            ctx->saltSz, ctx->iterations, keyLen, ctx->mdType, NULL,
-            INVALID_DEVID);
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_PBKDF2_ex(key, ctx->password, (int)ctx->passwordSz, ctx->salt,
+            (int)ctx->saltSz, (int)ctx->iterations, (int)keyLen, ctx->mdType,
+            NULL, INVALID_DEVID);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
@@ -271,7 +275,7 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
  * Set all the PBKDF2 context parameters.
  *
  * @param [in, out] ctx     PBKDF2 context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -364,9 +368,11 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     if (ok) {
         int rc;
 
-        rc = wc_PKCS12_PBKDF_ex(key, ctx->password, ctx->passwordSz, ctx->salt,
-            ctx->saltSz, ctx->iterations, keyLen, ctx->mdType, ctx->keyUse,
-            NULL);
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_PKCS12_PBKDF_ex(key, ctx->password, (int)ctx->passwordSz,
+            ctx->salt, (int)ctx->saltSz, (int)ctx->iterations, (int)keyLen,
+            ctx->mdType, ctx->keyUse, NULL);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
@@ -379,7 +385,7 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
  * Set all the PBKDF2 context parameters for PKCS#12.
  *
  * @param [in, out] ctx     PBKDF2 context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -432,4 +438,6 @@ const OSSL_DISPATCH wp_kdf_pkcs12_functions[] = {
     { OSSL_FUNC_KDF_GET_CTX_PARAMS,      (DFUNC)wp_kdf_pbkdf2_get_ctx_params  },
     { 0, NULL }
 };
+
+#endif
 

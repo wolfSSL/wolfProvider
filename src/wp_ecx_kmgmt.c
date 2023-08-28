@@ -29,7 +29,11 @@
 #include <openssl/obj_mac.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
+    defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
 
 /** Supported selections (key parts) in this key manager for ECX. */
 #define WP_ECX_POSSIBLE_SELECTIONS                                             \
@@ -45,7 +49,23 @@
 #define WP_KEY_TYPE_ED448       4
 
 /** Maximum key size. Used for exporting when comparing keys. */
+#ifdef WP_HAVE_ED448
 #define WP_MAX_KEY_SIZE         ED448_KEY_SIZE
+#elif defined(WP_HAVE_X448)
+#define WP_MAX_KEY_SIZE         CURVE448_KEY_SIZE
+#elif defined(WP_HAVE_ED25519)
+#define WP_MAX_KEY_SIZE         ED25519_KEY_SIZE
+#else
+#define WP_MAX_KEY_SIZE         CURVE25519_KEYSIZE
+#endif
+
+#ifdef WP_HAVE_X25519
+    #define ECX_LITTLE_ENDIAN       EC25519_LITTLE_ENDIAN
+#elif defined(WP_HAVE_X448)
+    #define ECX_LITTLE_ENDIAN       EC448_LITTLE_ENDIAN
+#else
+    #define ECX_LITTLE_ENDIAN       0
+#endif
 
 
 /** Type for function that initializes a wolfSSL key. */
@@ -109,17 +129,28 @@ typedef struct wp_EcxData {
 struct wp_Ecx {
     /** wolfSSL key - see data field for type. */
     union {
+    #ifdef WP_HAVE_X25519
         /** Curve25519 key object for ECDH. */
         curve25519_key x25519;
+    #endif
+    #ifdef WP_HAVE_X448
         /** Curve448 key object for ECDH. */
         curve448_key   x448;
+    #endif
+    #ifdef WP_HAVE_ED25519
         /** Ed25519 key object for ECDSA. */
         ed25519_key    ed25519;
+    #endif
+    #ifdef WP_HAVE_ED448
         /** Ed448 key object for ECDSA. */
         ed448_key      ed448;
+    #endif
     } key;
     /** Data including method table that operates on a wolfSSL key. */
     const wp_EcxData* data;
+
+    /** Unclamped values to restore on export. */
+    byte unclamped[2];
 
 #ifndef WP_SINGLE_THREADED
     /** Mutex for reference count updating. */
@@ -372,7 +403,7 @@ static int wp_ecx_set_params(wp_Ecx* ecx, const OSSL_PARAM params[])
     }
     if (ok && (data != NULL)) {
         int rc = (*ecx->data->importPub)(data, len, (void*)&ecx->key,
-            EC25519_LITTLE_ENDIAN);
+            ECX_LITTLE_ENDIAN);
         if (rc != 0) {
             ok = 0;
         }
@@ -452,7 +483,7 @@ static int wp_ecx_get_params_enc_pub_key(wp_Ecx* ecx, OSSL_PARAM params[],
         }
         else {
             int rc = (*ecx->data->exportPub)((void*)&ecx->key, p->data,
-                &outLen, EC25519_LITTLE_ENDIAN);
+                &outLen, ECX_LITTLE_ENDIAN);
             if (rc != 0) {
                 ok = 0;
             }
@@ -632,7 +663,7 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     if (ok) {
         len1 = ecx1->data->len;
         rc = (*ecx1->data->exportPub)((void*)&ecx1->key, key1, &len1,
-            EC25519_LITTLE_ENDIAN);
+            ECX_LITTLE_ENDIAN);
         if (rc != 0) {
             ok = 0;
         }
@@ -640,7 +671,7 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     if (ok) {
         len2 = ecx2->data->len;
         rc = (*ecx2->data->exportPub)((void*)&ecx2->key, key2, &len2,
-            EC25519_LITTLE_ENDIAN);
+            ECX_LITTLE_ENDIAN);
         if (rc != 0) {
             ok = 0;
         }
@@ -687,6 +718,7 @@ static int wp_ecx_match(const wp_Ecx* ecx1, const wp_Ecx* ecx2, int selection)
     return ok;
 }
 
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
 /**
  * Validate the ECX public key - X25519 and X448 only.
  *
@@ -698,21 +730,21 @@ static int wp_ecx_validate_pub_key(const wp_Ecx* ecx)
 {
     int ok = 1;
     int rc;
-    unsigned char key[CURVE448_KEY_SIZE];
+    unsigned char key[WP_MAX_KEY_SIZE];
     word32 len = ecx->data->len;
 
     ok &= ecx->hasPub;
     if (ok) {
         /* Get the public key out. */
         rc = (*ecx->data->exportPub)((void*)&ecx->key, key, &len,
-            EC25519_LITTLE_ENDIAN);
+            ECX_LITTLE_ENDIAN);
         if (rc != 0) {
             ok = 0;
         }
     }
     if (ok) {
         /* Check the public key is valid. */
-        rc = (*ecx->data->checkPub)(key, len, EC25519_LITTLE_ENDIAN);
+        rc = (*ecx->data->checkPub)(key, len, ECX_LITTLE_ENDIAN);
         if (rc != 0) {
             ok = 0;
         }
@@ -749,7 +781,9 @@ static int wp_ecx_x_validate(const wp_Ecx* ecx, int selection, int checkType)
 
     return ok;
 }
+#endif
 
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
 /**
  * Validate the ECX key - Ed25519 and Ed448 only.
  *
@@ -785,6 +819,7 @@ static int wp_ecx_ed_validate(const wp_Ecx* ecx, int selection, int checkType)
 
     return ok;
 }
+#endif
 
 /**
  * Import the key into ECX key object from parameters.
@@ -815,8 +850,10 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             ok = 0;
         }
         if (ok && (privData != NULL)) {
+            ecx->unclamped[0] = privData[0];
+            ecx->unclamped[1] = privData[len - 1];
             rc = (*ecx->data->importPriv)(privData, len, (void*)&ecx->key,
-                EC25519_LITTLE_ENDIAN);
+                ECX_LITTLE_ENDIAN);
             if (rc != 0) {
                 ok = 0;
             }
@@ -833,7 +870,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
         }
         if (ok && (pubData != NULL)) {
             rc = (*ecx->data->importPub)(pubData, len, (void*)&ecx->key,
-                EC25519_LITTLE_ENDIAN);
+                ECX_LITTLE_ENDIAN);
             if (rc != 0) {
                 ok = 0;
             }
@@ -936,7 +973,7 @@ static size_t wp_ecx_export_keypair_alloc_size(wp_Ecx* ecx, int priv)
  *
  * @param [in]      ecx     ECX key object.
  * @param [in, out] params  Array of parameters and values.
- * @param [in, out] pIdx    Current index into parameters aray.
+ * @param [in, out] pIdx    Current index into parameters array.
  * @param [in, out] data    Data buffer to place group data into.
  * @param [in, out] idx     Pointer to current index into data.
  * @return  1 on success.
@@ -952,7 +989,7 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
 
     outLen = ecx->data->len;
     rc = (*ecx->data->exportPub)((void*)&ecx->key, data + *idx, &outLen,
-        EC25519_LITTLE_ENDIAN);
+        ECX_LITTLE_ENDIAN);
     if (rc != 0) {
         ok = 0;
     }
@@ -965,8 +1002,10 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
         outLen = ecx->data->len;
         rc = (*ecx->data->exportPriv)((void*)&ecx->key, data + *idx, &outLen);
         if (ok) {
-            wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PUB_KEY,
-                data + *idx, outLen);
+            data[*idx + 0         ] = ecx->unclamped[0];
+            data[*idx + outLen - 1] = ecx->unclamped[1];
+            wp_param_set_octet_string_ptr(&params[i++],
+                OSSL_PKEY_PARAM_PRIV_KEY, data + *idx, outLen);
         }
     }
 
@@ -1212,6 +1251,8 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
     { 0, NULL }                                                                \
 };
 
+#ifdef WP_HAVE_X25519
+
 /*
  * X25519
  */
@@ -1219,7 +1260,7 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
 /**
  * Import the X25519 public key.
  *
- * @param [in]      in      Buffer holdnig DER encoded X25519 public key.
+ * @param [in]      in      Buffer holding DER encoded X25519 public key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL X25519 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1240,6 +1281,21 @@ static int wp_x25519_import_public(const byte* in, word32 inLen,
     return wc_curve25519_import_public_ex(in, inLen, key, endian);
 }
 
+/**
+ * Export the X25519 private key.
+ *
+ * @param [in]      key     wolfSSL X25519 key object.
+ * @param [out]     out     Buffer to hold DER encoded X25519 private key.
+ * @param [in, out] outLen  On in, length of buffer in bytes.
+ *                          On out, length of data in bytes.
+ */
+static int wp_curve25519_export_private_raw(curve25519_key* key, byte* out,
+    word32* outLen)
+{
+    return wc_curve25519_export_private_raw_ex(key, out, outLen,
+        EC25519_LITTLE_ENDIAN);
+}
+
 /** X25519 data and wolfSSL functions. */
 static const wp_EcxData x25519Data = {
     WP_KEY_TYPE_X25519,
@@ -1252,7 +1308,7 @@ static const wp_EcxData x25519Data = {
     (WP_ECX_IMPORT_PUB)&wp_x25519_import_public,
     (WP_ECX_EXPORT_PUB)&wc_curve25519_export_public_ex,
     (WP_ECX_IMPORT_PRIV)&wc_curve25519_import_private_ex,
-    (WP_ECX_EXPORT_PRIV)&wc_curve25519_export_private_raw,
+    (WP_ECX_EXPORT_PRIV)&wp_curve25519_export_private_raw,
     (WP_ECX_CHECK_PUB)&wc_curve25519_check_public,
     NULL,
 };
@@ -1299,9 +1355,28 @@ static const char* wp_x25519_query_operation_name(int op)
 /** Dispatch table for X25519 key management. */
 IMPLEMENT_ECX_KEYMGMT_DISPATCH(x25519, x)
 
+#endif /* WP_HAVE_X25519 */
+
+#ifdef WP_HAVE_X448
+
 /*
  * X448
  */
+
+/**
+ * Export the X448 private key.
+ *
+ * @param [in]      key     wolfSSL X448 key object.
+ * @param [out]     out     Buffer to hold DER encoded X448 private key.
+ * @param [in, out] outLen  On in, length of buffer in bytes.
+ *                          On out, length of data in bytes.
+ */
+static int wp_curve448_export_private_raw(curve448_key* key, byte* out,
+    word32* outLen)
+{
+    return wc_curve448_export_private_raw_ex(key, out, outLen,
+        EC448_LITTLE_ENDIAN);
+}
 
 /** X448 data and wolfSSL functions. */
 static const wp_EcxData x448Data = {
@@ -1315,7 +1390,7 @@ static const wp_EcxData x448Data = {
     (WP_ECX_IMPORT_PUB)&wc_curve448_import_public_ex,
     (WP_ECX_EXPORT_PUB)&wc_curve448_export_public_ex,
     (WP_ECX_IMPORT_PRIV)&wc_curve448_import_private_ex,
-    (WP_ECX_EXPORT_PRIV)&wc_curve448_export_private_raw,
+    (WP_ECX_EXPORT_PRIV)&wp_curve448_export_private_raw,
     (WP_ECX_CHECK_PUB)&wc_curve448_check_public,
     NULL,
 };
@@ -1362,6 +1437,10 @@ static const char* wp_x448_query_operation_name(int op)
 /** Dispatch table for X448 key management. */
 IMPLEMENT_ECX_KEYMGMT_DISPATCH(x448, x)
 
+#endif /* WP_HAVE_X448 */
+
+#ifdef WP_HAVE_ED25519
+
 /*
  * Ed25519
  */
@@ -1369,7 +1448,7 @@ IMPLEMENT_ECX_KEYMGMT_DISPATCH(x448, x)
 /**
  * Import the Ed25519 public key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed25519 public key.
+ * @param [in]      in      Buffer holding DER encoded Ed25519 public key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed25519 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1414,7 +1493,7 @@ static int wp_ed25519_export_public(ed25519_key* key, const byte* out,
 /**
  * Import the Ed25519 private key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed25519 private key.
+ * @param [in]      in      Buffer holding DER encoded Ed25519 private key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed25519 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1488,6 +1567,10 @@ static const char* wp_ed25519_query_operation_name(int op)
 /** Dispatch table for Ed25519 key management. */
 IMPLEMENT_ECX_KEYMGMT_DISPATCH(ed25519, ed)
 
+#endif /* WP_HAVE_ED25519 */
+
+#ifdef WP_HAVE_ED448
+
 /*
  * Ed448
  */
@@ -1495,7 +1578,7 @@ IMPLEMENT_ECX_KEYMGMT_DISPATCH(ed25519, ed)
 /**
  * Import the Ed448 public key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed448 public key.
+ * @param [in]      in      Buffer holding DER encoded Ed448 public key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed448 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1540,7 +1623,7 @@ static int wp_ed448_export_public(ed448_key* key, const byte* out,
 /**
  * Import the Ed448 private key.
  *
- * @param [in]      in      Buffer holdnig DER encoded Ed448 private key.
+ * @param [in]      in      Buffer holding DER encoded Ed448 private key.
  * @param [in]      inLen   Length of data in bytes.
  * @param [in, out] key     wolfSSL Ed448 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
@@ -1612,13 +1695,11 @@ static const char* wp_ed448_query_operation_name(int op)
 /** Dispatch table for Ed448 key management. */
 IMPLEMENT_ECX_KEYMGMT_DISPATCH(ed448, ed)
 
+#endif /* WP_HAVE_ED448 */
+
 /*
  * ECX encoding/decoding.
  */
-
-/* TODO: encode public/private key. */
-/* TODO: support PKCS#8 formatted private key. */
-/* TODO: support encrypted PKCS#8 formatted private key. */
 
 /** Type for function that decodes a key into a wolfSSL key. */
 typedef int (*WP_ECX_DECODE)(const byte* data, word32* idx, void* key,
@@ -1720,7 +1801,7 @@ static const OSSL_PARAM* wp_ecx_enc_dec_settable_ctx_params(
  * Set the ECX encoder/decoder context parameters.
  *
  * @param [in, out] ctx     ECX encoder/decoder context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -1794,28 +1875,43 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     unsigned char* data = NULL;
     word32 len = 0;
     word32 idx = 0;
-    wp_Ecx* ecx = NULL;
+    wp_Ecx* ecx;
     const char* dataType = NULL;
 
     (void)pwCb;
     (void)pwCbArg;
 
     ctx->selection = selection;
+#ifdef WP_HAVE_X25519
     if (ctx->keyType == WP_KEY_TYPE_X25519) {
         ecx = wp_x25519_new(ctx->provCtx);
         dataType = "X25519";
     }
-    else if (ctx->keyType == WP_KEY_TYPE_ED25519) {
+    else
+#endif /* WP_HAVE_X25519 */
+#ifdef WP_HAVE_ED25519
+    if (ctx->keyType == WP_KEY_TYPE_ED25519) {
         ecx = wp_ed25519_new(ctx->provCtx);
         dataType = "ED25519";
     }
-    else if (ctx->keyType == WP_KEY_TYPE_X448) {
+    else
+#endif /* WP_HAVE_ED25519 */
+#ifdef WP_HAVE_X448
+    if (ctx->keyType == WP_KEY_TYPE_X448) {
         ecx = wp_x448_new(ctx->provCtx);
         dataType = "X448";
     }
-    else if (ctx->keyType == WP_KEY_TYPE_ED448) {
+    else
+#endif /* WP_HAVE_X448 */
+#ifdef WP_HAVE_ED448
+    if (ctx->keyType == WP_KEY_TYPE_ED448) {
         ecx = wp_ed448_new(ctx->provCtx);
         dataType = "ED448";
+    }
+    else
+#endif /* WP_HAVE_ED448 */
+    {
+        ecx = NULL;
     }
     if (ecx == NULL) {
         ok = 0;
@@ -2029,6 +2125,8 @@ static int wp_ecx_pki_does_selection(WOLFPROV_CTX* provCtx, int selection)
 
     return ok;
 }
+
+#ifdef WP_HAVE_X25519
 
 /*
  * X25519 Public Key
@@ -2396,6 +2494,10 @@ const OSSL_DISPATCH wp_x25519_epki_pem_encoder_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_X25519 */
+
+#ifdef WP_HAVE_ED25519
+
 /*
  * Ed25519 SubkectPublicKeyInfo
  */
@@ -2655,6 +2757,10 @@ const OSSL_DISPATCH wp_ed25519_epki_pem_encoder_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_ED25519 */
+
+#ifdef WP_HAVE_X448
+
 /*
  * X448 Public Key
  */
@@ -2866,6 +2972,163 @@ const OSSL_DISPATCH wp_x448_pki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecx_export_object           },
     { 0, NULL }
 };
+
+/**
+ * Encode the private part of an X448 key in DER.
+ *
+ * Pass NULL for output to get the size of the encoding.
+ *
+ * @param [in]  key       X448 key object.
+ * @param [out] output    Buffer to put encoded data in.
+ * @param [in]  inLen     Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success.
+ * @return  BAD_FUNC_ARG when key is NULL.
+ * @return  MEMORY_E when dynamic memory allocation failed.
+ */
+static int wp_Curve448PrivateKeyToDer(curve448_key* key, byte* output,
+    word32 inLen)
+{
+    int ret;
+
+    ret = wc_Curve448PrivateKeyToDer(key, output, inLen);
+    if (ret > 0) {
+        /* Reverse the order of the key. */
+        int i;
+        byte* p = output + ret - CURVE448_KEY_SIZE;
+
+        for (i = 0; i < CURVE448_KEY_SIZE / 2; i++) {
+            byte t = p[i];
+            p[i] = p[CURVE448_KEY_SIZE - 1 - i];
+            p[CURVE448_KEY_SIZE - 1 - i] = t;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_pki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x448_pki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_pki_der_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding PKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_PKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x448_pki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_pki_pem_enc_new      },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/*
+ * X448 EncryptedPrivateKeyInfo
+ */
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_epki_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to DER encoder.
+ */
+const OSSL_DISPATCH wp_x448_epki_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_epki_der_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECX encoder/decoder context that handles encoding EPKI in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECX encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EcxEncDecCtx* wp_x448_epki_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_EPKI,
+        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
+}
+
+/**
+ * Dispatch table for PKI to PEM encoder.
+ */
+const OSSL_DISPATCH wp_x448_epki_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_epki_pem_enc_new     },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
+    { 0, NULL }
+};
+
+#endif /* WP_HAVE_X448 */
+
+#ifdef WP_HAVE_ED448
 
 /*
  * Ed448 SubkectPublicKeyInfo
@@ -3125,156 +3388,7 @@ const OSSL_DISPATCH wp_ed448_epki_pem_encoder_functions[] = {
     { 0, NULL }
 };
 
-/**
- * Encode the private part of an X448 key in DER.
- *
- * Pass NULL for output to get the size of the encoding.
- *
- * @param [in]  key       X448 key object.
- * @param [out] output    Buffer to put encoded data in.
- * @param [in]  inLen     Size of buffer in bytes.
- * @return  Size of encoded data in bytes on success.
- * @return  BAD_FUNC_ARG when key is NULL.
- * @return  MEMORY_E when dynamic memory allocation failed.
- */
-static int wp_Curve448PrivateKeyToDer(curve448_key* key, byte* output,
-    word32 inLen)
-{
-    int ret;
+#endif /* WP_HAVE_ED448 */
 
-    ret = wc_Curve448PrivateKeyToDer(key, output, inLen);
-    if (ret > 0) {
-        /* Reverse the order of the key. */
-        int i;
-        byte* p = output + ret - CURVE448_KEY_SIZE;
-
-        for (i = 0; i < CURVE448_KEY_SIZE / 2; i++) {
-            byte t = p[i];
-            p[i] = p[CURVE448_KEY_SIZE - 1 - i];
-            p[CURVE448_KEY_SIZE - 1 - i] = t;
-        }
-    }
-
-    return ret;
-}
-
-/**
- * Create a new ECX encoder/decoder context that handles encoding PKI in DER.
- *
- * @param [in] provCtx  Provider context.
- * @return  New ECX encoder/decoder context object on success.
- * @return  NULL on failure.
- */
-static wp_EcxEncDecCtx* wp_x448_pki_der_enc_new(WOLFPROV_CTX* provCtx)
-{
-    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_PKI,
-        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
-}
-
-/**
- * Dispatch table for PKI to DER encoder.
- */
-const OSSL_DISPATCH wp_x448_pki_der_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_pki_der_enc_new      },
-    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
-    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
-    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
-    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
-    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
-    { 0, NULL }
-};
-
-/**
- * Create a new ECX encoder/decoder context that handles encoding PKI in PEM.
- *
- * @param [in] provCtx  Provider context.
- * @return  New ECX encoder/decoder context object on success.
- * @return  NULL on failure.
- */
-static wp_EcxEncDecCtx* wp_x448_pki_pem_enc_new(WOLFPROV_CTX* provCtx)
-{
-    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_PKI,
-        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
-}
-
-/**
- * Dispatch table for PKI to PEM encoder.
- */
-const OSSL_DISPATCH wp_x448_pki_pem_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_pki_pem_enc_new      },
-    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
-    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
-    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
-    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
-    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
-    { 0, NULL }
-};
-
-/*
- * X448 EncryptedPrivateKeyInfo
- */
-
-/**
- * Create a new ECX encoder/decoder context that handles encoding EPKI in DER.
- *
- * @param [in] provCtx  Provider context.
- * @return  New ECX encoder/decoder context object on success.
- * @return  NULL on failure.
- */
-static wp_EcxEncDecCtx* wp_x448_epki_der_enc_new(WOLFPROV_CTX* provCtx)
-{
-    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_EPKI,
-        WP_FORMAT_DER, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
-}
-
-/**
- * Dispatch table for PKI to DER encoder.
- */
-const OSSL_DISPATCH wp_x448_epki_der_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_epki_der_enc_new     },
-    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
-    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
-    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
-    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
-    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
-    { 0, NULL }
-};
-
-/**
- * Create a new ECX encoder/decoder context that handles encoding EPKI in PEM.
- *
- * @param [in] provCtx  Provider context.
- * @return  New ECX encoder/decoder context object on success.
- * @return  NULL on failure.
- */
-static wp_EcxEncDecCtx* wp_x448_epki_pem_enc_new(WOLFPROV_CTX* provCtx)
-{
-    return wp_ecx_enc_dec_new(provCtx, WP_KEY_TYPE_X448, WP_ENC_FORMAT_EPKI,
-        WP_FORMAT_PEM, NULL, (WP_ECX_ENCODE)wp_Curve448PrivateKeyToDer);
-}
-
-/**
- * Dispatch table for PKI to PEM encoder.
- */
-const OSSL_DISPATCH wp_x448_epki_pem_encoder_functions[] = {
-    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_x448_epki_pem_enc_new     },
-    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecx_enc_dec_free            },
-    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
-                                    (DFUNC)wp_ecx_enc_dec_settable_ctx_params },
-    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
-    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
-    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
-    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
-    { 0, NULL }
-};
+#endif /* WP_HAVE_X25519 || WP_HAVE_ED25519 || WP_HAVE_X448 || WP_HAVE_ED448 */
 

@@ -33,19 +33,12 @@
 /** Constants associated with TLS groups for parameters. */
 typedef struct wp_tls_group_consts {
     unsigned int id;       /** TLS group ID. */
-    const char* alg;       /** Algorithm name. */
-    size_t algSz;          /** Length of algorithm name. */
     unsigned int secBits;  /** #Bits of security. */
     int minTls;            /** Minimum TLS version, -1 not supported. */
     int maxTls;            /** Maximum TLS version (or 0 for all). */
     int minDtls;           /** Minimum DTLS version, -1 not supported. */
     int maxDtls;           /** Maximum DTLS version (or 0 for all). */
 } wp_tls_group_consts;
-
-#define WP_ALG_NAME_ECC     "EC"    , 3
-#define WP_ALG_NAME_X25519  "X25519", 7
-#define WP_ALG_NAME_X448    "X448"  , 5
-#define WP_ALG_NAME_DH      "DH"    , 3
 
 #define WP_TLS_12_DOWN      TLS1_VERSION  , TLS1_2_VERSION
 #define WP_TLS_10_UP        TLS1_VERSION  , 0
@@ -57,48 +50,32 @@ typedef struct wp_tls_group_consts {
 
 /** List of group constants. */
 static const wp_tls_group_consts wp_group_const_list[35] = {
-    { WOLFSSL_ECC_SECP192R1      , WP_ALG_NAME_ECC   ,  80,
-      WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_SECP224R1      , WP_ALG_NAME_ECC   , 112,
-      WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_SECP256R1      , WP_ALG_NAME_ECC   , 128,
-      WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_SECP384R1      , WP_ALG_NAME_ECC   , 192,
-      WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_SECP521R1      , WP_ALG_NAME_ECC   , 256,
-      WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_BRAINPOOLP256R1, WP_ALG_NAME_ECC   , 128,
-      WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_BRAINPOOLP384R1, WP_ALG_NAME_ECC   , 192,
-      WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_BRAINPOOLP512R1, WP_ALG_NAME_ECC   , 256,
-      WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_X25519         , WP_ALG_NAME_X25519, 128,
-      WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_X448           , WP_ALG_NAME_X448  , 224,
-      WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_FFDHE_2048         , WP_ALG_NAME_DH    , 112,
-      WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_3072         , WP_ALG_NAME_DH    , 128,
-      WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_4096         , WP_ALG_NAME_DH    , 128,
-      WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_6144         , WP_ALG_NAME_DH    , 128,
-      WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_8192         , WP_ALG_NAME_DH    , 192,
-      WP_TLS_13_UP  , WP_DTLS_NONE    },
+    { WOLFSSL_ECC_SECP192R1      ,  80, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
+    { WOLFSSL_ECC_SECP224R1      , 112, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
+    { WOLFSSL_ECC_SECP256R1      , 128, WP_TLS_10_UP  , WP_DTLS_10_UP   },
+    { WOLFSSL_ECC_SECP384R1      , 192, WP_TLS_10_UP  , WP_DTLS_10_UP   },
+    { WOLFSSL_ECC_SECP521R1      , 256, WP_TLS_10_UP  , WP_DTLS_10_UP   },
+    { WOLFSSL_ECC_BRAINPOOLP256R1, 128, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
+    { WOLFSSL_ECC_BRAINPOOLP384R1, 192, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
+    { WOLFSSL_ECC_BRAINPOOLP512R1, 256, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
+    { WOLFSSL_ECC_X25519         , 128, WP_TLS_10_UP  , WP_DTLS_10_UP   },
+    { WOLFSSL_ECC_X448           , 224, WP_TLS_10_UP  , WP_DTLS_10_UP   },
+    { WOLFSSL_FFDHE_2048         , 112, WP_TLS_13_UP  , WP_DTLS_NONE    },
+    { WOLFSSL_FFDHE_3072         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
+    { WOLFSSL_FFDHE_4096         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
+    { WOLFSSL_FFDHE_6144         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
+    { WOLFSSL_FFDHE_8192         , 192, WP_TLS_13_UP  , WP_DTLS_NONE    },
 };
 
 /** Parameters for a group. Index references constant list. */
-#define WP_TLS_GROUP_ENTRY(tlsName, internalName, idx)                         \
+#define WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, alg, algSz)             \
     {                                                                          \
         OSSL_PARAM_utf8_string(OSSL_CAPABILITY_TLS_GROUP_NAME,                 \
             (char*)tlsName, sizeof(tlsName)),                                  \
         OSSL_PARAM_utf8_string(OSSL_CAPABILITY_TLS_GROUP_NAME_INTERNAL,        \
             (char*)internalName, sizeof(internalName)),                        \
         OSSL_PARAM_utf8_string(OSSL_CAPABILITY_TLS_GROUP_ALG,                  \
-            (char*)wp_group_const_list[idx].alg,                               \
-             wp_group_const_list[idx].algSz),                                  \
+            (char*)alg, algSz),                                                \
         OSSL_PARAM_uint(OSSL_CAPABILITY_TLS_GROUP_ID,                          \
             (unsigned int *)&wp_group_const_list[idx].id),                     \
         OSSL_PARAM_uint(OSSL_CAPABILITY_TLS_GROUP_SECURITY_BITS,               \
@@ -114,30 +91,46 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
         OSSL_PARAM_END                                                         \
     }
 
+/** Parameters for an EC group. Index references constant list. */
+#define WP_TLS_GROUP_ENTRY_EC(tlsName, internalName, idx)                      \
+    WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "EC", 3)
+
+/** Parameters for an X25519 group. Index references constant list. */
+#define WP_TLS_GROUP_ENTRY_X25519(tlsName, internalName, idx)                  \
+    WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "X25519", 7)
+
+/** Parameters for an X448 group. Index references constant list. */
+#define WP_TLS_GROUP_ENTRY_X448(tlsName, internalName, idx)                    \
+    WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "X448", 5)
+
+/** Parameters for a DH group. Index references constant list. */
+#define WP_TLS_GROUP_ENTRY_DH(tlsName, internalName, idx)                      \
+    WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "DH", 3)
+
 /** List of parameters for TLS groups. */
 static const OSSL_PARAM wp_param_group_list[][10] = {
-    WP_TLS_GROUP_ENTRY("secp192r1"      , "prime192v1"     , 0 ),
-    WP_TLS_GROUP_ENTRY("P-192"          , "prime192v1"     , 0 ),
-    WP_TLS_GROUP_ENTRY("secp224r1"      , "secp224r1"      , 1 ),
-    WP_TLS_GROUP_ENTRY("P-224"          , "secp224r1"      , 1 ),
-    WP_TLS_GROUP_ENTRY("secp256r1"      , "prime256v1"     , 2 ),
-    WP_TLS_GROUP_ENTRY("P-256"          , "prime256v1"     , 2 ),
-    WP_TLS_GROUP_ENTRY("secp384r1"      , "secp384r1"      , 3 ),
-    WP_TLS_GROUP_ENTRY("P-384"          , "secp384r1"      , 3 ),
-    WP_TLS_GROUP_ENTRY("secp521r1"      , "secp521r1"      , 4 ),
-    WP_TLS_GROUP_ENTRY("P-521"          , "secp521r1"      , 4 ),
+    WP_TLS_GROUP_ENTRY_EC(    "secp192r1"      , "prime192v1"     , 0 ),
+    WP_TLS_GROUP_ENTRY_EC(    "P-192"          , "prime192v1"     , 0 ),
+    WP_TLS_GROUP_ENTRY_EC(    "secp224r1"      , "secp224r1"      , 1 ),
+    WP_TLS_GROUP_ENTRY_EC(    "P-224"          , "secp224r1"      , 1 ),
+    WP_TLS_GROUP_ENTRY_EC(    "secp256r1"      , "prime256v1"     , 2 ),
+    WP_TLS_GROUP_ENTRY_EC(    "P-256"          , "prime256v1"     , 2 ),
+    WP_TLS_GROUP_ENTRY_EC(    "secp384r1"      , "secp384r1"      , 3 ),
+    WP_TLS_GROUP_ENTRY_EC(    "P-384"          , "secp384r1"      , 3 ),
+    WP_TLS_GROUP_ENTRY_EC(    "secp521r1"      , "secp521r1"      , 4 ),
+    WP_TLS_GROUP_ENTRY_EC(    "P-521"          , "secp521r1"      , 4 ),
 #ifndef HAVE_FIPS
-    WP_TLS_GROUP_ENTRY("brainpoolP256r1", "brainpoolP256r1", 5 ),
-    WP_TLS_GROUP_ENTRY("brainpoolP384r1", "brainpoolP384r1", 6 ),
-    WP_TLS_GROUP_ENTRY("brainpoolP512r1", "brainpoolP512r1", 7 ),
+    WP_TLS_GROUP_ENTRY_EC(    "brainpoolP256r1", "brainpoolP256r1", 5 ),
+    WP_TLS_GROUP_ENTRY_EC(    "brainpoolP384r1", "brainpoolP384r1", 6 ),
+    WP_TLS_GROUP_ENTRY_EC(    "brainpoolP512r1", "brainpoolP512r1", 7 ),
 #endif
-    WP_TLS_GROUP_ENTRY("x25519"         , "X25519"         , 8 ),
-    WP_TLS_GROUP_ENTRY("x448"           , "X448"           , 9 ),
-    WP_TLS_GROUP_ENTRY("ffdhe2048"      , "ffdhe2048"      , 10),
-    WP_TLS_GROUP_ENTRY("ffdhe3072"      , "ffdhe3072"      , 11),
-    WP_TLS_GROUP_ENTRY("ffdhe4096"      , "ffdhe4096"      , 12),
-    WP_TLS_GROUP_ENTRY("ffdhe6144"      , "ffdhe6144"      , 13),
-    WP_TLS_GROUP_ENTRY("ffdhe8192"      , "ffdhe8192"      , 14),
+    WP_TLS_GROUP_ENTRY_X25519("x25519"         , "X25519"         , 8 ),
+    WP_TLS_GROUP_ENTRY_X448(  "x448"           , "X448"           , 9 ),
+    WP_TLS_GROUP_ENTRY_DH(    "ffdhe2048"      , "ffdhe2048"      , 10),
+    WP_TLS_GROUP_ENTRY_DH(    "ffdhe3072"      , "ffdhe3072"      , 11),
+    WP_TLS_GROUP_ENTRY_DH(    "ffdhe4096"      , "ffdhe4096"      , 12),
+    WP_TLS_GROUP_ENTRY_DH(    "ffdhe6144"      , "ffdhe6144"      , 13),
+    WP_TLS_GROUP_ENTRY_DH(    "ffdhe8192"      , "ffdhe8192"      , 14),
 };
 
 /** Count of supported TLS groups. */
@@ -145,7 +138,7 @@ static const OSSL_PARAM wp_param_group_list[][10] = {
     (sizeof(wp_param_group_list) / sizeof(*wp_param_group_list))
 
 /**
- * Pass the list of paramaters for TLS groups to the callback.
+ * Pass the list of parameters for TLS groups to the callback.
  *
  * @param [in] cb   Callback.
  * @param [in] arg  Argument for callback.

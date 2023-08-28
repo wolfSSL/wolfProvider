@@ -26,7 +26,11 @@
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+
+
+#ifdef WP_HAVE_ECDH
 
 /** No KDF applied to derived secret. */
 #define WP_KDF_NONE       0
@@ -151,7 +155,7 @@ static wp_EcdhCtx* wp_ecdh_dup(wp_EcdhCtx* src)
             dst->keyLen   = src->keyLen;
         }
         if (!ok) {
-            /* Free allcoated memory and up referenced objects. */
+            /* Free allocated memory and up referenced objects. */
             wp_ecc_free(src->peer);
             wp_ecc_free(src->key);
             OPENSSL_free(dst);
@@ -216,15 +220,23 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
         ok = 0;
     }
     if (ok) {
+#ifdef HAVE_X963_KDF
         int rc;
-        rc = wc_X963_KDF(ctx->kdfMd, secret, secLen, ctx->ukm, ctx->ukmLen,
-            key, (word32)ctx->keyLen);
+        rc = wc_X963_KDF(ctx->kdfMd, secret, (word32)secLen, ctx->ukm,
+            (word32)ctx->ukmLen, key, (word32)ctx->keyLen);
         if (rc != 0) {
             ok = 0;
         }
         else {
             *keyLen = ctx->keyLen;
         }
+#else
+        (void)key;
+        (void)keyLen;
+        (void)secret;
+        (void)secLen;
+        ok = 0;
+#endif
     }
 
     return ok;
@@ -234,7 +246,7 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
  * Derive secret from ECC keys.
  *
  * @param [in]      ctx     ECDH key exchange context object.
- * @param [in]      secret  Bufffer to hold secret.
+ * @param [in]      secret  Buffer to hold secret.
  * @param [in, out] secLen  On in, size of buffer in bytes.
  *                          On out, length of secret data in bytes.
  * @return 1 on success.
@@ -245,18 +257,22 @@ static int wp_ecdh_derive_secret(wp_EcdhCtx* ctx, unsigned char* secret,
 {
     int ok = 1;
     int rc;
-    word32 len = *secLen;
+    word32 len = (word32)*secLen;
 
 #ifdef HAVE_ECC_CDH
     if (ctx->cofactor) {
         wc_ecc_set_flags(wp_ecc_get_key(ctx->key), WC_ECC_FLAG_COFACTOR);
     }
 #endif
-    /* Calculate secret. */
-    rc = wc_ecc_shared_secret(wp_ecc_get_key(ctx->key),
-        wp_ecc_get_key(ctx->peer), secret, &len);
-    if (rc != 0) {
-        ok = 0;
+    if ((ok = wp_ecc_check_usage(ctx->key))) {
+        /* Calculate secret. */
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_ecc_shared_secret(wp_ecc_get_key(ctx->key),
+            wp_ecc_get_key(ctx->peer), secret, &len);
+        PRIVATE_KEY_LOCK();
+        if (rc != 0) {
+            ok = 0;
+        }
     }
     if (ok) {
         *secLen = len;
@@ -616,4 +632,5 @@ const OSSL_DISPATCH wp_ecdh_keyexch_functions[] = {
     { 0, NULL }
 };
 
+#endif /* WP_HAVE_ECDH */
 

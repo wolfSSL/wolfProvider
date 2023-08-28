@@ -26,8 +26,11 @@
 #include <openssl/params.h>
 #include <openssl/evp.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
+
+#ifdef WP_HAVE_AESGCM
 
 /**
  * GMAC context structure when using wolfSSL for implementation.
@@ -44,7 +47,7 @@ typedef struct wp_GmacCtx {
     size_t expKeySize;
 
     /** IV to use. */
-    unsigned char iv[GCM_NONCE_MAX_SZ];
+    unsigned char iv[AES_BLOCK_SIZE];
     /** Length of IV data. */
     size_t ivLen;
     /** Private key GMAC was initialized with. */
@@ -253,8 +256,8 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
 
     if (ok) {
         /* One-shot API for creating GMAC. */
-        rc = wc_GmacUpdate(&macCtx->gmac, macCtx->iv, macCtx->ivLen,
-            macCtx->data, macCtx->dataLen, out, (word32)outSize);
+        rc = wc_GmacUpdate(&macCtx->gmac, macCtx->iv, (word32)macCtx->ivLen,
+            macCtx->data, (word32)macCtx->dataLen, out, (word32)outSize);
         if (rc != 0) {
             ok = 0;
         }
@@ -337,7 +340,7 @@ typedef struct wp_gmac_cipher {
     size_t keySize;
 } wp_gmac_cipher;
 
-/** wolfSSL GMAC compatable cipher names and key sizes. */
+/** wolfSSL GMAC compatible cipher names and key sizes. */
 static const wp_gmac_cipher wp_gmac_cipher_names[] = {
     { "AES-128-GCM", AES_128_KEY_SIZE },
     { "AES-192-GCM", AES_192_KEY_SIZE },
@@ -434,7 +437,7 @@ static int wp_gmac_set_param_iv(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (data != NULL)) {
-        if (len > GCM_NONCE_MAX_SZ) {
+        if (len > AES_BLOCK_SIZE) {
             ok = 0;
         }
         if (ok) {
@@ -490,4 +493,6 @@ const OSSL_DISPATCH wp_gmac_functions[] = {
     { OSSL_FUNC_MAC_SET_CTX_PARAMS,      (DFUNC)wp_gmac_set_ctx_params      },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_AESGCM */
 

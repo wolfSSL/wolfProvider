@@ -42,7 +42,7 @@ static unsigned char fakeCtx[1];
  *
  * No context data required so returning a global context.
  *
- * @param [in] provCtx  Provider context. UUnused.
+ * @param [in] provCtx  Provider context. Unused.
  * @return  Pointer to context.
  */
 static wp_Pem2Der* wp_pem2der_newctx(WOLFPROV_CTX* provCtx)
@@ -64,7 +64,7 @@ static void wp_pem2der_freectx(wp_Pem2Der* ctx)
 }
 
 /**
- * Find the start fo the PEM header.
+ * Find the start of the PEM header.
  *
  * @param [in] data  Data buffer with PEM encoding.
  * @param [in] len   Length of data in bytes.
@@ -76,7 +76,7 @@ static word32 wp_pem2der_find_header(unsigned char* data, word32 len)
     word32 i;
     word32 idx = len;
 
-    for (i = 0; i < len - 10; i++) {
+    for (i = 0; i + 10 < len; i++) {
         if ((data[i] == '-') && (XMEMCMP(data + i, "-----BEGIN", 10) == 0)) {
             idx = i;
             break;
@@ -86,6 +86,7 @@ static word32 wp_pem2der_find_header(unsigned char* data, word32 len)
     return idx;
 }
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
 /**
  * Password callback data.
  */
@@ -118,11 +119,12 @@ static int wp_pem_password_cb(char* passwd, int sz, int rw, void* userdata)
         ret = -1;
     }
     else {
-        ret = len;
+        ret = (int)len;
     }
 
     return ret;
 }
+#endif /* WOLFSSL_ENCRYPTED_KEYS */
 
 /**
  * Convert PEM encoded EC parameters to DER.
@@ -162,8 +164,8 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
         }
     }
     if (ok) {
-        rc = Base64_Decode((byte*)base64Data, base64Len, (*pDer)->buffer,
-            &(*pDer)->length);
+        rc = Base64_Decode((byte*)base64Data, (word32)base64Len,
+            (*pDer)->buffer, &(*pDer)->length);
         if (rc < 0) {
             ok = 0;
         }
@@ -176,26 +178,24 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
  * Decode the PEM data to DER.
  *
  * Looks for a BEGIN line and decodes to the corresponding END.
- * Number of bytes consumed passed back through used.
  *
  * @param [in]  data       PEM data.
  * @param [in]  len        Length of PEM data in bytes.
- * @param [out] used       Number of bytes used from data.
  * @param [in]  dataCb     Callback to pass the decoded data to.
  * @param [in]  dataCbArg  Argument to pass to callback.
  * @param [in]  pwCb       Password callback.
- * @param [in]  pwCbArg    Argment to pass to password callback.
+ * @param [in]  pwCbArg    Argument to pass to password callback.
  * @return  1 on success or not data.
  * @return  0 on failure.
  */
 static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
-    word32* used, OSSL_CALLBACK* dataCb, void* dataCbArg,
-    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+    OSSL_CALLBACK* dataCb, void* dataCbArg, OSSL_PASSPHRASE_CALLBACK* pwCb,
+    void* pwCbArg)
 {
     int ok = 1;
     int done = 0;
     int rc;
-    int format;
+    int algoId;
     int type;
     const char* dataType = NULL;
     const char* dataFormat = NULL;
@@ -204,7 +204,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     DerBuffer* der = NULL;
     OSSL_PARAM params[5];
     OSSL_PARAM* p = params;
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     wp_PasswordCbData wpPwCb = { pwCb, pwCbArg };
+#endif
+
+    (void)pwCb;
+    (void)pwCbArg;
 
     XMEMSET(&info, 0, sizeof(info));
 
@@ -223,10 +228,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataType = "RSA";
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         if (XMEMCMP(data + 32, "Proc-Type", 9) == 0) {
             info.passwd_cb = wp_pem_password_cb;
             info.passwd_userdata = (void*)&wpPwCb;
         }
+    #endif
     }
     else if (XMEMCMP(data, "-----BEGIN EC PARAMETERS-----", 29) == 0) {
         dataType = "EC";
@@ -242,10 +249,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataType = "EC";
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
         if (XMEMCMP(data + 31, "Proc-Type", 9) == 0) {
             info.passwd_cb = wp_pem_password_cb;
             info.passwd_userdata = (void*)&wpPwCb;
         }
+    #endif
     }
     else if (XMEMCMP(data, "-----BEGIN PRIVATE KEY-----", 27) == 0) {
         type = PKCS8_PRIVATEKEY_TYPE;
@@ -265,6 +274,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
     }
+#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (XMEMCMP(data, "-----BEGIN ENCRYPTED PRIVATE KEY-----", 37) == 0) {
         type = PKCS8_ENC_PRIVATEKEY_TYPE;
         dataType = NULL;
@@ -274,19 +284,46 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         info.passwd_cb = wp_pem_password_cb;
         info.passwd_userdata = (void*)&wpPwCb;
     }
+#endif
     else {
         ok = 0;
     }
 
     if (ok && !done) {
         /* Decode the PEM to DER using wolfSSL. */
-        rc = wc_PemToDer(data, len, type, &der, NULL, &info, &format);
+        rc = wc_PemToDer(data, len, type, &der, NULL, &info, &algoId);
         if (rc != 0) {
             ok = 0;
         }
-    }
-    if (ok) {
-        *used = info.consumed;
+    #if LIBWOLFSSL_VERSION_HEX < 0x05000000
+        /* Put back PKCS #8 wrapper so the OID can be checked. */
+        if (ok && ((type ==PKCS8_PRIVATEKEY_TYPE) ||
+                   (type == PKCS8_ENC_PRIVATEKEY_TYPE))) {
+            DerBuffer* pkcs8Der = NULL;
+            word32 pkcs8Sz;
+
+            rc = wc_CreatePKCS8Key(NULL, &pkcs8Sz, der->buffer, der->length,
+                algoId, NULL, 0);
+            if (rc != LENGTH_ONLY_E) {
+                ok = 0;
+            }
+            if (ok) {
+                rc = wc_AllocDer(&pkcs8Der, pkcs8Sz, DYNAMIC_TYPE_KEY, NULL);
+                if (rc != 0) {
+                    ok = 0;
+                }
+            }
+            if (ok) {
+                rc = wc_CreatePKCS8Key(pkcs8Der->buffer, &pkcs8Der->length,
+                    der->buffer, der->length, algoId, NULL, 0);
+                if (rc < 0) {
+                    ok = 0;
+                }
+            }
+            wc_FreeDer(&der);
+            der = pkcs8Der;
+        }
+    #endif
     }
 
     /* Construct parameters to pass to callback. */
@@ -328,7 +365,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
  * @param [in]      dataCb     Callback to pass the decoded data to.
  * @param [in]      dataCbArg  Argument to pass to callback.
  * @param [in]      pwCb       Password callback.
- * @param [in]      pwCbArg    Argment to pass to password callback.
+ * @param [in]      pwCbArg    Argument to pass to password callback.
  * @return  1 on success or not data.
  * @return  0 on failure.
  */
@@ -341,7 +378,6 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     unsigned char* data = NULL;
     word32 len = 0;
     word32 idx = 0;
-    word32 used;
 
     (void)ctx;
     (void)selection;
@@ -354,22 +390,15 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     else if (data == NULL) {
         done = 1;
     }
-    while ((!done) && ok) {
-        /* Find the PEM header. */
+    if (!done) {
         idx += wp_pem2der_find_header(data + idx, len - idx);
         /* No header means nothing to do. */
         if (idx == len) {
             done = 1;
         }
         if (!done) {
-            ok = wp_pem2der_decode_data(data + idx, len - idx, &used,
-                dataCb, dataCbArg, pwCb, pwCbArg);
-            if (ok) {
-                idx += used;
-                if (idx == len) {
-                    done = 1;
-                }
-            }
+            ok = wp_pem2der_decode_data(data + idx, len - idx, dataCb,
+                dataCbArg, pwCb, pwCbArg);
         }
     }
     /* Dispose of the PEM data buffer. */

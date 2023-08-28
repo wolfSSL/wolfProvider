@@ -27,8 +27,11 @@
 #include <openssl/evp.h>
 #include <openssl/cmac.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
+
+#ifdef WP_HAVE_CMAC
 
 /**
  * CMAC context structure when using wolfSSL for implementation.
@@ -120,9 +123,14 @@ static int wp_cmac_set_key(wp_CmacCtx* macCtx, const unsigned char* key,
         XMEMCPY(macCtx->key, key, keyLen);
 
         if (restart) {
+        #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
             int rc = wc_InitCmac_ex(&macCtx->cmac, macCtx->key,
                 (word32)macCtx->keyLen, macCtx->type, NULL, NULL,
                 INVALID_DEVID);
+        #else
+            int rc = wc_InitCmac(&macCtx->cmac, macCtx->key,
+                (word32)macCtx->keyLen, macCtx->type, NULL);
+        #endif
             if (rc != 0) {
                 ok = 0;
             }
@@ -209,7 +217,7 @@ static int wp_cmac_update(wp_CmacCtx* macCtx, const unsigned char* data,
     int ok = 1;
     int rc;
 
-    rc = wc_CmacUpdate(&macCtx->cmac, data, dataLen);
+    rc = wc_CmacUpdate(&macCtx->cmac, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }
@@ -337,7 +345,7 @@ typedef struct wp_cmac_cipher {
     size_t keySize;
 } wp_cmac_cipher;
 
-/** wolfSSL CMAC compatable cipher names and key sizes. */
+/** wolfSSL CMAC compatible cipher names and key sizes. */
 static const wp_cmac_cipher wp_cmac_cipher_names[] = {
     { "AES-128-CBC", AES_128_KEY_SIZE },
     { "AES-192-CBC", AES_192_KEY_SIZE },
@@ -458,4 +466,6 @@ const OSSL_DISPATCH wp_cmac_functions[] = {
     { OSSL_FUNC_MAC_SET_CTX_PARAMS,      (DFUNC)wp_cmac_set_ctx_params      },
     { 0, NULL }
 };
+
+#endif /* WP_HAVE_CMAC */
 

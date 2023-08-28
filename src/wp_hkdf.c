@@ -197,8 +197,10 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
                 ok = 0;
             }
             if (ok) {
+                PRIVATE_KEY_UNLOCK();
                 rc = wc_HKDF_Extract(ctx->mdType, ctx->salt,
                     (word32)ctx->saltSz, ctx->key, (word32)ctx->keySz, key);
+                PRIVATE_KEY_LOCK();
                 if (rc != 0) {
                     ok = 0;
                 }
@@ -206,8 +208,10 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
             break;
 
         case EVP_KDF_HKDF_MODE_EXPAND_ONLY:
+            PRIVATE_KEY_UNLOCK();
             rc = wc_HKDF_Expand(ctx->mdType, ctx->key, (word32)ctx->keySz,
                 ctx->info, (word32)ctx->infoSz, key, (word32)keyLen);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
@@ -215,9 +219,11 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
 
         case EVP_KDF_HKDF_MODE_EXTRACT_AND_EXPAND:
         default:
+            PRIVATE_KEY_UNLOCK();
             rc = wc_HKDF(ctx->mdType, ctx->key, (word32)ctx->keySz, ctx->salt,
                 (word32)ctx->saltSz, ctx->info, (word32)ctx->infoSz, key,
                 (word32)keyLen);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
@@ -231,7 +237,7 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
 /**
  * Find and set the HKDF mode into the context.
  *
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @param [in, out] ctx     HKDF context object.
  * @return  1 on success.
  * @return  0 on failure.
@@ -279,7 +285,7 @@ static int wp_hkdf_base_get_mode(const OSSL_PARAM params[], int* mode)
  * Set the base HKDF context parameters.
  *
  * @param [in, out] ctx     HKDF context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -344,7 +350,7 @@ static int wp_kdf_hkdf_get_ctx_params(wp_HkdfCtx* ctx, OSSL_PARAM params[])
  * Find and set the combined info parameters into the context.
  *
  * @param [in, out] ctx     HKDF context object.
- * @param [in]      params  Aray of parameters.
+ * @param [in]      params  Array of parameters.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -514,7 +520,7 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     ctx->infoSz = idx;
 
     rc = wc_HKDF_Expand(ctx->mdType, inKey, (word32)inKeyLen, ctx->info,
-        (word32)ctx->infoSz, key, keyLen);
+        (word32)ctx->infoSz, key, (word32)keyLen);
     if (rc != 0) {
         ok = 0;
     }
@@ -560,7 +566,7 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
         salt = secret;
         saltLen = ctx->mdLen;
         /* Calculate the digest of an empty string. */
-        rc = wc_Hash(ctx->mdType, zeros, 0, secret, ctx->mdLen);
+        rc = wc_Hash(ctx->mdType, zeros, 0, secret, (word32)ctx->mdLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -572,7 +578,8 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
 
     if (ok) {
         (void)keyLen;
-        rc = wc_HKDF_Extract(ctx->mdType, salt, saltLen, inKey, inKeyLen, key);
+        rc = wc_HKDF_Extract(ctx->mdType, salt, (word32)saltLen, inKey,
+            (word32)inKeyLen, key);
         if (rc != 0) {
             ok = 0;
         }
