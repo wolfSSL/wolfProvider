@@ -20,6 +20,8 @@
 #
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source ${SCRIPT_DIR}/utils-openssl.sh
+
 CERT_DIR=$SCRIPT_DIR/../certs
 LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
 
@@ -213,30 +215,6 @@ do_client_test() { # usage: do_client_test [extraArgs]
     done
 }
 
-if [ "$OPENSSL_DIR" = "" ]; then
-    if [ -x "/usr/bin/openssl" ]; then
-        OPENSSL_DIR="/usr"
-    elif [ -x "/ur/local/bin/openssl" ]; then
-        OPENSSL_DIR="/usr/local"
-    else
-        echo "Can't find OpenSSL 3.0.0"
-        exit 1
-    fi
-else
-    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_DIR/lib"
-fi
-OPENSSL_BIN="$OPENSSL_DIR/bin/openssl"
-
-OSSL_VER=`$OPENSSL_BIN version`
-case $OSSL_VER in
-    OpenSSL\ 3.*) ;;
-    *)
-      echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
-      echo "Set: OPENSSL_DIR"
-      exit 1
-      ;;
-esac
-
 FAIL=0
 WOLFPROV_NAME="libwolfprov"
 WOLFPROV_PATH=$PWD/.libs
@@ -245,6 +223,14 @@ CURVES=prime256v1
 #CURVES=X25519
 OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
 OPENSSL_PORT=$(generate_port)
+
+init_openssl
+if [ -z $LD_LIBRARY_PATH ]; then
+    export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
+else
+    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
+fi
+printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
 printf "\tClient testing\n" | tee $LOG_FILE
 start_openssl_server

@@ -54,9 +54,9 @@ wolfProvider is a library that can be used as an Provider in OpenSSL.
 ### OpenSSL
 
 ```
-git clone https://github.com/openssl/openssl.git
+git clone --depth=1 -b openssl-3.0.0 https://github.com/openssl/openssl.git
 cd openssl
-./config no-fips
+./config no-fips shared
 make
 sudo make install
 ```

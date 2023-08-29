@@ -20,6 +20,7 @@
 #
 
 # Execute this script from: wolfProvider
+#set -e
 
 do_cleanup() {
     echo "Cleanup"
@@ -33,7 +34,8 @@ do_trap() {
 
 trap do_trap INT TERM
 
-source ${PWD}/scripts/openssl-3_0_0.sh
+source ${PWD}/scripts/utils-openssl.sh
+source ${PWD}/scripts/utils-wolfssl.sh
 
 #
 # evp_test
@@ -117,7 +119,6 @@ evp_test_run() {
         evppkey_rsa.txt
     )
 
-    FAIL_CNT=0
     for T in ${EVP_TESTS[@]}
     do
         printf "\t\t$T ... "
@@ -131,18 +132,18 @@ evp_test_run() {
             FAIL_CNT=$((FAIL_CNT+1))
         fi
     done
-    if [ $FAIL_CNT != 0 ]; then
-        printf "\tFAILED=${FAIL_CNT}\n"
-        # Exit code must now indicate failure.
-        EC=1
-    fi
 }
 
 #
 # endecode_test
 #
 
-endecode_test_parse_result() {
+endecode_test_run() {
+    printf "\tTesting with evp_test:\n"
+
+    RES=`./endecode_test \
+        -rsa certs/ee-key.pem -pss certs/ca-pss-key.pem -context \
+        -provider libwolfprov 2>&1 | grep 'ok [1-9]'`
     OLD_IFS=$IFS
     IFS=$'\n'
     for R in $RES
@@ -159,7 +160,6 @@ endecode_test_parse_result() {
         esac
     done
 
-    FAIL_CNT=0
     for R in $RES_FAIL
     do
         case $R in
@@ -185,23 +185,6 @@ endecode_test_parse_result() {
         esac
     done
     IFS=$OLD_IFS
-
-    if [ $FAIL_CNT != 0 ]; then
-        printf "\t\tFAILED=${FAIL_CNT}\n"
-        # Exit code must now indicate failure.
-        EC=1
-    else
-        printf "\t\tPASS\n"
-    fi
-}
-
-endecode_test_run() {
-    printf "\tTesting with evp_test:\n"
-
-    RES=`./endecode_test \
-        -rsa certs/ee-key.pem -pss certs/ca-pss-key.pem -context \
-        -provider libwolfprov 2>&1 | grep 'ok [1-9]'`
-    endecode_test_parse_result
 }
 
 #
@@ -213,7 +196,6 @@ evp_libctx_test_run() {
 
     RES=`./evp_libctx_test -provider libwolfprov 2>&1`
 
-    FAIL_CNT=0
     IGNORE_NEXT_ERROR="no"
     IGNORE_GROUP_ERROR="no"
 
@@ -255,14 +237,6 @@ evp_libctx_test_run() {
         esac
     done
     IFS=$OLD_IFS
-
-    if [ $FAIL_CNT != 0 ]; then
-        printf "\t\tFAILED=${FAIL_CNT}\n"
-        # Exit code must now indicate failure.
-        EC=1
-    else
-        printf "\t\tPASS\n"
-    fi
 }
 
 #
@@ -273,57 +247,78 @@ WOLFPROV_DIR=$PWD
 WOLFPROV_CONFIG=$WOLFPROV_DIR/provider.conf
 WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 LOGDIR=$WOLFPROV_DIR/scripts/log
-LOGFILE=$LOGDIR/openssl_test.log
+LOG_FILE=$LOGDIR/dependencies.log
 export OPENSSL_MODULES=$WOLFPROV_PATH
 
 if [ ! -d "$LOGDIR" ]; then
     mkdir $LOGDIR
 fi
 
-if [ "$MAKE_JOBS" = "" ]; then
-    MAKE_JOBS=4
+# Fresh start
+rm -f $LOG_FILE
+
+if [ -z $NUMCPU ]; then
+    if [[ "$OSTYPE" == "linux-gnu" ]]; then
+      export NUMCPU=`grep -c ^processor /proc/cpuinfo`
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+      export NUMCPU=`sysctl -n hw.ncpu`
+    else
+      export NUMCPU=4
+    fi
 fi
 
-echo "START OpenSSL 3.0.0 install"
-if [ "$OPENSSL_SRC" = "" ]; then
-    install_openssl
-    OPENSSL_TEST=./openssl-3_0_0/test
+init_openssl
+init_wolfssl
+
+if [ -z $LD_LIBRARY_PATH ]; then
+    export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 else
-    OPENSSL_TEST=$OPENSSL_SRC/test
+    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 fi
-if [ ! -d $OPENSSL_TEST ]; then
-    echo "OpenSSL source not available: $OPENSSL_TEST"
-    exit 1
+printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
+
+# Set up wolfProvider
+cd ${WOLFPROV_DIR}
+if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
+    ./autogen.sh &>> $LOG_FILE
+    ./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
+fi
+make &>> $LOG_FILE
+if [ $? != 0 ]; then
+  tail -n 20 $LOG_FILE
+  do_cleanup
+  exit 1
 fi
 
-if [ "$OPENSSL_DIR" = "" ]; then
-    OPENSSL_DIR=${OPENSSL_3_0_0_INSTALL}
-else
-    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_DIR/lib"
+make test &>> $LOG_FILE
+if [ $? != 0 ]; then
+  tail -n 20 $LOG_FILE
+  do_cleanup
+  exit 1
 fi
-OPENSSL_BIN="$OPENSSL_DIR/bin/openssl"
-
-OSSL_VER=`$OPENSSL_BIN version`
-case $OSSL_VER in
-    OpenSSL\ 3.*) ;;
-    *)
-      echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
-      echo "Set: OPENSSL_DIR"
-      exit 1
-      ;;
-esac
-echo "FINISH OpenSSL 3.0.0 install"
-echo
+make install &>> $LOG_FILE
+if [ $? != 0 ]; then
+  tail -n 20 $LOG_FILE
+  do_cleanup
+  exit 1
+fi
 
 # Start with returning success
-EC=0
+FAIL_CNT=0
 cd $OPENSSL_TEST
 
-echo "START Testing with OpenSSL tests"
+printf "START Testing with OpenSSL tests\n"
 evp_test_run
 endecode_test_run
 evp_libctx_test_run
-echo "FINISHED Testing with OpenSSL tests"
+printf "FINISHED Testing with OpenSSL tests\n"
 
-exit $EC
+if [ $FAIL_CNT != 0 ]; then
+    printf "Number of tests failed: $FAIL_CNT\n"
+else
+    printf "All tests passed!\n"
+fi
+
+printf "Script ran for $SECONDS seconds\n"
+exit $FAIL_CNT
 
