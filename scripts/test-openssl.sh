@@ -247,7 +247,7 @@ WOLFPROV_DIR=$PWD
 WOLFPROV_CONFIG=$WOLFPROV_DIR/provider.conf
 WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 LOGDIR=$WOLFPROV_DIR/scripts/log
-LOGFILE=$LOGDIR/dependencies.log
+LOG_FILE=$LOGDIR/dependencies.log
 export OPENSSL_MODULES=$WOLFPROV_PATH
 
 if [ ! -d "$LOGDIR" ]; then
@@ -255,7 +255,7 @@ if [ ! -d "$LOGDIR" ]; then
 fi
 
 # Fresh start
-rm -f $LOGFILE
+rm -f $LOG_FILE
 
 if [ -z $NUMCPU ]; then
     if [[ "$OSTYPE" == "linux-gnu" ]]; then
@@ -280,12 +280,28 @@ printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 # Set up wolfProvider
 cd ${WOLFPROV_DIR}
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh &>> $LOGFILE
-    ./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOGFILE
+    ./autogen.sh &>> $LOG_FILE
+    ./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
 fi
-make &>> $LOGFILE
-make test &>> $LOGFILE
-make install &>> $LOGFILE
+make &>> $LOG_FILE
+if [ $? != 0 ]; then
+  tail -n 20 $LOG_FILE
+  do_cleanup
+  exit 1
+fi
+
+make test &>> $LOG_FILE
+if [ $? != 0 ]; then
+  tail -n 20 $LOG_FILE
+  do_cleanup
+  exit 1
+fi
+make install &>> $LOG_FILE
+if [ $? != 0 ]; then
+  tail -n 20 $LOG_FILE
+  do_cleanup
+  exit 1
+fi
 
 # Start with returning success
 FAIL_CNT=0

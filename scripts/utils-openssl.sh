@@ -32,7 +32,7 @@ install_openssl() {
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tClone OpenSSL ${OPENSSL_TAG} ... "
         git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
-             ${OPENSSL_SOURCE_DIR} &>> $LOGFILE
+             ${OPENSSL_SOURCE_DIR} &>> $LOG_FILE
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             do_cleanup
@@ -44,7 +44,7 @@ install_openssl() {
     cd ${OPENSSL_SOURCE_DIR}
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
-        ./config shared --prefix=${OPENSSL_INSTALL_DIR} &>> $LOGFILE
+        ./config shared --prefix=${OPENSSL_INSTALL_DIR} &>> $LOG_FILE
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             do_cleanup
@@ -54,7 +54,7 @@ install_openssl() {
     fi
 
     printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
-    make -j$NUMCPU &>> $LOGFILE
+    make -j$NUMCPU &>> $LOG_FILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
@@ -63,7 +63,7 @@ install_openssl() {
     printf "Done.\n"
 
     printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
-    make -j$NUMCPU install &>> $LOGFILE
+    make -j$NUMCPU install &>> $LOG_FILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
