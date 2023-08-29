@@ -1,3 +1,6 @@
+# General ignores
+*.swp
+*.swo
 
 
 # Ignore all things produced by autoreconf
@@ -8,6 +11,7 @@
 /config.guess
 /config.sub
 /configure
+/configure~
 /depcomp
 /install-sh
 /ltmain.sh
@@ -47,5 +51,7 @@
 /scripts/log/*.log
 *.gcno
 *.gcda
+
+# Installed dependencies
 /openssl*
 /wolfssl*
