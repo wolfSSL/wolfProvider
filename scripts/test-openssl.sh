@@ -257,8 +257,14 @@ fi
 # Fresh start
 rm -f $LOGFILE
 
-if [ "$MAKE_JOBS" = "" ]; then
-    MAKE_JOBS=8
+if [ -z $NUMCPU ]; then
+    if [[ "$OSTYPE" == "linux-gnu" ]]; then
+      export NUMCPU=`grep -c ^processor /proc/cpuinfo`
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+      export NUMCPU=`sysctl -n hw.ncpu`
+    else
+      export NUMCPU=4
+    fi
 fi
 
 init_openssl

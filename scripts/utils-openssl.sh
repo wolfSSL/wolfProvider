@@ -54,7 +54,7 @@ install_openssl() {
     fi
 
     printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
-    make -j$MAKE_JOBS &>> $LOGFILE
+    make -j$NUMCPU &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
@@ -63,7 +63,7 @@ install_openssl() {
     printf "Done.\n"
 
     printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
-    make -j$MAKE_JOBS install &>> $LOGFILE
+    make -j$NUMCPU install &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup

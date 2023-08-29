@@ -60,7 +60,7 @@ install_wolfssl() {
     fi
 
     printf "\tBuild wolfSSL ${WOLFSSL_TAG} ... "
-    make -j$MAKE_JOBS &>> $LOGFILE
+    make -j$NUMCPU &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
@@ -69,7 +69,7 @@ install_wolfssl() {
     printf "Done.\n"
 
     printf "\tInstalling wolfSSL ${WOLFSSL_TAG} ... "
-    make -j$MAKE_JOBS install &>> $LOGFILE
+    make -j$NUMCPU install &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
         do_cleanup
