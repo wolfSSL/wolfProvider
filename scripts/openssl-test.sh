@@ -33,8 +33,8 @@ do_trap() {
 
 trap do_trap INT TERM
 
-source ${PWD}/scripts/openssl-3_0_0.sh
-source ${PWD}/scripts/wolfssl-5_0_0.sh
+source ${PWD}/scripts/openssl-utils.sh
+source ${PWD}/scripts/wolfssl-utils.sh
 
 #
 # evp_test
@@ -274,7 +274,7 @@ WOLFPROV_DIR=$PWD
 WOLFPROV_CONFIG=$WOLFPROV_DIR/provider.conf
 WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 LOGDIR=$WOLFPROV_DIR/scripts/log
-LOGFILE=$LOGDIR/openssl_test.log
+LOGFILE=$LOGDIR/dependencies.log
 export OPENSSL_MODULES=$WOLFPROV_PATH
 
 if [ ! -d "$LOGDIR" ]; then
@@ -285,41 +285,26 @@ fi
 rm -f $LOGFILE
 
 if [ "$MAKE_JOBS" = "" ]; then
-    MAKE_JOBS=4
+    MAKE_JOBS=8
 fi
 
-echo "START OpenSSL 3.0.0 install"
-if [ "$OPENSSL_SRC" = "" ]; then
-    install_openssl
-    OPENSSL_TEST=./openssl-3_0_0/test
+init_openssl
+init_wolfssl
+
+if [ -z $LD_LIBRARY_PATH ]; then
+    export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 else
-    OPENSSL_TEST=$OPENSSL_SRC/test
+    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 fi
-if [ ! -d $OPENSSL_TEST ]; then
-    echo "OpenSSL source not available: $OPENSSL_TEST"
-    exit 1
-fi
+echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 
-if [ "$OPENSSL_DIR" = "" ]; then
-    OPENSSL_DIR=${OPENSSL_3_0_0_INSTALL}
-else
-    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_DIR/lib"
-fi
-OPENSSL_BIN="$OPENSSL_DIR/bin/openssl"
-
-OSSL_VER=`$OPENSSL_BIN version`
-case $OSSL_VER in
-    OpenSSL\ 3.*) ;;
-    *)
-      echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
-      echo "Set: OPENSSL_DIR"
-      exit 1
-      ;;
-esac
-echo "FINISH OpenSSL 3.0.0 install"
-echo
-
-install_wolfssl
+# Set up wolfProvider
+cd ${WOLFPROV_DIR}
+./autogen.sh &>> $LOGFILE
+./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOGFILE
+make &>> $LOGFILE
+make test &>> $LOGFILE
+make install &>> $LOGFILE
 
 # Start with returning success
 EC=0

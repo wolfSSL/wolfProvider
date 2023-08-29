@@ -23,30 +23,37 @@
 # OpenSSL 3.0.0
 #
 
-download_openssl_300() {
-    OPENSSL_3_0_0_GIT="https://github.com/openssl/openssl.git"
-    printf "\tClone OpenSSL 3.0.0 ... "
-    git clone --depth=1 -b ${OPENSSL_3_0_0_TAG} ${OPENSSL_3_0_0_GIT} \
-         ${OPENSSL_3_0_0_SOURCE} &>> $LOGFILE
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        do_cleanup
-        exit 1
-    fi
-    printf "Done.\n"
-}
+OPENSSL_GIT="https://github.com/openssl/openssl.git"
+OPENSSL_TAG="openssl-3.0.0"
+OPENSSL_SOURCE_DIR=$PWD/openssl-source
+OPENSSL_INSTALL_DIR=$PWD/openssl-install
 
-build_openssl_300() {
-    printf "\tConfigure OpenSSL 3.0.0 ... "
-    ./config shared --prefix=${OPENSSL_3_0_0_INSTALL} &>> $LOGFILE
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        do_cleanup
-        exit 1
+install_openssl() {
+    if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
+        printf "\tClone OpenSSL ${OPENSSL_TAG} ... "
+        git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
+             ${OPENSSL_SOURCE_DIR} &>> $LOGFILE
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
     fi
-    printf "Done.\n"
 
-    printf "\tBuild OpenSSL 3.0.0 ... "
+    cd ${OPENSSL_SOURCE_DIR}
+    if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
+        printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
+        ./config shared --prefix=${OPENSSL_INSTALL_DIR} &>> $LOGFILE
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+    fi
+
+    printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
     make -j$MAKE_JOBS &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
@@ -54,10 +61,8 @@ build_openssl_300() {
         exit 1
     fi
     printf "Done.\n"
-}
 
-install_openssl_300() {
-    printf "\tInstalling OpenSSL 3.0.0 ... "
+    printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
     make -j$MAKE_JOBS install &>> $LOGFILE
     if [ $? != 0 ]; then
         printf "ERROR.\n"
@@ -65,31 +70,25 @@ install_openssl_300() {
         exit 1
     fi
     printf "Done.\n"
+
+    cd ..
 }
 
-install_openssl() {
-    if [ -z "${OPENSSL_3_0_0_INSTALL}" ]; then
-        OPENSSL_3_0_0_TAG="openssl-3.0.0"
-        OPENSSL_3_0_0_SOURCE=$PWD/openssl-3_0_0
-        OPENSSL_3_0_0_INSTALL=$PWD/openssl-3_0_0-install
-        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_3_0_0_INSTALL/lib64"
+init_openssl() {
+    install_openssl
+    printf "\tOpenSSL ${OPENSSL_TAG} install at: ${OPENSSL_INSTALL_DIR}\n"
 
-        if [ ! -d ${OPENSSL_3_0_0_SOURCE} ]; then
-            download_openssl_300
-            cd ${OPENSSL_3_0_0_SOURCE}
-            build_openssl_300
-            cd ..
-            rm -rf ${OPENSSL_3_0_0_INSTALL}
-        fi
-        if [ ! -d ${OPENSSL_3_0_0_INSTALL} ]; then
-            cd ${OPENSSL_3_0_0_SOURCE}
-            install_openssl_300
-            cd ..
-        else
-            printf "\tOpenSSL 3.0.0 install exists.\n"
-        fi
-    else
-        printf "\tOpenSSL 3.0.0 install from: ${OPENSSL_3_0_0_INSTALL}\n"
-    fi
+    OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
+    OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
+
+    OSSL_VER=`$OPENSSL_BIN version`
+    case $OSSL_VER in
+        OpenSSL\ 3.*) ;;
+        *)
+            echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
+            echo "Set: OPENSSL_DIR"
+            exit 1
+            ;;
+    esac
 }
 

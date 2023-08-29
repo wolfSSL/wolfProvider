@@ -48,3 +48,4 @@
 *.gcno
 *.gcda
 /openssl*
+/wolfssl*
