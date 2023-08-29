@@ -428,7 +428,7 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
         if (ok && src->hasPriv &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
             dst->hasPriv = 1;
-            rc = mp_copy((mp_int*)src->key.k, dst->key.k);
+            rc = mp_copy(&(src->key.k), &(dst->key.k));
             if (rc != 0) {
                 ok = 0;
             }
@@ -770,7 +770,7 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-            ecc->key.k))) {
+            &(ecc->key.k)))) {
         ok = 0;
     }
     /* Private key. */
@@ -825,7 +825,7 @@ static int wp_ecc_has(const wp_Ecc* ecc, int selection)
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_ecc_match(const wp_Ecc* ecc1, const wp_Ecc* ecc2, int selection)
+static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
 {
     int ok = 1;
 
@@ -837,7 +837,7 @@ static int wp_ecc_match(const wp_Ecc* ecc1, const wp_Ecc* ecc2, int selection)
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-        (mp_cmp((mp_int*)ecc1->key.k, (mp_int*)ecc2->key.k) != MP_EQ)) {
+        (mp_cmp(&(ecc1->key.k), &(ecc2->key.k)) != MP_EQ)) {
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) &&
@@ -993,10 +993,10 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
             OSSL_PKEY_PARAM_PUB_KEY);
     }
     if (ok && priv && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-            ecc->key.k))) {
+            &(ecc->key.k)))) {
         ok = 0;
     }
-    if (ok && (!mp_iszero(ecc->key.k))) {
+    if (ok && (!mp_iszero(&(ecc->key.k)))) {
         ecc->key.type = ECC_PRIVATEKEY;
         ecc->hasPriv = 1;
     }
@@ -1255,7 +1255,7 @@ static size_t wp_ecc_export_keypair_alloc_size(wp_Ecc* ecc, int priv)
     /* Public key. */
     size_t len = WP_ECC_PUBLIC_KEY_SIZE(ecc);
     if (priv) {
-        len += mp_unsigned_bin_size(ecc->key.k);
+        len += mp_unsigned_bin_size(&(ecc->key.k));
     }
     return len;
 }
@@ -1291,7 +1291,7 @@ static int wp_ecc_export_keypair(wp_Ecc* ecc, OSSL_PARAM* params, int* pIdx,
             data + *idx, outLen);
         *idx += outLen;
         if (priv && (!wp_param_set_mp(&params[i++],
-                OSSL_PKEY_PARAM_PRIV_KEY, ecc->key.k, data, idx))) {
+                OSSL_PKEY_PARAM_PRIV_KEY, &(ecc->key.k), data, idx))) {
             ok = 0;
         }
     }
