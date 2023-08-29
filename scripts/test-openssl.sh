@@ -34,8 +34,8 @@ do_trap() {
 
 trap do_trap INT TERM
 
-source ${PWD}/scripts/openssl-utils.sh
-source ${PWD}/scripts/wolfssl-utils.sh
+source ${PWD}/scripts/utils-openssl.sh
+source ${PWD}/scripts/utils-wolfssl.sh
 
 #
 # evp_test
