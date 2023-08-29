@@ -34,6 +34,7 @@ do_trap() {
 trap do_trap INT TERM
 
 source ${PWD}/scripts/openssl-3_0_0.sh
+source ${PWD}/scripts/wolfssl-5_0_0.sh
 
 #
 # evp_test
@@ -317,6 +318,8 @@ case $OSSL_VER in
 esac
 echo "FINISH OpenSSL 3.0.0 install"
 echo
+
+install_wolfssl
 
 # Start with returning success
 EC=0

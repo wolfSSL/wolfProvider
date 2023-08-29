@@ -24,15 +24,25 @@
 #
 
 download_wolfssl_500() {
-    WOLFSSL_5_0_0_GIT="git@github.com:wolfssl/wolfssl.git"
+    WOLFSSL_5_0_0_GIT="https://github.com/wolfSSL/wolfssl.git"
     printf "\tClone wolfSSL 5.0.0 ... "
     git clone --depth=1 -b ${WOLFSSL_5_0_0_TAG} ${WOLFSSL_5_0_0_GIT} \
-         ${WOLFSSL_5_0_0_SOURCE} &> $LOGFILE
+         ${WOLFSSL_5_0_0_SOURCE} &>> $LOGFILE
+    if [ $? != 0 ]; then
+        printf "ERROR.\n"
+        do_cleanup
+        exit 1
+    fi
     printf "Done.\n"
 }
 
 configure_wolfssl() {
-    ./configure $1 "$2" -prefix=${WOLFSSL_5_0_0_INSTALL} &> $LOGFILE
+    ./configure $1 "$2" -prefix=${WOLFSSL_5_0_0_INSTALL} &>> $LOGFILE
+    if [ $? != 0 ]; then
+        printf "ERROR.\n"
+        do_cleanup
+        exit 1
+    fi
 }
 
 build_wolfssl_500() {
