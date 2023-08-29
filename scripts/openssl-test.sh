@@ -20,6 +20,7 @@
 #
 
 # Execute this script from: wolfProvider
+#set -e
 
 do_cleanup() {
     echo "Cleanup"
@@ -118,7 +119,6 @@ evp_test_run() {
         evppkey_rsa.txt
     )
 
-    FAIL_CNT=0
     for T in ${EVP_TESTS[@]}
     do
         printf "\t\t$T ... "
@@ -132,18 +132,18 @@ evp_test_run() {
             FAIL_CNT=$((FAIL_CNT+1))
         fi
     done
-    if [ $FAIL_CNT != 0 ]; then
-        printf "\tFAILED=${FAIL_CNT}\n"
-        # Exit code must now indicate failure.
-        EC=1
-    fi
 }
 
 #
 # endecode_test
 #
 
-endecode_test_parse_result() {
+endecode_test_run() {
+    printf "\tTesting with evp_test:\n"
+
+    RES=`./endecode_test \
+        -rsa certs/ee-key.pem -pss certs/ca-pss-key.pem -context \
+        -provider libwolfprov 2>&1 | grep 'ok [1-9]'`
     OLD_IFS=$IFS
     IFS=$'\n'
     for R in $RES
@@ -160,7 +160,6 @@ endecode_test_parse_result() {
         esac
     done
 
-    FAIL_CNT=0
     for R in $RES_FAIL
     do
         case $R in
@@ -186,23 +185,6 @@ endecode_test_parse_result() {
         esac
     done
     IFS=$OLD_IFS
-
-    if [ $FAIL_CNT != 0 ]; then
-        printf "\t\tFAILED=${FAIL_CNT}\n"
-        # Exit code must now indicate failure.
-        EC=1
-    else
-        printf "\t\tPASS\n"
-    fi
-}
-
-endecode_test_run() {
-    printf "\tTesting with evp_test:\n"
-
-    RES=`./endecode_test \
-        -rsa certs/ee-key.pem -pss certs/ca-pss-key.pem -context \
-        -provider libwolfprov 2>&1 | grep 'ok [1-9]'`
-    endecode_test_parse_result
 }
 
 #
@@ -214,7 +196,6 @@ evp_libctx_test_run() {
 
     RES=`./evp_libctx_test -provider libwolfprov 2>&1`
 
-    FAIL_CNT=0
     IGNORE_NEXT_ERROR="no"
     IGNORE_GROUP_ERROR="no"
 
@@ -256,14 +237,6 @@ evp_libctx_test_run() {
         esac
     done
     IFS=$OLD_IFS
-
-    if [ $FAIL_CNT != 0 ]; then
-        printf "\t\tFAILED=${FAIL_CNT}\n"
-        # Exit code must now indicate failure.
-        EC=1
-    else
-        printf "\t\tPASS\n"
-    fi
 }
 
 #
@@ -296,7 +269,7 @@ if [ -z $LD_LIBRARY_PATH ]; then
 else
     export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 fi
-echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
 # Set up wolfProvider
 cd ${WOLFPROV_DIR}
@@ -309,14 +282,21 @@ make test &>> $LOGFILE
 make install &>> $LOGFILE
 
 # Start with returning success
-EC=0
+FAIL_CNT=0
 cd $OPENSSL_TEST
 
-echo "START Testing with OpenSSL tests"
+printf "START Testing with OpenSSL tests\n"
 evp_test_run
 endecode_test_run
 evp_libctx_test_run
-echo "FINISHED Testing with OpenSSL tests"
+printf "FINISHED Testing with OpenSSL tests\n"
 
-exit $EC
+if [ $FAIL_CNT != 0 ]; then
+    printf "Number of tests failed: $FAIL_CNT\n"
+else
+    printf "All tests passed!\n"
+fi
+
+printf "Script ran for $SECONDS seconds\n"
+exit $FAIL_CNT
 
