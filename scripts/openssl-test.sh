@@ -300,8 +300,10 @@ echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 
 # Set up wolfProvider
 cd ${WOLFPROV_DIR}
-./autogen.sh &>> $LOGFILE
-./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOGFILE
+if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
+    ./autogen.sh &>> $LOGFILE
+    ./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOGFILE
+fi
 make &>> $LOGFILE
 make test &>> $LOGFILE
 make install &>> $LOGFILE
