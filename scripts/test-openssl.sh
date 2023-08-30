@@ -296,12 +296,6 @@ if [ $? != 0 ]; then
   do_cleanup
   exit 1
 fi
-make install &>> $LOG_FILE
-if [ $? != 0 ]; then
-  tail -n 20 $LOG_FILE
-  do_cleanup
-  exit 1
-fi
 
 # Start with returning success
 FAIL_CNT=0
