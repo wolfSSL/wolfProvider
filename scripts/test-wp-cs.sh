@@ -34,7 +34,7 @@ prepend() { # Usage: cmd 2>&1 | prepend "sometext "
 
 kill_servers() {
     if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
-        (kill -9 $OPENSSL_SERVER_PID) >/dev/null 2>&1
+        (kill -9 $OPENSSL_SERVER_PID) &>/dev/null
     fi
 }
 
@@ -149,7 +149,7 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         2>&1 | prepend "[server] " >>$LOG_FILE &
+         2>&1 | prepend "[server] " &>>$LOG_FILE &
     OPENSSL_SERVER_PID=$(($! - 1))
 
     sleep 0.1
@@ -170,7 +170,7 @@ do_client() { # usage: do_client [extraArgs]
              -cipher $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             2>&1 | prepend "[client] " >>$LOG_FILE
+             2>&1 | prepend "[client] " &>>$LOG_FILE
         )
     else
         (echo -n | \
@@ -178,7 +178,7 @@ do_client() { # usage: do_client [extraArgs]
              -ciphersuites $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             2>&1 | prepend "[client] " >>$LOG_FILE
+             2>&1 | prepend "[client] " &>>$LOG_FILE
         )
     fi
     if [ "$?" = "0" ]; then
