@@ -28,6 +28,7 @@ WOLFSSL_TAG="v5.0.0-stable"
 WOLFSSL_SOURCE_DIR=$PWD/wolfssl-source
 WOLFSSL_INSTALL_DIR=$PWD/wolfssl-install
 
+# Depends on OPENSSL_INSTALL_DIR
 install_wolfssl() {
     if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
         printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
@@ -46,7 +47,7 @@ install_wolfssl() {
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
         if [ -z "$WOLFSSL_CONFIG_OPTS" ]; then
             WOLFSSL_CONFIG_OPTS='--enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-aesctr --enable-aesccm --enable-x963kdf --enable-compkey --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-base16 --enable-aesgcm-stream --enable-curve25519 --enable-curve448 --enable-ed25519 --enable-ed448 --enable-pwdbased'
-            WOLFSSL_CONFIG_CPPFLAGS=CPPFLAGS="-DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DFP_MAX_BITS=16384 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
+            WOLFSSL_CONFIG_CPPFLAGS=CPPFLAGS="-I${OPENSSL_INSTALL_DIR} -DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DFP_MAX_BITS=16384 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
         fi
 
         ./autogen.sh &>> $LOG_FILE
