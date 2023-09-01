@@ -281,7 +281,7 @@ printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 cd ${WOLFPROV_DIR}
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
     ./autogen.sh &>> $LOG_FILE
-    ./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
+    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
 fi
 make -j$NUMCPU &>> $LOG_FILE
 if [ $? != 0 ]; then
