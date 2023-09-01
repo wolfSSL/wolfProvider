@@ -283,7 +283,7 @@ if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
     ./autogen.sh &>> $LOG_FILE
     ./configure --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
 fi
-make &>> $LOG_FILE
+make -j$NUMCPU &>> $LOG_FILE
 if [ $? != 0 ]; then
   tail -n 20 $LOG_FILE
   do_cleanup
