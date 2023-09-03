@@ -428,7 +428,8 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
         if (ok && src->hasPriv &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
             dst->hasPriv = 1;
-            rc = mp_copy(&(src->key.k), &(dst->key.k));
+            rc = mp_copy(wc_ecc_key_get_priv(&src->key),
+                wc_ecc_key_get_priv(&dst->key));
             if (rc != 0) {
                 ok = 0;
             }
@@ -770,7 +771,7 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-            &(ecc->key.k)))) {
+            wc_ecc_key_get_priv(&ecc->key)))) {
         ok = 0;
     }
     /* Private key. */
@@ -837,7 +838,8 @@ static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-        (mp_cmp(&(ecc1->key.k), &(ecc2->key.k)) != MP_EQ)) {
+        (mp_cmp(wc_ecc_key_get_priv(&ecc1->key),
+            wc_ecc_key_get_priv(&ecc2->key)) != MP_EQ)) {
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) &&
@@ -993,10 +995,10 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
             OSSL_PKEY_PARAM_PUB_KEY);
     }
     if (ok && priv && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-            &(ecc->key.k)))) {
+            wc_ecc_key_get_priv(&ecc->key)))) {
         ok = 0;
     }
-    if (ok && (!mp_iszero(&(ecc->key.k)))) {
+    if (ok && (!mp_iszero(wc_ecc_key_get_priv(&ecc->key)))) {
         ecc->key.type = ECC_PRIVATEKEY;
         ecc->hasPriv = 1;
     }
@@ -1255,7 +1257,7 @@ static size_t wp_ecc_export_keypair_alloc_size(wp_Ecc* ecc, int priv)
     /* Public key. */
     size_t len = WP_ECC_PUBLIC_KEY_SIZE(ecc);
     if (priv) {
-        len += mp_unsigned_bin_size(&(ecc->key.k));
+        len += mp_unsigned_bin_size(wc_ecc_key_get_priv(&ecc->key));
     }
     return len;
 }
@@ -1291,7 +1293,8 @@ static int wp_ecc_export_keypair(wp_Ecc* ecc, OSSL_PARAM* params, int* pIdx,
             data + *idx, outLen);
         *idx += outLen;
         if (priv && (!wp_param_set_mp(&params[i++],
-                OSSL_PKEY_PARAM_PRIV_KEY, &(ecc->key.k), data, idx))) {
+                OSSL_PKEY_PARAM_PRIV_KEY, wc_ecc_key_get_priv(&ecc->key), data,
+                idx))) {
             ok = 0;
         }
     }
