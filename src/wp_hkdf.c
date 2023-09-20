@@ -578,8 +578,14 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
 
     if (ok) {
         (void)keyLen;
-        rc = wc_HKDF_Extract(ctx->mdType, salt, (word32)saltLen, inKey,
-            (word32)inKeyLen, key);
+        if (saltLen == 0) {
+            rc = wc_HKDF_Extract(ctx->mdType, NULL, 0, inKey,
+                (word32)inKeyLen, key);
+        }
+        else {
+            rc = wc_HKDF_Extract(ctx->mdType, salt, (word32)saltLen, inKey,
+                (word32)inKeyLen, key);
+        }
         if (rc != 0) {
             ok = 0;
         }

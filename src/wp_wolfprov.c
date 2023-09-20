@@ -997,6 +997,10 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
     int ok = 1;
     OSSL_FUNC_core_get_libctx_fn* c_get_libctx = NULL;
 
+#ifdef HAVE_FIPS
+    PRIVATE_KEY_UNLOCK();
+#endif
+
     for (; in->function_id != 0; in++) {
         switch (in->function_id) {
             case OSSL_FUNC_CORE_GETTABLE_PARAMS:
