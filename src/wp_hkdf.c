@@ -519,8 +519,10 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     }
     ctx->infoSz = idx;
 
+    PRIVATE_KEY_UNLOCK();
     rc = wc_HKDF_Expand(ctx->mdType, inKey, (word32)inKeyLen, ctx->info,
         (word32)ctx->infoSz, key, (word32)keyLen);
+    PRIVATE_KEY_LOCK();
     if (rc != 0) {
         ok = 0;
     }
@@ -578,6 +580,7 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
 
     if (ok) {
         (void)keyLen;
+        PRIVATE_KEY_UNLOCK();
         if (saltLen == 0) {
             rc = wc_HKDF_Extract(ctx->mdType, NULL, 0, inKey,
                 (word32)inKeyLen, key);
@@ -586,6 +589,7 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
             rc = wc_HKDF_Extract(ctx->mdType, salt, (word32)saltLen, inKey,
                 (word32)inKeyLen, key);
         }
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
