@@ -32,8 +32,9 @@ WOLFSSL_INSTALL_DIR=$PWD/wolfssl-install
 install_wolfssl() {
     if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
         if [ "$(cd ${WOLFSSL_SOURCE_DIR} && git describe --tags)" != "${WOLFSSL_TAG}" ]; then # force a rebuild
-            rm -rf ${WOLFSSL_SOURCE_DIR}
-            rm -rf ${WOLFSSL_INSTALL_DIR}
+            printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR}\n"
+            do_cleanup
+            exit 1
         fi
     fi
 
