@@ -285,14 +285,16 @@ if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
 fi
 make -j$NUMCPU &>> $LOG_FILE
 if [ $? != 0 ]; then
-  tail -n 20 $LOG_FILE
+  printf "\n\n...\n"
+  tail -n 40 $LOG_FILE
   do_cleanup
   exit 1
 fi
 
 make test &>> $LOG_FILE
 if [ $? != 0 ]; then
-  tail -n 20 $LOG_FILE
+  printf "\n\n...\n"
+  tail -n 40 $LOG_FILE
   do_cleanup
   exit 1
 fi
