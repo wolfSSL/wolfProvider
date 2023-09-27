@@ -24,11 +24,19 @@
 #
 
 OPENSSL_GIT="https://github.com/openssl/openssl.git"
-OPENSSL_TAG="openssl-3.0.0"
+OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.0.0"}
 OPENSSL_SOURCE_DIR=$PWD/openssl-source
 OPENSSL_INSTALL_DIR=$PWD/openssl-install
 
 install_openssl() {
+    if [ -d ${OPENSSL_SOURCE_DIR} ]; then
+        if [ "$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)" != "${OPENSSL_TAG}" ]; then # force a rebuild
+            printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR}\n"
+            do_cleanup
+            exit 1
+        fi
+    fi
+
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tClone OpenSSL ${OPENSSL_TAG} ... "
         git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
@@ -42,34 +50,38 @@ install_openssl() {
     fi
 
     cd ${OPENSSL_SOURCE_DIR}
+
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
         ./config shared --prefix=${OPENSSL_INSTALL_DIR} &>> $LOG_FILE
         if [ $? != 0 ]; then
             printf "ERROR.\n"
+            rm -rf ${OPENSSL_INSTALL_DIR}
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+
+        printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
+        make -j$NUMCPU &>> $LOG_FILE
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            rm -rf ${OPENSSL_INSTALL_DIR}
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+
+        printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
+        make -j$NUMCPU install &>> $LOG_FILE
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            rm -rf ${OPENSSL_INSTALL_DIR}
             do_cleanup
             exit 1
         fi
         printf "Done.\n"
     fi
-
-    printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
-    make -j$NUMCPU &>> $LOG_FILE
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        do_cleanup
-        exit 1
-    fi
-    printf "Done.\n"
-
-    printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
-    make -j$NUMCPU install &>> $LOG_FILE
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        do_cleanup
-        exit 1
-    fi
-    printf "Done.\n"
 
     cd ..
 }

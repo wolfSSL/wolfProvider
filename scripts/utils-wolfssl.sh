@@ -24,12 +24,20 @@
 #
 
 WOLFSSL_GIT="https://github.com/wolfSSL/wolfssl.git"
-WOLFSSL_TAG="v5.0.0-stable"
+WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.6.3-stable"}
 WOLFSSL_SOURCE_DIR=$PWD/wolfssl-source
 WOLFSSL_INSTALL_DIR=$PWD/wolfssl-install
 
 # Depends on OPENSSL_INSTALL_DIR
 install_wolfssl() {
+    if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
+        if [ "$(cd ${WOLFSSL_SOURCE_DIR} && git describe --tags)" != "${WOLFSSL_TAG}" ]; then # force a rebuild
+            printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR}\n"
+            do_cleanup
+            exit 1
+        fi
+    fi
+
     if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
         printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
         git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
@@ -43,6 +51,7 @@ install_wolfssl() {
     fi
 
     cd ${WOLFSSL_SOURCE_DIR}
+
     if [ ! -d ${WOLFSSL_INSTALL_DIR} ]; then
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
         if [ -z "$WOLFSSL_CONFIG_OPTS" ]; then
@@ -54,29 +63,32 @@ install_wolfssl() {
         ./configure ${WOLFSSL_CONFIG_OPTS} "${WOLFSSL_CONFIG_CPPFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
         if [ $? != 0 ]; then
             printf "ERROR.\n"
+            rm -rf ${WOLFSSL_INSTALL_DIR}
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+
+        printf "\tBuild wolfSSL ${WOLFSSL_TAG} ... "
+        make -j$NUMCPU &>> $LOG_FILE
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            rm -rf ${WOLFSSL_INSTALL_DIR}
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+
+        printf "\tInstalling wolfSSL ${WOLFSSL_TAG} ... "
+        make -j$NUMCPU install &>> $LOG_FILE
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            rm -rf ${WOLFSSL_INSTALL_DIR}
             do_cleanup
             exit 1
         fi
         printf "Done.\n"
     fi
-
-    printf "\tBuild wolfSSL ${WOLFSSL_TAG} ... "
-    make -j$NUMCPU &>> $LOG_FILE
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        do_cleanup
-        exit 1
-    fi
-    printf "Done.\n"
-
-    printf "\tInstalling wolfSSL ${WOLFSSL_TAG} ... "
-    make -j$NUMCPU install &>> $LOG_FILE
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        do_cleanup
-        exit 1
-    fi
-    printf "Done.\n"
 
     cd ..
 }
