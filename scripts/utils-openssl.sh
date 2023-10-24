@@ -30,8 +30,9 @@ OPENSSL_INSTALL_DIR=$PWD/openssl-install
 
 install_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
-        if [ "$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)" != "${OPENSSL_TAG}" ]; then # force a rebuild
-            printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR}\n"
+        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)
+        if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
+            printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR} (expected: ${OPENSSL_TAG}, got: ${OPENSSL_TAG_CUR})\n"
             do_cleanup
             exit 1
         fi
