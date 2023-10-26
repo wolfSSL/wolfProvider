@@ -280,10 +280,10 @@ printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 # Set up wolfProvider
 cd ${WOLFPROV_DIR}
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh &>> $LOG_FILE
-    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
+    ./autogen.sh 2>&1 >> $LOG_FILE
+    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} 2>&1 >> $LOG_FILE
 fi
-make -j$NUMCPU &>> $LOG_FILE
+make -j$NUMCPU 2>&1 >> $LOG_FILE
 if [ $? != 0 ]; then
   printf "\n\n...\n"
   tail -n 40 $LOG_FILE
@@ -291,7 +291,7 @@ if [ $? != 0 ]; then
   exit 1
 fi
 
-make test &>> $LOG_FILE
+make test 2>&1 >> $LOG_FILE
 if [ $? != 0 ]; then
   printf "\n\n...\n"
   tail -n 40 $LOG_FILE
