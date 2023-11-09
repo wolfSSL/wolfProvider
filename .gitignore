@@ -55,3 +55,10 @@
 # Installed dependencies
 /openssl*
 /wolfssl*
+
+IDE/Android/android-ndk-r26b/
+IDE/Android/openssl/
+IDE/Android/openssl-install/
+IDE/Android/wolfssl/
+IDE/Android/wolfssl-install/
+IDE/Android/wolfProvider/
