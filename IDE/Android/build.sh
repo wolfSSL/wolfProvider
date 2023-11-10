@@ -9,12 +9,12 @@ if [ "${AUTO_INSTALL_TOOLS}" == "true" ]; then
 fi
 
 # https://developer.android.com/ndk/downloads/
-export ANDROID_NDK_ROOT=${WORKSPACE}/android-ndk-r26b
-PATH="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 if [ ! -e ${ANDROID_NDK_ROOT} ]; then
     wget https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
     unzip android-ndk-r26b-linux.zip
 fi
+export ANDROID_NDK_ROOT=${WORKSPACE}/android-ndk-r26b
+PATH="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 
 # Compile OpenSSL
 export OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256"
