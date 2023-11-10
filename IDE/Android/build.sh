@@ -3,7 +3,10 @@
 set -e
 WORKSPACE=$(pwd)
 
-DEBIAN_FRONTEND=noninteractive apt update && apt install -y git make autoconf libtool android-tools-adb unzip wget
+AUTO_INSTALL_TOOLS=${AUTO_INSTALL_TOOLS:-true}
+if [ "${AUTO_INSTALL_TOOLS}" == "true" ]; then
+    DEBIAN_FRONTEND=noninteractive apt update && apt install -y git make autoconf libtool android-tools-adb unzip wget
+fi
 
 # https://developer.android.com/ndk/downloads/
 export ANDROID_NDK_ROOT=${WORKSPACE}/android-ndk-r26b
