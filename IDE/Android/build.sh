@@ -11,7 +11,7 @@ fi
 # https://developer.android.com/ndk/downloads/
 export ANDROID_NDK_ROOT=${WORKSPACE}/android-ndk-r26b
 if [ ! -e ${ANDROID_NDK_ROOT} ]; then
-    wget https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
+    wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
     unzip android-ndk-r26b-linux.zip
 fi
 PATH="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
