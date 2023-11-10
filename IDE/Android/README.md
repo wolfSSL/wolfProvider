@@ -40,4 +40,4 @@ Providers:
 		evppkey_kdf_tls1_prf.txt ... PASS
 ```
 
-An alternate way of running `build.sh` is within a Docker environment. This can avoid unwanted local changes to your system by wrapping the environment in a container. Simply launch Docker with `docker run --rm -it -v $(pwd):/ws -w /ws ubuntu:22.04 build.sh`. This should start the script and build everything in the local folder. Then you can take the `run.sh` script and run it from your host environment.
+An alternate way of running `build.sh` is within a Docker environment. This can avoid unwanted local changes to your system by wrapping the environment in a container. Simply launch Docker with `docker run --rm -it -v $(pwd)/../../:/ws -w /ws/IDE/Android ubuntu:22.04 ./build.sh`. This should start the script and build everything in the local folder. Then you can take the `run.sh` script and run it from your host environment.

@@ -9,11 +9,11 @@ if [ "${AUTO_INSTALL_TOOLS}" == "true" ]; then
 fi
 
 # https://developer.android.com/ndk/downloads/
+export ANDROID_NDK_ROOT=${WORKSPACE}/android-ndk-r26b
 if [ ! -e ${ANDROID_NDK_ROOT} ]; then
     wget https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
     unzip android-ndk-r26b-linux.zip
 fi
-export ANDROID_NDK_ROOT=${WORKSPACE}/android-ndk-r26b
 PATH="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 
 # Compile OpenSSL
@@ -45,10 +45,11 @@ fi
 export LD_LIBRARY_PATH="${WORKSPACE}/wolfssl-install/lib:$LD_LIBRARY_PATH"
 export LIBRARY_PATH="${WORKSPACE}/wolfssl-install/lib:$LIBRARY_PATH"
 
+# If running in wolfProvider/IDE/Android, then 'ln -s ../../ wolfProvider'
 if [ ! -e ${WORKSPACE}/wolfProvider ]; then
     git clone https://github.com/wolfssl/wolfProvider ${WORKSPACE}/wolfProvider
-    cd ${WORKSPACE}/wolfProvider && \
-        ./autogen.sh && \
-        ./configure --with-openssl=${WORKSPACE}/openssl-install --with-wolfssl=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android CFLAGS="-lm -fPIC" --enable-debug && \
-        make -j
 fi
+cd ${WORKSPACE}/wolfProvider && \
+    ./autogen.sh && \
+    ./configure --with-openssl=${WORKSPACE}/openssl-install --with-wolfssl=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android CFLAGS="-lm -fPIC" --enable-debug && \
+    make -j
