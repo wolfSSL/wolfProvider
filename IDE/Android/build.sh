@@ -9,7 +9,7 @@ if [ "${AUTO_INSTALL_TOOLS}" == "true" ]; then
 fi
 
 # https://developer.android.com/ndk/downloads/
-export ANDROID_NDK_ROOT=${WORKSPACE}/android-ndk-r26b
+export ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT:-${WORKSPACE}/android-ndk-r26b}
 if [ ! -e ${ANDROID_NDK_ROOT} ]; then
     wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
     unzip android-ndk-r26b-linux.zip
