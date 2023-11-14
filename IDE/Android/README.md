@@ -1,11 +1,11 @@
 Installing WolfProvider on Android
 
 # Prerequisites
-You'll need to get the [Android NDK](https://developer.android.com/ndk/downloads/). I used [this one](https://dl.google.com/android/repository/android-ndk-r26b-linux.zip). Extract it into the folder that contains all the other files.
-
-You will also need Android Studio to run an emulator. Though having an Android device plugged in via USB and able to connect via ADB should also work.
+You will need Android Studio to run an emulator. Though having an Android device plugged in via USB and able to connect via ADB should also work.
 
 This example works with an x86_64 version of Android, but it should be relatively simple to change and use ARM or ARM64. You would need to modify `build.sh`.
+
+You'll need to get the [Android NDK](https://developer.android.com/ndk/downloads/). I used [this one](https://dl.google.com/android/repository/android-ndk-r26b-linux.zip). The `build.sh` script should do this for you.
 
 # Usage
 Have your Android device up and running. You can confirm it is reachable with `adb devices`.
