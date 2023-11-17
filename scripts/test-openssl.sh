@@ -22,6 +22,10 @@
 # Execute this script from: wolfProvider
 #set -e
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source ${SCRIPT_DIR}/utils-openssl.sh
+source ${SCRIPT_DIR}/utils-wolfssl.sh
+
 do_cleanup() {
     echo "Cleanup"
 }
@@ -33,9 +37,6 @@ do_trap() {
 }
 
 trap do_trap INT TERM
-
-source ${PWD}/scripts/utils-openssl.sh
-source ${PWD}/scripts/utils-wolfssl.sh
 
 #
 # evp_test
