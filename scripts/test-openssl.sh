@@ -87,6 +87,8 @@ source ${PWD}/scripts/utils-wolfssl.sh
 #   evppkey_kdf_scrypt.txt - SCRYPT not supported
 #   evppkey_sm2.txt - SM2 not supported
 #   evprand.txt - random is HashDRBG and internals not accessible.
+#   evppkey_rsa_common.txt
+#   evppkey_rsa.txt
 
 evp_test_run() {
     printf "\tTesting with evp_test:\n"
@@ -115,8 +117,6 @@ evp_test_run() {
         evppkey_kdf_hkdf.txt
         evppkey_kdf_tls1_prf.txt
         evppkey_mismatch.txt
-        evppkey_rsa_common.txt
-        evppkey_rsa.txt
     )
 
     for T in ${EVP_TESTS[@]}
