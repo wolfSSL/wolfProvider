@@ -30,16 +30,21 @@ fi
 export LD_LIBRARY_PATH="${WORKSPACE}/openssl-install/lib64:$LD_LIBRARY_PATH"
 
 # Compile WolfSSL
-export WOLFSSL_CONFIG_OPTS='--enable-debug --enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-aesctr --enable-aesccm --enable-x963kdf --enable-compkey --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-base16 --enable-aesgcm-stream --enable-curve25519 --enable-curve448 --enable-ed25519 --enable-ed448 --enable-pwdbased'
+export WOLFSSL_CONFIG_OPTS='--enable-debug --enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-aesctr --enable-aesccm --enable-x963kdf --enable-compkey --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-base16 --enable-aesgcm-stream --enable-curve25519 --enable-curve448 --enable-ed25519 --enable-pwdbased --enable-fips=ready'
 export WOLFSSL_CONFIG_CPPFLAGS=CPPFLAGS="-I${WORKSPACE}/openssl-install -DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DFP_MAX_BITS=16384 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
 export UNAME=Android
 export CROSS_COMPILE=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-
-export CC=x86_64-linux-android34-clang
+#export CC=x86_64-linux-android34-clang
 if [ ! -e ${WORKSPACE}/wolfssl ]; then
     git clone https://github.com/wolfssl/wolfssl ${WORKSPACE}/wolfssl
-    cd ${WORKSPACE}/wolfssl && \
+    cd ${WORKSPACE}/wolfssl && ./fips-check.sh fips-ready keep
+    cd ${WORKSPACE}/wolfssl/XXX-fips-test && \
         ./autogen.sh && \
-        ./configure ${WOLFSSL_CONFIG_OPTS} "${WOLFSSL_CONFIG_CPPFLAGS}" -prefix=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android --disable-asm CFLAGS=-fPIC && \
+        CC=x86_64-linux-android34-clang ./configure ${WOLFSSL_CONFIG_OPTS} "${WOLFSSL_CONFIG_CPPFLAGS}" -prefix=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android --disable-asm CFLAGS=-fPIC && \
+        make && \
+        adb push --sync src/.libs/libwolfssl.so ./wolfcrypt/test/.libs/testwolfcrypt /data/local/tmp/ && \
+        NEWHASH=$(adb shell "LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/testwolfcrypt 2>&1 | sed -n 's/hash = \(.*\)/\1/p'") && \
+        sed -i "s/^\".*\";/\"${NEWHASH}\";/" wolfcrypt/src/fips_test.c && \
         make -j install
 fi
 export LD_LIBRARY_PATH="${WORKSPACE}/wolfssl-install/lib:$LD_LIBRARY_PATH"
@@ -51,7 +56,7 @@ if [ ! -e ${WORKSPACE}/wolfProvider ]; then
 fi
 cd ${WORKSPACE}/wolfProvider && \
     ./autogen.sh && \
-    ./configure --with-openssl=${WORKSPACE}/openssl-install --with-wolfssl=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android CFLAGS="-lm -fPIC" --enable-debug && \
+    CC=x86_64-linux-android34-clang ./configure --with-openssl=${WORKSPACE}/openssl-install --with-wolfssl=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android CFLAGS="-lm -fPIC" --enable-debug && \
     make -j
 
 ${CROSS_COMPILE}clang ${WORKSPACE}/wolfProvider/examples/openssl_example.c -I ${WORKSPACE}/openssl-install/include/ -L ${WORKSPACE}/openssl-install/lib/ -lcrypto -o ${WORKSPACE}/wolfProvider/examples/openssl_example
