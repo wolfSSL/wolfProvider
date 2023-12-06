@@ -62,3 +62,5 @@ IDE/Android/openssl-install/
 IDE/Android/wolfssl-source/
 IDE/Android/wolfssl-install/
 IDE/Android/wolfProvider/
+
+examples/openssl_example
