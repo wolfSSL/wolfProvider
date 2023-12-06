@@ -53,3 +53,5 @@ cd ${WORKSPACE}/wolfProvider && \
     ./autogen.sh && \
     ./configure --with-openssl=${WORKSPACE}/openssl-install --with-wolfssl=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android CFLAGS="-lm -fPIC" --enable-debug && \
     make -j
+
+${CROSS_COMPILE}clang ${WORKSPACE}/wolfProvider/examples/openssl_example.c -I ${WORKSPACE}/openssl-install/include/ -L ${WORKSPACE}/openssl-install/lib/ -lcrypto -o ${WORKSPACE}/wolfProvider/examples/openssl_example
