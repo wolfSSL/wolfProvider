@@ -32,9 +32,10 @@ fi
 
 # Compile OpenSSL
 if [ ! -e ${WORKSPACE}/openssl-install ]; then
+    OPENSSL_BRANCH=${OPENSSL_BRANCH:-"openssl-3.2.0"}
     echo "=== Installing OpenSSL ==="
     export OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256"
-    git clone https://github.com/openssl/openssl.git ${WORKSPACE}/openssl-source && \
+    git clone https://github.com/openssl/openssl.git --branch=${OPENSSL_BRANCH} ${WORKSPACE}/openssl-source && \
         cd ${WORKSPACE}/openssl-source && \
         ./Configure android-x86_64 --prefix=${WORKSPACE}/openssl-install && \
         sed -i 's/-ldl//g' Makefile && \
