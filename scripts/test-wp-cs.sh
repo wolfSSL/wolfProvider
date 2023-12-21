@@ -35,7 +35,8 @@ prepend() { # Usage: cmd 2>&1 | prepend "sometext "
 
 kill_servers() {
     if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
-        (kill -9 $OPENSSL_SERVER_PID) &>/dev/null
+        (kill -9 %%) &>/dev/null
+        OPENSSL_SERVER_PID=-1
     fi
 }
 
@@ -153,12 +154,15 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
          2>&1 | prepend "[server] " >>$LOG_FILE &
     OPENSSL_SERVER_PID=$(($! - 1))
 
-    sleep 0.1
+    sleep 0.2
 
     if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-        printf "OpenSSL server failed to start\n"
-        do_cleanup
-        exit 1
+        sleep 0.2 # Might need to wait for backgrounded task to actually start
+        if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
+            printf "OpenSSL server failed to start\n"
+            do_cleanup
+            exit 1
+        fi
     fi
 }
 
@@ -248,6 +252,15 @@ if [ $? != 0 ]; then
   tail -n 40 $LOG_FILE
   do_cleanup
   exit 1
+fi
+
+if [ "${AM_BWRAPPED-}" != "yes" ]; then
+    bwrap_path="$(command -v bwrap)"
+    if [ -n "$bwrap_path" ]; then
+        export AM_BWRAPPED=yes
+        exec "$bwrap_path" --unshare-net --dev-bind / / "$0" "$@"
+    fi
+    unset AM_BWRAPPED
 fi
 
 make test 2>&1 >> $LOG_FILE
