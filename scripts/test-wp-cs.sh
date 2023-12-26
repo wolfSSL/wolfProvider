@@ -33,9 +33,20 @@ prepend() { # Usage: cmd 2>&1 | prepend "sometext "
     while read line; do echo "${1}${line}"; done
 }
 
+check_process_running() {
+    if [ "$1" = "-1" ]; then
+        echo 1
+    else
+        ps -p $1 > /dev/null
+        echo $?
+    fi
+}
+
 kill_servers() {
-    if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
-        (kill -9 %%) &>/dev/null
+    if [ "$OPENSSL_SERVER_PID" != "-1" ]; then
+        if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
+            kill -9 $OPENSSL_SERVER_PID 2>&1 >/dev/null
+        fi
         OPENSSL_SERVER_PID=-1
     fi
 }
@@ -135,11 +146,6 @@ TLS1_PSK_CIPHERS=(
     PSK-AES128-CBC-SHA
     PSK-3DES-EDE-CBC-SHA
 )
-
-check_process_running() {
-    ps -p $1 > /dev/null
-    echo $?
-}
 
 # need a unique port since may run the same time as testsuite
 generate_port() {
