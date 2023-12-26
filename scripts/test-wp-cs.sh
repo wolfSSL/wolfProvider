@@ -271,12 +271,12 @@ if [ $? != 0 ]; then
   exit 1
 fi
 
-printf "\tClient testing\n" | tee $LOG_FILE
+printf "Client testing\n" | tee $LOG_FILE
 start_openssl_server
 do_client_test "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 kill_servers
 
-printf "\tServer testing\n" | tee -a $LOG_FILE
+printf "Server testing\n" | tee -a $LOG_FILE
 start_openssl_server "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 do_client_test
 kill_servers
