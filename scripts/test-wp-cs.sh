@@ -46,6 +46,7 @@ kill_servers() {
     if [ "$OPENSSL_SERVER_PID" != "-1" ]; then
         if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
             kill -9 $OPENSSL_SERVER_PID 2>&1 >/dev/null
+            sleep 0.1 # make sure there's time for them to die
         fi
         OPENSSL_SERVER_PID=-1
     fi
@@ -160,10 +161,10 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
          2>&1 | prepend "[server] " >>$LOG_FILE &
     OPENSSL_SERVER_PID=$(($! - 1))
 
-    sleep 0.2
+    sleep 0.5
 
     if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-        sleep 0.2 # Might need to wait for backgrounded task to actually start
+        sleep 0.5 # Might need to wait for backgrounded task to actually start
         if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
             printf "OpenSSL server failed to start\n"
             do_cleanup
