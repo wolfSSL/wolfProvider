@@ -617,6 +617,8 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     unsigned char key2[WP_MAX_KEY_SIZE];
     word32 len2;
 
+    XMEMSET(key1, 0, sizeof(key1));
+    XMEMSET(key2, 0, sizeof(key2));
     ok &= ecx1->hasPriv && ecx2->hasPriv;
     if (ok) {
         len1 = ecx1->data->len;
@@ -659,6 +661,8 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     unsigned char key2[WP_MAX_KEY_SIZE];
     word32 len2;
 
+    XMEMSET(key1, 0, sizeof(key1));
+    XMEMSET(key2, 0, sizeof(key2));
     ok &= ecx1->hasPub && ecx2->hasPub;
     if (ok) {
         len1 = ecx1->data->len;
