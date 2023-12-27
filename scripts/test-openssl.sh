@@ -248,7 +248,7 @@ WOLFPROV_DIR=$PWD
 WOLFPROV_CONFIG=$WOLFPROV_DIR/provider.conf
 WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 LOGDIR=$WOLFPROV_DIR/scripts/log
-LOG_FILE=$LOGDIR/dependencies.log
+LOG_FILE=$LOGDIR/test-openssl.log
 export OPENSSL_MODULES=$WOLFPROV_PATH
 
 if [ ! -d "$LOGDIR" ]; then

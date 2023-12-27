@@ -24,7 +24,7 @@ source ${SCRIPT_DIR}/utils-openssl.sh
 source ${SCRIPT_DIR}/utils-wolfssl.sh
 
 CERT_DIR=$SCRIPT_DIR/../certs
-LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
+LOG_FILE=$SCRIPT_DIR/test-wp-cs.log
 
 OPENSSL_SERVER_PID=-1
 
@@ -166,7 +166,7 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
     if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
         sleep 0.5 # Might need to wait for backgrounded task to actually start
         if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-            printf "OpenSSL server failed to start\n"
+            printf "OpenSSL server failed to start (PID=$OPENSSL_SERVER_PID)\n"
             do_cleanup
             exit 1
         fi

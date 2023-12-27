@@ -113,5 +113,5 @@ To run automated unit tests:
 ### Integration Tests
 
 To run the cipher suite testing:
-* ./scripts/wp-cs-test.sh
+* ./scripts/test-wp-cs.sh
 
