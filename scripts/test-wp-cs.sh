@@ -45,7 +45,7 @@ check_process_running() {
 kill_servers() {
     if [ "$OPENSSL_SERVER_PID" != "-1" ]; then
         if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
-            kill -9 $OPENSSL_SERVER_PID 2>&1 >/dev/null
+            kill -9 $OPENSSL_SERVER_PID >/dev/null 2>&1
             sleep 0.1 # make sure there's time for them to die
         fi
         OPENSSL_SERVER_PID=-1
@@ -250,10 +250,10 @@ printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 # Set up wolfProvider
 cd ${WOLFPROV_DIR}
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh 2>&1 >> $LOG_FILE
-    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} 2>&1 >> $LOG_FILE
+    ./autogen.sh >>$LOG_FILE 2>&1
+    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
 fi
-make -j$NUMCPU 2>&1 >> $LOG_FILE
+make -j$NUMCPU >>$LOG_FILE 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
   tail -n 40 $LOG_FILE
@@ -270,7 +270,7 @@ if [ "${AM_BWRAPPED-}" != "yes" ]; then
     unset AM_BWRAPPED
 fi
 
-make test 2>&1 >> $LOG_FILE
+make test >>$LOG_FILE 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
   tail -n 40 $LOG_FILE
