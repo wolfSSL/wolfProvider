@@ -77,11 +77,15 @@ if [ ! -e ${WORKSPACE}/wolfssl-install ]; then
     fi
     cd ${WORKSPACE}/wolfssl-source && \
         CC=x86_64-linux-android34-clang ./configure ${WOLFSSL_CONFIG_OPTS} "${WOLFSSL_CONFIG_CPPFLAGS}" -prefix=${WORKSPACE}/wolfssl-install --host=x86_64-linux-android --disable-asm CFLAGS=-fPIC && \
-        make && \
+        make
+    checkReturn $?
+    if [ "${USE_FIPS}" = "true" ]; then
         adb push --sync src/.libs/libwolfssl.so ./wolfcrypt/test/.libs/testwolfcrypt /data/local/tmp/ && \
         NEWHASH=$(adb shell "LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/testwolfcrypt 2>&1 | sed -n 's/hash = \(.*\)/\1/p'") && \
         sed -i "s/^\".*\";/\"${NEWHASH}\";/" wolfcrypt/src/fips_test.c && \
-        make -j install
+        checkReturn $?
+    fi
+    make -j install
     checkReturn $?
 fi
 export LD_LIBRARY_PATH="${WORKSPACE}/wolfssl-install/lib:$LD_LIBRARY_PATH"
