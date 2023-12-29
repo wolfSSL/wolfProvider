@@ -41,3 +41,18 @@ Providers:
 ```
 
 An alternate way of running `build.sh` is within a Docker environment. This can avoid unwanted local changes to your system by wrapping the environment in a container. Simply launch Docker with `docker run --rm -it -v $(pwd)/../../:/ws -w /ws/IDE/Android ubuntu:22.04 ./build.sh`. This should start the script and build everything in the local folder. Then you can take the `run.sh` script and run it from your host environment.
+
+# build.sh options
+There are a few environment flags that can be passed to the script to modify its execution. This section details the functionality.
+
+## AUTO_INSTALL_TOOLS
+This setting will run on a Debian system the required commands to install the dependencies of this script.
+
+## CLEAN_BUILD
+This will remove previous sources and binaries in the folder to have a clean start.
+
+## USE_FIPS
+This sets WolfSSL to use the FIPS version. Note some algorithms are turned off as they are not FIPS certified (ie: ed25519 and ed448).
+
+### USE_FIPS_CHECK
+If you have access to the official FIPS GitHub repository, you can use that as the source. Generally it is intended for internal use.

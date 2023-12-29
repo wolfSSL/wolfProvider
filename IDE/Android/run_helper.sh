@@ -36,7 +36,7 @@ EVP_TESTS=(
 for T in ${EVP_TESTS[@]}
 do
     printf "\t\t$T ... "
-    ${RUNDIR}/openssl/test/evp_test -config ${RUNDIR}/provider.conf \
+    ${RUNDIR}/evp_test -config ${RUNDIR}/provider.conf \
         ${RUNDIR}/scripts/evp_test/$T \
         >$T.log 2>&1
     if [ "$?" = "0" ]; then

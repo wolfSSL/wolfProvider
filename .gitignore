@@ -57,8 +57,10 @@
 /wolfssl*
 
 IDE/Android/android-ndk-r26b/
-IDE/Android/openssl/
+IDE/Android/openssl-source/
 IDE/Android/openssl-install/
-IDE/Android/wolfssl/
+IDE/Android/wolfssl-source/
 IDE/Android/wolfssl-install/
 IDE/Android/wolfProvider/
+
+examples/openssl_example

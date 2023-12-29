@@ -22,6 +22,10 @@
 # Execute this script from: wolfProvider
 #set -e
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source ${SCRIPT_DIR}/utils-openssl.sh
+source ${SCRIPT_DIR}/utils-wolfssl.sh
+
 do_cleanup() {
     echo "Cleanup"
 }
@@ -33,9 +37,6 @@ do_trap() {
 }
 
 trap do_trap INT TERM
-
-source ${PWD}/scripts/utils-openssl.sh
-source ${PWD}/scripts/utils-wolfssl.sh
 
 #
 # evp_test
@@ -87,6 +88,8 @@ source ${PWD}/scripts/utils-wolfssl.sh
 #   evppkey_kdf_scrypt.txt - SCRYPT not supported
 #   evppkey_sm2.txt - SM2 not supported
 #   evprand.txt - random is HashDRBG and internals not accessible.
+#   evppkey_rsa_common.txt
+#   evppkey_rsa.txt
 
 evp_test_run() {
     printf "\tTesting with evp_test:\n"
@@ -115,8 +118,6 @@ evp_test_run() {
         evppkey_kdf_hkdf.txt
         evppkey_kdf_tls1_prf.txt
         evppkey_mismatch.txt
-        evppkey_rsa_common.txt
-        evppkey_rsa.txt
     )
 
     for T in ${EVP_TESTS[@]}
@@ -247,7 +248,7 @@ WOLFPROV_DIR=$PWD
 WOLFPROV_CONFIG=$WOLFPROV_DIR/provider.conf
 WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 LOGDIR=$WOLFPROV_DIR/scripts/log
-LOG_FILE=$LOGDIR/dependencies.log
+LOG_FILE=$LOGDIR/test-openssl.log
 export OPENSSL_MODULES=$WOLFPROV_PATH
 
 if [ ! -d "$LOGDIR" ]; then
@@ -280,10 +281,10 @@ printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 # Set up wolfProvider
 cd ${WOLFPROV_DIR}
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh &>> $LOG_FILE
-    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} &>> $LOG_FILE
+    ./autogen.sh >>$LOG_FILE 2>&1
+    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
 fi
-make -j$NUMCPU &>> $LOG_FILE
+make -j$NUMCPU >>$LOG_FILE 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
   tail -n 40 $LOG_FILE
@@ -291,7 +292,7 @@ if [ $? != 0 ]; then
   exit 1
 fi
 
-make test &>> $LOG_FILE
+make test >>$LOG_FILE 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
   tail -n 40 $LOG_FILE

@@ -21,9 +21,10 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-openssl.sh
+source ${SCRIPT_DIR}/utils-wolfssl.sh
 
 CERT_DIR=$SCRIPT_DIR/../certs
-LOG_FILE=$SCRIPT_DIR/wp-cs-test.log
+LOG_FILE=$SCRIPT_DIR/test-wp-cs.log
 
 OPENSSL_SERVER_PID=-1
 
@@ -32,9 +33,22 @@ prepend() { # Usage: cmd 2>&1 | prepend "sometext "
     while read line; do echo "${1}${line}"; done
 }
 
+check_process_running() {
+    if [ "$1" = "-1" ]; then
+        echo 1
+    else
+        ps -p $1 > /dev/null
+        echo $?
+    fi
+}
+
 kill_servers() {
-    if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
-        (kill -9 $OPENSSL_SERVER_PID) &>/dev/null
+    if [ "$OPENSSL_SERVER_PID" != "-1" ]; then
+        if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
+            kill -9 $OPENSSL_SERVER_PID >/dev/null 2>&1
+            sleep 0.1 # make sure there's time for them to die
+        fi
+        OPENSSL_SERVER_PID=-1
     fi
 }
 
@@ -134,11 +148,6 @@ TLS1_PSK_CIPHERS=(
     PSK-3DES-EDE-CBC-SHA
 )
 
-check_process_running() {
-    ps -p $1 > /dev/null
-    echo $?
-}
-
 # need a unique port since may run the same time as testsuite
 generate_port() {
     echo $(($(od -An -N2 /dev/random) % (65535-49512) + 49512))
@@ -149,15 +158,18 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         2>&1 | prepend "[server] " &>>$LOG_FILE &
+         2>&1 | prepend "[server] " >>$LOG_FILE &
     OPENSSL_SERVER_PID=$(($! - 1))
 
-    sleep 0.1
+    sleep 0.5
 
     if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-        printf "OpenSSL server failed to start\n"
-        do_cleanup
-        exit 1
+        sleep 0.5 # Might need to wait for backgrounded task to actually start
+        if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
+            printf "OpenSSL server failed to start (PID=$OPENSSL_SERVER_PID)\n"
+            do_cleanup
+            exit 1
+        fi
     fi
 }
 
@@ -170,7 +182,7 @@ do_client() { # usage: do_client [extraArgs]
              -cipher $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             2>&1 | prepend "[client] " &>>$LOG_FILE
+             2>&1 | prepend "[client] " >>$LOG_FILE
         )
     else
         (echo -n | \
@@ -178,7 +190,7 @@ do_client() { # usage: do_client [extraArgs]
              -ciphersuites $CIPHER $TLS_VERSION \
              -connect localhost:$OPENSSL_PORT \
              -curves $CURVES \
-             2>&1 | prepend "[client] " &>>$LOG_FILE
+             2>&1 | prepend "[client] " >>$LOG_FILE
         )
     fi
     if [ "$?" = "0" ]; then
@@ -216,8 +228,10 @@ do_client_test() { # usage: do_client_test [extraArgs]
 }
 
 FAIL=0
+
+WOLFPROV_DIR=$PWD
 WOLFPROV_NAME="libwolfprov"
-WOLFPROV_PATH=$PWD/.libs
+WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 
 CURVES=prime256v1
 #CURVES=X25519
@@ -225,6 +239,7 @@ OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
 OPENSSL_PORT=$(generate_port)
 
 init_openssl
+init_wolfssl
 if [ -z $LD_LIBRARY_PATH ]; then
     export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 else
@@ -232,12 +247,43 @@ else
 fi
 printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
-printf "\tClient testing\n" | tee $LOG_FILE
+# Set up wolfProvider
+cd ${WOLFPROV_DIR}
+if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
+    ./autogen.sh >>$LOG_FILE 2>&1
+    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+fi
+make -j$NUMCPU >>$LOG_FILE 2>&1
+if [ $? != 0 ]; then
+  printf "\n\n...\n"
+  tail -n 40 $LOG_FILE
+  do_cleanup
+  exit 1
+fi
+
+if [ "${AM_BWRAPPED-}" != "yes" ]; then
+    bwrap_path="$(command -v bwrap)"
+    if [ -n "$bwrap_path" ]; then
+        export AM_BWRAPPED=yes
+        exec "$bwrap_path" --unshare-net --dev-bind / / "$0" "$@"
+    fi
+    unset AM_BWRAPPED
+fi
+
+make test >>$LOG_FILE 2>&1
+if [ $? != 0 ]; then
+  printf "\n\n...\n"
+  tail -n 40 $LOG_FILE
+  do_cleanup
+  exit 1
+fi
+
+printf "Client testing\n" | tee $LOG_FILE
 start_openssl_server
 do_client_test "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 kill_servers
 
-printf "\tServer testing\n" | tee -a $LOG_FILE
+printf "Server testing\n" | tee -a $LOG_FILE
 start_openssl_server "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 do_client_test
 kill_servers

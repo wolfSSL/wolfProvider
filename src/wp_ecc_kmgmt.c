@@ -428,8 +428,12 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
         if (ok && src->hasPriv &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
             dst->hasPriv = 1;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
             rc = mp_copy(wc_ecc_key_get_priv(&src->key),
                 wc_ecc_key_get_priv(&dst->key));
+#else
+            rc = mp_copy(&(src->key.k), &(dst->key.k));
+#endif
             if (rc != 0) {
                 ok = 0;
             }
@@ -771,7 +775,12 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-            wc_ecc_key_get_priv(&ecc->key)))) {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+            wc_ecc_key_get_priv(&ecc->key)
+#else
+            &(ecc->key.k)
+#endif
+            ))) {
         ok = 0;
     }
     /* Private key. */
@@ -838,8 +847,13 @@ static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
         (mp_cmp(wc_ecc_key_get_priv(&ecc1->key),
-            wc_ecc_key_get_priv(&ecc2->key)) != MP_EQ)) {
+            wc_ecc_key_get_priv(&ecc2->key)) != MP_EQ)
+#else
+        (mp_cmp(&(ecc1->key.k), &(ecc2->key.k)) != MP_EQ)
+#endif
+        ) {
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) &&
@@ -995,10 +1009,21 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
             OSSL_PKEY_PARAM_PUB_KEY);
     }
     if (ok && priv && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-            wc_ecc_key_get_priv(&ecc->key)))) {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+            wc_ecc_key_get_priv(&ecc->key)
+#else
+            &(ecc->key.k)
+#endif
+            ))) {
         ok = 0;
     }
-    if (ok && (!mp_iszero(wc_ecc_key_get_priv(&ecc->key)))) {
+    if (ok &&
+#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+            (!mp_iszero(wc_ecc_key_get_priv(&ecc->key)))
+#else
+            (!mp_iszero(&(ecc->key.k)))
+#endif
+        ) {
         ecc->key.type = ECC_PRIVATEKEY;
         ecc->hasPriv = 1;
     }
@@ -1257,7 +1282,11 @@ static size_t wp_ecc_export_keypair_alloc_size(wp_Ecc* ecc, int priv)
     /* Public key. */
     size_t len = WP_ECC_PUBLIC_KEY_SIZE(ecc);
     if (priv) {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
         len += mp_unsigned_bin_size(wc_ecc_key_get_priv(&ecc->key));
+#else
+        len += mp_unsigned_bin_size(&(ecc->key.k));
+#endif
     }
     return len;
 }
@@ -1292,9 +1321,13 @@ static int wp_ecc_export_keypair(wp_Ecc* ecc, OSSL_PARAM* params, int* pIdx,
         wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PUB_KEY,
             data + *idx, outLen);
         *idx += outLen;
-        if (priv && (!wp_param_set_mp(&params[i++],
-                OSSL_PKEY_PARAM_PRIV_KEY, wc_ecc_key_get_priv(&ecc->key), data,
-                idx))) {
+        if (priv && (!wp_param_set_mp(&params[i++], OSSL_PKEY_PARAM_PRIV_KEY,
+#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+                wc_ecc_key_get_priv(&ecc->key),
+#else
+                &(ecc->key.k),
+#endif
+                data, idx))) {
             ok = 0;
         }
     }

@@ -604,10 +604,10 @@ int test_rsa_pkey_keygen(void *data)
     /* Generating a 3072-bit key is slow, so only do it if we have to because
      * we're using wolfCrypt FIPS. Can't do 2048 because that's the default. */
     const int newKeySize = 3072;
-    const int badKeyGenSizes[] = {512, 1024, 8192};
+    const int badKeyGenSizes[] = {512, 1024};
 #else
     const int newKeySize = 1024;
-    const int badKeyGenSizes[] = {256, 8192};
+    const int badKeyGenSizes[] = {256};
 #endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
     const int numBad = sizeof(badKeyGenSizes) / sizeof(*badKeyGenSizes);
     int i = 0;

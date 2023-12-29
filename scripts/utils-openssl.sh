@@ -30,8 +30,9 @@ OPENSSL_INSTALL_DIR=$PWD/openssl-install
 
 install_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
-        if [ "$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)" != "${OPENSSL_TAG}" ]; then # force a rebuild
-            printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR}\n"
+        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)
+        if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
+            printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR} (expected: ${OPENSSL_TAG}, got: ${OPENSSL_TAG_CUR})\n"
             do_cleanup
             exit 1
         fi
@@ -40,7 +41,7 @@ install_openssl() {
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tClone OpenSSL ${OPENSSL_TAG} ... "
         git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
-             ${OPENSSL_SOURCE_DIR} &>> $LOG_FILE
+             ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             do_cleanup
@@ -53,7 +54,7 @@ install_openssl() {
 
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
-        ./config shared --prefix=${OPENSSL_INSTALL_DIR} &>> $LOG_FILE
+        ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${OPENSSL_INSTALL_DIR}
@@ -63,7 +64,7 @@ install_openssl() {
         printf "Done.\n"
 
         printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
-        make -j$NUMCPU &>> $LOG_FILE
+        make -j$NUMCPU >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${OPENSSL_INSTALL_DIR}
@@ -73,7 +74,7 @@ install_openssl() {
         printf "Done.\n"
 
         printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
-        make -j$NUMCPU install &>> $LOG_FILE
+        make -j$NUMCPU install >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${OPENSSL_INSTALL_DIR}
