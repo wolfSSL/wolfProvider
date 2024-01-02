@@ -62,5 +62,8 @@ IDE/Android/openssl-install/
 IDE/Android/wolfssl-source/
 IDE/Android/wolfssl-install/
 IDE/Android/wolfProvider/
+IDE/XCODE/libcurl*
+IDE/XCODE/openssl*
+IDE/XCODE/wolfssl*
 
 examples/openssl_example
