@@ -20,8 +20,8 @@
 #
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source ${SCRIPT_DIR}/utils-openssl.sh
-source ${SCRIPT_DIR}/utils-wolfssl.sh
+source "${SCRIPT_DIR}"/utils-openssl.sh
+source "${SCRIPT_DIR}"/utils-wolfssl.sh
 
 CERT_DIR=$SCRIPT_DIR/../certs
 LOG_FILE=$SCRIPT_DIR/test-wp-cs.log
@@ -37,7 +37,7 @@ check_process_running() {
     if [ "$1" = "-1" ]; then
         echo 1
     else
-        ps -p $1 > /dev/null
+        ps -p "$1" > /dev/null
         echo $?
     fi
 }
@@ -154,11 +154,11 @@ generate_port() {
 }
 
 start_openssl_server() { # usage: start_openssl_server [extraArgs]
-    stdbuf -oL -eL $OPENSSL_BIN s_server -www $1 \
-         -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
-         -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
-         -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
-         2>&1 | prepend "[server] " >>$LOG_FILE &
+    stdbuf -oL -eL "$OPENSSL_BIN" s_server -www "$1" \
+         -cert "$CERT_DIR"/server-cert.pem -key "$CERT_DIR"/server-key.pem \
+         -dcert "$CERT_DIR"/server-ecc.pem -dkey "$CERT_DIR"/ecc-key.pem \
+         -accept "$OPENSSL_PORT" "$OPENSSL_ALL_CIPHERS" \
+         2>&1 | prepend "[server] " >>"$LOG_FILE" &
     OPENSSL_SERVER_PID=$(($! - 1))
 
     sleep 0.5
@@ -175,28 +175,28 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
 
 do_client() { # usage: do_client [extraArgs]
     printf "\t\t$CIPHER ... "
-    printf "\n$CIPHER ...\n" >>$LOG_FILE
+    printf "\n$CIPHER ...\n" >>"$LOG_FILE"
     if [ "$TLS_VERSION" != "-tls1_3" ]; then
         (echo -n | \
-         stdbuf -oL -eL $OPENSSL_BIN s_client $1 \
-             -cipher $CIPHER $TLS_VERSION \
-             -connect localhost:$OPENSSL_PORT \
-             -curves $CURVES \
-             2>&1 | prepend "[client] " >>$LOG_FILE
+         stdbuf -oL -eL "$OPENSSL_BIN" s_client "$1" \
+             -cipher "$CIPHER" "$TLS_VERSION" \
+             -connect localhost:"$OPENSSL_PORT" \
+             -curves "$CURVES" \
+             2>&1 | prepend "[client] " >>"$LOG_FILE"
         )
     else
         (echo -n | \
-         stdbuf -oL -eL $OPENSSL_BIN s_client $1 \
-             -ciphersuites $CIPHER $TLS_VERSION \
-             -connect localhost:$OPENSSL_PORT \
-             -curves $CURVES \
-             2>&1 | prepend "[client] " >>$LOG_FILE
+         stdbuf -oL -eL "$OPENSSL_BIN" s_client "$1" \
+             -ciphersuites "$CIPHER" "$TLS_VERSION" \
+             -connect localhost:"$OPENSSL_PORT" \
+             -curves "$CURVES" \
+             2>&1 | prepend "[client] " >>"$LOG_FILE"
         )
     fi
     if [ "$?" = "0" ]; then
-        printf "pass\n" | tee -a $LOG_FILE
+        printf "pass\n" | tee -a "$LOG_FILE"
     else
-        printf "fail\n" | tee -a $LOG_FILE
+        printf "fail\n" | tee -a "$LOG_FILE"
         FAIL=$((FAIL+1))
     fi
 }
@@ -215,13 +215,13 @@ do_client_test() { # usage: do_client_test [extraArgs]
 #    done
 
     TLS_VERSION=-tls1_2
-    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+    printf "\t$TLS_VERSION\n" | tee -a "$LOG_FILE"
     for CIPHER in ${TLS12_CIPHERS[@]}; do
         do_client "$1"
     done
 
     TLS_VERSION=-tls1_3
-    printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
+    printf "\t$TLS_VERSION\n" | tee -a "$LOG_FILE"
     for CIPHER in ${TLS13_CIPHERS[@]}; do
         do_client "$1"
     done
@@ -240,7 +240,7 @@ OPENSSL_PORT=$(generate_port)
 
 init_openssl
 init_wolfssl
-if [ -z $LD_LIBRARY_PATH ]; then
+if [ -z "$LD_LIBRARY_PATH" ]; then
     export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 else
     export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
@@ -248,15 +248,15 @@ fi
 printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
 # Set up wolfProvider
-cd ${WOLFPROV_DIR}
+cd "${WOLFPROV_DIR}" || exit
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh >>$LOG_FILE 2>&1
-    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+    ./autogen.sh >>"$LOG_FILE" 2>&1
+    ./configure --with-openssl="${OPENSSL_INSTALL_DIR}" --with-wolfssl="${WOLFSSL_INSTALL_DIR}" >>"$LOG_FILE" 2>&1
 fi
-make -j$NUMCPU >>$LOG_FILE 2>&1
+make -j"$NUMCPU" >>"$LOG_FILE" 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
+  tail -n 40 "$LOG_FILE"
   do_cleanup
   exit 1
 fi
@@ -270,20 +270,20 @@ if [ "${AM_BWRAPPED-}" != "yes" ]; then
     unset AM_BWRAPPED
 fi
 
-make test >>$LOG_FILE 2>&1
+make test >>"$LOG_FILE" 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
+  tail -n 40 "$LOG_FILE"
   do_cleanup
   exit 1
 fi
 
-printf "Client testing\n" | tee $LOG_FILE
+printf "Client testing\n" | tee "$LOG_FILE"
 start_openssl_server
 do_client_test "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 kill_servers
 
-printf "Server testing\n" | tee -a $LOG_FILE
+printf "Server testing\n" | tee -a "$LOG_FILE"
 start_openssl_server "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 do_client_test
 kill_servers

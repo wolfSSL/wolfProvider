@@ -23,8 +23,8 @@
 #set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source ${SCRIPT_DIR}/utils-openssl.sh
-source ${SCRIPT_DIR}/utils-wolfssl.sh
+source "${SCRIPT_DIR}"/utils-openssl.sh
+source "${SCRIPT_DIR}"/utils-wolfssl.sh
 
 do_cleanup() {
     echo "Cleanup"
@@ -123,9 +123,9 @@ evp_test_run() {
     for T in ${EVP_TESTS[@]}
     do
         printf "\t\t$T ... "
-        ./evp_test -config $WOLFPROV_CONFIG \
-            $WOLFPROV_DIR/scripts/evp_test/$T \
-            >$LOGDIR/$T.log 2>&1 
+        ./evp_test -config "$WOLFPROV_CONFIG" \
+            "$WOLFPROV_DIR"/scripts/evp_test/"$T" \
+            >"$LOGDIR"/"$T".log 2>&1 
         if [ "$?" = "0" ]; then
             echo "PASS"
         else
@@ -142,9 +142,9 @@ evp_test_run() {
 endecode_test_run() {
     printf "\tTesting with evp_test:\n"
 
-    RES=`./endecode_test \
+    RES=$(./endecode_test \
         -rsa certs/ee-key.pem -pss certs/ca-pss-key.pem -context \
-        -provider libwolfprov 2>&1 | grep 'ok [1-9]'`
+        -provider libwolfprov 2>&1 | grep 'ok [1-9]')
     OLD_IFS=$IFS
     IFS=$'\n'
     for R in $RES
@@ -153,10 +153,10 @@ endecode_test_run() {
         *skipped*)
             ;;
         "not ok "*)
-            RES_FAIL=`printf "$RES_FAIL\n$R"`
+            RES_FAIL=$(printf "$RES_FAIL\n$R")
             ;;
         "ok "*)
-            RES_SUCCESS=`printf "$RES_SUCCESS\n$R"`
+            RES_SUCCESS=$(printf "$RES_SUCCESS\n$R")
             ;;
         esac
     done
@@ -168,7 +168,7 @@ endecode_test_run() {
             ;;
         *)
             echo "ERROR: Unexpected failure"
-            echo $R
+            echo "$R"
             FAIL_CNT=$((FAIL_CNT+1))
             ;;
         esac
@@ -178,7 +178,7 @@ endecode_test_run() {
         case $R in
         *DSA*|*DHX*|*ECExplicit*|*RSA_PSS*|*MSBLOB*|*PVK*)
             echo "ERROR: Unexpected success"
-            echo $R
+            echo "$R"
             FAIL_CNT=$((FAIL_CNT+1))
             ;;
         *)
@@ -195,7 +195,7 @@ endecode_test_run() {
 evp_libctx_test_run() {
     printf "\tTesting with evp_libctx_test:\n"
 
-    RES=`./evp_libctx_test -provider libwolfprov 2>&1`
+    RES=$(./evp_libctx_test -provider libwolfprov 2>&1)
 
     IGNORE_NEXT_ERROR="no"
     IGNORE_GROUP_ERROR="no"
@@ -214,7 +214,7 @@ evp_libctx_test_run() {
                 IGNORE_NEXT_ERROR="no"
             else
                 echo "ERROR: Unexpected failure (case)"
-                echo $L
+                echo "$L"
                 FAIL_CNT=$((FAIL_CNT+1))
             fi
             ;;
@@ -225,7 +225,7 @@ evp_libctx_test_run() {
                 IGNORE_GROUP_ERROR="no"
             else
                 echo "ERROR: Unexpected failure (group)"
-                echo $L
+                echo "$L"
                 FAIL_CNT=$((FAIL_CNT+1))
             fi
             ;;
@@ -252,17 +252,17 @@ LOG_FILE=$LOGDIR/test-openssl.log
 export OPENSSL_MODULES=$WOLFPROV_PATH
 
 if [ ! -d "$LOGDIR" ]; then
-    mkdir $LOGDIR
+    mkdir "$LOGDIR"
 fi
 
 # Fresh start
-rm -f $LOG_FILE
+rm -f "$LOG_FILE"
 
-if [ -z $NUMCPU ]; then
+if [ -z "$NUMCPU" ]; then
     if [[ "$OSTYPE" == "linux-gnu" ]]; then
-      export NUMCPU=`grep -c ^processor /proc/cpuinfo`
+      export NUMCPU=$(grep -c ^processor /proc/cpuinfo)
     elif [[ "$OSTYPE" == "darwin"* ]]; then
-      export NUMCPU=`sysctl -n hw.ncpu`
+      export NUMCPU=$(sysctl -n hw.ncpu)
     else
       export NUMCPU=4
     fi
@@ -271,7 +271,7 @@ fi
 init_openssl
 init_wolfssl
 
-if [ -z $LD_LIBRARY_PATH ]; then
+if [ -z "$LD_LIBRARY_PATH" ]; then
     export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
 else
     export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
@@ -279,30 +279,30 @@ fi
 printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
 # Set up wolfProvider
-cd ${WOLFPROV_DIR}
+cd "${WOLFPROV_DIR}" || exit
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh >>$LOG_FILE 2>&1
-    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+    ./autogen.sh >>"$LOG_FILE" 2>&1
+    ./configure --with-openssl="${OPENSSL_INSTALL_DIR}" --with-wolfssl="${WOLFSSL_INSTALL_DIR}" >>"$LOG_FILE" 2>&1
 fi
-make -j$NUMCPU >>$LOG_FILE 2>&1
+make -j$NUMCPU >>"$LOG_FILE" 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
+  tail -n 40 "$LOG_FILE"
   do_cleanup
   exit 1
 fi
 
-make test >>$LOG_FILE 2>&1
+make test >>"$LOG_FILE" 2>&1
 if [ $? != 0 ]; then
   printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
+  tail -n 40 "$LOG_FILE"
   do_cleanup
   exit 1
 fi
 
 # Start with returning success
 FAIL_CNT=0
-cd $OPENSSL_TEST
+cd "$OPENSSL_TEST" || exit
 
 printf "START Testing with OpenSSL tests\n"
 evp_test_run

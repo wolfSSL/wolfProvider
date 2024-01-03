@@ -30,8 +30,8 @@ WOLFSSL_INSTALL_DIR=$PWD/wolfssl-install
 
 # Depends on OPENSSL_INSTALL_DIR
 install_wolfssl() {
-    if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
-        WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && git describe --tags)
+    if [ -d "${WOLFSSL_SOURCE_DIR}" ]; then
+        WOLFSSL_TAG_CUR=$(cd "${WOLFSSL_SOURCE_DIR}" && git describe --tags)
         if [ "${WOLFSSL_TAG_CUR}" != "${WOLFSSL_TAG}" ]; then # force a rebuild
             printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR} (expected: ${WOLFSSL_TAG}, got: ${WOLFSSL_TAG_CUR})\n"
             do_cleanup
@@ -39,10 +39,10 @@ install_wolfssl() {
         fi
     fi
 
-    if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
+    if [ ! -d "${WOLFSSL_SOURCE_DIR}" ]; then
         printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
-        git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
-             ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+        git clone --depth=1 -b "${WOLFSSL_TAG}" ${WOLFSSL_GIT} \
+             "${WOLFSSL_SOURCE_DIR}" >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             do_cleanup
@@ -51,40 +51,40 @@ install_wolfssl() {
         printf "Done.\n"
     fi
 
-    cd ${WOLFSSL_SOURCE_DIR}
+    cd "${WOLFSSL_SOURCE_DIR}" || exit
 
-    if [ ! -d ${WOLFSSL_INSTALL_DIR} ]; then
+    if [ ! -d "${WOLFSSL_INSTALL_DIR}" ]; then
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
         if [ -z "$WOLFSSL_CONFIG_OPTS" ]; then
             WOLFSSL_CONFIG_OPTS='--enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-aesctr --enable-aesccm --enable-x963kdf --enable-compkey --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-base16 --enable-aesgcm-stream --enable-curve25519 --enable-curve448 --enable-ed25519 --enable-ed448 --enable-pwdbased'
             WOLFSSL_CONFIG_CPPFLAGS=CPPFLAGS="-I${OPENSSL_INSTALL_DIR} -DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DFP_MAX_BITS=16384 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
         fi
 
-        ./autogen.sh >>$LOG_FILE 2>&1
-        ./configure ${WOLFSSL_CONFIG_OPTS} "${WOLFSSL_CONFIG_CPPFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+        ./autogen.sh >>"$LOG_FILE" 2>&1
+        ./configure "${WOLFSSL_CONFIG_OPTS}" "${WOLFSSL_CONFIG_CPPFLAGS}" -prefix="${WOLFSSL_INSTALL_DIR}" >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
-            rm -rf ${WOLFSSL_INSTALL_DIR}
+            rm -rf "${WOLFSSL_INSTALL_DIR}"
             do_cleanup
             exit 1
         fi
         printf "Done.\n"
 
         printf "\tBuild wolfSSL ${WOLFSSL_TAG} ... "
-        make -j$NUMCPU >>$LOG_FILE 2>&1
+        make -j"$NUMCPU" >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
-            rm -rf ${WOLFSSL_INSTALL_DIR}
+            rm -rf "${WOLFSSL_INSTALL_DIR}"
             do_cleanup
             exit 1
         fi
         printf "Done.\n"
 
         printf "\tInstalling wolfSSL ${WOLFSSL_TAG} ... "
-        make -j$NUMCPU install >>$LOG_FILE 2>&1
+        make -j"$NUMCPU" install >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
-            rm -rf ${WOLFSSL_INSTALL_DIR}
+            rm -rf "${WOLFSSL_INSTALL_DIR}"
             do_cleanup
             exit 1
         fi

@@ -29,8 +29,8 @@ OPENSSL_SOURCE_DIR=$PWD/openssl-source
 OPENSSL_INSTALL_DIR=$PWD/openssl-install
 
 install_openssl() {
-    if [ -d ${OPENSSL_SOURCE_DIR} ]; then
-        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)
+    if [ -d "${OPENSSL_SOURCE_DIR}" ]; then
+        OPENSSL_TAG_CUR=$(cd "${OPENSSL_SOURCE_DIR}" && git describe --tags)
         if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
             printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR} (expected: ${OPENSSL_TAG}, got: ${OPENSSL_TAG_CUR})\n"
             do_cleanup
@@ -38,10 +38,10 @@ install_openssl() {
         fi
     fi
 
-    if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
+    if [ ! -d "${OPENSSL_SOURCE_DIR}" ]; then
         printf "\tClone OpenSSL ${OPENSSL_TAG} ... "
-        git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
-             ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+        git clone --depth=1 -b "${OPENSSL_TAG}" ${OPENSSL_GIT} \
+             "${OPENSSL_SOURCE_DIR}" >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             do_cleanup
@@ -50,34 +50,34 @@ install_openssl() {
         printf "Done.\n"
     fi
 
-    cd ${OPENSSL_SOURCE_DIR}
+    cd "${OPENSSL_SOURCE_DIR}" || exit
 
-    if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
+    if [ ! -d "${OPENSSL_INSTALL_DIR}" ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
-        ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+        ./config shared --prefix="${OPENSSL_INSTALL_DIR}" >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
-            rm -rf ${OPENSSL_INSTALL_DIR}
+            rm -rf "${OPENSSL_INSTALL_DIR}"
             do_cleanup
             exit 1
         fi
         printf "Done.\n"
 
         printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
-        make -j$NUMCPU >>$LOG_FILE 2>&1
+        make -j"$NUMCPU" >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
-            rm -rf ${OPENSSL_INSTALL_DIR}
+            rm -rf "${OPENSSL_INSTALL_DIR}"
             do_cleanup
             exit 1
         fi
         printf "Done.\n"
 
         printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
-        make -j$NUMCPU install >>$LOG_FILE 2>&1
+        make -j"$NUMCPU" install >>"$LOG_FILE" 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
-            rm -rf ${OPENSSL_INSTALL_DIR}
+            rm -rf "${OPENSSL_INSTALL_DIR}"
             do_cleanup
             exit 1
         fi
@@ -94,7 +94,7 @@ init_openssl() {
     OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
     OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
 
-    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_INSTALL_DIR}/lib64 $OPENSSL_BIN version`
+    OSSL_VER=$(LD_LIBRARY_PATH=${OPENSSL_INSTALL_DIR}/lib64 $OPENSSL_BIN version)
     case $OSSL_VER in
         OpenSSL\ 3.*) ;;
         *)
