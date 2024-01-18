@@ -67,7 +67,7 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
 
     ./configure -prefix=${OUTDIR}/wolfssl-${TYPE}-${ARCH} ${CONF_OPTS} --host=${HOST} \
         CFLAGS="${CFLAGS_COMMON} -arch ${ARCH} -isysroot ${SDK_ROOT}"
-    make -j libwolfssl.la
+    make
     make install
 
     popd

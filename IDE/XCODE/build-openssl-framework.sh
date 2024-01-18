@@ -59,7 +59,6 @@ mkdir -p $SDK_OUTPUT_DIR
 build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|watchsimulator|appletvos|appletvsimulator>
     set -x
     pushd .
-    cd $WOLFSSL_DIR
 
     ARCH=$1
     HOST="${ARCH}-apple-darwin"
@@ -67,7 +66,9 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
     SDK_ROOT=$(xcrun --sdk ${TYPE} --show-sdk-path)
     TARGET="darwin64-${ARCH}-cc"
 
-    CC="clang" CXX="clang" CFLAGS="${CFLAGS_COMMON} -Os -arch ${ARCH} -isysroot ${SDK_ROOT}" LDFLAGS="-arch ${ARCH} -isysroot ${SDK_ROOT}" ./Configure no-asm ${TARGET} --prefix=${OUTDIR}/openssl-${TYPE}-${ARCH} ${CONF_OPTS}
+    mkdir -p ${OUTDIR}/${TYPE}-${ARCH} && cd ${OUTDIR}/${TYPE}-${ARCH}
+
+    CC="clang" CXX="clang" CFLAGS="${CFLAGS_COMMON} -Os -arch ${ARCH} -isysroot ${SDK_ROOT}" LDFLAGS="-arch ${ARCH} -isysroot ${SDK_ROOT}" ${WOLFSSL_DIR}/Configure no-asm ${TARGET} --prefix=${OUTDIR}/openssl-install-${TYPE}-${ARCH} ${CONF_OPTS}
     make -j
     make install
 
@@ -82,8 +83,8 @@ for type in iphonesimulator macosx appletvsimulator watchsimulator ; do
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/openssl-${type}-x86_64/lib/libopenssl.a" \
-        "$OUTDIR/openssl-${type}-arm64/lib/libopenssl.a" \
+        "$OUTDIR/openssl-install-${type}-x86_64/lib/libopenssl.a" \
+        "$OUTDIR/openssl-install-${type}-arm64/lib/libopenssl.a" \
         -create -output $LIPODIR/libopenssl-${type}.a
 
     echo "Checking libraries"
@@ -96,7 +97,7 @@ for type in iphoneos appletvos ; do
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/openssl-${type}-arm64/lib/libopenssl.a" \
+        "$OUTDIR/openssl-install-${type}-arm64/lib/libopenssl.a" \
         -create -output $LIPODIR/libopenssl-${type}.a
 
     echo "Checking libraries"
