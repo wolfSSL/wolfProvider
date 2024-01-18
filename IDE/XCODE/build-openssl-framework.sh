@@ -26,7 +26,6 @@ WOLFSSL_DIR=$(pwd)
 OUTDIR=$(pwd)/artifacts
 LIPODIR=${OUTDIR}/lib
 SDK_OUTPUT_DIR=${OUTDIR}/xcframework
-BUILD_MACHINE='uname -m'
 
 CFLAGS_COMMON=""
 # Base configure flags
@@ -77,32 +76,32 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
 }
 
 XCFRAMEWORKS=
-for type in iphonesimulator macosx appletvsimulator watchsimulator ; do
+for type in iphonesimulator macosx ; do
     build arm64 ${type}
     build x86_64 ${type}
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/openssl-install-${type}-x86_64/lib/libopenssl.a" \
-        "$OUTDIR/openssl-install-${type}-arm64/lib/libopenssl.a" \
+        "$OUTDIR/openssl-install-${type}-x86_64/lib/libssl.a" \
+        "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" \
         -create -output $LIPODIR/libopenssl-${type}.a
 
     echo "Checking libraries"
     xcrun -sdk ${type} lipo -info $LIPODIR/libopenssl-${type}.a
-    XCFRAMEWORKS+=" -library ${LIPODIR}/libopenssl-${type}.a -headers ${OUTDIR}/openssl-${type}-arm64/include"
+    XCFRAMEWORKS+=" -library ${LIPODIR}/libopenssl-${type}.a -headers ${OUTDIR}/openssl-install-${type}-arm64/include"
 done
 
-for type in iphoneos appletvos ; do
+for type in iphoneos ; do
     build arm64 ${type}
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/openssl-install-${type}-arm64/lib/libopenssl.a" \
+        "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" \
         -create -output $LIPODIR/libopenssl-${type}.a
 
     echo "Checking libraries"
     xcrun -sdk ${type} lipo -info $LIPODIR/libopenssl-${type}.a
-    XCFRAMEWORKS+=" -library ${LIPODIR}/libopenssl-${type}.a -headers ${OUTDIR}/openssl-${type}-arm64/include"
+    XCFRAMEWORKS+=" -library ${LIPODIR}/libopenssl-${type}.a -headers ${OUTDIR}/openssl-install-${type}-arm64/include"
 done
 
 ############################################################################################################################################
