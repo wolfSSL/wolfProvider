@@ -66,8 +66,8 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
     SDK_ROOT=$(xcrun --sdk ${TYPE} --show-sdk-path)
 
     ./configure -prefix=${OUTDIR}/wolfprov-${TYPE}-${ARCH} ${CONF_OPTS} --host=${HOST} \
-	--with-openssl=${WOLFPROV_DIR}/openssl-source/artifacts/openssl-${TYPE}-${ARCH} \
-	--with-wolfssl=${WOLFPROV_DIR}/wolfssl-source/artifacts/wolfssl-${TYPE}-${ARCH} \
+	--with-openssl=${WOLFPROV_DIR}/openssl-source/artifacts/openssl-install-${TYPE}-${ARCH} \
+	--with-wolfssl=${WOLFPROV_DIR}/wolfssl-source/artifacts/wolfssl-install-${TYPE}-${ARCH} \
         CFLAGS="${CFLAGS_COMMON} -arch ${ARCH} -isysroot ${SDK_ROOT}"
     make -j
     make install
@@ -77,7 +77,7 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
 }
 
 XCFRAMEWORKS=
-for type in iphonesimulator macosx appletvsimulator watchsimulator ; do
+for type in iphonesimulator macosx ; do
     build arm64 ${type}
     build x86_64 ${type}
 
@@ -92,7 +92,7 @@ for type in iphonesimulator macosx appletvsimulator watchsimulator ; do
     XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.a -headers ${OUTDIR}/wolfprov-${type}-arm64/include"
 done
 
-for type in iphoneos appletvos ; do
+for type in iphoneos ; do
     build arm64 ${type}
 
     # Create universal binaries from architecture-specific static libraries
