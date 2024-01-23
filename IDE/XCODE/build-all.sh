@@ -11,6 +11,8 @@ LOG_FILE=${OUTDIR}/wolfProvider.log
 source ${SCRIPT_DIR}/utils-openssl.sh
 source ${SCRIPT_DIR}/utils-wolfssl.sh
 
+mkdir -p ${OUTDIR}
+
 clone_openssl
 cd ${WOLFPROV_DIR}/openssl-source && ${XCODE_SCRIPTS_DIR}/build-openssl-framework.sh
 

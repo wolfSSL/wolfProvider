@@ -55,7 +55,6 @@ while getopts ":c:p:" opt; do
   esac
 done
 
-rm -rf $OUTDIR
 mkdir -p $LIPODIR
 mkdir -p $SDK_OUTPUT_DIR
 
