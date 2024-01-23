@@ -77,7 +77,7 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
 }
 
 XCFRAMEWORKS=
-for type in iphonesimulator macosx ; do
+for type in iphonesimulator ; do
     build arm64 ${type}
     build x86_64 ${type}
 
@@ -89,7 +89,7 @@ for type in iphonesimulator macosx ; do
 
     echo "Checking libraries"
     xcrun -sdk ${type} lipo -info $LIPODIR/libwolfprov-${type}.a
-    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.a -headers ${OUTDIR}/wolfprov-${type}-arm64/include"
+    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.a"
 done
 
 for type in iphoneos ; do
@@ -102,11 +102,11 @@ for type in iphoneos ; do
 
     echo "Checking libraries"
     xcrun -sdk ${type} lipo -info $LIPODIR/libwolfprov-${type}.a
-    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.a -headers ${OUTDIR}/wolfprov-${type}-arm64/include"
+    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.a"
 done
 
 ############################################################################################################################################
 #  ********** BUILD FRAMEWORK
 ############################################################################################################################################
 
-xcodebuild -create-xcframework ${XCFRAMEWORKS} -output ${SDK_OUTPUT_DIR}/libwolfprov.xcframework
+xcodebuild -create-xcframework ${XCFRAMEWORKS} -headers ${WOLFPROV_DIR}/include -output ${SDK_OUTPUT_DIR}/libwolfprov.xcframework
