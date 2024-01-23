@@ -818,7 +818,7 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
         int rc;
 
         rc = wc_AesGcmEncryptInit_ex(&ctx->aes, NULL, 0, ctx->iv,
-            ctx->ivLen);
+            (word32)ctx->ivLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -964,14 +964,14 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
 
         if (ivLen == 0) {
             if (key != NULL) {
-                rc = wc_AesGcmSetKey(aes, key, keyLen);
+                rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
                 if (rc != 0) {
                     ok = 0;
                 }
             }
         }
         else {
-            rc = wc_AesGcmEncryptInit(aes, key, keyLen, iv, ivLen);
+            rc = wc_AesGcmEncryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -1035,7 +1035,7 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
         ok = 0;
     }
 #ifdef WOLFSSL_AESGCM_STREAM
-    if (ok && (wc_AesGcmDecryptInit(aes, key, keyLen, iv, ivLen) != 0)) {
+    if (ok && (wc_AesGcmDecryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen) != 0)) {
         ok = 0;
     }
     if (ok) {
@@ -1196,10 +1196,10 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
         }
 
         if (ctx->enc) {
-            rc = wc_AesGcmEncryptUpdate(&ctx->aes, out, in, inLen, aad, aadLen);
+            rc = wc_AesGcmEncryptUpdate(&ctx->aes, out, in, (word32)inLen, aad, (word32)aadLen);
         }
         else {
-            rc = wc_AesGcmDecryptUpdate(&ctx->aes, out, in, inLen, aad, aadLen);
+            rc = wc_AesGcmDecryptUpdate(&ctx->aes, out, in, (word32)inLen, aad, (word32)aadLen);
         }
         if (rc == 0) {
             if (out != NULL) {
@@ -1261,7 +1261,7 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
             rc = wc_AesGcmEncryptFinal(aes, ctx->buf, sizeof(ctx->buf));
         }
         else {
-            rc = wc_AesGcmDecryptFinal(aes, ctx->buf, ctx->tagLen);
+            rc = wc_AesGcmDecryptFinal(aes, ctx->buf, (word32)ctx->tagLen);
         }
         if (rc != 0) {
             ok = 0;
