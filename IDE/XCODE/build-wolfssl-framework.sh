@@ -57,6 +57,7 @@ done
 
 mkdir -p $LIPODIR
 mkdir -p $SDK_OUTPUT_DIR
+cd $WOLFSSL_DIR && ./autogen.sh
 
 build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|watchsimulator|appletvos|appletvsimulator>
     set -x
