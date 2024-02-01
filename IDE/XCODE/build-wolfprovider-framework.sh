@@ -29,7 +29,7 @@ SDK_OUTPUT_DIR=${OUTDIR}/xcframework
 
 CFLAGS_COMMON=""
 # Base configure flags
-CONF_OPTS="--disable-shared --enable-static"
+CONF_OPTS=""
 
 helpFunction()
 {
@@ -84,13 +84,13 @@ for type in iphonesimulator macosx ; do
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/wolfprov-${type}-x86_64/lib/libwolfprov.a" \
-        "$OUTDIR/wolfprov-${type}-arm64/lib/libwolfprov.a" \
-        -create -output $LIPODIR/libwolfprov-${type}.a
+        "$OUTDIR/wolfprov-${type}-x86_64/lib/libwolfprov.dylib" \
+        "$OUTDIR/wolfprov-${type}-arm64/lib/libwolfprov.dylib" \
+        -create -output $LIPODIR/libwolfprov-${type}.dylib
 
     echo "Checking libraries"
-    xcrun -sdk ${type} lipo -info $LIPODIR/libwolfprov-${type}.a
-    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.a"
+    xcrun -sdk ${type} lipo -info $LIPODIR/libwolfprov-${type}.dylib
+    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.dylib"
 done
 
 for type in iphoneos ; do
@@ -98,12 +98,12 @@ for type in iphoneos ; do
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/wolfprov-${type}-arm64/lib/libwolfprov.a" \
-        -create -output $LIPODIR/libwolfprov-${type}.a
+        "$OUTDIR/wolfprov-${type}-arm64/lib/libwolfprov.dylib" \
+        -create -output $LIPODIR/libwolfprov-${type}.dylib
 
     echo "Checking libraries"
-    xcrun -sdk ${type} lipo -info $LIPODIR/libwolfprov-${type}.a
-    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.a"
+    xcrun -sdk ${type} lipo -info $LIPODIR/libwolfprov-${type}.dylib
+    XCFRAMEWORKS+=" -library ${LIPODIR}/libwolfprov-${type}.dylib"
 done
 
 ############################################################################################################################################
