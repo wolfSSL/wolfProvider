@@ -55,6 +55,7 @@
 # Installed dependencies
 /openssl*
 /wolfssl*
+/artifacts
 
 IDE/Android/android-ndk-r26b/
 IDE/Android/openssl-source/
