@@ -48,7 +48,7 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
     }
 
     /* Read big-endian data in. */
-    rc = mp_read_unsigned_bin(mp, rdata, len);
+    rc = mp_read_unsigned_bin(mp, rdata, (word32)len);
     if (rc != 0) {
         ok = 0;
     }

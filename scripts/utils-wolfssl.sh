@@ -29,7 +29,7 @@ WOLFSSL_SOURCE_DIR=$PWD/wolfssl-source
 WOLFSSL_INSTALL_DIR=$PWD/wolfssl-install
 
 # Depends on OPENSSL_INSTALL_DIR
-install_wolfssl() {
+clone_wolfssl() {
     if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
         WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && git describe --tags)
         if [ "${WOLFSSL_TAG_CUR}" != "${WOLFSSL_TAG}" ]; then # force a rebuild
@@ -50,7 +50,10 @@ install_wolfssl() {
         fi
         printf "Done.\n"
     fi
+}
 
+install_wolfssl() {
+    clone_wolfssl
     cd ${WOLFSSL_SOURCE_DIR}
 
     if [ ! -d ${WOLFSSL_INSTALL_DIR} ]; then

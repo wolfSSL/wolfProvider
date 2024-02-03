@@ -28,7 +28,7 @@ OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.0.0"}
 OPENSSL_SOURCE_DIR=$PWD/openssl-source
 OPENSSL_INSTALL_DIR=$PWD/openssl-install
 
-install_openssl() {
+clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
         OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)
         if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
@@ -49,7 +49,10 @@ install_openssl() {
         fi
         printf "Done.\n"
     fi
+}
 
+install_openssl() {
+    clone_openssl
     cd ${OPENSSL_SOURCE_DIR}
 
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
