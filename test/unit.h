@@ -64,16 +64,16 @@ void print_buffer(const char *desc, const unsigned char *buffer, size_t len);
 
 typedef int (*TEST_FUNC)(void *data);
 typedef struct TEST_CASE {
-    const char *name;
-    TEST_FUNC   func;
-    void       *data;
-    int         err;
-    int         run:1;
-    int         done:1;
+    const char   *name;
+    TEST_FUNC     func;
+    void         *data;
+    int           err;
+    unsigned int  run:1;
+    unsigned int  done:1;
 #ifdef TEST_MULTITHREADED
-    int         attempted:1;
-    pthread_t   thread;
-    int         cnt;
+    unsigned int  attempted:1;
+    pthread_t     thread;
+    int           cnt;
 #endif
 } TEST_CASE;
 
