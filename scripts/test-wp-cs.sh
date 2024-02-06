@@ -20,6 +20,7 @@
 #
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+NUMCPU=${NUMCPU:-8}
 source ${SCRIPT_DIR}/utils-openssl.sh
 source ${SCRIPT_DIR}/utils-wolfssl.sh
 

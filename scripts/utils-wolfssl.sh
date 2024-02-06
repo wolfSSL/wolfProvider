@@ -74,7 +74,7 @@ install_wolfssl() {
         printf "Done.\n"
 
         printf "\tBuild wolfSSL ${WOLFSSL_TAG} ... "
-        make -j$NUMCPU >>$LOG_FILE 2>&1
+        make >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${WOLFSSL_INSTALL_DIR}
@@ -84,7 +84,7 @@ install_wolfssl() {
         printf "Done.\n"
 
         printf "\tInstalling wolfSSL ${WOLFSSL_TAG} ... "
-        make -j$NUMCPU install >>$LOG_FILE 2>&1
+        make install >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${WOLFSSL_INSTALL_DIR}

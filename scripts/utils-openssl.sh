@@ -28,6 +28,8 @@ OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.0.0"}
 OPENSSL_SOURCE_DIR=$PWD/openssl-source
 OPENSSL_INSTALL_DIR=$PWD/openssl-install
 
+NUMCPU=${NUMCPU:-8}
+
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
         OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags)
