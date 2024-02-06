@@ -65,7 +65,7 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
     TYPE=$2
     SDK_ROOT=$(xcrun --sdk ${TYPE} --show-sdk-path)
 
-    ./configure -prefix=${OUTDIR}/wolfprov-${TYPE}-${ARCH} ${CONF_OPTS} --host=${HOST} \
+    ./configure -prefix=${OUTDIR}/wolfprov-install-${TYPE}-${ARCH} ${CONF_OPTS} --host=${HOST} \
 	--with-openssl=${WOLFPROV_DIR}/openssl-source/artifacts/openssl-install-${TYPE}-${ARCH} \
 	--with-wolfssl=${WOLFPROV_DIR}/wolfssl-source/artifacts/wolfssl-install-${TYPE}-${ARCH} \
         CFLAGS="${CFLAGS_COMMON} -arch ${ARCH} -isysroot ${SDK_ROOT}" \
@@ -84,8 +84,8 @@ for type in iphonesimulator macosx ; do
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/wolfprov-${type}-x86_64/lib/libwolfprov.dylib" \
-        "$OUTDIR/wolfprov-${type}-arm64/lib/libwolfprov.dylib" \
+        "$OUTDIR/wolfprov-install-${type}-x86_64/lib/libwolfprov.dylib" \
+        "$OUTDIR/wolfprov-install-${type}-arm64/lib/libwolfprov.dylib" \
         -create -output $LIPODIR/libwolfprov-${type}.dylib
 
     echo "Checking libraries"
@@ -98,7 +98,7 @@ for type in iphoneos ; do
 
     # Create universal binaries from architecture-specific static libraries
     lipo \
-        "$OUTDIR/wolfprov-${type}-arm64/lib/libwolfprov.dylib" \
+        "$OUTDIR/wolfprov-install-${type}-arm64/lib/libwolfprov.dylib" \
         -create -output $LIPODIR/libwolfprov-${type}.dylib
 
     echo "Checking libraries"
