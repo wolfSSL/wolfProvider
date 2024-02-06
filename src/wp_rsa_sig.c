@@ -89,7 +89,7 @@ typedef struct wp_RsaSigCtx {
     /** wolfSSL id of MGF operation to perform when padding mode is PSS. */
     int mgf;
     /** Indicates that the MGF id has been set explicitly. */
-    int mgfSet:1;
+    unsigned int mgfSet:1;
 
     /** Property query string. */
     char* propQuery;

@@ -30,6 +30,7 @@ SDK_OUTPUT_DIR=${OUTDIR}/xcframework
 CFLAGS_COMMON=""
 # Base configure flags
 CONF_OPTS=""
+NUMCPU=$(sysctl -n hw.ncpu)
 
 helpFunction()
 {
@@ -67,7 +68,7 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
     mkdir -p ${OUTDIR}/${TYPE}-${ARCH} && cd ${OUTDIR}/${TYPE}-${ARCH}
 
     CC="clang" CXX="clang" CFLAGS="${CFLAGS_COMMON} -Os -arch ${ARCH} -isysroot ${SDK_ROOT}" LDFLAGS="-arch ${ARCH} -isysroot ${SDK_ROOT}" ${WOLFSSL_DIR}/Configure no-asm ${TARGET} --prefix=${OUTDIR}/openssl-install-${TYPE}-${ARCH} ${CONF_OPTS}
-    make -j
+    make -j${NUMCPU}
     make install
 
     popd
