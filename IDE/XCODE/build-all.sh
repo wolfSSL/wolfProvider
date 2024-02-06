@@ -21,6 +21,7 @@ cd ${WOLFPROV_DIR}/wolfssl-source && ${XCODE_SCRIPTS_DIR}/build-wolfssl-framewor
 
 cd ${WOLFPROV_DIR} && ${XCODE_SCRIPTS_DIR}/build-wolfprovider-framework.sh
 
-clang ${WOLFPROV_DIR}/examples/openssl_example.c -I ${WOLFPROV_DIR}/openssl-source/artifacts/openssl-install-macos-x86_64/include -L ${WOLFPROV_DIR}/openssl-source/artifacts/openssl-install-macos-x86_64/lib -lcrypto -o ${WOLFPROV_DIR}/artifacts/openssl_example
+ARCH=$(uname -m)
+clang ${WOLFPROV_DIR}/examples/openssl_example.c -I ${OPENSSL_SOURCE_DIR}/artifacts/openssl-install-macosx-${ARCH}/include -L ${OPENSSL_SOURCE_DIR}/artifacts/openssl-install-macosx-${ARCH}/lib -lcrypto -o ${OUTDIR}/openssl_example
 
 echo "Script ran for $SECONDS seconds"
