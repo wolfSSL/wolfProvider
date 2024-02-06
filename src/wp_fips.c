@@ -42,7 +42,7 @@ void wolfProvider_SetFipsChecks(long checksMask)
  *
  * @return  The FIPS checks mask.
  */
-long wolfProvider_GetFipsChecks()
+long wolfProvider_GetFipsChecks(void)
 {
     return fipsChecks;
 }
