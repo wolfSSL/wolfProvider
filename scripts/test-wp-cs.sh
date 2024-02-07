@@ -165,7 +165,7 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
     sleep 0.5
 
     if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-        sleep 0.5 # Might need to wait for backgrounded task to actually start
+        sleep 2 # Might need to wait for backgrounded task to actually start
         if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
             printf "OpenSSL server failed to start (PID=$OPENSSL_SERVER_PID)\n"
             do_cleanup
