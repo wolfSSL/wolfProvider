@@ -27,8 +27,6 @@ source ${SCRIPT_DIR}/utils-wolfssl.sh
 CERT_DIR=$SCRIPT_DIR/../certs
 LOG_FILE=$SCRIPT_DIR/test-wp-cs.log
 
-OPENSSL_SERVER_PID=-1
-
 set -o pipefail # pass failures up the pipe
 prepend() { # Usage: cmd 2>&1 | prepend "sometext "
     while read line; do echo "${1}${line}"; done
@@ -44,12 +42,8 @@ check_process_running() {
 }
 
 kill_servers() {
-    if [ "$OPENSSL_SERVER_PID" != "-1" ]; then
-        if [ $(check_process_running $OPENSSL_SERVER_PID) = "0" ]; then
-            kill -9 $OPENSSL_SERVER_PID >/dev/null 2>&1
-            sleep 0.1 # make sure there's time for them to die
-        fi
-        OPENSSL_SERVER_PID=-1
+    if [ "$(jobs -p)" != "" ]; then
+        kill $(jobs -p)
     fi
 }
 
@@ -155,6 +149,8 @@ generate_port() {
 }
 
 start_openssl_server() { # usage: start_openssl_server [extraArgs]
+    kill_servers
+
     stdbuf -oL -eL $OPENSSL_BIN s_server -www $1 \
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
@@ -165,12 +161,7 @@ start_openssl_server() { # usage: start_openssl_server [extraArgs]
     sleep 0.5
 
     if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-        sleep 2 # Might need to wait for backgrounded task to actually start
-        if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-            printf "OpenSSL server failed to start (PID=$OPENSSL_SERVER_PID)\n"
-            do_cleanup
-            exit 1
-        fi
+        printf "OpenSSL server might have failed to start (PID=$OPENSSL_SERVER_PID)\n"
     fi
 }
 
