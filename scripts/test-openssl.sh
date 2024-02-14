@@ -141,11 +141,11 @@ evp_test_run() {
 #
 
 endecode_test_run() {
-    printf "\tTesting with evp_test:\n"
+    printf "\tTesting with endecode_test:\n"
 
     RES=`./endecode_test \
         -rsa certs/ee-key.pem -pss certs/ca-pss-key.pem -context \
-        -provider libwolfprov 2>&1 | grep 'ok [1-9]'`
+        -provider libwolfprov 2>&1 | tee -a $LOGDIR/endecode_test.log | grep 'ok [1-9]'`
     OLD_IFS=$IFS
     IFS=$'\n'
     for R in $RES
