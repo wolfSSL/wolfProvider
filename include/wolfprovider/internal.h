@@ -157,8 +157,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
     unsigned char* keyData, size_t* keyLen, word32 pkcs8Len,
     OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg, byte** cipherInfo);
 
-int wp_read_der_bio(OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len);
-BIO* wp_corebio_get_bio(OSSL_CORE_BIO *coreBio);
+int wp_read_der_bio(BIO *bio, unsigned char** data, word32* len);
 
 byte wp_ct_byte_mask_eq(byte a, byte b);
 byte wp_ct_byte_mask_ne(byte a, byte b);

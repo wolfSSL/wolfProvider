@@ -1902,6 +1902,7 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     unsigned char* data = NULL;
     word32 len = 0;
     wp_Rsa* rsa = NULL;
+    BIO *bio = NULL;
 
     (void)pwCb;
     (void)pwCbArg;
@@ -1912,9 +1913,21 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (rsa == NULL) {
         ok = 0;
     }
-    if (ok) {
-        ok = wp_read_der_bio(cBio, &data, &len);
+
+    bio = BIO_new_from_core_bio(ctx->provCtx->libCtx, cBio);
+    if (ok && (bio == NULL)) {
+        ok = 0;
     }
+
+    if (ok) {
+        ok = wp_read_der_bio(bio, &data, &len);
+    }
+
+    if (ok) {
+        BIO_free(bio);
+        bio = NULL;
+    }
+
     if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
         if (!wp_rsa_decode_spki(rsa, data, len)) {
             ok = 0;
@@ -2299,7 +2312,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 {
     int ok = 1;
     int rc;
-    BIO* out = wp_corebio_get_bio(cBio);
+    BIO* out = NULL;
     unsigned char* keyData = NULL;
     size_t keyLen;
     unsigned char* derData = NULL;
@@ -2315,6 +2328,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     (void)pwCb;
     (void)pwCbArg;
 
+    out = BIO_new_from_core_bio(ctx->provCtx->libCtx, cBio);
     if (out == NULL) {
         ok = 0;
     }
@@ -2434,6 +2448,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         OPENSSL_free(derData);
         OPENSSL_free(pemData);
     }
+    BIO_free(out);
     return ok;
 }
 

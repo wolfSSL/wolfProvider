@@ -146,7 +146,7 @@ static wp_FileCtx* wp_file_attach(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO* cBio)
     ctx = wp_filectx_new(provCtx);
     if (ctx != NULL) {
         /* Get the internal BIO. */
-        ctx->bio = wp_corebio_get_bio(cBio);
+        ctx->bio = BIO_new_from_core_bio(provCtx->libCtx, cBio);
     }
 
     return ctx;
