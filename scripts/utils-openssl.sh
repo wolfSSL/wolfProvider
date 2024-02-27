@@ -32,7 +32,7 @@ NUMCPU=${NUMCPU:-8}
 
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
-        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && git describe --tags || git branch --show-current)
+        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git describe --tags || git branch --show-current))
         if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
             printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR} (expected: ${OPENSSL_TAG}, got: ${OPENSSL_TAG_CUR})\n"
             do_cleanup
