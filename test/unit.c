@@ -399,7 +399,7 @@ static int run_tests(int runAll)
         if (!test_case[i].err)
             fprintf(stderr, "PASSED\n");
         else
-            fprintf(stderr, "FAILED\n");
+            fprintf(stderr, "FAILED (err: %d)\n", test_case[i].err);
         }
 
     LockFree();
@@ -418,7 +418,7 @@ static int run_tests(int runAll)
     else {
         for (i = 0; i < TEST_CASE_CNT; i++) {
             if (test_case[i].err) {
-                printf("## FAIL: %d: %s\n", i + 1, test_case[i].name);
+                printf("## FAIL: %d: %s (err: %d)\n", i + 1, test_case[i].name, test_case[i].err);
             }
         }
         printf("###### TESTSUITE FAILED\n");
@@ -454,7 +454,7 @@ static int run_tests(int runAll)
         if (!test_case[i].err)
             printf("#### SUCCESS: %d - %s\n", i + 1, test_case[i].name);
         else
-            printf("#### FAILED: %d - %s\n", i + 1, test_case[i].name);
+            printf("#### FAILED: %d - %s (err: %d)\n", i + 1, test_case[i].name, test_case[i].err);
         printf("\n");
     }
 
@@ -471,7 +471,7 @@ static int run_tests(int runAll)
     else {
         for (i = 0; i < TEST_CASE_CNT; i++) {
             if (test_case[i].err) {
-                printf("## FAIL: %d: %s\n", i + 1, test_case[i].name);
+                printf("## FAIL: %d: %s (err: %d)\n", i + 1, test_case[i].name, test_case[i].err);
             }
         }
         printf("###### TESTSUITE FAILED\n");

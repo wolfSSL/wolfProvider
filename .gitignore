@@ -65,3 +65,7 @@ IDE/Android/wolfssl-install/
 IDE/Android/wolfProvider/
 
 examples/openssl_example
+
+cscope.out
+
+tags
