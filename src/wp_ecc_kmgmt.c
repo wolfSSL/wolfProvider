@@ -428,7 +428,7 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
         if (ok && src->hasPriv &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
             dst->hasPriv = 1;
-#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
             rc = mp_copy(wc_ecc_key_get_priv(&src->key),
                 wc_ecc_key_get_priv(&dst->key));
 #else
@@ -775,7 +775,7 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
             wc_ecc_key_get_priv(&ecc->key)
 #else
             &(ecc->key.k)
@@ -847,7 +847,7 @@ static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
         (mp_cmp(wc_ecc_key_get_priv(&ecc1->key),
             wc_ecc_key_get_priv(&ecc2->key)) != MP_EQ)
 #else
@@ -1009,7 +1009,7 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
             OSSL_PKEY_PARAM_PUB_KEY);
     }
     if (ok && priv && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
-#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
             wc_ecc_key_get_priv(&ecc->key)
 #else
             &(ecc->key.k)
@@ -1018,7 +1018,7 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
         ok = 0;
     }
     if (ok &&
-#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
             (!mp_iszero(wc_ecc_key_get_priv(&ecc->key)))
 #else
             (!mp_iszero(&(ecc->key.k)))
@@ -1282,7 +1282,7 @@ static size_t wp_ecc_export_keypair_alloc_size(wp_Ecc* ecc, int priv)
     /* Public key. */
     size_t len = WP_ECC_PUBLIC_KEY_SIZE(ecc);
     if (priv) {
-#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
         len += mp_unsigned_bin_size(wc_ecc_key_get_priv(&ecc->key));
 #else
         len += mp_unsigned_bin_size(&(ecc->key.k));
@@ -1322,7 +1322,7 @@ static int wp_ecc_export_keypair(wp_Ecc* ecc, OSSL_PARAM* params, int* pIdx,
             data + *idx, outLen);
         *idx += outLen;
         if (priv && (!wp_param_set_mp(&params[i++], OSSL_PKEY_PARAM_PRIV_KEY,
-#if LIBWOLFSSL_VERSION_HEX >= 0x05006002
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
                 wc_ecc_key_get_priv(&ecc->key),
 #else
                 &(ecc->key.k),
