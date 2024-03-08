@@ -180,9 +180,9 @@ static int test_tls1_prf_hexstr_calc(OSSL_LIB_CTX* libCtx, unsigned char *key,
 {
     int err = 0;
     EVP_PKEY_CTX *ctx = NULL;
-    const char* secret = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00";
-    const char* label = "31:32:33:34:34:35:36";
-    const char* seed = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00";
+    const char* secret = "00000000000000000000000000000000";
+    const char* label = "31323334343536";
+    const char* seed = "00000000000000000000000000000000";
     size_t len = keyLen;
 
     ctx = EVP_PKEY_CTX_new_from_name(libCtx, "TLS1-PRF", NULL);

@@ -199,9 +199,9 @@ static int test_hkdf_hexstr_calc(OSSL_LIB_CTX* libCtx, unsigned char *key,
 {
     int err = 0;
     EVP_PKEY_CTX *ctx = NULL;
-    const char* inKey = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00";
-    const char* salt = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00";
-    const char* info = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00";
+    const char* inKey = "00000000000000000000000000000000";
+    const char* salt = "00000000000000000000000000000000";
+    const char* info = "00000000000000000000000000000000";
     size_t len = keyLen;
 
     if (strncmp("EXTRACT_ONLY", mode, 12) == 0) {
