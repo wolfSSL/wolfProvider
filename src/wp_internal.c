@@ -684,6 +684,15 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
 /*
  * Copy of Core BIO structure as it isn't public and need to get the BIO out.
  */
+
+#if OPENSSL_VERSION_PREREQ(3,2)
+struct ossl_core_bio_st {
+    /* Reference count. */
+    int ref_cnt;
+    /* Underlying BIO. */
+    BIO *bio;
+};
+#else
 struct ossl_core_bio_st {
     /* Reference count. */
     int ref_cnt;
@@ -692,6 +701,7 @@ struct ossl_core_bio_st {
     /* Underlying BIO. */
     BIO *bio;
 };
+#endif
 
 /**
  * Read data out of the core BIO.
