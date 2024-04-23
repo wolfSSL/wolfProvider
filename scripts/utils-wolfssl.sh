@@ -23,15 +23,16 @@
 # wolfSSL 5.0.0
 #
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 WOLFSSL_GIT="https://github.com/wolfSSL/wolfssl.git"
 WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.6.3-stable"}
-WOLFSSL_SOURCE_DIR=$PWD/wolfssl-source
-WOLFSSL_INSTALL_DIR=$PWD/wolfssl-install
+WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
+WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
 
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
     if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
-        WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && (git describe --tags || git branch --show-current))
+        WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
         if [ "${WOLFSSL_TAG_CUR}" != "${WOLFSSL_TAG}" ]; then # force a rebuild
             printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR} (expected: ${WOLFSSL_TAG}, got: ${WOLFSSL_TAG_CUR})\n"
             do_cleanup

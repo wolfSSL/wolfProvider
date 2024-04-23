@@ -23,16 +23,17 @@
 # OpenSSL 3.0.0
 #
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 OPENSSL_GIT="https://github.com/openssl/openssl.git"
 OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.0.0"}
-OPENSSL_SOURCE_DIR=$PWD/openssl-source
-OPENSSL_INSTALL_DIR=$PWD/openssl-install
+OPENSSL_SOURCE_DIR=${SCRIPT_DIR}/../openssl-source
+OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 
 NUMCPU=${NUMCPU:-8}
 
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
-        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git describe --tags || git branch --show-current))
+        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
         if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
             printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR} (expected: ${OPENSSL_TAG}, got: ${OPENSSL_TAG_CUR})\n"
             do_cleanup
