@@ -221,7 +221,7 @@ do_client_test() { # usage: do_client_test [extraArgs]
 
 FAIL=0
 
-WOLFPROV_DIR=$PWD
+WOLFPROV_DIR=$SCRIPT_DIR/..
 WOLFPROV_NAME="libwolfprov"
 WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 
@@ -239,6 +239,15 @@ else
 fi
 printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
+if [ "${AM_BWRAPPED-}" != "yes" ]; then
+    bwrap_path="$(command -v bwrap)"
+    if [ -n "$bwrap_path" ]; then
+        export AM_BWRAPPED=yes
+        exec "$bwrap_path" --unshare-net --dev-bind / / "$0" "$@"
+    fi
+    unset AM_BWRAPPED
+fi
+
 # Set up wolfProvider
 cd ${WOLFPROV_DIR}
 if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
@@ -251,15 +260,6 @@ if [ $? != 0 ]; then
   tail -n 40 $LOG_FILE
   do_cleanup
   exit 1
-fi
-
-if [ "${AM_BWRAPPED-}" != "yes" ]; then
-    bwrap_path="$(command -v bwrap)"
-    if [ -n "$bwrap_path" ]; then
-        export AM_BWRAPPED=yes
-        exec "$bwrap_path" --unshare-net --dev-bind / / "$0" "$@"
-    fi
-    unset AM_BWRAPPED
 fi
 
 make test >>$LOG_FILE 2>&1

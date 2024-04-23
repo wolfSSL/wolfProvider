@@ -245,7 +245,7 @@ evp_libctx_test_run() {
 # Start
 #
 
-WOLFPROV_DIR=$PWD
+WOLFPROV_DIR=${SCRIPT_DIR}/..
 WOLFPROV_CONFIG=$WOLFPROV_DIR/provider.conf
 WOLFPROV_PATH=$WOLFPROV_DIR/.libs
 LOGDIR=$WOLFPROV_DIR/scripts/log
