@@ -24,8 +24,8 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 NUMCPU=${NUMCPU:-8}
-source ${SCRIPT_DIR}/utils-openssl.sh
-source ${SCRIPT_DIR}/utils-wolfssl.sh
+WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+source ${SCRIPT_DIR}/utils-wolfprovider.sh
 
 do_cleanup() {
     echo "Cleanup"
@@ -125,7 +125,7 @@ evp_test_run() {
     do
         printf "\t\t$T ... "
         ./evp_test -config $WOLFPROV_CONFIG \
-            $WOLFPROV_DIR/scripts/evp_test/$T \
+            $WOLFPROV_SOURCE_DIR/scripts/evp_test/$T \
             >$LOGDIR/$T.log 2>&1 
         if [ "$?" = "0" ]; then
             echo "PASS"
@@ -245,12 +245,8 @@ evp_libctx_test_run() {
 # Start
 #
 
-WOLFPROV_DIR=${SCRIPT_DIR}/..
-WOLFPROV_CONFIG=$WOLFPROV_DIR/provider.conf
-WOLFPROV_PATH=$WOLFPROV_DIR/.libs
-LOGDIR=$WOLFPROV_DIR/scripts/log
+LOGDIR=$WOLFPROV_SOURCE_DIR/scripts/log
 LOG_FILE=$LOGDIR/test-openssl.log
-export OPENSSL_MODULES=$WOLFPROV_PATH
 
 if [ ! -d "$LOGDIR" ]; then
     mkdir $LOGDIR
@@ -269,37 +265,7 @@ if [ -z $NUMCPU ]; then
     fi
 fi
 
-init_openssl
-init_wolfssl
-
-if [ -z $LD_LIBRARY_PATH ]; then
-    export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
-else
-    export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
-fi
-printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
-
-# Set up wolfProvider
-cd ${WOLFPROV_DIR}
-if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh >>$LOG_FILE 2>&1
-    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-fi
-make -j$NUMCPU >>$LOG_FILE 2>&1
-if [ $? != 0 ]; then
-  printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
-  do_cleanup
-  exit 1
-fi
-
-make test >>$LOG_FILE 2>&1
-if [ $? != 0 ]; then
-  printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
-  do_cleanup
-  exit 1
-fi
+init_wolfprov
 
 # Start with returning success
 FAIL_CNT=0

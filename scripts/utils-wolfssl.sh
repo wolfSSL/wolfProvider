@@ -19,15 +19,13 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 #
 
-#
-# wolfSSL 5.0.0
-#
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 WOLFSSL_GIT=${WOLFSSL_GIT:-"https://github.com/wolfSSL/wolfssl.git"}
 WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.6.3-stable"}
 WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
+
+WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
@@ -42,9 +40,16 @@ clone_wolfssl() {
 
     if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
         printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
-        git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
-             ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
+        if [ "$WOLFPROV_DEBUG" = "1" ]; then
+            git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
+                 ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        else
+            git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
+                 ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        fi
+        if [ $RET != 0 ]; then
             printf "ERROR.\n"
             do_cleanup
             exit 1
@@ -65,8 +70,14 @@ install_wolfssl() {
         fi
 
         ./autogen.sh >>$LOG_FILE 2>&1
-        ./configure ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
+        if [ "$WOLFPROV_DEBUG" = "1" ]; then
+            ./configure ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} --enable-debug >>$LOG_FILE 2>&1
+            RET=$?
+        else
+            ./configure ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        fi
+        if [ $RET != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${WOLFSSL_INSTALL_DIR}
             do_cleanup
@@ -100,6 +111,6 @@ install_wolfssl() {
 
 init_wolfssl() {
     install_wolfssl
-    printf "\twolfSSL ${WOLFSSL_TAG} install from: ${WOLFSSL_INSTALL_DIR}\n"
+    printf "\twolfSSL ${WOLFSSL_TAG} installed in: ${WOLFSSL_INSTALL_DIR}\n"
 }
 
