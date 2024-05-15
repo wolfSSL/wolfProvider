@@ -60,8 +60,8 @@ install_wolfssl() {
     if [ ! -d ${WOLFSSL_INSTALL_DIR} ]; then
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
         if [ -z "$WOLFSSL_CONFIG_OPTS" ]; then
-            WOLFSSL_CONFIG_OPTS='--enable-all-crypto --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'
-            WOLFSSL_CONFIG_CFLAGS="-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
+            WOLFSSL_CONFIG_OPTS='--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'
+            WOLFSSL_CONFIG_CFLAGS="-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
         fi
 
         ./autogen.sh >>$LOG_FILE 2>&1
