@@ -422,10 +422,11 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
         ctx->rsa = NULL;
         if (!wp_rsa_up_ref(rsa)) {
             ok = 0;
+        } else {
+            ctx->rsa = rsa;
         }
     }
     if (ok) {
-        ctx->rsa = rsa;
         ctx->op = op;
 
         if (!wp_rsa_set_ctx_params(ctx, params)) {
