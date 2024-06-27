@@ -414,15 +414,20 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
 {
     int ok = 1;
 
-    if (ctx->rsa != rsa) {
+    if ((ctx == NULL) || (rsa == NULL)) {
+        ok = 0;
+    }
+    if (ok && (ctx->rsa != rsa)) {
         wp_rsa_free(ctx->rsa);
         ctx->rsa = NULL;
         if (!wp_rsa_up_ref(rsa)) {
             ok = 0;
         }
+        else {
+            ctx->rsa = rsa;
+        }
     }
     if (ok) {
-        ctx->rsa = rsa;
         ctx->op = op;
 
         if (!wp_rsa_set_ctx_params(ctx, params)) {
@@ -432,14 +437,14 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
     if (ok) {
         ctx->saltLen = RSA_PSS_SALTLEN_AUTO;
 
-        if (wp_rsa_get_type(rsa) == RSA_FLAG_TYPE_RSA) {
+        if (wp_rsa_get_type(ctx->rsa) == RSA_FLAG_TYPE_RSA) {
             ctx->padMode = RSA_PKCS1_PADDING;
         }
         else {
             char* mdName;
             char* mgfMdName;
             ctx->padMode = RSA_PKCS1_PSS_PADDING;
-            wp_rsa_get_pss_mds(rsa, &mdName, &mgfMdName);
+            wp_rsa_get_pss_mds(ctx->rsa, &mdName, &mgfMdName);
             if ((mdName == NULL) || (mdName[0] == '\0')) {
                 mdName = (char*)WP_RSA_DEFAULT_MD;
             }
@@ -453,7 +458,7 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
                 ok = 0;
             }
             if (ok) {
-                ctx->minSaltLen = wp_rsa_get_pss_salt_len(rsa);
+                ctx->minSaltLen = wp_rsa_get_pss_salt_len(ctx->rsa);
                 if (ok && !wp_rsa_check_pss_salt_len(ctx)) {
                     ok = 0;
                 }
