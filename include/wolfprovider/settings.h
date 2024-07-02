@@ -91,6 +91,9 @@
 #ifdef HAVE_AESCCM
     #define WP_HAVE_AESCCM
 #endif
+#ifdef WOLFSSL_AES_CFB
+    #define WP_HAVE_AESCFB
+#endif
 
 #ifndef WC_NO_RNG
     #define WP_HAVE_RANDOM
