@@ -24,6 +24,7 @@ WOLFSSL_GIT=${WOLFSSL_GIT:-"https://github.com/wolfSSL/wolfssl.git"}
 WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.6.3-stable"}
 WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
+WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
@@ -64,19 +65,20 @@ install_wolfssl() {
 
     if [ ! -d ${WOLFSSL_INSTALL_DIR} ]; then
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
-        if [ -z "$WOLFSSL_CONFIG_OPTS" ]; then
-            WOLFSSL_CONFIG_OPTS='--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'
-            WOLFSSL_CONFIG_CFLAGS="-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
-        fi
 
         ./autogen.sh >>$LOG_FILE 2>&1
+        CONF_ARGS="--enable-wolfprovider -prefix=${WOLFSSL_INSTALL_DIR}"
+
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            ./configure ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} --enable-debug >>$LOG_FILE 2>&1
-            RET=$?
-        else
-            ./configure ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-            RET=$?
+            CONF_ARGS+=" --enable-debug"
         fi
+        if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            ./fips-check.sh keep nomakecheck fips-ready
+            cd XXX-fips-test && ./autogen.sh
+            CONF_ARGS+=" --enable-fips=ready"
+        fi
+        ./configure ${CONF_ARGS} >>$LOG_FILE 2>&1
+        RET=$?
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${WOLFSSL_INSTALL_DIR}
@@ -102,6 +104,9 @@ install_wolfssl() {
             rm -rf ${WOLFSSL_INSTALL_DIR}
             do_cleanup
             exit 1
+        fi
+        if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            cd ..
         fi
         printf "Done.\n"
     fi
