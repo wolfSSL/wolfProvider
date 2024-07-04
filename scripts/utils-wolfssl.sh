@@ -25,6 +25,8 @@ WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.6.3-stable"}
 WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
 WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
+WOLFSSL_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'}
+WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"}
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
@@ -67,7 +69,7 @@ install_wolfssl() {
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
 
         ./autogen.sh >>$LOG_FILE 2>&1
-        CONF_ARGS="--enable-wolfprovider -prefix=${WOLFSSL_INSTALL_DIR}"
+        CONF_ARGS="-prefix=${WOLFSSL_INSTALL_DIR}"
 
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
             CONF_ARGS+=" --enable-debug"
@@ -80,7 +82,8 @@ install_wolfssl() {
             fi
             cd XXX-fips-test
         fi
-        ./configure ${CONF_ARGS} >>$LOG_FILE 2>&1
+
+        ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
         RET=$?
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
