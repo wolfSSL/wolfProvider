@@ -338,8 +338,10 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
     case WC_HASH_TYPE_MD5_SHA:
     case WC_HASH_TYPE_BLAKE2B:
     case WC_HASH_TYPE_BLAKE2S:
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+#ifdef WC_HASH_TYPE_SHAKE128
     case WC_HASH_TYPE_SHAKE128:
+#endif
+#ifdef WC_HASH_TYPE_SHAKE256
     case WC_HASH_TYPE_SHAKE256:
 #endif
     default:
