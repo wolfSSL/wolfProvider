@@ -468,7 +468,7 @@ IMPLEMENT_DIGEST(wp_sha512, wc_Sha512,
 
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
 #if !defined(WOLFSSL_NOSHA512_224) && \
-    (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5, 3)) && !defined(HAVE_SELFTEST)
+    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
 IMPLEMENT_DIGEST(wp_sha512_224, wc_Sha512_224,
                  WC_SHA512_224_BLOCK_SIZE, WC_SHA512_224_DIGEST_SIZE,
                  WP_SHA2_FLAGS,
@@ -477,7 +477,7 @@ IMPLEMENT_DIGEST(wp_sha512_224, wc_Sha512_224,
 #endif /* WOLFSSL_NOSHA512_224 */
 
 #if !defined(WOLFSSL_NOSHA512_256) && \
-    (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5, 3)) && !defined(HAVE_SELFTEST)
+    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
 IMPLEMENT_DIGEST(wp_sha512_256, wc_Sha512_256,
                  WC_SHA512_256_BLOCK_SIZE, WC_SHA512_256_DIGEST_SIZE,
                  WP_SHA2_FLAGS,
