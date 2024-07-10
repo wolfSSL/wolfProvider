@@ -21,7 +21,8 @@
 #include "unit.h"
 
 #if defined(WP_HAVE_DES3CBC) || defined(WP_HAVE_AESCBC) || \
-    defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR)
+    defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR) || \
+    defined(WP_HAVE_AESCFB)
 
 static int test_cipher_enc(const EVP_CIPHER *cipher,
                            unsigned char *key, unsigned char *iv,
@@ -179,7 +180,8 @@ static int test_cipher_enc_dec(void *data, const char *cipher, int keyLen,
 #endif
 
 #if defined(WP_HAVE_DES3CBC) || defined(WP_HAVE_AESCBC) || \
-    defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR)
+    defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR) || \
+    defined(WP_HAVE_AESCFB)
 
 
 /******************************************************************************/
@@ -541,4 +543,45 @@ int test_aes256_ctr_stream(void *data)
 }
 
 #endif /* WP_HAVE_AESCTR */
+
+#ifdef WP_HAVE_AESCFB
+
+int test_aes128_cfb_stream(void *data)
+{
+    int err;
+
+    err = test_stream_enc_dec(data, "AES-128-CFB", 16, 16, 16, 0);
+    if (err == 0)
+        err = test_stream_enc_dec(data, "AES-128-CFB", 16, 16, 1, 0);
+
+    return err;
+}
+
+/******************************************************************************/
+
+int test_aes192_cfb_stream(void *data)
+{
+    int err;
+
+    err = test_stream_enc_dec(data, "AES-192-CFB", 24, 16, 15, 0);
+    if (err == 0)
+        err = test_stream_enc_dec(data, "AES-192-CFB", 24, 16, 2, 0);
+
+    return err;
+}
+
+/******************************************************************************/
+
+int test_aes256_cfb_stream(void *data)
+{
+    int err;
+
+    err = test_stream_enc_dec(data, "AES-256-CFB", 32, 16, 14, 0);
+    if (err == 0)
+        err = test_stream_enc_dec(data, "AES-256-CFB", 32, 16, 3, 0);
+
+    return err;
+}
+
+#endif /* WP_HAVE_AESCFB */
 
