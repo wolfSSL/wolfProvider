@@ -7,6 +7,7 @@ check_PROGRAMS =
 dist_noinst_SCRIPTS =
 DISTCLEANFILES =
 pkginclude_HEADERS =
+EXTRA_DIST =
 
 ACLOCAL_AMFLAGS = -I m4
 AM_CPPFLAGS = -I$(top_srcdir)/include
@@ -16,6 +17,7 @@ lib_LTLIBRARIES = libwolfprov.la
 include src/include.am
 include include/include.am
 include test/include.am
+include certs/include.am
 #include scripts/include.am
 
 #noinst_PROGRAMS += bench
