@@ -6,6 +6,7 @@ noinst_HEADERS =
 check_PROGRAMS =
 dist_noinst_SCRIPTS =
 DISTCLEANFILES =
+pkginclude_HEADERS =
 
 ACLOCAL_AMFLAGS = -I m4
 
