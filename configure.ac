@@ -51,8 +51,6 @@ if test "x$have_wolfssl" = "xyes"; then
     LDFLAGS="$LDFLAGS $WOLFSSL_LDFLAGS"
 fi
 
-AC_CHECK_HEADERS([wolfssl/wolfcrypt/kdf.h])
-
 # DEBUG
 DEBUG_CFLAGS="-g -O0 -DWOLFPROV_DEBUG"
 
