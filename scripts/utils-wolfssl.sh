@@ -42,7 +42,7 @@ clone_wolfssl() {
 
     if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
         printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
-        git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
+        git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
              ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
