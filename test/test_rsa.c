@@ -749,7 +749,7 @@ int test_rsa_load_key(void* data)
     params[0] = OSSL_PARAM_construct_end();
 
     PRINT_MSG("Open RSA private key");
-    ctx = OSSL_STORE_open_ex("./certs/server-key.pem", wpLibCtx, NULL, NULL,
+    ctx = OSSL_STORE_open_ex(CERTS_DIR"server-key.pem", wpLibCtx, NULL, NULL,
         NULL, params, NULL, NULL);
     err = ctx == NULL;
     if (err == 0) {
@@ -784,7 +784,7 @@ int test_rsa_load_cert(void* data)
     params[0] = OSSL_PARAM_construct_end();
 
     PRINT_MSG("Open certificate with RSA public key");
-    ctx = OSSL_STORE_open_ex("./certs/server-cert.pem", wpLibCtx, NULL, NULL,
+    ctx = OSSL_STORE_open_ex(CERTS_DIR"server-cert.pem", wpLibCtx, NULL, NULL,
         NULL, params, NULL, NULL);
     err = ctx == NULL;
     if (err == 0) {
