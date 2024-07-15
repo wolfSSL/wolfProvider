@@ -36,7 +36,10 @@ test: check
 # OpenSSL isn't installed in a standard location, this naked configure command
 # will fail to find it. We tell it where to find the include and lib directory
 # for OpenSSL here.
+#
+# The '--with-wolfssl' doesn't get propagated during a distcheck either, but it
+# is necessary when they are installed somewhere other than /usr/local.
 AM_DISTCHECK_CONFIGURE_FLAGS=CPPFLAGS="-I@abs_top_srcdir@/include \
-                                         @OPENSSL_INCLUDES@" \
-                             LDFLAGS="@OPENSSL_LDFLAGS@"
+                                         @OPENSSL_INCLUDES@ @WOLFSSL_INCLUDES@" \
+                             LDFLAGS="@OPENSSL_LDFLAGS@ @WOLFSSL_LDFLAGS@" 
 
