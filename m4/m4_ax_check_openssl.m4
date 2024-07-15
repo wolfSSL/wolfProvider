@@ -55,6 +55,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
             if test x"$PKG_CONFIG" != x""; then
                 OPENSSL_LDFLAGS=`$PKG_CONFIG openssl --libs-only-L 2>/dev/null`
                 if test $? = 0; then
+                    OPENSSL_DIR=`$PKG_CONFIG openssl --libs-only-I 2>/dev/null`"/.."
                     OPENSSL_LIBS=`$PKG_CONFIG openssl --libs-only-l 2>/dev/null`
                     OPENSSL_INCLUDES=`$PKG_CONFIG openssl --cflags-only-I 2>/dev/null`
                     found=true
@@ -77,6 +78,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
         for ssldir in $ssldirs; do
             AC_MSG_CHECKING([for include/openssl/ssl.h in $ssldir])
             if test -f "$ssldir/include/openssl/ssl.h"; then
+                OPENSSL_DIR="$ssldir"
                 OPENSSL_INCLUDES="-I$ssldir/include"
                 OPENSSL_LDFLAGS="-L$ssldir/lib -L$ssldir/lib64"
                 OPENSSL_LIBS="-lssl -lcrypto"
