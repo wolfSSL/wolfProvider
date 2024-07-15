@@ -39,5 +39,5 @@ test: check
 #
 # The '--with-wolfssl' doesn't get propagated during a distcheck either, but it
 # is necessary when they are installed somewhere other than /usr/local.
-AM_DISTCHECK_CONFIGURE_FLAGS="--with-openssl=@OPENSSL_DIR@ --with-wolfssl=@WOLFSSL_DIR@"
+AM_DISTCHECK_CONFIGURE_FLAGS="--with-openssl=@OPENSSL_INSTALL_DIR@ --with-wolfssl=@WOLFSSL_INSTALL_DIR@"
 
