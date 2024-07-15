@@ -51,8 +51,8 @@ export UNAME=Android
 export CROSS_COMPILE=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-
 if [ ! -e ${WORKSPACE}/wolfssl-install ]; then
     echo "=== Installing WolfSSL ==="
-    export WOLFSSL_CONFIG_OPTS='--enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-aesctr --enable-aesccm --enable-x963kdf --enable-compkey --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-base16 --enable-aesgcm-stream --enable-pwdbased'
-    export WOLFSSL_CONFIG_CPPFLAGS=CPPFLAGS="-I${WORKSPACE}/openssl-install -DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DFP_MAX_BITS=16384 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
+    export WOLFSSL_CONFIG_OPTS='--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'
+    export WOLFSSL_CONFIG_CPPFLAGS=CPPFLAGS="-I${WORKSPACE}/openssl-install -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
     if [ "${USE_FIPS}" = "true" ]; then
         WOLFSSL_CONFIG_OPTS+=' --enable-fips=ready'
         if [ "${USE_FIPS_CHECK}" = "true" ]; then
