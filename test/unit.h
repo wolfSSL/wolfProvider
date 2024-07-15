@@ -62,6 +62,10 @@ void print_buffer(const char *desc, const unsigned char *buffer, size_t len);
 #define TEST_DECL(func, data)        { #func, func, data, 0, 0, 0 }
 #endif
 
+#ifndef CERTS_DIR
+#define CERTS_DIR "./certs"
+#endif
+
 typedef int (*TEST_FUNC)(void *data);
 typedef struct TEST_CASE {
     const char   *name;
