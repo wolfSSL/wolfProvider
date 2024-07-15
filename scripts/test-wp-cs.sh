@@ -21,8 +21,8 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 NUMCPU=${NUMCPU:-8}
-source ${SCRIPT_DIR}/utils-openssl.sh
-source ${SCRIPT_DIR}/utils-wolfssl.sh
+WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+source ${SCRIPT_DIR}/utils-wolfprovider.sh
 
 CERT_DIR=$SCRIPT_DIR/../certs
 LOG_FILE=$SCRIPT_DIR/test-wp-cs.log
@@ -221,23 +221,12 @@ do_client_test() { # usage: do_client_test [extraArgs]
 
 FAIL=0
 
-WOLFPROV_DIR=$SCRIPT_DIR/..
-WOLFPROV_NAME="libwolfprov"
-WOLFPROV_PATH=$WOLFPROV_DIR/.libs
-
 CURVES=prime256v1
 #CURVES=X25519
 OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
 OPENSSL_PORT=$(generate_port)
 
-init_openssl
-init_wolfssl
-if [ -z $LD_LIBRARY_PATH ]; then
-    export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
-else
-    export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
-fi
-printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
+init_wolfprov
 
 if [ "${AM_BWRAPPED-}" != "yes" ]; then
     bwrap_path="$(command -v bwrap)"
@@ -246,28 +235,6 @@ if [ "${AM_BWRAPPED-}" != "yes" ]; then
         exec "$bwrap_path" --unshare-net --dev-bind / / "$0" "$@"
     fi
     unset AM_BWRAPPED
-fi
-
-# Set up wolfProvider
-cd ${WOLFPROV_DIR}
-if [ ! -e "${WOLFPROV_DIR}/configure" ]; then
-    ./autogen.sh >>$LOG_FILE 2>&1
-    ./configure --with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-fi
-make -j$NUMCPU >>$LOG_FILE 2>&1
-if [ $? != 0 ]; then
-  printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
-  do_cleanup
-  exit 1
-fi
-
-make test >>$LOG_FILE 2>&1
-if [ $? != 0 ]; then
-  printf "\n\n...\n"
-  tail -n 40 $LOG_FILE
-  do_cleanup
-  exit 1
 fi
 
 printf "Client testing\n" | tee $LOG_FILE

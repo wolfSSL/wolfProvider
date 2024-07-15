@@ -19,15 +19,16 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 #
 
-#
-# wolfSSL 5.0.0
-#
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 WOLFSSL_GIT=${WOLFSSL_GIT:-"https://github.com/wolfSSL/wolfssl.git"}
-WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.6.3-stable"}
+WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.7.2-stable"}
 WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
+WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
+WOLFSSL_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'}
+WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"}
+
+WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
@@ -42,10 +43,17 @@ clone_wolfssl() {
 
     if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
         printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
-        git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
-             ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "ERROR.\n"
+        if [ "$WOLFPROV_DEBUG" = "1" ]; then
+            git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
+                 ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        else
+            git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
+                 ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        fi
+        if [ $RET != 0 ]; then
+            printf "ERROR cloning\n"
             do_cleanup
             exit 1
         fi
@@ -59,15 +67,37 @@ install_wolfssl() {
 
     if [ ! -d ${WOLFSSL_INSTALL_DIR} ]; then
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
-        if [ -z "$WOLFSSL_CONFIG_OPTS" ]; then
-            WOLFSSL_CONFIG_OPTS='--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'
-            WOLFSSL_CONFIG_CFLAGS="-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
-        fi
 
         ./autogen.sh >>$LOG_FILE 2>&1
-        ./configure ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" -prefix=${WOLFSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+        CONF_ARGS="-prefix=${WOLFSSL_INSTALL_DIR}"
+
+        if [ "$WOLFPROV_DEBUG" = "1" ]; then
+            CONF_ARGS+=" --enable-debug"
+        fi
+        if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            CONF_ARGS+=" --enable-fips=ready"
+            if [ ! -e "XXX-fips-test" ]; then
+                ./fips-check.sh keep nomakecheck fips-ready >>$LOG_FILE 2>&1
+                if [ $? != 0 ]; then
+                    printf "ERROR checking out FIPS\n"
+                    rm -rf ${WOLFSSL_INSTALL_DIR}
+                    do_cleanup
+                    exit 1
+                fi
+                (cd XXX-fips-test && ./autogen.sh && ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" && make && ./fips-hash.sh) >>$LOG_FILE 2>&1
+                if [ $? != 0 ]; then
+                    printf "ERROR compiling FIPS version of wolfSSL\n"
+                    rm -rf ${WOLFSSL_INSTALL_DIR}
+                    do_cleanup
+                    exit 1
+                fi
+            fi
+            cd XXX-fips-test
+        fi
+
+        ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
-            printf "ERROR.\n"
+            printf "ERROR running ./configure\n"
             rm -rf ${WOLFSSL_INSTALL_DIR}
             do_cleanup
             exit 1
@@ -92,6 +122,9 @@ install_wolfssl() {
             do_cleanup
             exit 1
         fi
+        if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            cd ..
+        fi
         printf "Done.\n"
     fi
 
@@ -100,6 +133,6 @@ install_wolfssl() {
 
 init_wolfssl() {
     install_wolfssl
-    printf "\twolfSSL ${WOLFSSL_TAG} install from: ${WOLFSSL_INSTALL_DIR}\n"
+    printf "\twolfSSL ${WOLFSSL_TAG} installed in: ${WOLFSSL_INSTALL_DIR}\n"
 }
 

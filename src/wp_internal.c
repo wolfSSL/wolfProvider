@@ -291,12 +291,14 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
         break;
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-#ifndef WOLFSSL_NOSHA512_224
+#if !defined(WOLFSSL_NOSHA512_224) && !defined(HAVE_FIPS) && \
+        !defined(SELF_TEST)
     case WC_HASH_TYPE_SHA512_224:
         rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
         break;
 #endif /* !WOLFSSL_NOSHA512_224 */
-#ifndef WOLFSSL_NOSHA512_256
+#if !defined(WOLFSSL_NOSHA512_256) && !defined(HAVE_FIPS) && \
+        !defined(SELF_TEST)
     case WC_HASH_TYPE_SHA512_256:
         rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
         break;
@@ -337,10 +339,10 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
     case WC_HASH_TYPE_BLAKE2B:
     case WC_HASH_TYPE_BLAKE2S:
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-#ifndef WOLFSSL_NO_SHAKE128
+#ifdef WOLFSSL_SHAKE128
     case WC_HASH_TYPE_SHAKE128:
 #endif
-#ifndef WOLFSSL_NO_SHAKE256
+#ifdef WOLFSSL_SHAKE256
     case WC_HASH_TYPE_SHAKE256:
 #endif
 #endif

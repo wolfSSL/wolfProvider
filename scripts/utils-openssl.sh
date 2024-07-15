@@ -30,6 +30,7 @@ OPENSSL_SOURCE_DIR=${SCRIPT_DIR}/../openssl-source
 OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 
 NUMCPU=${NUMCPU:-8}
+WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
@@ -43,9 +44,16 @@ clone_openssl() {
 
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tClone OpenSSL ${OPENSSL_TAG} ... "
-        git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
-             ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
+        if [ "$WOLFPROV_DEBUG" = "1" ]; then
+            git clone -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
+                 ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        else
+            git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
+                 ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        fi
+        if [ $RET != 0 ]; then
             printf "ERROR.\n"
             do_cleanup
             exit 1
@@ -60,8 +68,14 @@ install_openssl() {
 
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
-        ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
+        if [ "$WOLFPROV_DEBUG" = "1" ]; then
+            ./config shared --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
+            RET=$?
+        else
+            ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        fi
+        if [ $RET != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${OPENSSL_INSTALL_DIR}
             do_cleanup
@@ -95,7 +109,7 @@ install_openssl() {
 
 init_openssl() {
     install_openssl
-    printf "\tOpenSSL ${OPENSSL_TAG} install at: ${OPENSSL_INSTALL_DIR}\n"
+    printf "\tOpenSSL ${OPENSSL_TAG} installed in: ${OPENSSL_INSTALL_DIR}\n"
 
     OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
     OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
