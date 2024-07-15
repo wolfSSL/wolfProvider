@@ -86,6 +86,13 @@ install_wolfssl() {
                     exit 1
                 fi
                 (cd XXX-fips-test && ./autogen.sh && ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" && make && ./fips-hash.sh) >>$LOG_FILE 2>&1
+                RET=$?
+                if [ $RET != 0 ]; then
+                    printf "ERROR compiling FIPS version of wolfSSL\n"
+                    rm -rf ${WOLFSSL_INSTALL_DIR}
+                    do_cleanup
+                    exit 1
+                fi
             fi
             cd XXX-fips-test
         fi
@@ -93,7 +100,7 @@ install_wolfssl() {
         ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
         RET=$?
         if [ $RET != 0 ]; then
-            printf "ERROR.\n"
+            printf "ERROR running ./configure\n"
             rm -rf ${WOLFSSL_INSTALL_DIR}
             do_cleanup
             exit 1
