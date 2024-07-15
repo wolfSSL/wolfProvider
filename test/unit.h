@@ -63,7 +63,7 @@ void print_buffer(const char *desc, const unsigned char *buffer, size_t len);
 #endif
 
 #ifndef CERTS_DIR
-#define CERTS_DIR "./certs/"
+#define CERTS_DIR "./certs"
 #endif
 
 typedef int (*TEST_FUNC)(void *data);
