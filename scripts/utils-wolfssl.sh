@@ -78,7 +78,7 @@ install_wolfssl() {
             CONF_ARGS+=" --enable-fips=ready"
             if [ ! -e "XXX-fips-test" ]; then
                 ./fips-check.sh keep nomakecheck fips-ready >>$LOG_FILE 2>&1
-                $(cd XXX-fips-test && ./autogen.sh && ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" && make && ./fips-hash.sh) >>$LOG_FILE 2>&1
+                (cd XXX-fips-test && ./autogen.sh && ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" && make && ./fips-hash.sh) >>$LOG_FILE 2>&1
             fi
             cd XXX-fips-test
         fi
