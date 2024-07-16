@@ -1,11 +1,11 @@
 # configure.ac
 #
-# Copyright (C) 2019-2021 wolfSSL Inc.
+# Copyright (C) 2019-2024 wolfSSL Inc.
 #
 
-AC_COPYRIGHT([Copyright (C) 2021 wolfSSL Inc.])
+AC_COPYRIGHT([Copyright (C) 2024 wolfSSL Inc.])
 AC_PREREQ([2.69])
-AC_INIT([wolfprov], [0.0.1])
+AC_INIT([wolfprov], [1.0.0])
 AC_CONFIG_AUX_DIR([build-aux])
 
 AC_CONFIG_HEADERS([include/config.h])
