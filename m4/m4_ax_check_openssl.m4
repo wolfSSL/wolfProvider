@@ -98,7 +98,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
     # being careful not to pollute the global LIBS, LDFLAGS, and CPPFLAGS
 
     AC_MSG_CHECKING([whether compiling and linking against OpenSSL works])
-    echo "Trying link with OPENSSL_LDFLAGS=$OPENSSL_LDFLAGS;" \
+    echo "Trying link with OPENSSL_INSTALL_DIR=$OPENSSL_INSTALL_DIR; OPENSSL_LDFLAGS=$OPENSSL_LDFLAGS;" \
         "OPENSSL_LIBS=$OPENSSL_LIBS; OPENSSL_INCLUDES=$OPENSSL_INCLUDES" >&AS_MESSAGE_LOG_FD
 
     save_LIBS="$LIBS"
@@ -120,6 +120,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
     LDFLAGS="$save_LDFLAGS"
     LIBS="$save_LIBS"
 
+    AC_SUBST([OPENSSL_INSTALL_DIR])
     AC_SUBST([OPENSSL_INCLUDES])
     AC_SUBST([OPENSSL_LIBS])
     AC_SUBST([OPENSSL_LDFLAGS])

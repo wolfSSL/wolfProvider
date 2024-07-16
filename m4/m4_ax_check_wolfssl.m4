@@ -102,7 +102,7 @@ AC_DEFUN([AX_CHECK_WOLFSSL], [
     # being careful not to pollute the global LIBS, LDFLAGS, and CPPFLAGS
 
     AC_MSG_CHECKING([whether compiling and linking against wolfSSL works])
-    echo "Trying link with WOLFSSL_LDFLAGS=$WOLFSSL_LDFLAGS;" \
+    echo "Trying link with WOLFSSL_INSTALL_DIR=$WOLFSSL_INSTALL_DIR; WOLFSSL_LDFLAGS=$WOLFSSL_LDFLAGS;" \
         "WOLFSSL_LIBS=$WOLFSSL_LIBS; WOLFSSL_INCLUDES=$WOLFSSL_INCLUDES" >&AS_MESSAGE_LOG_FD
 
     save_LIBS="$LIBS"
@@ -126,6 +126,7 @@ AC_DEFUN([AX_CHECK_WOLFSSL], [
     LDFLAGS="$save_LDFLAGS"
     LIBS="$save_LIBS"
 
+    AC_SUBST([WOLFSSL_INSTALL_DIR])
     AC_SUBST([WOLFSSL_INCLUDES])
     AC_SUBST([WOLFSSL_LIBS])
     AC_SUBST([WOLFSSL_LDFLAGS])
