@@ -55,6 +55,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
             if test x"$PKG_CONFIG" != x""; then
                 OPENSSL_LDFLAGS=`$PKG_CONFIG openssl --libs-only-L 2>/dev/null`
                 if test $? = 0; then
+                    OPENSSL_INSTALL_DIR=`$PKG_CONFIG openssl --libs-only-I 2>/dev/null`"/.."
                     OPENSSL_LIBS=`$PKG_CONFIG openssl --libs-only-l 2>/dev/null`
                     OPENSSL_INCLUDES=`$PKG_CONFIG openssl --cflags-only-I 2>/dev/null`
                     found=true
@@ -77,6 +78,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
         for ssldir in $ssldirs; do
             AC_MSG_CHECKING([for include/openssl/ssl.h in $ssldir])
             if test -f "$ssldir/include/openssl/ssl.h"; then
+                OPENSSL_INSTALL_DIR="$ssldir"
                 OPENSSL_INCLUDES="-I$ssldir/include"
                 OPENSSL_LDFLAGS="-L$ssldir/lib -L$ssldir/lib64"
                 OPENSSL_LIBS="-lssl -lcrypto"
@@ -96,7 +98,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
     # being careful not to pollute the global LIBS, LDFLAGS, and CPPFLAGS
 
     AC_MSG_CHECKING([whether compiling and linking against OpenSSL works])
-    echo "Trying link with OPENSSL_LDFLAGS=$OPENSSL_LDFLAGS;" \
+    echo "Trying link with OPENSSL_INSTALL_DIR=$OPENSSL_INSTALL_DIR; OPENSSL_LDFLAGS=$OPENSSL_LDFLAGS;" \
         "OPENSSL_LIBS=$OPENSSL_LIBS; OPENSSL_INCLUDES=$OPENSSL_INCLUDES" >&AS_MESSAGE_LOG_FD
 
     save_LIBS="$LIBS"
@@ -118,6 +120,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
     LDFLAGS="$save_LDFLAGS"
     LIBS="$save_LIBS"
 
+    AC_SUBST([OPENSSL_INSTALL_DIR])
     AC_SUBST([OPENSSL_INCLUDES])
     AC_SUBST([OPENSSL_LIBS])
     AC_SUBST([OPENSSL_LDFLAGS])

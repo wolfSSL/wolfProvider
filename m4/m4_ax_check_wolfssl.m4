@@ -54,6 +54,8 @@ AC_DEFUN([AX_CHECK_WOLFSSL], [
             if test x"$PKG_CONFIG" != x""; then
                 WOLFSSL_LDFLAGS=`$PKG_CONFIG wolfssl --libs-only-L 2>/dev/null`
                 if test $? = 0; then
+                    # Hack to get the folder wolfssl is installed in
+                    WOLFSSL_INSTALL_DIR=`$PKG_CONFIG wolfssl --libs-only-I 2>/dev/null`"/.."
                     WOLFSSL_LIBS=`$PKG_CONFIG wolfssl --libs-only-l 2>/dev/null`
                     WOLFSSL_INCLUDES=`$PKG_CONFIG wolfssl --cflags-only-I 2>/dev/null`
                     found=true
@@ -76,6 +78,7 @@ AC_DEFUN([AX_CHECK_WOLFSSL], [
         for wolfssldir in $wolfssldirs; do
             AC_MSG_CHECKING([for include/wolfssl/ssl.h in $wolfssldir])
             if test -f "$wolfssldir/include/wolfssl/ssl.h"; then
+                WOLFSSL_INSTALL_DIR="$wolfssldir"
                 WOLFSSL_INCLUDES="-I$wolfssldir/include"
                 WOLFSSL_LDFLAGS="-L$wolfssldir/lib"
                 WOLFSSL_LIBS="-lwolfssl"
@@ -99,7 +102,7 @@ AC_DEFUN([AX_CHECK_WOLFSSL], [
     # being careful not to pollute the global LIBS, LDFLAGS, and CPPFLAGS
 
     AC_MSG_CHECKING([whether compiling and linking against wolfSSL works])
-    echo "Trying link with WOLFSSL_LDFLAGS=$WOLFSSL_LDFLAGS;" \
+    echo "Trying link with WOLFSSL_INSTALL_DIR=$WOLFSSL_INSTALL_DIR; WOLFSSL_LDFLAGS=$WOLFSSL_LDFLAGS;" \
         "WOLFSSL_LIBS=$WOLFSSL_LIBS; WOLFSSL_INCLUDES=$WOLFSSL_INCLUDES" >&AS_MESSAGE_LOG_FD
 
     save_LIBS="$LIBS"
@@ -123,6 +126,7 @@ AC_DEFUN([AX_CHECK_WOLFSSL], [
     LDFLAGS="$save_LDFLAGS"
     LIBS="$save_LIBS"
 
+    AC_SUBST([WOLFSSL_INSTALL_DIR])
     AC_SUBST([WOLFSSL_INCLUDES])
     AC_SUBST([WOLFSSL_LIBS])
     AC_SUBST([WOLFSSL_LDFLAGS])
