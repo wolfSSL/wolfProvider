@@ -29,7 +29,7 @@
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
-#ifdef WP_HAVE_AESCTR
+#if defined(WP_HAVE_AESCTR) || defined(WP_HAVE_AESCFB)
 
 /**
  * Data structure for AES ciphers that are streaming.
@@ -62,9 +62,9 @@ static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
 
 
 /**
- * Free the AES block context object.
+ * Free the AES stream context object.
  *
- * @param [in, out] ctx  AES block context object.
+ * @param [in, out] ctx  AES stream context object.
  */
 static void wp_aes_stream_freectx(wp_AesStreamCtx *ctx)
 {
@@ -73,11 +73,11 @@ static void wp_aes_stream_freectx(wp_AesStreamCtx *ctx)
 }
 
 /**
- * Duplicate the AES block context object.
+ * Duplicate the AES stream context object.
  *
- * @param [in] src  AES block context object to copy.
+ * @param [in] src  AES stream context object to copy.
  * @return  NULL on failure.
- * @return  AES block context object.
+ * @return  AES stream context object.
  */
 static void *wp_aes_stream_dupctx(wp_AesStreamCtx *src)
 {
@@ -121,7 +121,7 @@ static const OSSL_PARAM *wp_cipher_gettable_params(
 }
 
 /**
- * Get the values from the AES block context for the parameters.
+ * Get the values from the AES stream context for the parameters.
  *
  * @param [in, out] params  Array of parameters to retrieve.
  * @param [in]      mode    AES cipher mode.
@@ -177,7 +177,7 @@ static int wp_aes_stream_get_params(OSSL_PARAM params[], unsigned int mode,
 /**
  * Returns the parameters of a cipher context that can be retrieved.
  *
- * @param [in] ctx      AES block context object. Unused.
+ * @param [in] ctx      AES stream context object. Unused.
  * @param [in] provCtx  wolfProvider context object. Unused.
  * @return  Array of parameters.
  */
@@ -203,7 +203,7 @@ static const OSSL_PARAM* wp_cipher_gettable_ctx_params(wp_AesStreamCtx* ctx,
 /**
  * Returns the parameters of a cipher context that can be set.
  *
- * @param [in] ctx      AES block context object. Unused.
+ * @param [in] ctx      AES stream context object. Unused.
  * @param [in] provCtx  wolfProvider context object. Unused.
  * @return  Array of parameters.
  */
@@ -224,9 +224,9 @@ static const OSSL_PARAM* wp_cipher_settable_ctx_params(wp_AesStreamCtx* ctx,
 }
 
 /**
- * Set the IV against the AES block context object.
+ * Set the IV against the AES stream context object.
  *
- * @param [in, out] ctx    AES block context object.
+ * @param [in, out] ctx    AES stream context object.
  * @param [in]      iv     IV data.
  * @param [in]      ivlen  Length of IV data in bytes.
  * @return  1 on success.
@@ -249,16 +249,16 @@ static int wp_aes_init_iv(wp_AesStreamCtx *ctx, const unsigned char *iv,
 }
 
 /**
- * Initialization of an AES block cipher.
+ * Initialization of an AES stream cipher.
  *
  * Internal. Handles both encrypt and ddecrypt.
  *
- * @param [in, out] ctx     AES block context object.
+ * @param [in, out] ctx     AES stream context object.
  * @param [in]      key     Private key data. May be NULL.
  * @param [in]      keyLen  Length of private key in bytes.
  * @param [in]      iv      IV data. May be NULL.
  * @param [in]      ivLen   Length of IV in bytes.
- * @param [in]      params  Parameters to set against AES block context object.
+ * @param [in]      params  Parameters to set against AES stream context object.
  * @param [in]      enc     Initializing for encryption.
  * @return  1 on success.
  * @return  0 on failure.
@@ -307,14 +307,14 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
 }
 
 /**
- * Initialization of an AES block cipher for encryption.
+ * Initialization of an AES stream cipher for encryption.
  *
- * @param [in, out] ctx     AES block context object.
+ * @param [in, out] ctx     AES stream context object.
  * @param [in]      key     Private key data. May be NULL.
  * @param [in]      keyLen  Length of private key in bytes.
  * @param [in]      iv      IV data. May be NULL.
  * @param [in]      ivLen   Length of IV in bytes.
- * @param [in]      params  Parameters to set against AES block context object.
+ * @param [in]      params  Parameters to set against AES stream context object.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -326,14 +326,14 @@ static int wp_aes_stream_einit(wp_AesStreamCtx *ctx, const unsigned char *key,
 }
 
 /**
- * Initialization of an AES block cipher for decryption.
+ * Initialization of an AES stream cipher for decryption.
  *
- * @param [in, out] ctx     AES block context object.
+ * @param [in, out] ctx     AES stream context object.
  * @param [in]      key     Private key data. May be NULL.
  * @param [in]      keyLen  Length of private key in bytes.
  * @param [in]      iv      IV data. May be NULL.
  * @param [in]      ivLen   Length of IV in bytes.
- * @param [in]      params  Parameters to set against AES block context object.
+ * @param [in]      params  Parameters to set against AES stream context object.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -345,12 +345,12 @@ static int wp_aes_stream_dinit(wp_AesStreamCtx *ctx, const unsigned char *key,
 }
 
 /**
- * Encrypt/decrypt using AES-ECB or AES-CBC with wolfSSL.
+ * Encrypt/decrypt using AES-CTR or AES-CFB with wolfSSL.
  *
  * Assumes out has inLen bytes available.
  * Assumes whole blocks only.
  *
- * @param [in]  ctx    AES block context object.
+ * @param [in]  ctx    AES stream context object.
  * @param [out] out    Buffer to hold encrypted/decrypted result.
  * @param [in]  in     Data to encrypt/decrypt.
  * @param [in]  inLen  Length of data to encrypt/decrypt in bytes.
@@ -362,6 +362,7 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
 {
     int ok = 0;
 
+#ifdef WP_HAVE_AESCTR
     if (ctx->mode == EVP_CIPH_CTR_MODE) {
         int rc;
 
@@ -372,6 +373,26 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
             ok = 1;
         }
     }
+    else
+#endif
+#ifdef WP_HAVE_AESCFB
+    if (ctx->mode == EVP_CIPH_CFB_MODE) {
+        int rc;
+ 
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        if (ctx->enc) {
+            rc = wc_AesCfbEncrypt(&ctx->aes, out, in, (word32)inLen);
+        }else {
+            rc = wc_AesCfbDecrypt(&ctx->aes, out, in, (word32)inLen);
+        }
+        if (rc == 0) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+            ok = 1;
+        }
+    }
+    else
+#endif
+    {}
 
     return ok;
 }
@@ -379,7 +400,7 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
 /**
  * Update encryption/decryption with more data.
  *
- * @param [in]  ctx      AES block context object.
+ * @param [in]  ctx      AES stream context object.
  * @param [out] out      Buffer to hold encrypted/decrypted result.
  * @param [out] outLen   Length of encrypted/decrypted data in bytes.
  * @param [in]  outSize  Size of output buffer in bytes.
@@ -407,9 +428,9 @@ static int wp_aes_stream_update(wp_AesStreamCtx *ctx, unsigned char *out,
 }
 
 /**
- * Finalize AES block encryption/decryption.
+ * Finalize AES stream encryption/decryption.
  *
- * @param [in]  ctx      AES block context object.
+ * @param [in]  ctx      AES stream context object.
  * @param [out] out      Buffer to hold encrypted/decrypted data.
  * @param [out] outLen   Length of data encrypted/decrypted in bytes.
  * @param [in]  outSize  Size of buffer.
@@ -430,7 +451,7 @@ static int wp_aes_stream_final(wp_AesStreamCtx* ctx, unsigned char *out,
 /**
  * One-shot encryption/decryption operation.
  *
- * @param [in]  ctx      AES block context object.
+ * @param [in]  ctx      AES stream context object.
  * @param [out] out      Buffer to hold encrypted/decrypted result.
  * @param [out] outLen   Length of encrypted/decrypted data in bytes.
  * @param [in]  outSize  Size of output buffer in bytes.
@@ -459,9 +480,9 @@ static int wp_aes_stream_cipher(wp_AesStreamCtx* ctx, unsigned char* out,
 }
 
 /**
- * Put values from the AES block context object into parameters objects.
+ * Put values from the AES stream context object into parameters objects.
  *
- * @param [in]      ctx     AES block context object.
+ * @param [in]      ctx     AES stream context object.
  * @param [in, out] params  Array of parameters objects.
  * @return  1 on success.
  * @return  0 on failure.
@@ -509,9 +530,9 @@ static int wp_aes_stream_get_ctx_params(wp_AesStreamCtx* ctx,
 }
 
 /**
- * Sets the parameters to use into AES block context object.
+ * Sets the parameters to use into AES stream context object.
  *
- * @param [in, out] ctx     AES block context object.
+ * @param [in, out] ctx     AES stream context object.
  * @param [in]      params  Array of parameter objects.
  * @return  1 on success.
  * @return  0 on failure.
@@ -543,7 +564,7 @@ static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
 }
 
 /**
- * Initialize the AES block context object.
+ * Initialize the AES stream context object.
  *
  * @param [in, out] ctx      AES stream context object.
  * @param [in]      kBits    Number of bits in a valid key.
@@ -564,7 +585,7 @@ static void wp_aes_stream_init_ctx(wp_AesStreamCtx* ctx, size_t kBits,
 /** Implements the get parameters API for a stream cipher. */
 #define IMPLEMENT_AES_STREAM_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)         \
 /**                                                                            \
- * Get the values from the AES block context for the parameters.               \
+ * Get the values from the AES stream context for the parameters.               \
  *                                                                             \
  * @param [in, out] params  Array of parameters to retrieve.                   \
  * @return 1 on success.                                                       \
@@ -632,13 +653,26 @@ IMPLEMENT_AES_STREAM_DISPATCH(lcmode, kBits, ivBits)
 /*
  * AES CTR
  */
-
-/** wp_aes256cbc_functions */
+#ifdef WP_HAVE_AESCTR
+/** wp_aes256ctr_functions */
 IMPLEMENT_AES_STREAM(ctr, CTR, 256, 128)
-/** wp_aes192cbc_functions */
+/** wp_aes192ctr_functions */
 IMPLEMENT_AES_STREAM(ctr, CTR, 192, 128)
-/** wp_aes128cbc_functions */
+/** wp_aes128ctr_functions */
 IMPLEMENT_AES_STREAM(ctr, CTR, 128, 128)
-
 #endif /* WP_HAVE_AESCTR */
+
+/*
+ * AES CFB
+ */
+#ifdef WP_HAVE_AESCFB
+/** wp_aes256cfb_functions */
+IMPLEMENT_AES_STREAM(cfb, CFB, 256, 128)
+/** wp_aes192cfb_functions */
+IMPLEMENT_AES_STREAM(cfb, CFB, 192, 128)
+/** wp_aes128cfb_functions */
+IMPLEMENT_AES_STREAM(cfb, CFB, 128, 128)
+#endif /* WP_HAVE_AESCFB */
+
+#endif /* WP_HAVE_AESCTR || WP_HAVE_AESCFB */
 
