@@ -1,7 +1,7 @@
 
 ## Description
 
-wolfProvider is a library that can be used as an Provider in OpenSSL.
+wolfProvider is a library that can be used as a Provider in OpenSSL.
 
 ## Features
 
