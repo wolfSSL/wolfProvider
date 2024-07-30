@@ -34,6 +34,12 @@ OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
+if [ -z $LD_LIBRARY_PATH ]; then
+  export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64
+else
+  export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64:$LD_LIBRARY_PATH
+fi
+
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
         OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
