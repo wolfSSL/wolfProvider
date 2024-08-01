@@ -38,11 +38,6 @@ install_wolfprov() {
 
     init_openssl
     init_wolfssl
-    if [ -z $LD_LIBRARY_PATH ]; then
-      export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib"
-    else
-      export LD_LIBRARY_PATH="$OPENSSL_INSTALL_DIR/lib64:$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
-    fi
     printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
     if [ ! -d ${WOLFPROV_INSTALL_DIR} ]; then

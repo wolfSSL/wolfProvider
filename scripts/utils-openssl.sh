@@ -24,6 +24,8 @@
 #
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source ${SCRIPT_DIR}/utils-general.sh
+
 OPENSSL_GIT="https://github.com/openssl/openssl.git"
 OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.0.0"}
 OPENSSL_SOURCE_DIR=${SCRIPT_DIR}/../openssl-source
@@ -31,6 +33,12 @@ OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+
+if [ -z $LD_LIBRARY_PATH ]; then
+  export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64
+else
+  export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64:$LD_LIBRARY_PATH
+fi
 
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ]; then
