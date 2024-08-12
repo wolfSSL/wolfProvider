@@ -166,6 +166,14 @@ int test_aes256_ctr_stream(void *data);
 
 #endif
 
+#ifdef WP_HAVE_AESCFB
+
+int test_aes128_cfb_stream(void *data);
+int test_aes192_cfb_stream(void *data);
+int test_aes256_cfb_stream(void *data);
+
+#endif
+
 #ifdef WP_HAVE_AESGCM
 
 int test_aes128_gcm(void *data);
