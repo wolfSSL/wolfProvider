@@ -132,6 +132,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
             ok = 0;                                                            \
         }                                                                      \
     }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }                                                                              \
 
@@ -153,6 +154,7 @@ static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
     if (rc != 0) {                                                             \
         ok = 0;                                                                \
     }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 
@@ -187,6 +189,7 @@ static int name##_final(void* ctx, unsigned char* out, size_t* outLen,         \
             *outLen = dgstSize;                                                \
         }                                                                      \
     }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 
@@ -259,6 +262,7 @@ static int wp_digest_get_params(OSSL_PARAM params[], size_t blkSize,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -552,6 +556,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
     if (ok && (!wp_##alg##_set_ctx_params(ctx, params))) {                     \
         ok = 0;                                                                \
     }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }                                                                              \
 
@@ -586,6 +591,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
            *outLen = ctx->outLen;                                             \
         }                                                                      \
     }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 
@@ -654,6 +660,7 @@ static int name##_set_ctx_params(CTX* ctx, const OSSL_PARAM params[])          \
                 OSSL_DIGEST_PARAM_XOFLEN, &ctx->outLen))) {                    \
         ok = 0;                                                                \
     }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 

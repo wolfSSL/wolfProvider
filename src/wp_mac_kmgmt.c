@@ -104,6 +104,7 @@ int wp_mac_up_ref(wp_Mac* mac)
         wc_UnLockMutex(&mac->mutex);
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
     mac->refCnt++;
@@ -141,6 +142,7 @@ int wp_mac_get_private_key(wp_Mac* mac, unsigned char** priv, size_t* privLen)
         ok = 1;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -309,6 +311,7 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
         ok &= mac->key != NULL;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -335,6 +338,7 @@ static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -376,6 +380,7 @@ static int wp_mac_import(wp_Mac *mac, int selection, const OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -475,6 +480,7 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
     }
     OPENSSL_clear_free(data, len);
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -534,6 +540,7 @@ static int wp_mac_gen_set_params(wp_MacGenCtx* ctx, const OSSL_PARAM params[])
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -626,6 +633,7 @@ static int wp_mac_get_params(wp_Mac* mac, OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

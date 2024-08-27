@@ -27,6 +27,7 @@
 #include <openssl/params.h>
 #include <openssl/prov_ssl.h>
 
+#include <wolfprovider/wp_logging.h>
 #include "wolfprovider/internal.h"
 
 
@@ -157,6 +158,7 @@ static int wp_tls_group_capability(OSSL_CALLBACK *cb, void *arg)
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -182,6 +184,7 @@ int wolfssl_prov_get_capabilities(void *provCtx, const char *capability,
     if (strcasecmp(capability, "TLS-GROUP") == 0) {
         ok = wp_tls_group_capability(cb, arg);
     }
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

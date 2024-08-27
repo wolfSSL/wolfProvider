@@ -168,6 +168,7 @@ static int wp_kdf_init(wp_KdfCtx* ctx, wp_Kdf* kdf, const OSSL_PARAM params[])
         ok = wp_kdf_set_ctx_params(ctx, params);
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -199,6 +200,7 @@ static int wp_kdf_derive(wp_KdfCtx* ctx, unsigned char* secret, size_t* secLen,
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

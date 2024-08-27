@@ -171,6 +171,7 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -353,6 +354,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     /* Dispose of the DER data buffer now that callback has used it. */
     wc_FreeDer(&der);
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -404,6 +406,7 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     /* Dispose of the PEM data buffer. */
     OPENSSL_free(data);
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

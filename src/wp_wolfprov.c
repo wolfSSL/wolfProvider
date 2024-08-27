@@ -199,6 +199,7 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
             ok = 0;
         }
     }
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1046,6 +1047,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
         *out = wolfprov_dispatch_table;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

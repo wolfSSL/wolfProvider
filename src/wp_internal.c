@@ -23,6 +23,7 @@
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
+#include <wolfprovider/wp_logging.h>
 
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
@@ -56,6 +57,7 @@ int wp_provctx_lock_rng(WOLFPROV_CTX* provCtx)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -354,6 +356,7 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -432,6 +435,7 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -668,6 +672,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         *keyLen = len;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
     (void)provCtx;
@@ -742,6 +747,7 @@ int wp_read_der_bio(OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len)
     }
     while (ok && (readLen > 0));
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

@@ -129,6 +129,9 @@ int wolfProv_SetLogComponents(int componentMask);
 
 #ifdef WOLFPROV_DEBUG
 
+#define WOLFPROV_STRINGIZE_HELPER(x) #x
+#define WOLFPROV_STRINGIZE(x) WOLFPROV_STRINGIZE_HELPER(x)
+
 #define WOLFPROV_ERROR(type, err)                                           \
     WOLFPROV_ERROR_LINE(type, err, __FILE__, __LINE__)
 #define WOLFPROV_ERROR_MSG(type, msg)                                       \

@@ -231,6 +231,7 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -278,6 +279,7 @@ static int wp_hkdf_base_get_mode(const OSSL_PARAM params[], int* mode)
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -312,6 +314,7 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -343,6 +346,7 @@ static int wp_kdf_hkdf_get_ctx_params(wp_HkdfCtx* ctx, OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -378,6 +382,7 @@ static int wp_hkdf_base_set_info(wp_HkdfCtx* ctx, const OSSL_PARAM params[])
         params = p + 1;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -402,6 +407,7 @@ static int wp_kdf_hkdf_set_ctx_params(wp_HkdfCtx* ctx,
             ok = 0;
         }
     }
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -527,6 +533,7 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -595,6 +602,7 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -634,6 +642,7 @@ static int wp_kdf_tls1_3_derive(wp_HkdfCtx* ctx, unsigned char* key,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -671,6 +680,7 @@ static int wp_kdf_tls1_3_set_ctx_params(wp_HkdfCtx* ctx,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
