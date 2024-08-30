@@ -115,6 +115,9 @@ static wp_FileCtx* wp_file_open(WOLFPROV_CTX* provCtx, const char* uri)
             ok = 0;
         }
         if (ok) {
+            if (ctx->bio != NULL) {
+                BIO_free(ctx->bio);
+            }
             /* Create a BIO to access file. */
             ctx->bio = BIO_new_file(uri, "rb");
             if (ctx->bio == NULL) {
@@ -145,8 +148,11 @@ static wp_FileCtx* wp_file_attach(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO* cBio)
 
     ctx = wp_filectx_new(provCtx);
     if (ctx != NULL) {
+        if (ctx->bio != NULL) {
+            BIO_free(ctx->bio);
+        }
         /* Get the internal BIO. */
-        ctx->bio = wp_corebio_get_bio(cBio);
+        ctx->bio = wp_corebio_get_bio(provCtx, cBio);
     }
 
     return ctx;

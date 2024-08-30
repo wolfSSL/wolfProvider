@@ -391,7 +391,7 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     (void)selection;
 
     /* Read the data from the BIO into buffer that is allocated on the fly. */
-    if (!wp_read_der_bio(coreBio, &data, &len)) {
+    if (!wp_read_der_bio(ctx->provCtx, coreBio, &data, &len)) {
         ok = 0;
     }
     /* No data - nothing to do. */

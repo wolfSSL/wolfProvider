@@ -1940,7 +1940,7 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
 
     if (ok) {
-        ok = wp_read_der_bio(cBio, &data, &len);
+        ok = wp_read_der_bio(ctx->provCtx, cBio, &data, &len);
     }
     if (ok) {
         rc = ctx->decode(data, &idx, (void*)&ecx->key, len);
@@ -1992,7 +1992,7 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 {
     int ok = 1;
     int rc;
-    BIO* out = wp_corebio_get_bio(cBio);
+    BIO* out = wp_corebio_get_bio(ctx->provCtx, cBio);
     unsigned char* keyData = NULL;
     size_t keyLen = 0;
     unsigned char derData[160];

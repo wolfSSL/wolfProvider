@@ -1936,7 +1936,7 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         ok = 0;
     }
     if (ok) {
-        ok = wp_read_der_bio(cBio, &data, &len);
+        ok = wp_read_der_bio(ctx->provCtx, cBio, &data, &len);
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
         if (!wp_rsa_decode_spki(rsa, data, len)) {
@@ -2333,7 +2333,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 {
     int ok = 1;
     int rc;
-    BIO* out = wp_corebio_get_bio(cBio);
+    BIO *out = wp_corebio_get_bio(ctx->provCtx, cBio);
     unsigned char* keyData = NULL;
     size_t keyLen;
     unsigned char* derData = NULL;
@@ -2468,6 +2468,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         OPENSSL_free(derData);
         OPENSSL_free(pemData);
     }
+    BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
