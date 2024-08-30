@@ -201,22 +201,24 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
     }
 #endif
 
-    ctx->coreBioMethod = BIO_meth_new(BIO_TYPE_CORE_TO_PROV, "BIO to Core filter");
-    if (ctx->coreBioMethod == NULL
-        || !BIO_meth_set_write_ex(ctx->coreBioMethod, bio_core_write_ex)
-        || !BIO_meth_set_read_ex(ctx->coreBioMethod, bio_core_read_ex)
-        || !BIO_meth_set_puts(ctx->coreBioMethod, bio_core_puts)
-        || !BIO_meth_set_gets(ctx->coreBioMethod, bio_core_gets)
-        || !BIO_meth_set_ctrl(ctx->coreBioMethod, bio_core_ctrl)
-        || !BIO_meth_set_create(ctx->coreBioMethod, bio_core_new)
-        || !BIO_meth_set_destroy(ctx->coreBioMethod, bio_core_free)) {
-        BIO_meth_free(ctx->coreBioMethod);
+    if (ctx != NULL) {
+        ctx->coreBioMethod = BIO_meth_new(BIO_TYPE_CORE_TO_PROV, "BIO to Core filter");
+        if (ctx->coreBioMethod == NULL
+            || !BIO_meth_set_write_ex(ctx->coreBioMethod, bio_core_write_ex)
+            || !BIO_meth_set_read_ex(ctx->coreBioMethod, bio_core_read_ex)
+            || !BIO_meth_set_puts(ctx->coreBioMethod, bio_core_puts)
+            || !BIO_meth_set_gets(ctx->coreBioMethod, bio_core_gets)
+            || !BIO_meth_set_ctrl(ctx->coreBioMethod, bio_core_ctrl)
+            || !BIO_meth_set_create(ctx->coreBioMethod, bio_core_new)
+            || !BIO_meth_set_destroy(ctx->coreBioMethod, bio_core_free)) {
+            BIO_meth_free(ctx->coreBioMethod);
 #ifndef WP_SINGLE_THREADED
-        wc_FreeMutex(&ctx->rng_mutex);
+            wc_FreeMutex(&ctx->rng_mutex);
 #endif
-        wc_FreeRng(&ctx->rng);
-        OPENSSL_free(ctx);
-        ctx = NULL;
+            wc_FreeRng(&ctx->rng);
+            OPENSSL_free(ctx);
+            ctx = NULL;
+        }
     }
 
     return ctx;
