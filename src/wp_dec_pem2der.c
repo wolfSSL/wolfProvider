@@ -31,36 +31,42 @@
 
 #include <wolfssl/wolfcrypt/asn_public.h>
 
-/* Dummy type for PEM to DER context. */
-typedef void wp_Pem2Der;
-
-/* A fake static global context. */
-static unsigned char fakeCtx[1];
+/**
+ * PEM to DER context.
+ */
+typedef struct wp_Pem2Der {
+    /** Provider context - useful when duplicating. */
+    WOLFPROV_CTX* provCtx;
+} wp_Pem2Der;
 
 /**
  * Create a new PEM to DER context.
  *
- * No context data required so returning a global context.
- *
- * @param [in] provCtx  Provider context. Unused.
+ * @param [in] provCtx  Provider context.
  * @return  Pointer to context.
  */
 static wp_Pem2Der* wp_pem2der_newctx(WOLFPROV_CTX* provCtx)
 {
-    (void)provCtx;
-    return fakeCtx;
+    wp_Pem2Der* ctx = NULL;
+
+    if (wolfssl_prov_is_running()) {
+        ctx = (wp_Pem2Der*)OPENSSL_zalloc(sizeof(*ctx));
+    }
+    if (ctx != NULL) {
+        ctx->provCtx = provCtx;
+    }
+
+    return ctx;
 }
 
 /**
  * Dispose of PEM to DER context.
  *
- * Nothing to do as it is a global context.
- *
- * @param [in] ctx  PEM to DER context. Unused.
+ * @param [in] ctx  PEM to DER context.
  */
 static void wp_pem2der_freectx(wp_Pem2Der* ctx)
 {
-    (void)ctx;
+    OPENSSL_free(ctx);
 }
 
 /**
