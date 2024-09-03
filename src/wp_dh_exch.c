@@ -195,6 +195,7 @@ static int wp_dh_init(wp_DhCtx* ctx, wp_Dh* dh, const OSSL_PARAM params[])
         ok = wp_dh_set_ctx_params(ctx, params);
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -239,6 +240,7 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
 #endif
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -294,6 +296,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -373,6 +376,7 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
 
     OPENSSL_clear_free(tmp, maxLen);
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -434,6 +438,7 @@ static int wp_dh_set_peer(wp_DhCtx* ctx, wp_Dh* peer)
         ctx->peer = peer;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -467,6 +472,7 @@ static int wp_dh_set_param_kdf(wp_DhCtx* ctx, const OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -504,6 +510,7 @@ static int wp_dh_set_param_kdf_digest(wp_DhCtx* ctx, const OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -539,6 +546,7 @@ static int wp_dh_set_ctx_params(wp_DhCtx* ctx, const OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -593,6 +601,7 @@ static int wp_dh_get_params_kdf(wp_DhCtx* ctx, OSSL_PARAM params[])
          }
      }
 
+     WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
      return ok;
 }
 
@@ -636,6 +645,7 @@ static int wp_dh_get_ctx_params(wp_DhCtx* ctx, OSSL_PARAM params[])
          }
      }
 
+     WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
      return ok;
 }
 

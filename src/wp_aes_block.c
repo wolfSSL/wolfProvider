@@ -181,6 +181,7 @@ static int wp_aes_block_get_params(OSSL_PARAM params[], unsigned int mode,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -266,6 +267,7 @@ static int wp_aes_init_iv(wp_AesBlockCtx *ctx, const unsigned char *iv,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 #endif
@@ -329,6 +331,7 @@ static int wp_aes_block_init(wp_AesBlockCtx *ctx, const unsigned char *key,
         ok = wp_aes_block_set_ctx_params(ctx, params);
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -516,6 +519,7 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
         ok = invalid == 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -564,6 +568,7 @@ static int wp_aes_block_final_enc(wp_AesBlockCtx* ctx, unsigned char *out,
         ctx->bufSz = 0;
         *outLen = oLen;
     }
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -629,6 +634,7 @@ static int wp_aes_block_final_dec(wp_AesBlockCtx* ctx, unsigned char *out,
         *outLen = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -660,6 +666,7 @@ static int wp_aes_block_final(wp_AesBlockCtx* ctx, unsigned char *out,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -693,6 +700,7 @@ static int wp_aes_block_cipher(wp_AesBlockCtx* ctx, unsigned char* out,
         *outLen = inLen;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -748,6 +756,7 @@ static int wp_aes_block_get_ctx_params(wp_AesBlockCtx* ctx, OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -794,6 +803,7 @@ static int wp_aes_block_set_ctx_params(wp_AesBlockCtx *ctx,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

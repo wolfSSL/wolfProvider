@@ -31,11 +31,13 @@
 
 #include <wolfssl/wolfcrypt/asn_public.h>
 
-/* Dummy type for EPKI to PKI context. */
-typedef void wp_Epki2Pki;
-
-/* A fake static global context. */
-static unsigned char fakeCtx[1];
+/**
+ * EPKI to PKI context.
+ */
+typedef struct wp_Epki2Pki {
+    /** Provider context - useful when duplicating. */
+    WOLFPROV_CTX* provCtx;
+} wp_Epki2Pki;
 
 /**
  * Create a new EPKI to PKI context.
@@ -47,20 +49,26 @@ static unsigned char fakeCtx[1];
  */
 static wp_Epki2Pki* wp_epki2pki_newctx(WOLFPROV_CTX* provCtx)
 {
-    (void)provCtx;
-    return fakeCtx;
+    wp_Epki2Pki* ctx = NULL;
+
+    if (wolfssl_prov_is_running()) {
+        ctx = (wp_Epki2Pki*)OPENSSL_zalloc(sizeof(*ctx));
+    }
+    if (ctx != NULL) {
+        ctx->provCtx = provCtx;
+    }
+
+    return ctx;
 }
 
 /**
  * Dispose of EPKI to PKI context.
  *
- * Nothing to do as it is a global context.
- *
- * @param [in] ctx  EPKI to PKI context. Unused.
+ * @param [in] ctx  EPKI to PKI context.
  */
 static void wp_epki2pki_freectx(wp_Epki2Pki* ctx)
 {
-    (void)ctx;
+    OPENSSL_free(ctx);
 }
 
 #if LIBWOLFSSL_VERSION_HEX < 0x05000000
@@ -189,7 +197,7 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     (void)selection;
 
     /* Read the data from the BIO into buffer that is allocated on the fly. */
-    if (!wp_read_der_bio(coreBio, &data, &len)) {
+    if (!wp_read_der_bio(ctx->provCtx, coreBio, &data, &len)) {
         ok = 0;
     }
     /* No data - nothing to do. */
@@ -231,6 +239,7 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     /* Dispose of the EPKI data buffer. */
     OPENSSL_free(data);
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

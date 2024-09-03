@@ -67,6 +67,7 @@ int wp_kdf_up_ref(wp_Kdf* kdf)
         wc_UnLockMutex(&kdf->mutex);
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
     kdf->refCnt++;

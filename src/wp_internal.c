@@ -23,6 +23,8 @@
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
+#include <wolfprovider/wp_wolfprov.h>
+#include <wolfprovider/wp_logging.h>
 
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
@@ -56,6 +58,7 @@ int wp_provctx_lock_rng(WOLFPROV_CTX* provCtx)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -354,6 +357,7 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -432,6 +436,7 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -668,6 +673,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         *keyLen = len;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
     (void)provCtx;
@@ -682,29 +688,6 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
 #endif
 }
 
-/* TODO: Structure could change! */
-/*
- * Copy of Core BIO structure as it isn't public and need to get the BIO out.
- */
-
-#if OPENSSL_VERSION_PREREQ(3,2)
-struct ossl_core_bio_st {
-    /* Reference count. */
-    int ref_cnt;
-    /* Underlying BIO. */
-    BIO *bio;
-};
-#else
-struct ossl_core_bio_st {
-    /* Reference count. */
-    int ref_cnt;
-    /* Read/write reference count lock. */
-    CRYPTO_RWLOCK *ref_lock;
-    /* Underlying BIO. */
-    BIO *bio;
-};
-#endif
-
 /**
  * Read data out of the core BIO.
  *
@@ -714,22 +697,29 @@ struct ossl_core_bio_st {
  * @return  1 on success.
  * @return  0 on failure.
  */
-int wp_read_der_bio(OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len)
+int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len)
 {
     int ok = 1;
-    long readLen;
+    long readLen = 1;
     unsigned char buf[128]; /* Read 128 bytes at a time. */
     unsigned char* p;
 
-    do {
-        readLen = BIO_read(coreBio->bio, buf, sizeof(buf));
+    BIO *bio = wp_corebio_get_bio(provctx, coreBio);
+    if (bio == NULL) {
+        ok = 0;
+    }
+
+    while (ok && (readLen > 0)) {
+        readLen = BIO_read(bio, buf, sizeof(buf));
         if (readLen < -1) {
+            WOLFPROV_MSG(WP_LOG_PROVIDER, "BIO_read error (%d) in %s:%d", readLen, __FILE__, __LINE__);
             ok = 0;
         }
         if (ok && (readLen > 0)) {
             /* Reallocate for new data. */
             p = OPENSSL_realloc(*data, *len + readLen);
             if (p == NULL) {
+                WOLFPROV_MSG(WP_LOG_PROVIDER, "OPENSSL_realloc error (%d) in %s:%d", readLen, __FILE__, __LINE__);
                 ok = 0;
             }
         }
@@ -740,21 +730,34 @@ int wp_read_der_bio(OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len)
             *len += readLen;
         }
     }
-    while (ok && (readLen > 0));
 
+    BIO_free(bio);
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
 /**
- * Get the underlying BIO from the core BIO.
+ * Get the underlying BIO object from the core BIO.
  *
  * @param [in]  coreBio  Core BIO.
  * @return  NULL on failure.
  * @return  Underlying BIO on success.
  */
-BIO* wp_corebio_get_bio(OSSL_CORE_BIO *coreBio)
+BIO* wp_corebio_get_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio)
 {
-    return coreBio->bio;
+    BIO *outBio;
+
+    if ((provCtx == NULL) || (provCtx->coreBioMethod == NULL))
+        return NULL;
+
+    if ((outBio = BIO_new(provCtx->coreBioMethod)) == NULL)
+        return NULL;
+    if (!wolfssl_prov_bio_up_ref(coreBio)) {
+        BIO_free(outBio);
+        return NULL;
+    }
+    BIO_set_data(outBio, coreBio);
+    return outBio;
 }
 
 

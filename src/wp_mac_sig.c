@@ -245,6 +245,7 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -266,6 +267,7 @@ static int wp_mac_digest_sign_update(wp_MacSigCtx *ctx,
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -297,6 +299,7 @@ static int wp_mac_digest_sign_final(wp_MacSigCtx *ctx, unsigned char *sig,
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

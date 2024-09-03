@@ -153,6 +153,7 @@ static int wp_ecx_init(wp_EcxCtx* ctx, wp_Ecx* ecx, const OSSL_PARAM params[])
         ctx->key = ecx;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -184,6 +185,7 @@ static int wp_ecx_set_peer(wp_EcxCtx* ctx, wp_Ecx* peer)
         ctx->peer = peer;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -264,6 +266,7 @@ static int wp_x25519_derive(wp_EcxCtx* ctx, unsigned char* secret,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -333,6 +336,7 @@ static int wp_x448_derive(wp_EcxCtx* ctx, unsigned char* secret,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

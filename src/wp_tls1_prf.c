@@ -192,6 +192,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -229,6 +230,7 @@ static int wp_kdf_tls1_prf_get_seed(wp_Tls1Prf_Ctx* ctx,
         params = p + 1;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 /**
@@ -258,6 +260,7 @@ static int wp_kdf_tls1_prf_set_ctx_params(wp_Tls1Prf_Ctx* ctx,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -308,6 +311,7 @@ static int wp_kdf_tls1_prf_get_ctx_params(wp_Tls1Prf_Ctx* ctx,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

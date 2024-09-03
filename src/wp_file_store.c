@@ -115,6 +115,9 @@ static wp_FileCtx* wp_file_open(WOLFPROV_CTX* provCtx, const char* uri)
             ok = 0;
         }
         if (ok) {
+            if (ctx->bio != NULL) {
+                BIO_free(ctx->bio);
+            }
             /* Create a BIO to access file. */
             ctx->bio = BIO_new_file(uri, "rb");
             if (ctx->bio == NULL) {
@@ -145,8 +148,11 @@ static wp_FileCtx* wp_file_attach(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO* cBio)
 
     ctx = wp_filectx_new(provCtx);
     if (ctx != NULL) {
+        if (ctx->bio != NULL) {
+            BIO_free(ctx->bio);
+        }
         /* Get the internal BIO. */
-        ctx->bio = wp_corebio_get_bio(cBio);
+        ctx->bio = wp_corebio_get_bio(provCtx, cBio);
     }
 
     return ctx;
@@ -216,6 +222,7 @@ static int wp_file_set_ctx_params(wp_FileCtx* ctx, const OSSL_PARAM params[])
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -284,6 +291,7 @@ static int wp_file_decoder_set_input_structure(OSSL_DECODER_CTX* decCtx,
             break;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -361,6 +369,7 @@ static int wp_file_set_decoder(wp_FileCtx* ctx, OSSL_DECODER_CTX* decCtx)
         OSSL_DECODER_free(decoder);
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -444,6 +453,7 @@ static int wp_file_load(wp_FileCtx* ctx, OSSL_CALLBACK* objCb, void* objCbArg,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

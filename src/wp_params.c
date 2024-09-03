@@ -23,6 +23,7 @@
 
 #include "wolfprovider/internal.h"
 #include "wolfprovider/wp_params.h"
+#include "wolfprovider/wp_logging.h"
 
 
 /**
@@ -53,6 +54,7 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -85,6 +87,7 @@ int wp_mp_to_unsigned_bin_le(mp_int* mp, unsigned char* data, size_t len)
     }
 #endif
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -162,6 +165,7 @@ int wp_param_set_mp(OSSL_PARAM* p, const char* key, mp_int* mp,
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 /**
@@ -238,6 +242,7 @@ int wp_params_get_digest(const OSSL_PARAM* params, char* name,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -266,6 +271,7 @@ int wp_params_get_mp(const OSSL_PARAM* params, const char* key, mp_int* mp)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -302,6 +308,7 @@ int wp_params_get_octet_string(const OSSL_PARAM* params, const char* key,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -355,6 +362,7 @@ int wp_params_get_bn_be(const OSSL_PARAM* params, const char* key,
 #endif
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -385,6 +393,7 @@ int wp_params_get_octet_string_ptr(const OSSL_PARAM* params, const char* key,
         *len  = p->data_size;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -417,6 +426,7 @@ int wp_params_get_utf8_string(const OSSL_PARAM* params, const char* key,
         XSTRNCPY(str, p->data, len);
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -445,6 +455,7 @@ int wp_params_get_utf8_string_ptr(const OSSL_PARAM* params, const char* key,
         *data = (char *)p->data;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -469,6 +480,7 @@ int wp_params_get_size_t(const OSSL_PARAM* params, const char* key, size_t* val)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -494,6 +506,7 @@ int wp_params_get_uint64(const OSSL_PARAM* params, const char* key,
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -518,6 +531,7 @@ int wp_params_get_int(const OSSL_PARAM* params, const char* key, int* val)
         ok = 0;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -550,6 +564,7 @@ int wp_params_get_uint(const OSSL_PARAM* params, const char* key,
         *set = 1;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -584,6 +599,7 @@ int wp_params_set_mp(OSSL_PARAM params[], const char* key, mp_int* mp)
         p->return_size = outLen;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -625,6 +641,7 @@ int wp_params_set_octet_string_be(OSSL_PARAM params[], const char* key,
         p->return_size = len;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
