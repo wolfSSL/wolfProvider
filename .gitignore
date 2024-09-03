@@ -53,8 +53,11 @@
 *.gcda
 
 # Installed dependencies
-/openssl*
-/wolfssl*
+/openssl-source/
+/openssl-install/
+/wolfssl-source/
+/wolfssl-install/
+/wolfprov-install/
 /artifacts
 
 IDE/Android/android-ndk-r26b/

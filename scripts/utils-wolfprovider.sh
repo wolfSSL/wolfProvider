@@ -25,11 +25,14 @@ source ${SCRIPT_DIR}/utils-wolfssl.sh
 
 WOLFPROV_SOURCE_DIR=${SCRIPT_DIR}/..
 WOLFPROV_INSTALL_DIR=${SCRIPT_DIR}/../wolfprov-install
-WOLFPROV_CONFIG=${WOLFPROV_CONFIG:-"$WOLFPROV_SOURCE_DIR/provider.conf"}
+if [ "$WOLFSSL_ISFIPS" -eq "1" ]; then
+    WOLFPROV_CONFIG=${WOLFPROV_CONFIG:-"$WOLFPROV_SOURCE_DIR/provider-fips.conf"}
+else
+    WOLFPROV_CONFIG=${WOLFPROV_CONFIG:-"$WOLFPROV_SOURCE_DIR/provider.conf"}
+fi
 
 WOLFPROV_NAME="libwolfprov"
 WOLFPROV_PATH=$WOLFPROV_INSTALL_DIR/lib
-export OPENSSL_MODULES=$WOLFPROV_PATH
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
@@ -95,5 +98,8 @@ install_wolfprov() {
 init_wolfprov() {
     install_wolfprov
     printf "\twolfProvider installed in: ${WOLFPROV_INSTALL_DIR}\n"
+
+    export OPENSSL_MODULES=$WOLFPROV_PATH
+    export OPENSSL_CONF=${WOLFPROV_CONFIG}
 }
 

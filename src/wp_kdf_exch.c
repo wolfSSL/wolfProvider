@@ -218,17 +218,50 @@ static int wp_kdf_set_ctx_params(wp_KdfCtx* ctx, const OSSL_PARAM params[])
 }
 
 /**
- * Return an array of supported settable parameters for the KDF ke context.
+ * Return an array of supported settable parameters for the HKDF ke context.
  *
  * @param [in] ctx      ECDH key exchange context object. Unused.
  * @param [in] provCtx  Provider context object. Unused.
  * @return  Array of parameters with data type.
  */
-static const OSSL_PARAM* wp_kdf_settable_ctx_params(wp_KdfCtx* ctx,
+static const OSSL_PARAM* wp_hkdf_settable_ctx_params(wp_KdfCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
+    (void)ctx;
     (void)provCtx;
-    return EVP_KDF_settable_ctx_params(EVP_KDF_CTX_kdf(ctx->kdfCtx));
+    static const OSSL_PARAM settable_ctx_params[] = {
+        OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_MODE, NULL, 0),
+        OSSL_PARAM_int(OSSL_KDF_PARAM_MODE, NULL),
+        OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_PROPERTIES, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_DIGEST, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_KDF_PARAM_KEY, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SALT, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_KDF_PARAM_INFO, NULL, 0),
+        OSSL_PARAM_END
+    };    
+    return settable_ctx_params;
+}
+
+/**
+ * Return an array of supported settable parameters for the HKDF ke context.
+ *
+ * @param [in] ctx      ECDH key exchange context object. Unused.
+ * @param [in] provCtx  Provider context object. Unused.
+ * @return  Array of parameters with data type.
+ */
+static const OSSL_PARAM* wp_tls1_prf_settable_ctx_params(wp_KdfCtx* ctx,
+    WOLFPROV_CTX* provCtx)
+{
+    (void)ctx;
+    (void)provCtx;
+    static const OSSL_PARAM settable_ctx_params[] = {
+        OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_PROPERTIES, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_DIGEST, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SECRET, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SEED, NULL, 0),
+        OSSL_PARAM_END
+    };    
+    return settable_ctx_params;
 }
 
 /*
@@ -256,7 +289,7 @@ const OSSL_DISPATCH wp_hkdf_keyexch_functions[] = {
     { OSSL_FUNC_KEYEXCH_DERIVE,              (DFUNC)wp_kdf_derive             },
     { OSSL_FUNC_KEYEXCH_SET_CTX_PARAMS,      (DFUNC)wp_kdf_set_ctx_params     },
     { OSSL_FUNC_KEYEXCH_SETTABLE_CTX_PARAMS,
-                                            (DFUNC)wp_kdf_settable_ctx_params },
+                                            (DFUNC)wp_hkdf_settable_ctx_params },
     { 0, NULL }
 };
 
@@ -285,7 +318,7 @@ const OSSL_DISPATCH wp_tls1_prf_keyexch_functions[] = {
     { OSSL_FUNC_KEYEXCH_DERIVE,              (DFUNC)wp_kdf_derive             },
     { OSSL_FUNC_KEYEXCH_SET_CTX_PARAMS,      (DFUNC)wp_kdf_set_ctx_params     },
     { OSSL_FUNC_KEYEXCH_SETTABLE_CTX_PARAMS,
-                                            (DFUNC)wp_kdf_settable_ctx_params },
+                                            (DFUNC)wp_tls1_prf_settable_ctx_params },
     { 0, NULL }
 };
 

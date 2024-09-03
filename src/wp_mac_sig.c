@@ -326,8 +326,18 @@ static int wp_mac_set_ctx_params(wp_MacSigCtx *ctx, const OSSL_PARAM params[])
 static const OSSL_PARAM *wp_mac_settable_ctx_params(wp_MacSigCtx *ctx,
     WOLFPROV_CTX* provCtx)
 {
+    (void)ctx;
     (void)provCtx;
-    return EVP_MAC_settable_ctx_params(EVP_MAC_CTX_get0_mac(ctx->macCtx));
+    static const OSSL_PARAM settable_ctx_params[] = {
+        OSSL_PARAM_utf8_string(OSSL_MAC_PARAM_DIGEST, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_MAC_PARAM_PROPERTIES, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_MAC_PARAM_KEY, NULL, 0),
+        OSSL_PARAM_int(OSSL_MAC_PARAM_DIGEST_NOINIT, NULL),
+        OSSL_PARAM_int(OSSL_MAC_PARAM_DIGEST_ONESHOT, NULL),
+        OSSL_PARAM_size_t(OSSL_MAC_PARAM_TLS_DATA_SIZE, NULL),
+        OSSL_PARAM_END
+    };    
+    return settable_ctx_params;
 }
 
 /*

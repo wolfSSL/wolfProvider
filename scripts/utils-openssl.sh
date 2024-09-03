@@ -122,7 +122,7 @@ init_openssl() {
     OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
     OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
 
-    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_INSTALL_DIR}/lib64 $OPENSSL_BIN version`
+    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_INSTALL_DIR}/lib64 $OPENSSL_BIN version | tail -n1`
     case $OSSL_VER in
         OpenSSL\ 3.*) ;;
         *)
