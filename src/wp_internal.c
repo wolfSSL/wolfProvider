@@ -23,6 +23,7 @@
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
+#include <wolfprovider/wp_wolfprov.h>
 #include <wolfprovider/wp_logging.h>
 
 #include <wolfssl/wolfcrypt/rsa.h>
@@ -733,14 +734,6 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
     BIO_free(bio);
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
-}
-
-static OSSL_FUNC_BIO_up_ref_fn *c_bio_up_ref = NULL;
-static int wolfssl_prov_bio_up_ref(OSSL_CORE_BIO *bio)
-{
-    if (c_bio_up_ref == NULL)
-        return 0;
-    return c_bio_up_ref(bio);
 }
 
 /**

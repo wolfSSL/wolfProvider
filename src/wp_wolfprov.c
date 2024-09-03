@@ -33,6 +33,7 @@
 #include "wolfprovider/wp_wolfprov.h"
 #include "wolfprovider/alg_funcs.h"
 
+const char* wolfprovider_id = "libwolfprov";
 
 /* Core function that gets the table of parameters. */
 static OSSL_FUNC_core_gettable_params_fn* c_gettable_params = NULL;
@@ -86,6 +87,7 @@ static OSSL_FUNC_BIO_gets_fn *c_bio_gets = NULL;
 static OSSL_FUNC_BIO_puts_fn *c_bio_puts = NULL;
 static OSSL_FUNC_BIO_ctrl_fn *c_bio_ctrl = NULL;
 static OSSL_FUNC_BIO_free_fn *c_bio_free = NULL;
+static OSSL_FUNC_BIO_up_ref_fn *c_bio_up_ref = NULL;
 
 static int wolfssl_prov_bio_read_ex(OSSL_CORE_BIO *bio, void *data, size_t data_len,
                           size_t *bytes_read)
@@ -129,6 +131,13 @@ static int wolfssl_prov_bio_free(OSSL_CORE_BIO *bio)
     if (c_bio_free == NULL)
         return 0;
     return c_bio_free(bio);
+}
+
+int wolfssl_prov_bio_up_ref(OSSL_CORE_BIO *bio)
+{
+    if (c_bio_up_ref == NULL)
+        return 0;
+    return c_bio_up_ref(bio);
 }
 
 
@@ -1134,6 +1143,27 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
                 break;
             case OSSL_FUNC_CORE_GET_LIBCTX:
                 c_get_libctx = OSSL_FUNC_core_get_libctx(in);
+                break;
+            case OSSL_FUNC_BIO_READ_EX:
+                c_bio_read_ex = OSSL_FUNC_BIO_read_ex(in);
+                break;
+            case OSSL_FUNC_BIO_WRITE_EX:
+                c_bio_write_ex = OSSL_FUNC_BIO_write_ex(in);
+                break;
+            case OSSL_FUNC_BIO_GETS:
+                c_bio_gets = OSSL_FUNC_BIO_gets(in);
+                break;
+            case OSSL_FUNC_BIO_PUTS:
+                c_bio_puts = OSSL_FUNC_BIO_puts(in);
+                break;
+            case OSSL_FUNC_BIO_CTRL:
+                c_bio_ctrl = OSSL_FUNC_BIO_ctrl(in);
+                break;
+            case OSSL_FUNC_BIO_FREE:
+                c_bio_free = OSSL_FUNC_BIO_free(in);
+                break;
+            case OSSL_FUNC_BIO_UP_REF:
+                c_bio_up_ref = OSSL_FUNC_BIO_up_ref(in);
                 break;
             default:
                 /* Just ignore anything we don't understand */

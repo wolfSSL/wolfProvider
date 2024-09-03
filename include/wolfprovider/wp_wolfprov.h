@@ -23,7 +23,9 @@
 #ifndef WP_WOLFPROV_H
 #define WP_WOLFPROV_H
 
-const char* wolfprovider_id = "libwolfprov";
+extern const char* wolfprovider_id;
+
+int wolfssl_prov_bio_up_ref(OSSL_CORE_BIO *bio);
 
 /* Prototype of public function that initializes the wolfSSL provider. */
 OSSL_provider_init_fn wolfssl_provider_init;
