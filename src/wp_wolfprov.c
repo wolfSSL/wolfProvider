@@ -33,6 +33,8 @@
 #include "wolfprovider/wp_wolfprov.h"
 #include "wolfprovider/alg_funcs.h"
 
+#include "wolfssl/wolfcrypt/logging.h"
+
 const char* wolfprovider_id = "libwolfprov";
 
 /* Core function that gets the table of parameters. */
@@ -1132,6 +1134,11 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 {
     int ok = 1;
     OSSL_FUNC_core_get_libctx_fn* c_get_libctx = NULL;
+
+#ifdef WOLFPROV_DEBUG
+    ok = (wolfProv_Debugging_ON() == 0) && (wolfSSL_Debugging_ON() == 0);
+    wolfSSL_SetLoggingPrefix("wolfSSL");
+#endif
 
     for (; in->function_id != 0; in++) {
         switch (in->function_id) {
