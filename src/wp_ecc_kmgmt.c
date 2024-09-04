@@ -1869,11 +1869,13 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
         ok = 0;
     }
     if (ok && (data[0] != 0x06)) {
+        WOLFPROV_MSG(WP_LOG_PK, "Invalid data");
         ok = 0;
     }
     if (ok) {
         oidLen = data[1];
         if ((oidLen >= 0x80) || (oidLen + 2 > len)) {
+            WOLFPROV_MSG(WP_LOG_PK, "OID out of bounds");
             ok = 0;
         }
     }
@@ -1884,6 +1886,7 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
         ecc->curveId = wp_ecc_get_curve_id_from_oid(data + 2, oidLen);
     #endif
         if (ecc->curveId == ECC_CURVE_INVALID) {
+            WOLFPROV_MSG(WP_LOG_PK, "Invalid curve");
             ok = 0;
         }
     }
@@ -1891,10 +1894,12 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
     if (ok) {
         rc = wc_ecc_set_curve(&ecc->key, 0, ecc->curveId);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_PK, "Can't set curve: %d",rc);
             ok = 0;
         }
     }
     if (ok && (!wp_ecc_set_bits(ecc))) {
+        WOLFPROV_MSG(WP_LOG_PK, "Can't set bits");
         ok = 0;
     }
 
