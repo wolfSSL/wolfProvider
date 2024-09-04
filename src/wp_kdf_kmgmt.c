@@ -71,6 +71,7 @@ int wp_kdf_up_ref(wp_Kdf* kdf)
     return ok;
 #else
     kdf->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -151,6 +152,7 @@ static int wp_kdf_has(const wp_Kdf* kdf, int selection)
 {
     (void)kdf;
     (void)selection;
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 

@@ -108,6 +108,7 @@ int wp_mac_up_ref(wp_Mac* mac)
     return ok;
 #else
     mac->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -435,6 +436,7 @@ static int wp_mac_export_priv_key(wp_Mac* mac, OSSL_PARAM* params, int* pIdx,
     }
 
     *pIdx = i;
+    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 

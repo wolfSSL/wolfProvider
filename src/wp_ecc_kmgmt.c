@@ -256,6 +256,7 @@ int wp_ecc_up_ref(wp_Ecc* ecc)
     return ok;
 #else
     ecc->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -2113,6 +2114,7 @@ static int wp_ecc_encode_params_size(const wp_Ecc *ecc, size_t* keyLen)
     /* ASN.1 type, len and data. */
     *keyLen = ecc->key.dp->oidSz + 2;
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -2135,6 +2137,7 @@ static int wp_ecc_encode_params(const wp_Ecc *ecc, unsigned char* keyData,
 
     *keyLen = ecc->key.dp->oidSz + 2;
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 

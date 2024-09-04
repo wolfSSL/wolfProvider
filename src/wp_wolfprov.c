@@ -75,6 +75,7 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
 int wolfssl_prov_is_running(void)
 {
     /* Always running. */
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -174,6 +175,7 @@ static int bio_core_new(BIO *bio)
 {
     BIO_set_init(bio, 1);
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
         
@@ -182,6 +184,7 @@ static int bio_core_free(BIO *bio)
     BIO_set_init(bio, 0);
     wolfssl_prov_bio_free(BIO_get_data(bio));
     
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -911,6 +914,7 @@ static int wp_dummy_decode(WOLFPROV_CTX* ctx, OSSL_CORE_BIO* cBio,
     (void)pwCb;
     (void)pwCbArg;
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 /**

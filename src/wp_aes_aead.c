@@ -603,6 +603,7 @@ static int wp_aead_set_param_tls1_iv_rand(wp_AeadCtx* ctx,
 #else
     (void)ctx;
     (void)params;
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
