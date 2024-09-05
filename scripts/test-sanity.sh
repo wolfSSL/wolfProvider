@@ -21,28 +21,38 @@ function doTestCmd() {
     echo "<<<<<<"
 }
 
-doTestCmd init_wolfprov
+function runSpotCheck() {
+    SPOTCHECK_ARGS=$1
+    rm -rf ${WOLFSSL_INSTALL_DIR} ${WOLFPROV_INSTALL_DIR}
+    doTestCmd "$1 init_wolfprov"
 
-SET_POST=$( set )
-echo "New variables set:"
-diff <(echo "$SET_PRE") <(echo "$SET_POST") | grep "="
+    SET_POST=$( set )
+    echo "New variables set:"
+    diff <(echo "$SET_PRE") <(echo "$SET_POST") | grep "="
 
-doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl list -providers --verbose | grep 'Providers:' -A 10"
+    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl list -providers --verbose | grep 'Providers:' -A 10"
 
-if [ $(${OPENSSL_INSTALL_DIR}/bin/openssl list -providers --verbose | grep libwolfprov | wc -l) = 0 ]; then
-    echo "Not using wolfProvider for some reason"
-    exit 2
-fi
+    if [ $(${OPENSSL_INSTALL_DIR}/bin/openssl list -providers --verbose | grep libwolfprov | wc -l) = 0 ]; then
+        echo "Not using wolfProvider for some reason"
+        exit 2
+    fi
 
-if [ $(${OPENSSL_INSTALL_DIR}/bin/openssl list -providers --verbose | grep OpenSSL | wc -l) -ne 0 ]; then
-    echo "OpenSSL provider is also enabled"
-    exit 2
-fi
+    if [ $(${OPENSSL_INSTALL_DIR}/bin/openssl list -providers --verbose | grep OpenSSL | wc -l) -ne 0 ]; then
+        echo "OpenSSL provider is also enabled"
+        exit 2
+    fi
 
-doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect github.com:443 </dev/null"
-doTestCmd "curl https://github.com/wolfSSL/wolfProvider -o test.html"
+    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect github.com:443 </dev/null"
+    doTestCmd "curl https://github.com/wolfSSL/wolfProvider -o test.html"
 
-doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect tcp.support:443 </dev/null"
-doTestCmd "curl https://tls.support -vv --tlsv1.3 --tls-max 1.3 -o test.html"
+    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect tcp.support:443 </dev/null"
+    doTestCmd "curl https://tls.support -vv --tlsv1.3 --tls-max 1.3 -o test.html"
+}
+
+echo "Now testing standard version"
+runSpotCheck ""
+
+echo "Now testing FIPS version"
+runSpotCheck "WOLFSSL_ISFIPS=1"
 
 exit $?
