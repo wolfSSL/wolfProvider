@@ -801,6 +801,14 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
         }
     }
 
+    if (ok) {
+        /* Always assume not decoded from explicit params for now */
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_EC_DECODED_FROM_EXPLICIT_PARAMS);
+        if ((p != NULL) && !OSSL_PARAM_set_int(p, 0)) {
+            ok = 0;
+        }
+    }
+
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
