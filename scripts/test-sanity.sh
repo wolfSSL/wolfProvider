@@ -27,7 +27,7 @@ function runSpotCheck() {
     unset OPENSSL_MODULES
     unset OPENSSL_CONF
     rm -rf ${WOLFSSL_INSTALL_DIR} ${WOLFSSL_SOURCE_DIR} ${WOLFPROV_INSTALL_DIR}
-    doTestCmd "$1 init_wolfprov"
+    doTestCmd init_wolfprov
 
     SET_POST=$( set )
     echo "New variables set:"
@@ -52,10 +52,6 @@ function runSpotCheck() {
     doTestCmd "curl https://tls.support -vv --tlsv1.3 --tls-max 1.3 -o test.html"
 }
 
-echo "Now testing standard version"
-runSpotCheck ""
-
-echo "Now testing FIPS version"
-runSpotCheck "WOLFSSL_ISFIPS=1"
+runSpotCheck
 
 exit $?
