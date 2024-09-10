@@ -1,6 +1,5 @@
 #!/bin/bash
 # This script provides simple sanity checks to make sure the provider is working
-# NOTE: Careful running this script, because it will remove folders automatically
 
 SET_PRE=$( set )
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -23,10 +22,6 @@ function doTestCmd() {
 }
 
 function runSpotCheck() {
-    SPOTCHECK_ARGS=$1
-    unset OPENSSL_MODULES
-    unset OPENSSL_CONF
-    rm -rf ${WOLFSSL_INSTALL_DIR} ${WOLFSSL_SOURCE_DIR} ${WOLFPROV_INSTALL_DIR}
     doTestCmd init_wolfprov
 
     SET_POST=$( set )
