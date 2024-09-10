@@ -50,6 +50,10 @@ wolfProvider is a library that can be used as a Provider in OpenSSL.
 * TLS1 PRF
 
 ## Building
+The quickest method is to use the `scripts/build-wolfprovider.sh` script. It will retreive the dependencies and compile them as necessary. To use other than the default (such as different releases) you can set various environment variables prior to calling the script. An example is:
+    OPENSSL_TAG=openssl-3.2.0 WOLFSSL_TAG=v5.7.2-stable WOLFPROV_DEBUG=1 scripts/build-wolfprovider.sh
+
+Alternatively, you can manually compile each component using the following guide.
 
 ### OpenSSL
 
