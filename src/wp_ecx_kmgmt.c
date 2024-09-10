@@ -224,6 +224,7 @@ int wp_ecx_up_ref(wp_Ecx* ecx)
     return ok;
 #else
     ecx->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }

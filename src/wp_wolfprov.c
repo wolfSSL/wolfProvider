@@ -33,6 +33,8 @@
 #include "wolfprovider/wp_wolfprov.h"
 #include "wolfprovider/alg_funcs.h"
 
+#include "wolfssl/wolfcrypt/logging.h"
+
 const char* wolfprovider_id = "libwolfprov";
 
 /* Core function that gets the table of parameters. */
@@ -73,6 +75,7 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
 int wolfssl_prov_is_running(void)
 {
     /* Always running. */
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -172,6 +175,7 @@ static int bio_core_new(BIO *bio)
 {
     BIO_set_init(bio, 1);
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
         
@@ -180,6 +184,7 @@ static int bio_core_free(BIO *bio)
     BIO_set_init(bio, 0);
     wolfssl_prov_bio_free(BIO_get_data(bio));
     
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -909,6 +914,7 @@ static int wp_dummy_decode(WOLFPROV_CTX* ctx, OSSL_CORE_BIO* cBio,
     (void)pwCb;
     (void)pwCbArg;
 
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 /**
@@ -1132,6 +1138,11 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 {
     int ok = 1;
     OSSL_FUNC_core_get_libctx_fn* c_get_libctx = NULL;
+
+#ifdef WOLFPROV_DEBUG
+    ok = (wolfProv_Debugging_ON() == 0) && (wolfSSL_Debugging_ON() == 0);
+    wolfSSL_SetLoggingPrefix("wolfSSL");
+#endif
 
     for (; in->function_id != 0; in++) {
         switch (in->function_id) {

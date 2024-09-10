@@ -80,9 +80,11 @@ install_wolfssl() {
         CONF_ARGS="-prefix=${WOLFSSL_INSTALL_DIR}"
 
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            CONF_ARGS+=" --enable-debug"
+            CONF_ARGS+=" --enable-debug --enable-debug-trace-errcodes=backtrace --enable-keylog-export"
+            WOLFSSL_CONFIG_CFLAGS+=" -DWOLFSSL_LOGGINGENABLED_DEFAULT=1"
         fi
         if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            printf "with FIPS ... "
             CONF_ARGS+=" --enable-fips=ready"
             if [ ! -e "XXX-fips-test" ]; then
                 ./fips-check.sh keep nomakecheck fips-ready >>$LOG_FILE 2>&1

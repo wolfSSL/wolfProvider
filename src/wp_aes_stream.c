@@ -450,6 +450,7 @@ static int wp_aes_stream_final(wp_AesStreamCtx* ctx, unsigned char *out,
     (void)out;
     (void)outSize;
     *outLen = 0;
+    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 

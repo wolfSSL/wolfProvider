@@ -276,6 +276,7 @@ int wp_dh_up_ref(wp_Dh* dh)
     return ok;
 #else
     dh->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }

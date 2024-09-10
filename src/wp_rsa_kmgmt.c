@@ -199,6 +199,7 @@ int wp_rsa_up_ref(wp_Rsa* rsa)
     return ok;
 #else
     rsa->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -468,6 +469,7 @@ static int wp_rsa_pss_params_set_pss_defaults(wp_RsaPssParams* pss)
     pss->saltLen = 20;
     pss->derTrailer = 1; /* Default: RFC8017 A.2.3 */
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -1085,6 +1087,7 @@ static int wp_rsa_pss_params_export(wp_RsaPssParams* pss, OSSL_PARAM* params,
         &pss->saltLen);
 
     *idx = i;
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 

@@ -480,6 +480,7 @@ static int wp_file_eof(wp_FileCtx* ctx)
 static int wp_file_close(wp_FileCtx* ctx)
 {
     wp_filectx_free(ctx);
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 

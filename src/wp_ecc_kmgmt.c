@@ -256,6 +256,7 @@ int wp_ecc_up_ref(wp_Ecc* ecc)
     return ok;
 #else
     ecc->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -796,6 +797,14 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params,
             OSSL_PKEY_PARAM_EC_POINT_CONVERSION_FORMAT);
         if ((p != NULL) && (!OSSL_PARAM_set_utf8_string(p, "uncompressed"))) {
+            ok = 0;
+        }
+    }
+
+    if (ok) {
+        /* Always assume not decoded from explicit params for now */
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_EC_DECODED_FROM_EXPLICIT_PARAMS);
+        if ((p != NULL) && !OSSL_PARAM_set_int(p, 0)) {
             ok = 0;
         }
     }
@@ -1869,11 +1878,13 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
         ok = 0;
     }
     if (ok && (data[0] != 0x06)) {
+        WOLFPROV_MSG(WP_LOG_PK, "Invalid data");
         ok = 0;
     }
     if (ok) {
         oidLen = data[1];
         if ((oidLen >= 0x80) || (oidLen + 2 > len)) {
+            WOLFPROV_MSG(WP_LOG_PK, "OID out of bounds");
             ok = 0;
         }
     }
@@ -1884,6 +1895,7 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
         ecc->curveId = wp_ecc_get_curve_id_from_oid(data + 2, oidLen);
     #endif
         if (ecc->curveId == ECC_CURVE_INVALID) {
+            WOLFPROV_MSG(WP_LOG_PK, "Invalid curve");
             ok = 0;
         }
     }
@@ -1891,10 +1903,12 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
     if (ok) {
         rc = wc_ecc_set_curve(&ecc->key, 0, ecc->curveId);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_PK, "Can't set curve: %d",rc);
             ok = 0;
         }
     }
     if (ok && (!wp_ecc_set_bits(ecc))) {
+        WOLFPROV_MSG(WP_LOG_PK, "Can't set bits");
         ok = 0;
     }
 
@@ -2108,6 +2122,7 @@ static int wp_ecc_encode_params_size(const wp_Ecc *ecc, size_t* keyLen)
     /* ASN.1 type, len and data. */
     *keyLen = ecc->key.dp->oidSz + 2;
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -2130,6 +2145,7 @@ static int wp_ecc_encode_params(const wp_Ecc *ecc, unsigned char* keyData,
 
     *keyLen = ecc->key.dp->oidSz + 2;
 
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
