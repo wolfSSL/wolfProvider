@@ -48,7 +48,7 @@ function runSpotCheck() {
     doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect github.com:443 </dev/null"
     doTestCmd "curl https://github.com/wolfSSL/wolfProvider -o test.html"
 
-    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect tcp.support:443 </dev/null"
+    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect tls.support:443 </dev/null"
     doTestCmd "curl https://tls.support -vv --tlsv1.3 --tls-max 1.3 -o test.html"
 }
 
