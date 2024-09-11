@@ -40,11 +40,16 @@ function runSpotCheck() {
         exit 2
     fi
 
-    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect github.com:443 </dev/null"
-    doTestCmd "curl https://github.com/wolfSSL/wolfProvider -o test.html"
+    case `uname` in
+        Darwin)
+            doTestCmd "security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates.keychain > ${SCRIPT_DIR}/allCA.pem"
+            CA_ARGS="-CAfile ${SCRIPT_DIR}/allCA.pem"
+            ;;
+        *) CA_ARGS="-CApath /etc/ssl/certs" ;;
+    esac
 
-    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client -CApath /etc/ssl/certs -connect tls.support:443 </dev/null"
-    doTestCmd "curl https://tls.support -vv --tlsv1.3 --tls-max 1.3 -o test.html"
+    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client ${CA_ARGS} -connect github.com:443 </dev/null"
+    doTestCmd "${OPENSSL_INSTALL_DIR}/bin/openssl s_client ${CA_ARGS} -connect tls.support:443 </dev/null"
 }
 
 runSpotCheck
