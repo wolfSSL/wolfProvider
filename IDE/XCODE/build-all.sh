@@ -17,7 +17,7 @@ clone_openssl
 cd ${WOLFPROV_DIR}/openssl-source && ${XCODE_SCRIPTS_DIR}/build-openssl-framework.sh
 
 clone_wolfssl
-cd ${WOLFPROV_DIR}/wolfssl-source && ${XCODE_SCRIPTS_DIR}/build-wolfssl-framework.sh -c "--enable-opensslcoexist --enable-cmac --enable-keygen --enable-sha --enable-aesctr --enable-aesccm --enable-x963kdf --enable-compkey --enable-certgen --enable-aeskeywrap --enable-enckeys --enable-base16 --enable-aesgcm-stream --enable-pwdbased" -p "-I${OPENSSL_SOURCE_DIR} -DHAVE_AES_ECB -DWOLFSSL_AES_DIRECT -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DECC_MIN_KEY_SZ=192 -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DFP_MAX_BITS=16384 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER"
+cd ${WOLFPROV_DIR}/wolfssl-source && ${XCODE_SCRIPTS_DIR}/build-wolfssl-framework.sh -c "${WOLFSSL_CONFIG_OPTS}" -p "${WOLFSSL_CONFIG_CFLAGS}"
 
 cd ${WOLFPROV_DIR} && ${XCODE_SCRIPTS_DIR}/build-wolfprovider-framework.sh
 
