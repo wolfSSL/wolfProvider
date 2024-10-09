@@ -80,8 +80,6 @@ typedef struct wp_RsaSigCtx {
 
     /** wolfSSL hash object. */
     wc_HashAlg hash;
-    /** Hash algorithm to use on data to be signed. */
-    enum wc_HashType hashType;
     /** Length of salt to use when padding mode is PSS. */
     int saltLen;
     /** Minimum salt length when padding mode is PSS based on RSA key. */
@@ -136,8 +134,8 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
             (hashType == WC_HASH_TYPE_MD5)) {
             ok = 0;
         }
-        if (ok && (ctx->hashType != WC_HASH_TYPE_NONE) &&
-            (hashType != ctx->hashType)) {
+        if (ok && (ctx->hash.type != WC_HASH_TYPE_NONE) &&
+            (hashType != ctx->hash.type)) {
             ok = 0;
         }
 #ifdef HAVE_FIPS
@@ -148,11 +146,11 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
         (void)op;
 #endif
         if (ok) {
-            ctx->hashType = hashType;
+            ctx->hash.type = hashType;
         }
 
         if (ok) {
-            rc = wc_HashInit_ex(&ctx->hash, ctx->hashType, NULL, INVALID_DEVID);
+            rc = wc_HashInit_ex(&ctx->hash, ctx->hash.type, NULL, INVALID_DEVID);
             if (rc != 0) {
                 ok = 0;
             }
@@ -295,8 +293,8 @@ static wp_RsaSigCtx* wp_rsa_ctx_dup(wp_RsaSigCtx* srcCtx)
             ok = 0;
         }
 
-        if (ok && (srcCtx->hashType != WC_HASH_TYPE_NONE) &&
-            (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash, srcCtx->hashType))) {
+        if (ok && (srcCtx->hash.type != WC_HASH_TYPE_NONE) &&
+            (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash))) {
             ok = 0;
         }
         if (ok && (!wp_rsa_up_ref(srcCtx->rsa))) {
@@ -304,7 +302,6 @@ static wp_RsaSigCtx* wp_rsa_ctx_dup(wp_RsaSigCtx* srcCtx)
         }
         if (ok) {
             dstCtx->rsa      = srcCtx->rsa;
-            dstCtx->hashType = srcCtx->hashType;
             dstCtx->mgf      = srcCtx->mgf;
             dstCtx->mgfSet   = srcCtx->mgfSet;
             dstCtx->padMode  = srcCtx->padMode;
@@ -378,7 +375,7 @@ static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx* ctx)
     int maxSaltLen;
     int bits = wp_rsa_get_bits(ctx->rsa);
 
-    maxSaltLen = ((bits + 7) / 8) - wc_HashGetDigestSize(ctx->hashType) - 2;
+    maxSaltLen = ((bits + 7) / 8) - wc_HashGetDigestSize(ctx->hash.type) - 2;
     if (((bits - 1) & 0x07) == 0) {
         maxSaltLen--;
     }
@@ -518,8 +515,8 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
     unsigned char* encodedDigest = NULL;
     int encodedDigestLen = 0;
 
-    if (ctx->hashType != WC_HASH_TYPE_NONE) {
-        if (tbsLen != (size_t)wc_HashGetDigestSize(ctx->hashType)) {
+    if (ctx->hash.type != WC_HASH_TYPE_NONE) {
+        if (tbsLen != (size_t)wc_HashGetDigestSize(ctx->hash.type)) {
             ok = 0;
         }
         if (ok) {
@@ -530,7 +527,7 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
         if (ok) {
             encodedDigestLen = wc_EncodeSignature(encodedDigest, tbs,
-                (word32)tbsLen, wc_HashGetOID(ctx->hashType));
+                (word32)tbsLen, wc_HashGetOID(ctx->hash.type));
             if (encodedDigestLen <= 0) {
                 ok = 0;
             }
@@ -579,12 +576,12 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
 {
     int ok = 1;
     int rc;
-    int saltLen = wp_pss_salt_len_to_wc(ctx->saltLen, ctx->hashType,
+    int saltLen = wp_pss_salt_len_to_wc(ctx->saltLen, ctx->hash.type,
         wp_rsa_get_key(ctx->rsa), EVP_PKEY_OP_SIGN);
 
     PRIVATE_KEY_UNLOCK();
     rc = wc_RsaPSS_Sign_ex(tbs, (word32)tbsLen, sig, (word32)sigSize,
-        ctx->hashType, ctx->mgf, saltLen, wp_rsa_get_key(ctx->rsa),
+        ctx->hash.type, ctx->mgf, saltLen, wp_rsa_get_key(ctx->rsa),
         &ctx->rng);
     PRIVATE_KEY_LOCK();
     if (rc < 0) {
@@ -748,7 +745,7 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx* ctx, const unsigned char* sig,
         }
         if (ok) {
             encodedDigestLen = wc_EncodeSignature(encodedDigest, tbs,
-                (word32)tbsLen, wc_HashGetOID(ctx->hashType));
+                (word32)tbsLen, wc_HashGetOID(ctx->hash.type));
             if (encodedDigestLen <= 0) {
                 ok = 0;
             }
@@ -789,15 +786,15 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
     int rc;
     int saltLen;
 
-    if (ctx->hashType == WC_HASH_TYPE_NONE) {
+    if (ctx->hash.type == WC_HASH_TYPE_NONE) {
         ok = wp_rsa_setup_md(ctx, WP_RSA_DEFAULT_MD, NULL, EVP_PKEY_OP_VERIFY);
     }
     if (ok) {
-        saltLen = wp_pss_salt_len_to_wc(ctx->saltLen, ctx->hashType,
+        saltLen = wp_pss_salt_len_to_wc(ctx->saltLen, ctx->hash.type,
             wp_rsa_get_key(ctx->rsa), EVP_PKEY_OP_VERIFY);
 
         rc = wc_RsaPSS_Verify_ex((byte*)sig, (word32)sigLen, decryptedSig,
-            (word32)sigLen, ctx->hashType, ctx->mgf, saltLen,
+            (word32)sigLen, ctx->hash.type, ctx->mgf, saltLen,
             wp_rsa_get_key(ctx->rsa));
         if (rc < 0) {
             ok = 0;
@@ -805,7 +802,7 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
     }
     if (ok) {
         rc = wc_RsaPSS_CheckPadding_ex(tbs, (word32)tbsLen, decryptedSig, rc,
-            ctx->hashType, saltLen, 0);
+            ctx->hash.type, saltLen, 0);
         if (rc != 0) {
             ok = 0;
         }
@@ -990,7 +987,7 @@ static int wp_rsa_digest_signverify_update(wp_RsaSigCtx* ctx,
     const unsigned char* data, size_t dataLen)
 {
     int ok = 1;
-    int rc = wc_HashUpdate(&ctx->hash, ctx->hashType, data, (word32)dataLen);
+    int rc = wc_HashUpdate(&ctx->hash, ctx->hash.type, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
     }
@@ -1048,7 +1045,7 @@ static int wp_rsa_digest_sign_final(wp_RsaSigCtx* ctx, unsigned char* sig,
         ok = 0;
     }
     else if (sig != NULL) {
-        int rc = wc_HashFinal(&ctx->hash, ctx->hashType, digest);
+        int rc = wc_HashFinal(&ctx->hash, ctx->hash.type, digest);
         if (rc != 0) {
             ok = 0;
         }
@@ -1056,7 +1053,7 @@ static int wp_rsa_digest_sign_final(wp_RsaSigCtx* ctx, unsigned char* sig,
 
     if (ok) {
         ok = wp_rsa_sign(ctx, sig, sigLen, sigSize, digest,
-            wc_HashGetDigestSize(ctx->hashType));
+            wc_HashGetDigestSize(ctx->hash.type));
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -1109,7 +1106,7 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
         ok = 0;
     }
     else {
-        int rc = wc_HashFinal(&ctx->hash, ctx->hashType, digest);
+        int rc = wc_HashFinal(&ctx->hash, ctx->hash.type, digest);
         if (rc != 0) {
             ok = 0;
         }
@@ -1117,7 +1114,7 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
 
     if (ok) {
         ok = wp_rsa_verify(ctx,sig, sigLen, digest,
-            wc_HashGetDigestSize(ctx->hashType));
+            wc_HashGetDigestSize(ctx->hash.type));
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -1392,7 +1389,7 @@ static int wp_rsa_set_pad_mode(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
             }
         }
         else if (padMode == RSA_NO_PADDING) {
-            if (ctx->hashType != WC_HASH_TYPE_NONE) {
+            if (ctx->hash.type != WC_HASH_TYPE_NONE) {
                 ok = 0;
             }
         }

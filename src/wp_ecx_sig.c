@@ -50,8 +50,6 @@ typedef struct wp_EcxSigCtx {
 
     /** wolfSSL hash object. */
     wc_HashAlg hash;
-    /** Hash algorithm to use on data to be signed. */
-    enum wc_HashType hashType;
 
     /** Property query string. */
     char* propQuery;
@@ -135,8 +133,7 @@ static wp_EcxSigCtx* wp_ecx_dupctx(wp_EcxSigCtx* srcCtx)
             ok = 0;
         }
 
-        if (ok && (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash,
-                                 srcCtx->hashType))) {
+        if (ok && (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash))) {
             ok = 0;
         }
         if (ok && (!wp_ecx_up_ref(srcCtx->ecx))) {
@@ -144,7 +141,6 @@ static wp_EcxSigCtx* wp_ecx_dupctx(wp_EcxSigCtx* srcCtx)
         }
         if (ok) {
             dstCtx->ecx      = srcCtx->ecx;
-            dstCtx->hashType = srcCtx->hashType;
             dstCtx->op       = srcCtx->op;
             XMEMCPY(dstCtx->mdName, srcCtx->mdName, sizeof(srcCtx->mdName));
         }
