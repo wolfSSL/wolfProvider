@@ -26,3 +26,19 @@ if [ "$UTILS_GENERAL_LOADED" != "yes" ]; then # only set once
 
     export UTILS_GENERAL_LOADED=yes
 fi
+
+check_folder_age() {
+    folderA=$1
+    folderB=$2
+    folderA_age=$(find "$folderA" -type f -printf '%T@' | sort -n | tail -n 1)
+    folderB_age=$(find "$folderB" -type f -printf '%T@' | sort -n | tail -n 1)
+
+    if awk "BEGIN {exit !($folderA_age > $folderB_age)}"; then
+        echo 1
+    elif awk "BEGIN {exit !($folderA_age < $folderB_age)}"; then
+        echo -1
+    else
+        echo 0
+    fi
+}
+
