@@ -1,18 +1,18 @@
 # wolfProvider version 1.0.1 (Sept 10, 2024)
-Add test-sanity script
-Add FIPS testing
-Add a sanity check to make sure we can connect to external servers
-Fix for openssl denying connections
-Add more logging of calls
-Add helpful failure messages
-Fix 'make check' failures
-Fix wp_corebio_get_bio
-Add in simple logging for wolfProvider
-Use custom list of supported settable parameters
-Explicit ignore of generated content
-Add simple Github Action
-Add in declarations and calls to tests
-Add AES CFB encryption/decryption + tests
+* Add test-sanity script
+* Add FIPS testing
+* Add a sanity check to make sure we can connect to external servers
+* Fix for openssl denying connections
+* Add more logging of calls
+* Add helpful failure messages
+* Fix 'make check' failures
+* Fix wp_corebio_get_bio
+* Add in simple logging for wolfProvider
+* Use custom list of supported settable parameters
+* Explicit ignore of generated content
+* Add simple Github Action
+* Add in declarations and calls to tests
+* Add AES CFB encryption/decryption + tests
 
 # wolfProvider version 1.0.0 (July 17, 2024)
 
