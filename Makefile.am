@@ -14,6 +14,9 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libwolfprov.la
 
+EXTRA_DIST+=ChangeLog.md
+EXTRA_DIST+=README.md
+
 include src/include.am
 include include/include.am
 include test/include.am
