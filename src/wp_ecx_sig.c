@@ -137,7 +137,7 @@ static wp_EcxSigCtx* wp_ecx_dupctx(wp_EcxSigCtx* srcCtx)
             ok = 0;
         }
 
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         if (ok && (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash)))
 #else
         if (ok && (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash, srcCtx->hashType)))

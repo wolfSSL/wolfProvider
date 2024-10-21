@@ -138,7 +138,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
             (hashType == WC_HASH_TYPE_MD5)) {
             ok = 0;
         }
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         if (ok && (ctx->hash.type != WC_HASH_TYPE_NONE) &&
             (hashType != ctx->hash.type))
 #else
@@ -156,7 +156,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
         (void)op;
 #endif
         if (ok) {
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             ctx->hash.type = hashType;
 #else
             ctx->hashType = hashType;
@@ -164,7 +164,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
         }
 
         if (ok) {
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             rc = wc_HashInit_ex(&ctx->hash, ctx->hash.type, NULL, INVALID_DEVID);
 #else
             rc = wc_HashInit_ex(&ctx->hash, ctx->hashType, NULL, INVALID_DEVID);
@@ -311,7 +311,7 @@ static wp_RsaSigCtx* wp_rsa_ctx_dup(wp_RsaSigCtx* srcCtx)
             ok = 0;
         }
 
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         if (ok && (srcCtx->hash.type != WC_HASH_TYPE_NONE) &&
             (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash)))
 #else
@@ -402,7 +402,7 @@ static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx* ctx)
     int maxSaltLen;
     int bits = wp_rsa_get_bits(ctx->rsa);
 
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
     maxSaltLen = ((bits + 7) / 8) - wc_HashGetDigestSize(ctx->hash.type) - 2;
 #else
     maxSaltLen = ((bits + 7) / 8) - wc_HashGetDigestSize(ctx->hashType) - 2;
@@ -546,13 +546,13 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
     unsigned char* encodedDigest = NULL;
     int encodedDigestLen = 0;
 
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
     if (ctx->hash.type != WC_HASH_TYPE_NONE)
 #else
     if (ctx->hashType != WC_HASH_TYPE_NONE)
 #endif
     {
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         if (tbsLen != (size_t)wc_HashGetDigestSize(ctx->hash.type))
 #else
         if (tbsLen != (size_t)wc_HashGetDigestSize(ctx->hashType))
@@ -567,7 +567,7 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
             }
         }
         if (ok) {
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             encodedDigestLen = wc_EncodeSignature(encodedDigest, tbs,
                 (word32)tbsLen, wc_HashGetOID(ctx->hash.type));
 #else
@@ -623,7 +623,7 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
     int ok = 1;
     int rc;
     int saltLen = wp_pss_salt_len_to_wc(ctx->saltLen,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         ctx->hash.type,
 #else
         ctx->hashType,
@@ -632,7 +632,7 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
 
     PRIVATE_KEY_UNLOCK();
     rc = wc_RsaPSS_Sign_ex(tbs, (word32)tbsLen, sig, (word32)sigSize,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         ctx->hash.type,
 #else
         ctx->hashType,
@@ -802,7 +802,7 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx* ctx, const unsigned char* sig,
         if (ok) {
             encodedDigestLen = wc_EncodeSignature(encodedDigest, tbs,
                 (word32)tbsLen, wc_HashGetOID(
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                     ctx->hash.type
 #else
                     ctx->hashType
@@ -848,7 +848,7 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
     int rc;
     int saltLen;
 
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
     if (ctx->hash.type == WC_HASH_TYPE_NONE)
 #else
     if (ctx->hashType == WC_HASH_TYPE_NONE)
@@ -858,7 +858,7 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
     }
     if (ok) {
         saltLen = wp_pss_salt_len_to_wc(ctx->saltLen,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type,
 #else
                 ctx->hashType,
@@ -867,7 +867,7 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
 
         rc = wc_RsaPSS_Verify_ex((byte*)sig, (word32)sigLen, decryptedSig,
             (word32)sigLen,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             ctx->hash.type,
 #else
             ctx->hashType,
@@ -880,7 +880,7 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
     }
     if (ok) {
         rc = wc_RsaPSS_CheckPadding_ex(tbs, (word32)tbsLen, decryptedSig, rc,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             ctx->hash.type,
 #else
             ctx->hashType,
@@ -1071,7 +1071,7 @@ static int wp_rsa_digest_signverify_update(wp_RsaSigCtx* ctx,
 {
     int ok = 1;
     int rc = wc_HashUpdate(&ctx->hash,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             ctx->hash.type,
 #else
             ctx->hashType,
@@ -1135,7 +1135,7 @@ static int wp_rsa_digest_sign_final(wp_RsaSigCtx* ctx, unsigned char* sig,
     }
     else if (sig != NULL) {
         int rc = wc_HashFinal(&ctx->hash,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type,
 #else
                 ctx->hashType,
@@ -1149,7 +1149,7 @@ static int wp_rsa_digest_sign_final(wp_RsaSigCtx* ctx, unsigned char* sig,
     if (ok) {
         ok = wp_rsa_sign(ctx, sig, sigLen, sigSize, digest,
             wc_HashGetDigestSize(
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type
 #else
                 ctx->hashType
@@ -1208,7 +1208,7 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
     }
     else {
         int rc = wc_HashFinal(&ctx->hash,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type,
 #else
                 ctx->hashType,
@@ -1222,7 +1222,7 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
     if (ok) {
         ok = wp_rsa_verify(ctx,sig, sigLen, digest,
             wc_HashGetDigestSize(
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type
 #else
                 ctx->hashType
@@ -1502,7 +1502,7 @@ static int wp_rsa_set_pad_mode(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
             }
         }
         else if (padMode == RSA_NO_PADDING) {
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             if (ctx->hash.type != WC_HASH_TYPE_NONE)
 #else
             if (ctx->hashType != WC_HASH_TYPE_NONE)

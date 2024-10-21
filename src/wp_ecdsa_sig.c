@@ -256,7 +256,7 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
         *sigLen = wc_ecc_sig_size(wp_ecc_get_key(ctx->ecc));
     }
     else {
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         if ((ctx->hash.type != WC_HASH_TYPE_NONE) &&
             (tbsLen != (size_t)wc_HashGetDigestSize(ctx->hash.type)))
 #else
@@ -423,7 +423,7 @@ static int wp_ecdsa_setup_md(wp_EcdsaSigCtx *ctx, const char *mdName,
     if (mdName != NULL) {
         int rc;
 
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         ctx->hash.type = wp_name_to_wc_hash_type(ctx->libCtx, mdName, mdProps);
         if ((ctx->hash.type == WC_HASH_TYPE_NONE) ||
             (ctx->hash.type == WC_HASH_TYPE_MD5))
@@ -435,7 +435,7 @@ static int wp_ecdsa_setup_md(wp_EcdsaSigCtx *ctx, const char *mdName,
         {
             ok = 0;
         }
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         if ((ctx->hash.type == WC_HASH_TYPE_SHA) && (op == EVP_PKEY_OP_SIGN))
 #else
         if ((ctx->hashType == WC_HASH_TYPE_SHA) && (op == EVP_PKEY_OP_SIGN))
@@ -445,7 +445,7 @@ static int wp_ecdsa_setup_md(wp_EcdsaSigCtx *ctx, const char *mdName,
         }
 
         if (ok) {
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             rc = wc_HashInit_ex(&ctx->hash, ctx->hash.type, NULL, INVALID_DEVID);
 #else
             rc = wc_HashInit_ex(&ctx->hash, ctx->hashType, NULL, INVALID_DEVID);
@@ -505,7 +505,7 @@ static int wp_ecdsa_digest_signverify_update(wp_EcdsaSigCtx *ctx,
 {
     int ok = 1;
     int rc = wc_HashUpdate(&ctx->hash,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             ctx->hash.type,
 #else
             ctx->hashType,
@@ -569,7 +569,7 @@ static int wp_ecdsa_digest_sign_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
     }
     else if (sig != NULL) {
         int rc = wc_HashFinal(&ctx->hash,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type,
 #else
                 ctx->hashType,
@@ -583,7 +583,7 @@ static int wp_ecdsa_digest_sign_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
     if (ok) {
         ok = wp_ecdsa_sign(ctx, sig, sigLen, sigSize, digest,
             wc_HashGetDigestSize(
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type
 #else
                 ctx->hashType
@@ -642,7 +642,7 @@ static int wp_ecdsa_digest_verify_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
     }
     else {
         int rc = wc_HashFinal(&ctx->hash,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
                 ctx->hash.type,
 #else
                 ctx->hashType,
@@ -655,7 +655,7 @@ static int wp_ecdsa_digest_verify_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
 
     if (ok) {
         ok = wp_ecdsa_verify(ctx,sig, sigLen, digest,
-#ifdef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             wc_HashGetDigestSize(ctx->hash.type)
 #else
             wc_HashGetDigestSize(ctx->hashType)
