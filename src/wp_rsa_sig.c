@@ -80,7 +80,7 @@ typedef struct wp_RsaSigCtx {
 
     /** wolfSSL hash object. */
     wc_HashAlg hash;
-#ifndef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
     /** Hash algorithm to use on data to be signed. */
     enum wc_HashType hashType;
 #endif
@@ -326,7 +326,7 @@ static wp_RsaSigCtx* wp_rsa_ctx_dup(wp_RsaSigCtx* srcCtx)
         }
         if (ok) {
             dstCtx->rsa      = srcCtx->rsa;
-#ifndef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
             dstCtx->hashType = srcCtx->hashType;
 #endif
             dstCtx->mgf      = srcCtx->mgf;

@@ -248,7 +248,11 @@ int wp_mgf1_from_hash(int nid)
  * @return  1 on success.
  * @return  0 on failure.
  */
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst)
+#else
 int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
+#endif
 {
     int ok = 1;
     int rc = 0;

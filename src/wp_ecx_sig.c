@@ -50,7 +50,7 @@ typedef struct wp_EcxSigCtx {
 
     /** wolfSSL hash object. */
     wc_HashAlg hash;
-#ifndef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
     /** Hash algorithm to use on data to be signed. */
     enum wc_HashType hashType;
 #endif
@@ -150,7 +150,7 @@ static wp_EcxSigCtx* wp_ecx_dupctx(wp_EcxSigCtx* srcCtx)
         }
         if (ok) {
             dstCtx->ecx      = srcCtx->ecx;
-#ifndef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
             dstCtx->hashType = srcCtx->hashType;
 #endif
             dstCtx->op       = srcCtx->op;

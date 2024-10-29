@@ -51,7 +51,7 @@ typedef struct wp_EcdsaSigCtx {
 
     /** wolfSSL hash object. */
     wc_HashAlg hash;
-#ifndef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
     /** Hash algorithm to use on data to be signed. */
     enum wc_HashType hashType;
 #endif
@@ -143,7 +143,7 @@ static wp_EcdsaSigCtx* wp_ecdsa_dupctx(wp_EcdsaSigCtx* srcCtx)
         }
 
         if (ok && (!wp_hash_copy(&srcCtx->hash, &dstCtx->hash
-#ifndef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
                         ,srcCtx->hashType
 #endif
                         ))) {
@@ -154,7 +154,7 @@ static wp_EcdsaSigCtx* wp_ecdsa_dupctx(wp_EcdsaSigCtx* srcCtx)
         }
         if (ok) {
             dstCtx->ecc      = srcCtx->ecc;
-#ifndef wc_Hashes
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
             dstCtx->hashType = srcCtx->hashType;
 #endif
             dstCtx->op       = srcCtx->op;
