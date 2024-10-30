@@ -248,62 +248,103 @@ int wp_mgf1_from_hash(int nid)
  * @return  1 on success.
  * @return  0 on failure.
  */
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst)
+#else
 int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
+#endif
 {
     int ok = 1;
     int rc = 0;
 
-    switch (hashType) {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+    switch (src->type)
+#else
+    switch (hashType)
+#endif
+    {
     case WC_HASH_TYPE_MD5:
 #ifdef WP_HAVE_MD5
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Md5Copy(&src->alg.md5, &dst->alg.md5);
+#else
         rc = wc_Md5Copy(&src->md5, &dst->md5);
+#endif
 #else
         ok = 0;
 #endif
         break;
     case WC_HASH_TYPE_SHA:
 #ifdef WP_HAVE_SHA1
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_ShaCopy(&src->alg.sha, &dst->alg.sha);
+#else
         rc = wc_ShaCopy(&src->sha, &dst->sha);
+#endif
 #else
         ok = 0;
 #endif
         break;
     case WC_HASH_TYPE_SHA224:
 #ifdef WP_HAVE_SHA224
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha224Copy(&src->alg.sha224, &dst->alg.sha224);
+#else
         rc = wc_Sha224Copy(&src->sha224, &dst->sha224);
+#endif
 #else
         ok = 0;
 #endif
         break;
     case WC_HASH_TYPE_SHA256:
 #ifdef WP_HAVE_SHA256
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha256Copy(&src->alg.sha256, &dst->alg.sha256);
+#else
         rc = wc_Sha256Copy(&src->sha256, &dst->sha256);
+#endif
 #else
         ok = 0;
 #endif
         break;
     case WC_HASH_TYPE_SHA384:
 #ifdef WP_HAVE_SHA384
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha384Copy(&src->alg.sha384, &dst->alg.sha384);
+#else
         rc = wc_Sha384Copy(&src->sha384, &dst->sha384);
+#endif
 #else
         ok = 0;
 #endif
         break;
 #ifdef WP_HAVE_SHA512
     case WC_HASH_TYPE_SHA512:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha512Copy(&src->alg.sha512, &dst->alg.sha512);
+#else
         rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
+#endif
         break;
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
 #if !defined(WOLFSSL_NOSHA512_224) && !defined(HAVE_FIPS) && \
         !defined(SELF_TEST)
     case WC_HASH_TYPE_SHA512_224:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha512_224Copy(&src->alg.sha512, &dst->alg.sha512);
+#else
         rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
+#endif
         break;
 #endif /* !WOLFSSL_NOSHA512_224 */
 #if !defined(WOLFSSL_NOSHA512_256) && !defined(HAVE_FIPS) && \
         !defined(SELF_TEST)
     case WC_HASH_TYPE_SHA512_256:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha512_256Copy(&src->alg.sha512, &dst->alg.sha512);
+#else
         rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
+#endif
         break;
 #endif /* !WOLFSSL_NOSHA512_256 */
 #endif /* LIBWOLFSSL_VERSION_HEX >= 0x05000000 */
@@ -316,16 +357,32 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
 #endif /* WP_HAVE_SHA512 */
 #ifdef WP_HAVE_SHA3
     case WC_HASH_TYPE_SHA3_224:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha3_224_Copy(&src->alg.sha3, &dst->alg.sha3);
+#else
         rc = wc_Sha3_224_Copy(&src->sha3, &dst->sha3);
+#endif
         break;
     case WC_HASH_TYPE_SHA3_256:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha3_256_Copy(&src->alg.sha3, &dst->alg.sha3);
+#else
         rc = wc_Sha3_256_Copy(&src->sha3, &dst->sha3);
+#endif
         break;
     case WC_HASH_TYPE_SHA3_384:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha3_384_Copy(&src->alg.sha3, &dst->alg.sha3);
+#else
         rc = wc_Sha3_384_Copy(&src->sha3, &dst->sha3);
+#endif
         break;
     case WC_HASH_TYPE_SHA3_512:
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        rc = wc_Sha3_512_Copy(&src->alg.sha3, &dst->alg.sha3);
+#else
         rc = wc_Sha3_512_Copy(&src->sha3, &dst->sha3);
+#endif
         break;
 #else
     case WC_HASH_TYPE_SHA3_224:
@@ -355,6 +412,10 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
     }
     if (rc != 0) {
         ok = 0;
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+    } else {
+        dst->type = src->type;
+#endif
     }
 
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

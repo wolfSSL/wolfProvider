@@ -150,7 +150,11 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid);
 int wp_name_to_wc_mgf(OSSL_LIB_CTX* libCtx, const char* name,
     const char* propQ);
 int wp_mgf1_from_hash(int nid);
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst);
+#else
 int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType);
+#endif
 
 int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     const char** cipherName);
