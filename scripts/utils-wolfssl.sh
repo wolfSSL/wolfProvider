@@ -86,7 +86,8 @@ install_wolfssl() {
             printf "with FIPS ... "
             CONF_ARGS+=" --enable-fips=ready"
             if [ ! -e "XXX-fips-test" ]; then
-                ./fips-check.sh keep nomakecheck fips-ready >>$LOG_FILE 2>&1
+                # Sometimes the system OpenSSL is different than the one we're using. So for the 'git' commands, we'll just use whatever the system comes with
+                LD_LIBRARY_PATH="" ./fips-check.sh keep nomakecheck fips-ready >>$LOG_FILE 2>&1
                 if [ $? != 0 ]; then
                     printf "ERROR checking out FIPS\n"
                     rm -rf ${WOLFSSL_INSTALL_DIR}
