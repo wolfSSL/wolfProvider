@@ -31,12 +31,6 @@ WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
-if [ -z $LD_LIBRARY_PATH ]; then
-  export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib"
-else
-  export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
-fi
-
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
     if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
@@ -144,5 +138,11 @@ install_wolfssl() {
 init_wolfssl() {
     install_wolfssl
     printf "\twolfSSL ${WOLFSSL_TAG} installed in: ${WOLFSSL_INSTALL_DIR}\n"
+
+    if [ -z $LD_LIBRARY_PATH ]; then
+      export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib"
+    else
+      export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
+    fi
 }
 
