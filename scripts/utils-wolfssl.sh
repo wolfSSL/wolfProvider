@@ -31,12 +31,6 @@ WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
-if [ -z $LD_LIBRARY_PATH ]; then
-  export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib"
-else
-  export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
-fi
-
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
     if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
@@ -86,7 +80,8 @@ install_wolfssl() {
             printf "with FIPS ... "
             CONF_ARGS+=" --enable-fips=ready"
             if [ ! -e "XXX-fips-test" ]; then
-                ./fips-check.sh keep nomakecheck fips-ready >>$LOG_FILE 2>&1
+                # Sometimes the system OpenSSL is different than the one we're using. So for the 'git' commands, we'll just use whatever the system comes with
+                LD_LIBRARY_PATH="" ./fips-check.sh keep nomakecheck fips-ready >>$LOG_FILE 2>&1
                 if [ $? != 0 ]; then
                     printf "ERROR checking out FIPS\n"
                     rm -rf ${WOLFSSL_INSTALL_DIR}
@@ -143,5 +138,11 @@ install_wolfssl() {
 init_wolfssl() {
     install_wolfssl
     printf "\twolfSSL ${WOLFSSL_TAG} installed in: ${WOLFSSL_INSTALL_DIR}\n"
+
+    if [ -z $LD_LIBRARY_PATH ]; then
+      export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib"
+    else
+      export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
+    fi
 }
 

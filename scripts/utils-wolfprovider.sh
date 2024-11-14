@@ -40,6 +40,8 @@ install_wolfprov() {
 
     init_openssl
     init_wolfssl
+    unset OPENSSL_MODULES
+    unset OPENSSL_CONF
     printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
     if [ ! -d ${WOLFPROV_INSTALL_DIR} ] || [ $(check_folder_age "${WOLFPROV_INSTALL_DIR}" "${WOLFSSL_INSTALL_DIR}") -lt 0 ] || [ $(check_folder_age "${WOLFPROV_INSTALL_DIR}" "${OPENSSL_INSTALL_DIR}") -lt 0 ]; then

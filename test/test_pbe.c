@@ -369,8 +369,8 @@ int test_pbe(void *data)
     PRINT_MSG("Not using wolfProvider - PBKDF not available in wolfCrypt");
 #endif
 
-    PRINT_MSG("PBE DES-EDE3-CBC SHA-1");
 #if !defined(NO_DES3) && defined(WP_HAVE_SHA1)
+    PRINT_MSG("PBE DES-EDE3-CBC SHA-1");
     err = test_pbe_sha1_des3_pbkdf1();
 #endif
 #if defined(WP_HAVE_SHA256) && defined(WP_HAVE_AESCBC)
