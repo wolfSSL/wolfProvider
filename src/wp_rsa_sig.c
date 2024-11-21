@@ -1247,7 +1247,13 @@ static int wp_rsa_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
     /* TODO: implement */
     (void)ctx;
     (void)p;
-    return 0;
+    const byte oid[] = {0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00, 0x04, 0x10};
+    int ok = 1;
+
+    if (ok && (!OSSL_PARAM_set_octet_string(p, oid, sizeof(oid)))) {
+        ok = 0;
+    }
+    return ok;
 }
 
 /**
