@@ -583,7 +583,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \
-        int rc = fin(&ctx->obj, out, ctx->outLen);                             \
+        int rc = fin(&ctx->obj, out, (word32)ctx->outLen);                     \
         if (rc != 0) {                                                         \
             ok = 0;                                                            \
         }                                                                      \

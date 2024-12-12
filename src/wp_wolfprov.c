@@ -1123,6 +1123,34 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
     { 0, NULL }
 };
 
+#ifdef HAVE_FIPS
+    #include <wolfssl/wolfcrypt/fips_test.h>
+
+    static void wp_fipsCb(int ok, int err, const char* hash)
+    {
+        (void)ok;
+        (void)err;
+        (void)hash;
+        WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+           "in my Fips callback, ok = %d, err = %d\n", ok, err);
+        WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+           "message = %s\n", wc_GetErrorString(err));
+        WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+           "hash = %s\n", hash);
+
+#ifdef WC_NO_ERR_TRACE
+        if (err == WC_NO_ERR_TRACE(IN_CORE_FIPS_E)) {
+#else
+        if (err == IN_CORE_FIPS_E) {
+#endif
+            WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+               "In core integrity hash check failure, copy above hash\n");
+            WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+               "into verifyCore[] in fips_test.c and rebuild\n");
+        }
+    }
+#endif
+
 /*
  * Initializes the wolfSSL provider.
  *
@@ -1142,6 +1170,10 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 #ifdef WOLFPROV_DEBUG
     ok = (wolfProv_Debugging_ON() == 0) && (wolfSSL_Debugging_ON() == 0);
     wolfSSL_SetLoggingPrefix("wolfSSL");
+#endif
+
+#ifdef HAVE_FIPS
+    wolfCrypt_SetCb_fips(wp_fipsCb);
 #endif
 
     for (; in->function_id != 0; in++) {
