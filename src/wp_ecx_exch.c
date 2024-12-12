@@ -230,7 +230,7 @@ static int wp_x25519_derive(wp_EcxCtx* ctx, unsigned char* secret,
     }
     else if (ok) {
         int rc;
-        word32 len = secSize;
+        word32 len = (word32)secSize;
         int i;
 
         rc = wc_curve25519_shared_secret(wp_ecx_get_key(ctx->key),
@@ -316,7 +316,7 @@ static int wp_x448_derive(wp_EcxCtx* ctx, unsigned char* secret,
     }
     else if (ok) {
         int rc;
-        word32 len = secSize;
+        word32 len = (word32)secSize;
 
         rc = wc_curve448_shared_secret(wp_ecx_get_key(ctx->key),
             wp_ecx_get_key(ctx->peer), secret, &len);

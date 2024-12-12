@@ -404,7 +404,7 @@ static int wp_ecx_set_params(wp_Ecx* ecx, const OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (data != NULL)) {
-        int rc = (*ecx->data->importPub)(data, len, (void*)&ecx->key,
+        int rc = (*ecx->data->importPub)(data, (word32)len, (void*)&ecx->key,
             ECX_LITTLE_ENDIAN);
         if (rc != 0) {
             ok = 0;
@@ -479,7 +479,7 @@ static int wp_ecx_get_params_enc_pub_key(wp_Ecx* ecx, OSSL_PARAM params[],
 
     p = OSSL_PARAM_locate(params, key);
     if (p != NULL) {
-        word32 outLen = p->return_size;
+        word32 outLen = (word32)p->return_size;
 
         if (p->data == NULL) {
             outLen = ecx->data->len;
@@ -513,7 +513,7 @@ static int wp_ecx_get_params_priv_key(wp_Ecx* ecx, OSSL_PARAM params[])
 
     p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
     if (p != NULL) {
-        word32 outLen = p->return_size;
+        word32 outLen = (word32)p->return_size;
 
         if (p->data == NULL) {
             outLen = ecx->data->len;
@@ -869,7 +869,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
         if (ok && (privData != NULL)) {
             ecx->unclamped[0] = privData[0];
             ecx->unclamped[1] = privData[len - 1];
-            rc = (*ecx->data->importPriv)(privData, len, (void*)&ecx->key,
+            rc = (*ecx->data->importPriv)(privData, (word32)len, (void*)&ecx->key,
                 ECX_LITTLE_ENDIAN);
             if (rc != 0) {
                 ok = 0;
@@ -886,7 +886,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             ok = 0;
         }
         if (ok && (pubData != NULL)) {
-            rc = (*ecx->data->importPub)(pubData, len, (void*)&ecx->key,
+            rc = (*ecx->data->importPub)(pubData, (word32)len, (void*)&ecx->key,
                 ECX_LITTLE_ENDIAN);
             if (rc != 0) {
                 ok = 0;
@@ -2034,7 +2034,7 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         keyLen = derLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, derLen, NULL, 0, cipherInfo, pemType);
+        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo, pemType);
         if (rc <= 0) {
             ok = 0;
         }
@@ -2046,7 +2046,7 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             }
         }
         if (ok) {
-            rc = wc_DerToPemEx(derData, derLen, pemData, pemLen, cipherInfo,
+            rc = wc_DerToPemEx(derData, (word32)derLen, pemData, (word32)pemLen, cipherInfo,
                 pemType);
             if (rc <= 0) {
                 ok = 0;
@@ -2058,7 +2058,7 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
     if (ok) {
-        rc = BIO_write(out, keyData, keyLen);
+        rc = BIO_write(out, keyData, (int)keyLen);
         if (rc <= 0) {
             ok = 0;
         }
