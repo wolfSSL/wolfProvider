@@ -482,6 +482,11 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
 #endif
 
+#ifdef WP_HAVE_DES3
+    { WP_NAMES_DES_EDE3_CBC, WOLFPROV_PROPERTIES, wp_des3cbc_functions,
+     "" },
+#endif
+
     { NULL, NULL, NULL, NULL }
 };
 
