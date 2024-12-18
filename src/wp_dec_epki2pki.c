@@ -192,6 +192,7 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     word32 len = 0;
     char password[1024];
     size_t passwordLen;
+    word32 tradIdx = 0;
 
     (void)ctx;
     (void)selection;
@@ -203,6 +204,11 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     /* No data - nothing to do. */
     else if (data == NULL) {
         done = 1;
+    }
+    if (wc_GetPkcs8TraditionalOffset(data, &tradIdx, (word32)len) <= 0) {
+        /* This is not PKCS8, we are done */
+        done = 1;
+        ok = 1;
     }
     if ((!done) && ok && (!pwCb(password, sizeof(password), &passwordLen, NULL,
             pwCbArg))) {
