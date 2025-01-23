@@ -29,7 +29,7 @@ SDK_OUTPUT_DIR=${OUTDIR}/xcframework
 CFLAGS_COMMON=""
 CPPFLAGS_COMMON=""
 # Base configure flags
-CONF_OPTS="--disable-shared --enable-static --enable-armasm=no-sha3-crypto"
+CONF_OPTS="--disable-shared --enable-static --enable-armasm=no"
 
 helpFunction()
 {
