@@ -887,16 +887,25 @@ static int wp_rsa_has(const wp_Rsa* rsa, int selection)
 static int wp_rsa_match(const wp_Rsa* rsa1, const wp_Rsa* rsa2, int selection)
 {
     int ok = 1;
+    int checked = 0;
 
-    if (mp_cmp((mp_int*)&rsa1->key.n, (mp_int*)&rsa2->key.n) != MP_EQ) {
-        ok = 0;
-    }
     if (ok && mp_cmp((mp_int*)&rsa1->key.e, (mp_int*)&rsa2->key.e) != MP_EQ) {
         ok = 0;
     }
-    if (ok && (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-        (mp_cmp((mp_int*)&rsa1->key.d, (mp_int*)&rsa2->key.d) != MP_EQ))) {
-        ok = 0;
+    if (ok && (((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0))) {
+        if (ok && (((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0))) {
+            if (mp_cmp((mp_int*)&rsa1->key.n, (mp_int*)&rsa2->key.n) != MP_EQ) {
+                ok = 0;
+            }
+            else {
+                checked = 1;
+            }
+        }
+        if (ok && checked == 0 &&
+            (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+            (mp_cmp((mp_int*)&rsa1->key.d, (mp_int*)&rsa2->key.d) != MP_EQ))) {
+            ok = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
