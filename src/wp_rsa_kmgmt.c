@@ -902,10 +902,14 @@ static int wp_rsa_match(const wp_Rsa* rsa1, const wp_Rsa* rsa2, int selection)
             }
         }
         if (ok && checked == 0 &&
-            (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-            (mp_cmp((mp_int*)&rsa1->key.d, (mp_int*)&rsa2->key.d) != MP_EQ))) {
-            ok = 0;
+            (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0))) {
+                if (mp_cmp((mp_int*)&rsa1->key.d, (mp_int*)&rsa2->key.d) != MP_EQ) {
+                ok = 0;
+            } else {
+                checked = 1;
+            }
         }
+        ok = ok && checked;
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

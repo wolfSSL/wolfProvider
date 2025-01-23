@@ -856,6 +856,7 @@ static int wp_ecc_has(const wp_Ecc* ecc, int selection)
 static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
 {
     int ok = 1;
+    int checked = 0;
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -864,20 +865,30 @@ static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
         (ecc1->key.dp->id != ecc2->key.dp->id)) {
         ok = 0;
     }
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
-        (mp_cmp(wc_ecc_key_get_priv(&ecc1->key),
-            wc_ecc_key_get_priv(&ecc2->key)) != MP_EQ)
-#else
-        (mp_cmp(&(ecc1->key.k), &(ecc2->key.k)) != MP_EQ)
-#endif
-        ) {
-        ok = 0;
-    }
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) &&
-        (wc_ecc_cmp_point((ecc_point*)&ecc1->key.pubkey,
-                          (ecc_point*)&ecc2->key.pubkey) != MP_EQ)) {
-        ok = 0;
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0)) {
+        if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+            if (wc_ecc_cmp_point((ecc_point*)&ecc1->key.pubkey,
+                            (ecc_point*)&ecc2->key.pubkey) != MP_EQ) {
+                ok = 0;
+            } else {
+                checked = 1;
+            }
+        }
+        if (ok && checked == 0 &&
+            ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+        #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
+                if (mp_cmp(wc_ecc_key_get_priv(&ecc1->key),
+                    wc_ecc_key_get_priv(&ecc2->key)) != MP_EQ)
+        #else
+                if (mp_cmp(&(ecc1->key.k), &(ecc2->key.k)) != MP_EQ)
+        #endif
+                {
+                    ok = 0;
+                } else {
+                    checked = 1;
+                }
+        }
+        ok = ok && checked;
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
