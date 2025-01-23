@@ -1131,11 +1131,11 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
         (void)ok;
         (void)err;
         (void)hash;
-        WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+        WOLFPROV_MSG(WP_LOG_PROVIDER,
            "in my Fips callback, ok = %d, err = %d\n", ok, err);
-        WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+        WOLFPROV_MSG(WP_LOG_PROVIDER,
            "message = %s\n", wc_GetErrorString(err));
-        WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+        WOLFPROV_MSG(WP_LOG_PROVIDER,
            "hash = %s\n", hash);
 
 #ifdef WC_NO_ERR_TRACE
@@ -1143,9 +1143,9 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
 #else
         if (err == IN_CORE_FIPS_E) {
 #endif
-            WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_PROVIDER,
                "In core integrity hash check failure, copy above hash\n");
-            WOLFPROVIDER_MSG(WE_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_PROVIDER,
                "into verifyCore[] in fips_test.c and rebuild\n");
         }
     }
