@@ -92,6 +92,29 @@ static word32 wp_pem2der_find_header(unsigned char* data, word32 len)
     return idx;
 }
 
+/**
+ * Find the start of the PEM footer.
+ *
+ * @param [in] data  Data buffer with PEM encoding.
+ * @param [in] len   Length of data in bytes.
+ * @return  Index of PEM header on success.
+ * @return  Length of data on failure.
+ */
+static word32 wp_pem2der_find_footer(unsigned char* data, word32 len)
+{
+    word32 i;
+    word32 idx = len;
+
+    for (i = 0; i + 8 < len; i++) {
+        if ((data[i] == '-') && (XMEMCMP(data + i, "-----END", 8) == 0)) {
+            idx = i;
+            break;
+        }
+    }
+
+    return idx;
+}
+
 #ifdef WOLFSSL_ENCRYPTED_KEYS
 /**
  * Password callback data.
@@ -409,6 +432,17 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
                 dataCbArg, pwCb, pwCbArg);
         }
     }
+    if (data != NULL) {
+        /* Restore BIO position to end of first footer */
+        idx = wp_pem2der_find_footer(data, len);
+        BIO *bio = wp_corebio_get_bio(ctx->provCtx, coreBio);
+        if (BIO_seek(bio, idx) == -1) {
+            WOLFPROV_ERROR_MSG(WP_LOG_PK, "Error resetting BIO position");
+        }
+
+        BIO_free(bio);
+    }
+
     /* Dispose of the PEM data buffer. */
     OPENSSL_free(data);
 
