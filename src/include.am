@@ -10,6 +10,7 @@ libwolfprov_la_SOURCES += src/wp_aes_block.c
 libwolfprov_la_SOURCES += src/wp_aes_stream.c
 libwolfprov_la_SOURCES += src/wp_aes_aead.c
 libwolfprov_la_SOURCES += src/wp_aes_wrap.c
+libwolfprov_la_SOURCES += src/wp_des.c
 libwolfprov_la_SOURCES += src/wp_hmac.c
 libwolfprov_la_SOURCES += src/wp_cmac.c
 libwolfprov_la_SOURCES += src/wp_gmac.c
