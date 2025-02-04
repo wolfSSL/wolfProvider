@@ -554,13 +554,13 @@ int wp_params_get_uint(const OSSL_PARAM* params, const char* key,
     const OSSL_PARAM* p;
 
     if (set != NULL) {
-        *set = 1;
+        *set = 0;
     }
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (!OSSL_PARAM_get_uint(p, val))) {
         ok = 0;
     }
-    if (ok && (set != NULL)) {
+    if (ok && (p != NULL) && (set != NULL)) {
         *set = 1;
     }
 
