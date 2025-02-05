@@ -107,7 +107,7 @@ static word32 wp_pem2der_find_footer(unsigned char* data, word32 len)
 
     for (i = 0; i + 8 < len; i++) {
         if ((data[i] == '-') && (XMEMCMP(data + i, "-----END", 8) == 0)) {
-            idx = i;
+            idx = i + 13;
             break;
         }
     }
