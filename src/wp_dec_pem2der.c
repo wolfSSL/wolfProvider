@@ -226,10 +226,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         type = CERT_TYPE;
         obj = OSSL_OBJECT_CERT;
     }
+#if LIBWOLFSSL_VERSION_HEX > 0x05007006
     else if (XMEMCMP(data, "-----BEGIN TRUSTED CERTIFICATE-----", 35) == 0) {
         type = TRUSTED_CERT_TYPE;
         obj = OSSL_OBJECT_CERT;
     }
+#endif
     else if (XMEMCMP(data, "-----BEGIN X509 CRL-----", 24) == 0) {
         type = CRL_TYPE;
         obj = OSSL_OBJECT_CRL;
