@@ -269,6 +269,9 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
         if (padMode == RSA_NO_PADDING) {
             bufLen = rsaSigLen;
         }
+        else if (padMode == RSA_X931_PADDING) {
+            bufLen = EVP_MD_size(md);
+        }
         buf = (unsigned char *)OPENSSL_malloc(bufLen);
         err = buf == NULL;
     }
@@ -446,6 +449,40 @@ int test_rsa_sign_verify_pss(void *data)
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha384(),
                                        EVP_sha512()) == 1;
+    }
+#endif
+
+    return err;
+}
+
+int test_rsa_sign_verify_x931(void *data)
+{
+
+    int err = 0;
+
+    (void)data;
+
+    /* Use SHA-1 (default) for MD and MGF1 MD. */
+    err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha1(), NULL) == 1;
+#ifdef WP_HAVE_SHA256
+    if (err == 0) {
+        /* Use SHA-256 for MD. */
+        err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha256(),
+                                       NULL) == 1;
+    }
+#endif
+#ifdef WP_HAVE_SHA384
+    if (err == 0) {
+        /* Use SHA-384 for MD. */
+        err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha384(),
+                                       NULL) == 1;
+    }
+#endif
+#ifdef WP_HAVE_SHA512
+    if (err == 0) {
+        /* Use SHA-512 for MD. */
+        err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha512(),
+                                       NULL) == 1;
     }
 #endif
 
