@@ -776,6 +776,12 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_ecc_epki_pem_encoder_functions,
       "" },
+    { WP_NAMES_EC, WP_ENCODER_PROPERTIES(X9_62, der),
+      wp_ecc_x9_62_der_encoder_functions,
+      "" },
+    { WP_NAMES_EC, WP_ENCODER_PROPERTIES(X9_62, pem),
+      wp_ecc_x9_62_pem_encoder_functions,
+      "" },
 #endif
 
 #ifdef WP_HAVE_X25519
@@ -962,6 +968,9 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
 #ifdef WP_HAVE_ECC
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_ecc_spki_decoder_functions,
+      "" },
+    { WP_NAMES_EC, WP_DECODER_PROPERTIES(X9_62),
+      wp_ecc_x9_62_decoder_functions,
       "" },
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_ecc_pki_decoder_functions,

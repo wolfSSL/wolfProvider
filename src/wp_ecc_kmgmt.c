@@ -2076,7 +2076,8 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     if (ok && (!wp_read_der_bio(ctx->provCtx, cBio, &data, &len))) {
         ok = 0;
     }
-    if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
+    if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
+               (ctx->format == WP_ENC_FORMAT_X9_62))) {
         if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
             if (!wp_ecc_decode_pki(ecc, data, len)) {
                 ok = 0;
@@ -2439,7 +2440,8 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         ok = 0;
     }
 
-    if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
+    if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
+               (ctx->format == WP_ENC_FORMAT_X9_62))) {
         if (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
             if (!wp_ecc_encode_params_size(key, &derLen)) {
                 ok = 0;
@@ -2480,7 +2482,8 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
 
-    if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
+    if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
+               (ctx->format == WP_ENC_FORMAT_X9_62))) {
         if (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
             pemType = DH_PARAM_TYPE;
             if (!wp_ecc_encode_params(key, derData, &derLen)) {
@@ -2488,6 +2491,9 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             }
         }
         else {
+            if (ctx->format == WP_ENC_FORMAT_X9_62) {
+                pemType = ECC_PRIVATEKEY_TYPE;
+            }
             private = 1;
             if (!wp_ecc_encode_priv(key, derData, &derLen)) {
                 ok = 0;
@@ -2543,8 +2549,9 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             keyLen = pemLen = rc;
             keyData = pemData;
         }
-        if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) &&
-            (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS)) {
+        if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
+               (ctx->format == WP_ENC_FORMAT_X9_62)) &&
+               (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS)) {
             pemData[11] = 'E';
             pemData[12] = 'C';
             pemData[pemLen - 19] = 'E';
@@ -2978,6 +2985,121 @@ const OSSL_DISPATCH wp_ecc_epki_pem_encoder_functions[] = {
                                     (DFUNC)wp_ecc_enc_dec_settable_ctx_params },
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecc_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecc_pki_does_selection      },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecc_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecc_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecc_free                    },
+    { 0, NULL }
+};
+
+/*
+ * ECC X9.62
+ */
+
+/**
+ * Create a new ECC encoder/decoder context that handles decoding X9.62.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECC encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EccEncDecCtx* wp_ecc_x9_62_dec_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecc_enc_dec_new(provCtx, WP_ENC_FORMAT_X9_62, 0);
+}
+
+/**
+ * Return whether the X9.62 decoder/encoder handles the part of the key.
+ *
+ * @param [in] ctx        ECC encoder/decoder context object.
+ * @param [in] selection  Parts of key to handle.
+ * @return  1 when supported.
+ * @return  0 when not supported.
+ */
+static int wp_ecc_x9_62_does_selection(WOLFPROV_CTX* provCtx,
+    int selection)
+{
+    int ok;
+
+    (void)provCtx;
+
+    if (selection == 0) {
+        ok = 1;
+    }
+    else {
+        ok = (selection & (OSSL_KEYMGMT_SELECT_ALL_PARAMETERS |
+                           OSSL_KEYMGMT_SELECT_PRIVATE_KEY)) != 0;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Dispatch table for x9_62 decoder.
+ */
+const OSSL_DISPATCH wp_ecc_x9_62_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_ecc_x9_62_dec_new           },
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_ecc_enc_dec_free            },
+    { OSSL_FUNC_DECODER_DOES_SELECTION,
+                                        (DFUNC)wp_ecc_x9_62_does_selection    },
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_ecc_decode                  },
+    { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_ecc_export_object           },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECC encoder/decoder context that handles encoding params in DER.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECC encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EccEncDecCtx* wp_ecc_x9_62_der_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecc_enc_dec_new(provCtx, WP_ENC_FORMAT_X9_62, WP_FORMAT_DER);
+}
+
+/**
+ * Dispatch table for X9.62 to DER encoder.
+ */
+const OSSL_DISPATCH wp_ecc_x9_62_der_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ecc_x9_62_der_enc_new       },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecc_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                   (DFUNC)wp_ecc_enc_dec_settable_ctx_params  },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecc_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION,
+                                        (DFUNC)wp_ecc_x9_62_does_selection    },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecc_encode                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecc_import                  },
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecc_free                    },
+    { 0, NULL }
+};
+
+/**
+ * Create a new ECC encoder/decoder context that handles encoding X9.62 in PEM.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECC encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EccEncDecCtx* wp_ecc_x9_62_pem_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecc_enc_dec_new(provCtx, WP_ENC_FORMAT_X9_62, WP_FORMAT_PEM);
+}
+
+/**
+ * Dispatch table for X9.62 to PEM encoder.
+ */
+const OSSL_DISPATCH wp_ecc_x9_62_pem_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,
+                                        (DFUNC)wp_ecc_x9_62_pem_enc_new       },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecc_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,
+                                  (DFUNC)wp_ecc_enc_dec_settable_ctx_params   },
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecc_enc_dec_set_ctx_params  },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION,
+                                        (DFUNC)wp_ecc_x9_62_does_selection    },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecc_encode                  },
     { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecc_import                  },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecc_free                    },
