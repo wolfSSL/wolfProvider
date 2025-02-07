@@ -677,10 +677,29 @@ static int wp_ecdsa_digest_verify_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
  */
 static int wp_ecdsa_get_alg_id(wp_EcdsaSigCtx *ctx, OSSL_PARAM *p)
 {
-    /* TODO: implement */
-    (void)ctx;
-    (void)p;
-    return 0;
+    int ok = 0;
+
+    if (XMEMCMP(ctx->mdName, "SHA256", 7) == 0) {
+        static const unsigned char ecdsa_sha256[] = {
+            0x30, 0x0a, 0x06, 0x08, 42, 134, 72, 206, 61, 4, 3, 2
+        };
+        ok = OSSL_PARAM_set_octet_string(p, ecdsa_sha256, sizeof(ecdsa_sha256));
+    }
+    if (XMEMCMP(ctx->mdName, "SHA384", 7) == 0) {
+        static const unsigned char ecdsa_sha384[] = {
+            0x30, 0x0a, 0x06, 0x08, 42, 134, 72, 206, 61, 4, 3, 3
+        };
+        ok = OSSL_PARAM_set_octet_string(p, ecdsa_sha384, sizeof(ecdsa_sha384));
+    }
+    if (XMEMCMP(ctx->mdName, "SHA512", 7) == 0) {
+        static const unsigned char ecdsa_sha512[] = {
+            0x30, 0x0a, 0x06, 0x08, 42, 134, 72, 206, 61, 4, 3, 4
+        };
+        ok = OSSL_PARAM_set_octet_string(p, ecdsa_sha512, sizeof(ecdsa_sha512));
+    }
+    /* TODO: support more digests */
+
+    return ok;
 }
 
 /**
