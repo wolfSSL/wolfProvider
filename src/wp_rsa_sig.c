@@ -1221,11 +1221,13 @@ static int wp_rsa_verify_x931(wp_RsaSigCtx* ctx, const unsigned char* sig,
                 rc = mp_read_unsigned_bin(&toMp, decryptedSig, (int)sigLen);
                 if (rc != MP_OKAY) {
                     ok = 0;
-                } else {
+                }
+                else {
                     rc = mp_sub(&(wp_rsa_get_key(ctx->rsa)->n), &toMp, &nMinusTo);
                     if (rc != MP_OKAY) {
                         ok = 0;
-                    } else {
+                    }
+                    else {
                         rc = mp_to_unsigned_bin(&nMinusTo, decryptedSig);
                         if (rc != MP_OKAY) {
                             ok = 0;
@@ -1241,7 +1243,8 @@ static int wp_rsa_verify_x931(wp_RsaSigCtx* ctx, const unsigned char* sig,
         rc = wp_remove_x931_padding(&unpadded, decryptedSig, len);
         if (rc <= 0) {
             ok = 0;
-        } else {
+        }
+        else {
             XMEMCPY(decryptedSig, unpadded, rc);
             rc--;
         }
