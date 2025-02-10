@@ -3,8 +3,7 @@ name: Curl Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ '*' ]
-#    branches: [ 'master', 'main', 'release/**' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -14,11 +13,10 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
-  make_check:
-    name: make check
+  test_curl:
     runs-on: ubuntu-latest
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -37,35 +35,25 @@ jobs:
           if [ -f test-suite.log ] ; then
             cat test-suite.log
           fi
-  test_curl:
-    name: ${{ matrix.curl_ref }}
-    if: github.repository_owner == 'wolfssl'
-    runs-on: ubuntu-latest
-    # This should be a safe limit for the tests to run.
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        curl_ref: [ 'master', 'curl-8_4_0' ]
-    steps:
-    - name: Install test dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
 
-    - name: Build curl
-      uses: wolfSSL/actions-build-autotools-project@v1
-      with:
-        repository: curl/curl
-        path: curl
-        ref: ${{ matrix.curl_ref }}
-        configure: --with-openssl
-        check: false
+      - name: Install curl test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
 
-    - name: Test curl
-      working-directory: curl
-      run: |
-        LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfProvider/wolfssl-install/lib:$GITHUB_WORKSPACE/wolfProvider/openssl-install/lib64 \
-        OPENSSL_CONF=$GITHUB_WORKSPACE/wolfProvider/provider.conf \
-        OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfProvider/wolfprov-install/lib \
-        make -j $(nproc) test-ci
+      - name: Build curl
+        uses: wolfSSL/actions-build-autotools-project@v1
+        with:
+          repository: curl/curl
+          path: curl
+          ref: curl-8_4_0
+          configure: --with-openssl
+          check: false
+
+      - name: Test curl with wolfProvider
+        working-directory: curl
+        run: |
+          LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfProvider/wolfssl-install/lib:$GITHUB_WORKSPACE/wolfProvider/openssl-install/lib64 \
+          OPENSSL_CONF=$GITHUB_WORKSPACE/wolfProvider/provider.conf \
+          OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfProvider/wolfprov-install/lib \
+          make -j $(nproc) test-ci
