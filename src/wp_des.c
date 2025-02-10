@@ -30,7 +30,7 @@
 #include <wolfprovider/alg_funcs.h>
 
 
-#if defined(WP_HAVE_DES3)
+#if defined(WP_HAVE_DES3CBC)
 
 /**
  * Data structure for DES3 ciphers that are block based.

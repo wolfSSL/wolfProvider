@@ -83,7 +83,7 @@
     #define WP_HAVE_AESCBC
 #endif
 #ifndef NO_DES3
-    #define WP_HAVE_DES3
+    #define WP_HAVE_DES3CBC
 #endif
 #ifdef WOLFSSL_AES_COUNTER
     #define WP_HAVE_AESCTR
