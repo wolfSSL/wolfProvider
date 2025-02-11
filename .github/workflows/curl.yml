@@ -23,6 +23,7 @@ jobs:
 
       - name: Test wolfProvider
         run: |
+          export WOLFPROV_DEBUG=1
           OPENSSL_TAG=master WOLFSSL_TAG=master WOLFPROV_DEBUG=1 ./scripts/build-wolfprovider.sh
           make check
 
@@ -50,7 +51,9 @@ jobs:
       - name: Test curl with wolfProvider
         working-directory: curl
         run: |
-          LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/wolfssl-install/lib:$GITHUB_WORKSPACE/wolfProvider/wolfProvider/openssl-install/lib64 \
-          OPENSSL_CONF=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/provider.conf \
-          OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/wolfprov-install/lib \
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/wolfssl-install/lib:$GITHUB_WORKSPACE/wolfProvider/wolfProvider/openssl-install/lib64:LD_LIBRARY_PATH
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/wolfprov-install/lib
+          echo "OSSL CONF = "
+          echo $OPENSSL_CONF
           make -j $(nproc) test-ci
