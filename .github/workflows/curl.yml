@@ -23,7 +23,7 @@ jobs:
 
       - name: Test wolfProvider
         run: |
-          OPENSSL_TAG=master WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=master WOLFSSL_TAG=master WOLFPROV_DEBUG=1 ./scripts/build-wolfprovider.sh
           make check
 
       - name: Print errors 
@@ -50,7 +50,7 @@ jobs:
       - name: Test curl with wolfProvider
         working-directory: curl
         run: |
-          LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfProvider/wolfssl-install/lib:$GITHUB_WORKSPACE/wolfProvider/openssl-install/lib64 \
-          OPENSSL_CONF=$GITHUB_WORKSPACE/wolfProvider/provider.conf \
-          OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfProvider/wolfprov-install/lib \
+          LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/wolfssl-install/lib:$GITHUB_WORKSPACE/wolfProvider/wolfProvider/openssl-install/lib64 \
+          OPENSSL_CONF=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/provider.conf \
+          OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfProvider/wolfProvider/wolfprov-install/lib \
           make -j $(nproc) test-ci
