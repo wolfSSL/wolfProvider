@@ -45,7 +45,7 @@ jobs:
           ref: release-1.27.4
 
       - name: Build nginx
-        working_directory: nginx
+        working-directory: nginx
         run: |
           ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
           make -j
