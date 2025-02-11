@@ -37,14 +37,18 @@ jobs:
         run: |
           sudo cpan -iT Proc::Find Net::SSLeay IO::Socket::SSL
 
-      - name: Build nginx
-        uses: wolfSSL/actions-build-autotools-project@v1
+      - name: Checkout nginx
+        uses: actions/checkout@v4
         with:
           repository: nginx/nginx
           path: nginx
           ref: release-1.27.4
-          configure: --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
-          check: false
+
+      - name: Build nginx
+        working_directory: nginx
+        run: |
+          ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
+          make -j
 
       - name: Checkout nginx-tests
         uses: actions/checkout@v4
