@@ -20,11 +20,8 @@ jobs:
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
-        with:
-          path: wolfProvider
 
       - name: Test wolfProvider
-        working-directory: wolfProvider
         run: |
           OPENSSL_TAG=master WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh
           make check
