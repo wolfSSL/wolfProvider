@@ -1,0 +1,62 @@
+name: Nginx Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  test_nginx:
+    runs-on: ubuntu-latest
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Build wolfProvider
+        run: |
+          OPENSSL_TAG=master WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh
+          make check
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+      - name: Install nginx dependencies
+        run: |
+          sudo cpan -iT Proc::Find Net::SSLeay IO::Socket::SSL
+
+      - name: Build nginx
+        uses: wolfSSL/actions-build-autotools-project@v1
+        with:
+          repository: nginx/nginx
+          path: nginx
+          ref: release-1.27.4
+          configure: --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
+          check: false
+
+      - name: Checkout nginx-tests
+        uses: actions/checkout@v4
+        with:
+          repository: nginx/nginx-tests
+          path: nginx-tests
+          ref: master
+
+      - name: Run nginx-tests with wolfProvider
+        working-directory: nginx-tests
+        run: |
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v .
