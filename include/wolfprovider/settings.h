@@ -155,6 +155,9 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
+#ifndef WP_NO_FORCE_FAIL
+    #define WP_CHECK_FORCE_FAIL
+#endif
 
 #endif /* WOLFPROV_SETTINGS_H */
 
