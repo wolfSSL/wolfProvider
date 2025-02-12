@@ -51,6 +51,10 @@ static const OSSL_PARAM wolfssl_param_types[] = {
     OSSL_PARAM_END
 };
 
+#ifdef WP_CHECK_FORCE_FAIL
+static int forceFail = 0;
+#endif
+
 /*
  * Get he table of parameters supported by wolfProv.
  *
@@ -74,6 +78,12 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
  */
 int wolfssl_prov_is_running(void)
 {
+#ifdef WP_CHECK_FORCE_FAIL
+    if (forceFail) {
+      WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+      return 0;
+    }
+#endif
     /* Always running. */
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
@@ -1183,6 +1193,19 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 
 #ifdef HAVE_FIPS
     wolfCrypt_SetCb_fips(wp_fipsCb);
+#endif
+
+#ifdef WP_CHECK_FORCE_FAIL
+    char *forceFailEnv = NULL;
+#if defined(XGETENV) && !defined(NO_GETENV)
+    forceFailEnv = XGETENV("WOLFPROV_FORCE_FAIL");
+    if (forceFailEnv != NULL && XATOI(forceFailEnv) == 1) {
+      WOLFPROV_MSG(WP_LOG_PROVIDER, "WOLFPROV_FORCE_FAIL=1, Forcing failure\n");
+      forceFail = 1;
+    }
+#else
+#error "Force failure check enabled but impossible to perform without XGETENV, use -DWP_NO_FORCE_FAIL"
+#endif
 #endif
 
     for (; in->function_id != 0; in++) {
