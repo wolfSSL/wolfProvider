@@ -2470,7 +2470,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
                 ok = 0;
             }
         }
-        else if(selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
+        else if (selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
             if (!wp_ecc_encode_params_size(key, &derLen)) {
                 ok = 0;
             }
@@ -2515,7 +2515,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
                 ok = 0;
             }
         }
-        else if(selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
+        else if (selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
             pemType = DH_PARAM_TYPE;
             if (!wp_ecc_encode_params(key, derData, &derLen)) {
                 ok = 0;
