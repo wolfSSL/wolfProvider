@@ -800,7 +800,7 @@ static void wp_des3_block_init_ctx(wp_Des3BlockCtx* ctx, size_t kBits,
  * @return 1 on success.                                                       \
  * @return 0 on failure.                                                       \
  */                                                                            \
-static int wp_des3_##lcmode##_get_params(OSSL_PARAM params[])         \
+static int wp_des3_##lcmode##_get_params(OSSL_PARAM params[])                  \
 {                                                                              \
     return wp_des3_block_get_params(params, EVP_CIPH_##UCMODE##_MODE, kBits,   \
         ivBits);                                                               \
