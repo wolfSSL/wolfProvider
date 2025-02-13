@@ -2119,7 +2119,7 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         ok = 0;
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
-        if (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
+        if (selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
             if (!wp_dh_decode_params(dh, data, len)) {
                 ok = 0;
                 decoded = 0;

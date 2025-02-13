@@ -1644,6 +1644,12 @@ static wp_Ecc* wp_ecc_gen(wp_EccGenCtx *ctx, OSSL_CALLBACK *cb, void *cbArg)
                 }
             }
         }
+        if (ok && ((ctx->selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0)) {
+            rc = wc_ecc_set_curve(&ecc->key, 0, ecc->curveId);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
         if (!ok) {
             wp_ecc_free(ecc);
             ecc = NULL;
@@ -2131,11 +2137,19 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
  */
 static int wp_ecc_encode_params_size(const wp_Ecc *ecc, size_t* keyLen)
 {
-    /* ASN.1 type, len and data. */
-    *keyLen = ecc->key.dp->oidSz + 2;
+    int ok = 1;
+    word32 len = 0;
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
+    if (wc_ecc_get_oid(ecc->key.dp->oidSum, NULL, &len) <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        /* ASN.1 type, len and data. */
+        *keyLen = len + 2;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**
@@ -2151,14 +2165,22 @@ static int wp_ecc_encode_params_size(const wp_Ecc *ecc, size_t* keyLen)
 static int wp_ecc_encode_params(const wp_Ecc *ecc, unsigned char* keyData,
     size_t* keyLen)
 {
-    keyData[0] = 0x06;
-    keyData[1] = ecc->key.dp->oidSz;
-    XMEMCPY(keyData + 2, ecc->key.dp->oid, ecc->key.dp->oidSz);
+    int ok = 1;
+    word32 len;
+    const byte *oid;
 
-    *keyLen = ecc->key.dp->oidSz + 2;
+    if (wc_ecc_get_oid(ecc->key.dp->oidSum, &oid, &len) <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        keyData[0] = 0x06;
+        keyData[1] = len;
+        XMEMCPY(keyData + 2, oid, len);
+        *keyLen = len + 2;
+    }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**
@@ -2442,14 +2464,14 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
                (ctx->format == WP_ENC_FORMAT_X9_62))) {
-        if (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
-            if (!wp_ecc_encode_params_size(key, &derLen)) {
+        if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
+            private = 1;
+            if (!wp_ecc_encode_priv_size(key, &derLen)) {
                 ok = 0;
             }
         }
-        else {
-            private = 1;
-            if (!wp_ecc_encode_priv_size(key, &derLen)) {
+        else if(selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
+            if (!wp_ecc_encode_params_size(key, &derLen)) {
                 ok = 0;
             }
         }
@@ -2484,18 +2506,18 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
                (ctx->format == WP_ENC_FORMAT_X9_62))) {
-        if (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
-            pemType = DH_PARAM_TYPE;
-            if (!wp_ecc_encode_params(key, derData, &derLen)) {
-                ok = 0;
-            }
-        }
-        else {
+        if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
             if (ctx->format == WP_ENC_FORMAT_X9_62) {
                 pemType = ECC_PRIVATEKEY_TYPE;
             }
             private = 1;
             if (!wp_ecc_encode_priv(key, derData, &derLen)) {
+                ok = 0;
+            }
+        }
+        else if(selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
+            pemType = DH_PARAM_TYPE;
+            if (!wp_ecc_encode_params(key, derData, &derLen)) {
                 ok = 0;
             }
         }
@@ -2551,7 +2573,8 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
         if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
                (ctx->format == WP_ENC_FORMAT_X9_62)) &&
-               (selection == OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS)) {
+               ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) == 0) &&
+               (selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS)) {
             pemData[11] = 'E';
             pemData[12] = 'C';
             pemData[pemLen - 19] = 'E';
