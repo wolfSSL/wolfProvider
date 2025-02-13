@@ -798,6 +798,64 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
 }
 
 /**
+ * Read PEM data out of the core BIO.
+ *
+ * @param [in] coreBIO  Core BIO.
+ * @param [out] data    New buffer holding data read.
+ * @param [out] len     Length of data read.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
+    unsigned char** data, word32* len)
+{
+    int ok = 1;
+    long readLen = 1;
+    char buf[128];
+    unsigned char* p;
+
+    BIO *bio = wp_corebio_get_bio(provctx, coreBio);
+    if (bio == NULL) {
+        ok = 0;
+    }
+
+    while (ok && (readLen > 0)) {
+        /* Read a line at a time. */
+        readLen = BIO_gets(bio, buf, sizeof(buf));
+        if (readLen < -1) {
+            WOLFPROV_MSG(WP_LOG_PROVIDER, "BIO_read error (%d) in %s:%d",
+                readLen, __FILE__, __LINE__);
+            ok = 0;
+        }
+        if (ok && (readLen > 0)) {
+            /* Reallocate for new data. */
+            p = OPENSSL_realloc(*data, *len + readLen);
+            if (p == NULL) {
+                WOLFPROV_MSG(WP_LOG_PROVIDER,
+                    "OPENSSL_realloc error (%d) in %s:%d", readLen, __FILE__,
+                    __LINE__);
+                ok = 0;
+            }
+        }
+        if (ok && (readLen > 0)) {
+            *data = p;
+            /* Copy in new data. */
+            XMEMCPY(*data + *len, (unsigned char*)buf, readLen);
+            *len += readLen;
+        }
+        /* Last line should have footer. */
+        if (XMEMCMP(buf, "-----END ", 8) == 0) {
+            break;
+        }
+    }
+
+    BIO_free(bio);
+    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
+    return ok;
+}
+
+/**
  * Get the underlying BIO object from the core BIO.
  *
  * @param [in]  coreBio  Core BIO.

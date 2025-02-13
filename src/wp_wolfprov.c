@@ -51,6 +51,10 @@ static const OSSL_PARAM wolfssl_param_types[] = {
     OSSL_PARAM_END
 };
 
+#ifdef WP_CHECK_FORCE_FAIL
+static int forceFail = 0;
+#endif
+
 /*
  * Get he table of parameters supported by wolfProv.
  *
@@ -74,6 +78,12 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
  */
 int wolfssl_prov_is_running(void)
 {
+#ifdef WP_CHECK_FORCE_FAIL
+    if (forceFail) {
+      WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+      return 0;
+    }
+#endif
     /* Always running. */
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
@@ -776,6 +786,12 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
       wp_ecc_epki_pem_encoder_functions,
       "" },
+    { WP_NAMES_EC, WP_ENCODER_PROPERTIES(X9_62, der),
+      wp_ecc_x9_62_der_encoder_functions,
+      "" },
+    { WP_NAMES_EC, WP_ENCODER_PROPERTIES(X9_62, pem),
+      wp_ecc_x9_62_pem_encoder_functions,
+      "" },
 #endif
 
 #ifdef WP_HAVE_X25519
@@ -962,6 +978,9 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
 #ifdef WP_HAVE_ECC
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
       wp_ecc_spki_decoder_functions,
+      "" },
+    { WP_NAMES_EC, WP_DECODER_PROPERTIES(X9_62),
+      wp_ecc_x9_62_decoder_functions,
       "" },
     { WP_NAMES_EC, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_ecc_pki_decoder_functions,
@@ -1174,6 +1193,19 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 
 #ifdef HAVE_FIPS
     wolfCrypt_SetCb_fips(wp_fipsCb);
+#endif
+
+#ifdef WP_CHECK_FORCE_FAIL
+    char *forceFailEnv = NULL;
+#if defined(XGETENV) && !defined(NO_GETENV)
+    forceFailEnv = XGETENV("WOLFPROV_FORCE_FAIL");
+    if (forceFailEnv != NULL && XATOI(forceFailEnv) == 1) {
+      WOLFPROV_MSG(WP_LOG_PROVIDER, "WOLFPROV_FORCE_FAIL=1, Forcing failure\n");
+      forceFail = 1;
+    }
+#else
+#error "Force failure check enabled but impossible to perform without XGETENV, use -DWP_NO_FORCE_FAIL"
+#endif
 #endif
 
     for (; in->function_id != 0; in++) {

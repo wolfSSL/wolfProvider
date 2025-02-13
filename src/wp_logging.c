@@ -104,7 +104,7 @@ void wolfProv_Debugging_OFF(void)
  * Default logging level for wolfProv is WP_LOG_LEVEL_DEFAULT.
  *
  * @param levelMask [IN] Bitmask of logging levels from wolfProv_LogType
- *                  in we_logging.h.
+ *                  in wp_logging.h.
  * @return 0 on success, NOT_COMPILED_IN if debugging has not been enabled.
  */
 int wolfProv_SetLogLevel(int levelMask)
@@ -123,7 +123,7 @@ int wolfProv_SetLogLevel(int levelMask)
  * Default component level for wolfProv is WP_LOG_COMPONENT_DEFAULT.
  *
  * @param componentMask [IN] Bitmask of components from
- *                      wolfProv_LogComponents in we_logging.h.
+ *                      wolfProv_LogComponents in wp_logging.h.
  * @return 0 on success, NOT_COMPILED_IN if debugging has not been enabled.
  */
 int wolfProv_SetLogComponents(int componentMask)

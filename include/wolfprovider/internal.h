@@ -74,6 +74,8 @@
 #define WP_ENC_FORMAT_EPKI              3
 /** Type-specific encoding format. */
 #define WP_ENC_FORMAT_TYPE_SPECIFIC     4
+/** X9_62 encoding format. */
+#define WP_ENC_FORMAT_X9_62             5
 
 /* Data format. */
 /** DER - Binary encoding. */
@@ -93,6 +95,9 @@
 #define WP_PBES2            13
 /** Default iterations for PKCS#12 PBKDF2. */
 #define WP_PKCS12_ITERATIONS_DEFAULT    2048
+
+/** Maximum salt length for PKCS. */
+#define WP_MAX_SALT_SIZE    64
 
 
 /* These values are taken from ssl.h.
@@ -175,6 +180,8 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
     OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg, byte** cipherInfo);
 
 int wp_read_der_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len);
+int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
+    unsigned char** data, word32* len);
 BIO* wp_corebio_get_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio);
 
 byte wp_ct_byte_mask_eq(byte a, byte b);

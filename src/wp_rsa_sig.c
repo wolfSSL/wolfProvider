@@ -1591,15 +1591,43 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
  */
 static int wp_rsa_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
 {
-    /* TODO: implement */
-    (void)ctx;
-    (void)p;
-    const byte sha256WithRSAEncryptionOid[] = {0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00, 0x04, 0x10};
-    int ok = 1;
+    int ok = 0;
 
-    if (ok && (!OSSL_PARAM_set_octet_string(p, sha256WithRSAEncryptionOid, sizeof(sha256WithRSAEncryptionOid)))) {
-        ok = 0;
+    if ((XMEMCMP(ctx->mdName, "SHA256", 7) == 0) ||
+        (XMEMCMP(ctx->mdName, "sha256", 7) == 0)) {
+        static const byte sha256WithRSAEncryptionOid[] = {
+            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+            0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00, 0x04,
+            0x10
+        };
+        ok = OSSL_PARAM_set_octet_string(p, sha256WithRSAEncryptionOid,
+            sizeof(sha256WithRSAEncryptionOid));
     }
+    else if ((XMEMCMP(ctx->mdName, "SHA384", 7) == 0) ||
+             (XMEMCMP(ctx->mdName, "sha384", 7) == 0)) {
+        static const byte sha384WithRSAEncryptionOid[] = {
+            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+            0xf7, 0x0d, 0x01, 0x01, 0x0c, 0x05, 0x00, 0x04,
+            0x10
+        };
+        ok = OSSL_PARAM_set_octet_string(p, sha384WithRSAEncryptionOid,
+            sizeof(sha384WithRSAEncryptionOid));
+    }
+    else if ((XMEMCMP(ctx->mdName, "SHA512", 7) == 0) ||
+             (XMEMCMP(ctx->mdName, "sha512", 7) == 0)) {
+        static const byte sha512WithRSAEncryptionOid[] = {
+            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+            0xf7, 0x0d, 0x01, 0x01, 0x0d, 0x05, 0x00, 0x04,
+            0x10
+        };
+        ok = OSSL_PARAM_set_octet_string(p, sha512WithRSAEncryptionOid,
+            sizeof(sha512WithRSAEncryptionOid));
+    }
+    /* TODO: support more digests */
+    else {
+        WOLFPROV_MSG(WP_LOG_PK, "Digest not supported: %s\n", ctx->mdName);
+    }
+
     return ok;
 }
 

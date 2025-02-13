@@ -30,7 +30,7 @@ static long fipsChecks = WP_FIPS_CHECKS_DEFAULT;
  * Default FIPS checks for wolfProvider is WE_FIPS_CHECKS_DEFAULT.
  *
  * @param checksMask  [in]  Bitmask of FIPS checks from wolfProvider_FipsCheck
- *                          in we_fips.h.
+ *                          in wp_fips.h.
  */
 void wolfProvider_SetFipsChecks(long checksMask)
 {

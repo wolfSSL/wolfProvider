@@ -133,19 +133,20 @@ static int wp_pem_password_cb(char* passwd, int sz, int rw, void* userdata)
 #endif /* WOLFSSL_ENCRYPTED_KEYS */
 
 /**
- * Convert PEM encoded EC parameters to DER.
+ * Convert PEM to DER for unsupported header/footer.
  *
  * wolfSSL does not support PEM encoded EC parameters.
  *
- * @param [in]      data  PEM encoded data.
- * @param [in]      len   Length of data in bytes.
- * @param [out]     pDer  DER Buffer holding decoded data.
- * @param [in, out] info  Information about decodeding PEM.
+ * @param [in]      data     PEM encoded data.
+ * @param [in]      len      Length of data in bytes.
+ * @param [out]     pDer     DER Buffer holding decoded data.
+ * @param [in, out] info     Information about decodeding PEM.
+ * @param [in]      nameLen  Length of name in header and footer.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
-    EncryptedInfo* info)
+static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
+    EncryptedInfo* info, int nameLen)
 {
     int ok = 1;
     int rc;
@@ -153,16 +154,17 @@ static int wp_pem2der_ec_params(const char* data, word32 len, DerBuffer** pDer,
     const char* base64Data;
     size_t base64Len;
 
-    base64Data = data + 29;
-    base64Len = len - 29;
-    footer = strstr(base64Data, "-----END EC PARAMETERS-----");
+    /* Skip '-----BEGIN <name>-----\n'. */
+    base64Data = data + 16 + nameLen + 1;
+    base64Len = len - 16 + nameLen + 1;
+    footer = XSTRSTR(base64Data, "-----END ");
     if (footer == NULL) {
         info->consumed = len;
         ok = 0;
     }
     if (ok) {
         /* Include footer and '\n'. */
-        info->consumed = (long)(footer - data) + 27 + 1;
+        info->consumed = (long)(footer - data) + 14 + nameLen + 1;
         base64Len = footer - base64Data;
         rc = wc_AllocDer(pDer, (word32)base64Len, ECC_TYPE, NULL);
         if (rc != 0) {
@@ -226,6 +228,22 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         type = CERT_TYPE;
         obj = OSSL_OBJECT_CERT;
     }
+#if LIBWOLFSSL_VERSION_HEX > 0x05007006
+    else if (XMEMCMP(data, "-----BEGIN TRUSTED CERTIFICATE-----", 35) == 0) {
+        type = TRUSTED_CERT_TYPE;
+        obj = OSSL_OBJECT_CERT;
+    }
+#else
+    else if (XMEMCMP(data, "-----BEGIN TRUSTED CERTIFICATE-----", 35) == 0) {
+        type = CERT_TYPE;
+        obj = OSSL_OBJECT_CERT;
+        if (!wp_pem2der_convert((const char*)data, len, &der, &info,
+                XSTRLEN("TRUSTED CERTIFICATE"))) {
+            ok = 0;
+        }
+        done = 1;
+    }
+#endif
     else if (XMEMCMP(data, "-----BEGIN X509 CRL-----", 24) == 0) {
         type = CRL_TYPE;
         obj = OSSL_OBJECT_CRL;
@@ -246,7 +264,8 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataType = "EC";
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
-        if (!wp_pem2der_ec_params((const char*)data, len, &der, &info)) {
+        if (!wp_pem2der_convert((const char*)data, len, &der, &info,
+                XSTRLEN("EC PARAMETERS"))) {
             ok = 0;
         }
         done = 1;
@@ -391,7 +410,7 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     (void)selection;
 
     /* Read the data from the BIO into buffer that is allocated on the fly. */
-    if (!wp_read_der_bio(ctx->provCtx, coreBio, &data, &len)) {
+    if (!wp_read_pem_bio(ctx->provCtx, coreBio, &data, &len)) {
         ok = 0;
     }
     /* No data - nothing to do. */
