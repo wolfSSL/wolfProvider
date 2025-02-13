@@ -792,9 +792,9 @@ static void wp_des3_block_init_ctx(wp_Des3BlockCtx* ctx, size_t kBits,
 }
 
 /** Implement the get params API for a block cipher. */
-#define IMPLEMENT_DES3_BLOCK_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)          \
+#define IMPLEMENT_DES3_BLOCK_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)         \
 /**                                                                            \
- * Get the values from the DES3 block context for the parameters.               \
+ * Get the values from the DES3 block context for the parameters.              \
  *                                                                             \
  * @param [in, out] params  Array of parameters to retrieve.                   \
  * @return 1 on success.                                                       \
@@ -802,12 +802,12 @@ static void wp_des3_block_init_ctx(wp_Des3BlockCtx* ctx, size_t kBits,
  */                                                                            \
 static int wp_des3_##lcmode##_get_params(OSSL_PARAM params[])         \
 {                                                                              \
-    return wp_des3_block_get_params(params, EVP_CIPH_##UCMODE##_MODE, kBits,    \
+    return wp_des3_block_get_params(params, EVP_CIPH_##UCMODE##_MODE, kBits,   \
         ivBits);                                                               \
 }
 
 /** Implement the new context API for a block cipher. */
-#define IMPLEMENT_DES3_BLOCK_NEWCTX(lcmode, UCMODE, kBits, ivBits)              \
+#define IMPLEMENT_DES3_BLOCK_NEWCTX(lcmode, UCMODE, kBits, ivBits)             \
 /**                                                                            \
  * Create a new block cipher context object.                                   \
  *                                                                             \
@@ -815,37 +815,37 @@ static int wp_des3_##lcmode##_get_params(OSSL_PARAM params[])         \
  * @return  NULL on failure.                                                   \
  * @return  AEAD context object on success.                                    \
  */                                                                            \
-static wp_Des3BlockCtx* wp_des3_block_##lcmode##_newctx(               \
+static wp_Des3BlockCtx* wp_des3_block_##lcmode##_newctx(                       \
     WOLFPROV_CTX *provCtx)                                                     \
 {                                                                              \
-    wp_Des3BlockCtx *ctx = NULL;                                                \
+    wp_Des3BlockCtx *ctx = NULL;                                               \
     (void)provCtx;                                                             \
     if (wolfssl_prov_is_running()) {                                           \
         ctx = OPENSSL_zalloc(sizeof(*ctx));                                    \
     }                                                                          \
     if (ctx != NULL) {                                                         \
-        wp_des3_block_init_ctx(ctx, kBits, ivBits, EVP_CIPH_##UCMODE##_MODE);   \
+        wp_des3_block_init_ctx(ctx, kBits, ivBits, EVP_CIPH_##UCMODE##_MODE);  \
     }                                                                          \
     return ctx;                                                                \
 }
 
 /** Implement the dispatch table for a block cipher. */
-#define IMPLEMENT_DES3_BLOCK_DISPATCH(mode, kBits, ivBits)                      \
+#define IMPLEMENT_DES3_BLOCK_DISPATCH(mode, kBits, ivBits)                     \
 const OSSL_DISPATCH wp_des3##mode##_functions[] = {                            \
     { OSSL_FUNC_CIPHER_NEWCTX,                                                 \
-                              (DFUNC)wp_des3_block_##mode##_newctx }, \
-    { OSSL_FUNC_CIPHER_FREECTX,          (DFUNC)wp_des3_block_freectx        }, \
-    { OSSL_FUNC_CIPHER_DUPCTX,           (DFUNC)wp_des3_block_dupctx         }, \
-    { OSSL_FUNC_CIPHER_ENCRYPT_INIT,     (DFUNC)wp_des3_block_einit          }, \
-    { OSSL_FUNC_CIPHER_DECRYPT_INIT,     (DFUNC)wp_des3_block_dinit          }, \
-    { OSSL_FUNC_CIPHER_UPDATE,           (DFUNC)wp_des3_block_update         }, \
-    { OSSL_FUNC_CIPHER_FINAL,            (DFUNC)wp_des3_block_final          }, \
-    { OSSL_FUNC_CIPHER_CIPHER,           (DFUNC)wp_des3_block_cipher         }, \
+                              (DFUNC)wp_des3_block_##mode##_newctx },          \
+    { OSSL_FUNC_CIPHER_FREECTX,         (DFUNC)wp_des3_block_freectx        }, \
+    { OSSL_FUNC_CIPHER_DUPCTX,          (DFUNC)wp_des3_block_dupctx         }, \
+    { OSSL_FUNC_CIPHER_ENCRYPT_INIT,    (DFUNC)wp_des3_block_einit          }, \
+    { OSSL_FUNC_CIPHER_DECRYPT_INIT,    (DFUNC)wp_des3_block_dinit          }, \
+    { OSSL_FUNC_CIPHER_UPDATE,          (DFUNC)wp_des3_block_update         }, \
+    { OSSL_FUNC_CIPHER_FINAL,           (DFUNC)wp_des3_block_final          }, \
+    { OSSL_FUNC_CIPHER_CIPHER,          (DFUNC)wp_des3_block_cipher         }, \
     { OSSL_FUNC_CIPHER_GET_PARAMS,                                             \
-                              (DFUNC)wp_des3_##mode##_get_params   }, \
-    { OSSL_FUNC_CIPHER_GET_CTX_PARAMS,   (DFUNC)wp_des3_block_get_ctx_params }, \
-    { OSSL_FUNC_CIPHER_SET_CTX_PARAMS,   (DFUNC)wp_des3_block_set_ctx_params }, \
-    { OSSL_FUNC_CIPHER_GETTABLE_PARAMS,  (DFUNC)wp_cipher_gettable_params   }, \
+                              (DFUNC)wp_des3_##mode##_get_params   },          \
+    { OSSL_FUNC_CIPHER_GET_CTX_PARAMS,  (DFUNC)wp_des3_block_get_ctx_params }, \
+    { OSSL_FUNC_CIPHER_SET_CTX_PARAMS,  (DFUNC)wp_des3_block_set_ctx_params }, \
+    { OSSL_FUNC_CIPHER_GETTABLE_PARAMS, (DFUNC)wp_cipher_gettable_params   },  \
     { OSSL_FUNC_CIPHER_GETTABLE_CTX_PARAMS,                                    \
                               (DFUNC)wp_cipher_gettable_ctx_params          }, \
     { OSSL_FUNC_CIPHER_SETTABLE_CTX_PARAMS,                                    \
@@ -854,9 +854,9 @@ const OSSL_DISPATCH wp_des3##mode##_functions[] = {                            \
 };
 
 /** Implements the functions calling base functions for a block cipher. */
-#define IMPLEMENT_DES3_BLOCK(lcmode, UCMODE, kBits, ivBits)                     \
-IMPLEMENT_DES3_BLOCK_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)                  \
-IMPLEMENT_DES3_BLOCK_NEWCTX(lcmode, UCMODE, kBits, ivBits)                      \
+#define IMPLEMENT_DES3_BLOCK(lcmode, UCMODE, kBits, ivBits)                    \
+IMPLEMENT_DES3_BLOCK_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)                 \
+IMPLEMENT_DES3_BLOCK_NEWCTX(lcmode, UCMODE, kBits, ivBits)                     \
 IMPLEMENT_DES3_BLOCK_DISPATCH(lcmode, kBits, ivBits)
 
 /*
