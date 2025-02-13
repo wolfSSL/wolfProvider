@@ -72,7 +72,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        openvpn_ref: [ 'master', 'release/2.6' ]
+        openvpn_ref: [ 'master' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
       - name: Retrieving OpenSSL from cache
