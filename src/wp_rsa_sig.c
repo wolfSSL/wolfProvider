@@ -469,7 +469,9 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
         ctx->saltLen = RSA_PSS_SALTLEN_AUTO;
 
         if (wp_rsa_get_type(ctx->rsa) == RSA_FLAG_TYPE_RSA) {
-            ctx->padMode = RSA_PKCS1_PADDING;
+            if (ctx->padMode != RSA_X931_PADDING) {
+                ctx->padMode = RSA_PKCS1_PADDING;
+            }
         }
         else {
             char* mdName;
@@ -652,6 +654,56 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
 }
 
 /**
+ * Add X9.31 padding to the input buffer, placing the result in the output
+ * buffer.
+ *
+ * @param  to       [out]  Buffer to store padded result.
+ * @param  toLen    [in]   Length of "to" buffer.
+ * @param  from     [in]   Input buffer.
+ * @param  fromLen  [in]   Length of input buffer.
+ * @returns  1 on success and 0 on failure.
+ */
+static int wp_add_x931_padding(unsigned char* to, size_t toLen,
+                               const unsigned char* from, size_t fromLen)
+{
+    int ok = 1;
+    int padBytes;
+
+    if (to == NULL || from == NULL) {
+        WOLFPROV_ERROR_MSG(WP_LOG_PK, "Bad argument.");
+        ok = 0;
+    }
+    else {
+        /* Need at least two bytes for trailer and header. */
+        padBytes = (int)(toLen - fromLen - 2);
+        if (padBytes < 0) {
+            WOLFPROV_ERROR_MSG(WP_LOG_PK, "Output buffer too small.");
+            ok = 0;
+        }
+    }
+
+    if (ok == 1) {
+        if (padBytes == 0) {
+            to[0] = 0x6A;
+        }
+        else {
+            to[0] = 0x6B;
+            if (padBytes > 1) {
+                XMEMSET(&to[1], 0xBB, padBytes - 1);
+            }
+            to[padBytes] = 0xBA;
+        }
+
+        XMEMCPY(&to[padBytes + 1], from, fromLen);
+        to[toLen - 1] = 0xCC;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+
+    return ok;
+}
+
+/**
  * Sign the data using RSA without padding.
  *
  * @param [in, out] ctx      RSA signature context object.
@@ -686,6 +738,134 @@ static int wp_rsa_sign_no_pad(wp_RsaSigCtx* ctx, unsigned char* sig,
             *sigLen = rc;
         }
     }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+static int wp_rsa_get_x931_hash_code(enum wc_HashType hash) {
+    int ret = 0;
+
+    if (hash == WC_HASH_TYPE_SHA) {
+        ret = 0x33;
+    }
+    else if (hash == WC_HASH_TYPE_SHA256) {
+        ret = 0x34;
+    }
+    else if (hash == WC_HASH_TYPE_SHA384) {
+        ret = 0x36;
+    }
+    else if (hash == WC_HASH_TYPE_SHA512) {
+        ret = 0x35;
+    }
+
+    return ret;
+}
+
+/**
+ * Sign the data using RSA with X931 padding.
+ *
+ * @param [in, out] ctx      RSA signature context object.
+ * @param [out]     sig      Buffer to hold signature.
+ * @param [out]     sigLen   Length of signature data in bytes.
+ * @param [in]      sigSize  Size of signature buffer in bytes.
+ * @param [in]      tbs      Data to be signed.
+ * @param [in]      tbsLen   Length of data to be signed in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize, const unsigned char* tbs, size_t tbsLen)
+{
+    int ok = 1;
+    int paddedSz = 0;
+    unsigned char *padded = NULL;
+    unsigned char *tbuf = NULL;
+    int rc = 0;
+    mp_int toMp;
+    mp_int nMinusTo;
+
+    paddedSz = wc_RsaEncryptSize(wp_rsa_get_key(ctx->rsa));
+    if (paddedSz <= 0) {
+        ok = 0;
+    }
+    if (ok) {
+        tbuf = (unsigned char *)OPENSSL_malloc(paddedSz);
+        if (tbuf == NULL) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        padded = (unsigned char *)OPENSSL_malloc(paddedSz);
+        if (padded == NULL) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        XMEMCPY(tbuf, tbs, tbsLen);
+        tbuf[tbsLen] = wp_rsa_get_x931_hash_code(
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+            ctx->hash.type
+    #else
+            ctx->hashType
+    #endif
+        );
+    }
+    if (ok) {
+        if (wp_add_x931_padding(padded, paddedSz, tbuf, tbsLen + 1) != 1) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        word32 len = (word32)sigSize;
+
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_RsaDirect(padded, paddedSz, sig, &len,
+            wp_rsa_get_key(ctx->rsa), RSA_PRIVATE_ENCRYPT, &ctx->rng);
+        PRIVATE_KEY_LOCK();
+        if (rc < 0) {
+            ok = 0;
+        }
+        else {
+            *sigLen = rc;
+        }
+    }
+    if (padded != NULL) {
+        OPENSSL_free(padded);
+    }
+    if (tbuf != NULL) {
+        OPENSSL_free(tbuf);
+    }
+    if (ok) {
+        rc = mp_init_multi(&toMp, &nMinusTo, NULL, NULL, NULL, NULL);
+        if (rc != MP_OKAY) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        rc = mp_read_unsigned_bin(&toMp, sig, *sigLen);
+        if (rc != MP_OKAY) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        /*
+         * X9.31 specifies, "The signature is either the result
+         * or its complement to n, whichever is smaller."
+         */
+        rc = mp_sub(&(wp_rsa_get_key(ctx->rsa)->n), &toMp, &nMinusTo);
+        if (rc != MP_OKAY) {
+            ok = 0;
+        }
+        else if (mp_cmp(&toMp, &nMinusTo) == MP_GT) {
+            rc = mp_to_unsigned_bin(&nMinusTo, sig);
+            if (rc != MP_OKAY) {
+                ok = 0;
+            }
+        }
+    }
+    mp_free(&toMp);
+    mp_free(&nMinusTo);
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -732,6 +912,9 @@ static int wp_rsa_sign(wp_RsaSigCtx* ctx, unsigned char* sig, size_t* sigLen,
         }
         else if (ctx->padMode == RSA_NO_PADDING) {
             ok = wp_rsa_sign_no_pad(ctx, sig, sigLen, sigSize, tbs, tbsLen);
+        }
+        else if (ctx->padMode == RSA_X931_PADDING) {
+            ok = wp_rsa_sign_x931(ctx, sig, sigLen, sigSize, tbs, tbsLen);
         }
         else {
             ok = 0;
@@ -930,6 +1113,166 @@ static int wp_rsa_verify_no_pad(wp_RsaSigCtx* ctx, const unsigned char* sig,
 }
 
 /**
+ * Remove X9.31 padding from the input buffer, placing the result in the output
+ * buffer.
+ *
+ * @param  to       [out]  Pointer to buffer holding unpadded result. This
+ *                         buffer will be allocated by this function if *to is
+ *                         NULL.
+ * @param  from     [in]   Input buffer.
+ * @param  fromLen  [in]   Length of input buffer.
+ * @returns  Length of unpadded result on success and -1 on failure.
+ */
+static int wp_remove_x931_padding(unsigned char** to, const unsigned char* from,
+                                  size_t fromLen)
+{
+    int ret = -1;
+    int ok = 1;
+    size_t idx = 0;
+    size_t numCopy = 0;
+
+    if (to == NULL || from == NULL || fromLen < 2) {
+        ok = 0;
+    }
+    else {
+        if (from[fromLen - 1] != 0xCC) {
+            ok = 0;
+        }
+
+        if (from[idx] == 0x6B) {
+            while (++idx < fromLen && from[idx] == 0xBB) {}
+
+            if (idx == fromLen || from[idx] != 0xBA) {
+                ok = 0;
+            }
+        }
+        else if (from[idx] != 0x6A) {
+            ok = 0;
+        }
+    }
+
+    if (ok) {
+        ++idx;
+        numCopy = fromLen - idx - 1;
+        if (numCopy > 0) {
+            if (*to == NULL) {
+                *to = (unsigned char*)OPENSSL_malloc(numCopy);
+                if (*to == NULL) {
+                    ok = 0;
+                }
+            }
+            if (ok){
+                XMEMCPY(*to, from + idx, numCopy);
+            }
+        }
+    }
+
+    if (ok) {
+        ret = (int)numCopy;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ret);
+    return ret;
+}
+
+/**
+ * Verify an RSA X931 padded signature.
+ *
+ * @param [in] ctx           RSA signature context object.
+ * @param [in] sig           Signature data.
+ * @param [in] sigLen        Length of signature data in bytes.
+ * @param [in] tbs           Data to be signed.
+ * @param [in] tbsLen        Length of data to be signed in bytes.
+ * @param [in] decryptedSig  Buffer to hold decrypted signature.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_verify_x931(wp_RsaSigCtx* ctx, const unsigned char* sig,
+    size_t sigLen, const unsigned char* tbs, size_t tbsLen,
+    unsigned char* decryptedSig)
+{
+    int ok = 1;
+    int rc;
+    word32 len = (word32)sigLen;
+    unsigned char* unpadded = NULL;
+    mp_int toMp;
+    mp_int nMinusTo;
+
+    rc = wc_RsaDirect((byte*)sig, (word32)sigLen, decryptedSig, &len,
+        wp_rsa_get_key(ctx->rsa), RSA_PUBLIC_DECRYPT, &ctx->rng);
+    if (rc < 0) {
+        ok = 0;
+    }
+    if (ok) {
+        /*
+         * X9.31 specifies, "If e is odd, then
+         *   - If RR = 12 mod 16, then IR = RR ;
+         *   - If n - RR = 12 mod 16, then IR = n - RR ;"
+         * RR is "to" and IR is the value to unpad in the next
+         * step. Taking "to" mod 16 is the same as just checking the
+         * lower 4 bits of "to."
+         */
+        if ((decryptedSig[sigLen-1] & 0x0F) != 12) {
+            rc = mp_init_multi(&toMp, &nMinusTo, NULL, NULL, NULL, NULL);
+            if (rc != MP_OKAY) {
+                ok = 0;
+            }
+            if (ok) {
+                rc = mp_read_unsigned_bin(&toMp, decryptedSig, (int)sigLen);
+                if (rc != MP_OKAY) {
+                    ok = 0;
+                }
+                else {
+                    rc = mp_sub(&(wp_rsa_get_key(ctx->rsa)->n), &toMp, &nMinusTo);
+                    if (rc != MP_OKAY) {
+                        ok = 0;
+                    }
+                    else {
+                        rc = mp_to_unsigned_bin(&nMinusTo, decryptedSig);
+                        if (rc != MP_OKAY) {
+                            ok = 0;
+                        }
+                    }
+                }
+            }
+            mp_free(&toMp);
+            mp_free(&nMinusTo);
+        }
+    }
+    if (ok) {
+        rc = wp_remove_x931_padding(&unpadded, decryptedSig, len);
+        if (rc <= 0) {
+            ok = 0;
+        }
+        else {
+            XMEMCPY(decryptedSig, unpadded, rc);
+            rc--;
+        }
+    }
+    if (ok) {
+        if (unpadded[rc] != wp_rsa_get_x931_hash_code(
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+            ctx->hash.type
+    #else
+            ctx->hashType
+    #endif
+        )) {
+            ok = 0;
+        }
+    }
+    if (ok && (((size_t)rc != tbsLen) || ((XMEMCMP(tbs, decryptedSig,
+            tbsLen) != 0)))) {
+        ok = 0;
+    }
+    if (NULL != unpadded) {
+        OPENSSL_free(unpadded);
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
  * Verify an RSA signature.
  *
  * @param [in] ctx     RSA signature context object.
@@ -968,6 +1311,10 @@ static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
             }
             else if (ctx->padMode == RSA_NO_PADDING) {
                 ok = wp_rsa_verify_no_pad(ctx, sig, sigLen, tbs, tbsLen,
+                    decryptedSig);
+            }
+            else if (ctx->padMode == RSA_X931_PADDING) {
+                ok = wp_rsa_verify_x931(ctx, sig, sigLen, tbs, tbsLen,
                     decryptedSig);
             }
             else {
@@ -1542,6 +1889,11 @@ static int wp_rsa_set_pad_mode(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
             if (ctx->hashType != WC_HASH_TYPE_NONE)
 #endif
             {
+                ok = 0;
+            }
+        }
+        else if (padMode == RSA_X931_PADDING) {
+            if (wp_rsa_get_type(ctx->rsa) != RSA_FLAG_TYPE_RSA) {
                 ok = 0;
             }
         }
