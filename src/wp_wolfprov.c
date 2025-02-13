@@ -718,7 +718,6 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
       wp_rsa_kp_pem_encoder_functions,
       "" },
 #ifdef WOLFSSL_RSA_PSS_ENCODING
-    /* TODO: RSA-PSS encoding isn't supported in wolfSSL */
     { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_rsapss_spki_der_encoder_functions,
       "" },

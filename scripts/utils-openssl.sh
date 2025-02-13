@@ -70,7 +70,7 @@ install_openssl() {
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            ./config shared --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
+            ./config shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
             RET=$?
         else
             ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
