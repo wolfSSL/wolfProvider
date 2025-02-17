@@ -120,6 +120,8 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_AES_128_WRAP \
     "AES-128-WRAP:id-aes128-wrap:AES128-WRAP:2.16.840.1.101.3.4.1.5"
 
+#define WP_NAMES_DES_EDE3_CBC "DES-EDE3-CBC:DES3:1.2.840.113549.3.7"
+
 /* Internal cipher flags. */
 #define WP_CIPHER_FLAG_AEAD             0x0001
 #define WP_CIPHER_FLAG_CUSTOM_IV        0x0002
@@ -276,6 +278,8 @@ extern const OSSL_DISPATCH wp_aes128cfb_functions[];
 extern const OSSL_DISPATCH wp_aes256wrap_functions[];
 extern const OSSL_DISPATCH wp_aes192wrap_functions[];
 extern const OSSL_DISPATCH wp_aes128wrap_functions[];
+
+extern const OSSL_DISPATCH wp_des3cbc_functions[];
 
 /* MAC implementations. */
 extern const OSSL_DISPATCH wp_hmac_functions[];
