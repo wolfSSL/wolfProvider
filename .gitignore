@@ -72,3 +72,4 @@ examples/openssl_example
 cscope.out
 
 tags
+test/scripts/aes-test.log
