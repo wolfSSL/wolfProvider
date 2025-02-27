@@ -109,7 +109,13 @@ static wp_FileCtx* wp_file_open(WOLFPROV_CTX* provCtx, const char* uri)
     if (ctx != NULL) {
         int ok = 1;
 
-        /* TODO: support URI form 'file:'. */
+        if (OPENSSL_strncasecmp(uri, "file:", 5) == 0) {
+            uri += 5;
+            if (OPENSSL_strncasecmp(uri, "//", 2) == 0) {
+                /* TODO: may need more uri processing for windows cases */
+                uri += 2;
+            }
+        }
         ctx->uri = OPENSSL_strdup(uri);
         if (ctx->uri == NULL) {
             ok = 0;
