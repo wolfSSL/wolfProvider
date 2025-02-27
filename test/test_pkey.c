@@ -96,14 +96,16 @@ int test_pkey_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
     if (err == 0) {
         err = EVP_PKEY_sign_init(ctx) != 1;
     }
+    /* Signature MD MUST be set before padding for ossl x931 */
+    if ((err == 0) && (padMode == RSA_PKCS1_PSS_PADDING ||
+            padMode == RSA_X931_PADDING) && rsaMd != NULL) {
+        err = EVP_PKEY_CTX_set_signature_md(ctx, rsaMd) <= 0;
+    }
     if ((err == 0) && padMode) {
         err = EVP_PKEY_CTX_set_rsa_padding(ctx, padMode) <= 0;
     }
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING) {
         err = EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx, -1) < 0;
-    }
-    if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING && rsaMd != NULL) {
-        err = EVP_PKEY_CTX_set_signature_md(ctx, rsaMd) <= 0;
     }
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING && rsaMgf1Md != NULL) {
         err = EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, rsaMgf1Md) <= 0;
@@ -131,14 +133,16 @@ int test_pkey_verify(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
     if (err == 0) {
         err = EVP_PKEY_verify_init(ctx) != 1;
     }
+    /* Signature MD MUST be set before padding for ossl x931 */
+    if ((err == 0) && (padMode == RSA_PKCS1_PSS_PADDING ||
+        padMode == RSA_X931_PADDING) && rsaMd != NULL) {
+        err = EVP_PKEY_CTX_set_signature_md(ctx, rsaMd) <= 0;
+    }
     if ((err == 0) && padMode) {
         err = EVP_PKEY_CTX_set_rsa_padding(ctx, padMode) <= 0;
     }
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING) {
         err = EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx, -1) < 0;
-    }
-    if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING && rsaMd != NULL) {
-        err = EVP_PKEY_CTX_set_signature_md(ctx, rsaMd) <= 0;
     }
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING && rsaMgf1Md != NULL) {
         err = EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, rsaMgf1Md) <= 0;

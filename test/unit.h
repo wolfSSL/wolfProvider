@@ -231,6 +231,7 @@ int test_pkey_dec_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
 int test_rsa_sign_sha1(void *data);
 int test_rsa_sign_verify_pkcs1(void *data);
 int test_rsa_sign_verify_pss(void *data);
+int test_rsa_sign_verify_x931(void *data);
 int test_rsa_enc_dec_pkcs1(void *data);
 int test_rsa_enc_dec_oaep(void *data);
 int test_rsa_pkey_keygen(void *data);
