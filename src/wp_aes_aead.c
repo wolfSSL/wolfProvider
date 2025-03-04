@@ -819,8 +819,7 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
     #ifdef WOLFSSL_AESGCM_STREAM
         int rc;
 
-        rc = wc_AesGcmEncryptInit_ex(&ctx->aes, NULL, 0, ctx->iv,
-            (word32)ctx->ivLen);
+        rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, ctx->ivLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -967,23 +966,27 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
     if (ok) {
         int rc;
 
-        if (ivLen == 0) {
-            if (key != NULL) {
-                rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
-                if (rc != 0) {
-                    ok = 0;
-                }
-            }
-        }
-        else {
-            rc = wc_AesGcmEncryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen);
-            if (rc != 0) {
+        if (iv != NULL) {
+            if (ivLen == 0) {
                 ok = 0;
             }
             if (ok) {
                 XMEMCPY(ctx->iv, iv, ivLen);
                 ctx->ivState = IV_STATE_BUFFERED;
                 ctx->ivSet = 0;
+                ctx->ivLen = ivLen;
+            }
+        }
+        if ((ivLen == 0) && (key != NULL)) {
+            rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        else if (key != NULL) {
+            rc = wc_AesGcmEncryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen);
+            if (rc != 0) {
+                ok = 0;
             }
         }
     }
@@ -1041,8 +1044,10 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
         ok = 0;
     }
 #ifdef WOLFSSL_AESGCM_STREAM
-    if (ok && (wc_AesGcmDecryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen) != 0)) {
-        ok = 0;
+    if (ok && key != NULL) {
+        if (wc_AesGcmDecryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen) != 0) {
+            ok = 0;
+        }
     }
     if (ok) {
         XMEMCPY(ctx->iv, iv, ivLen);
@@ -1181,6 +1186,7 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
     int ok = 1;
     int done = 0;
     size_t oLen = 0;
+    int rc;
 
     if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
         ok = wp_aesgcm_tls_cipher(ctx, out, outLen, in, inLen);
@@ -1192,7 +1198,17 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
     }
 
     if ((!done) && ok) {
-        int rc;
+        if (ctx->ivState == IV_STATE_BUFFERED) {
+            rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, ctx->ivLen);
+            if (rc != 0) {
+                ok = 0;
+            }
+
+            ctx->ivState = IV_STATE_COPIED;
+        }
+    }
+
+    if ((!done) && ok) {
         const unsigned char* aad = NULL;
         size_t aadLen = 0;
 
@@ -1465,11 +1481,13 @@ static int wp_aesgcm_cipher(wp_AeadCtx *ctx, unsigned char *out,
         ok = 0;
     }
     if (ok) {
-        ok = wp_aesgcm_stream_update(ctx, out, outLen, outSize, in, inLen);
-    }
-    if (ok) {
-        ok = wp_aesgcm_stream_final(ctx, out + *outLen, &finalLen,
-            outSize - *outLen);
+        if (in != NULL) {
+            ok = wp_aesgcm_stream_update(ctx, out, outLen, outSize, in, inLen);
+        }
+        else {
+            ok = wp_aesgcm_stream_final(ctx, out + *outLen, &finalLen,
+                outSize - *outLen);
+        }
     }
     if (ok) {
         *outLen += finalLen;
