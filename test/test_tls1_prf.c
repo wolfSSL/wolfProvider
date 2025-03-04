@@ -375,7 +375,7 @@ int test_tls1_prf(void *data)
     if (err == 0) {
         err = test_tls1_prf_str_md("sha256");
     }
-#elif defined(WP_HAVE_SHA384
+#elif defined(WP_HAVE_SHA384)
     if (err == 0) {
         err = test_tls1_prf_str_md("sha384");
     }
