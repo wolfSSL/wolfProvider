@@ -116,10 +116,15 @@ static int wp_ecc_gen_set_params(wp_EccGenCtx* ctx, const OSSL_PARAM params[]);
 /** Mapping of OpenSSL curve name to wolfSSL elliptic curve information. */
 static const wp_EccGroupMap wp_ecc_group_map[] = {
     { SN_X9_62_prime192v1, ECC_SECP192R1, 192 },
+    { "P-192"            , ECC_SECP192R1, 192 },
     { SN_secp224r1       , ECC_SECP224R1, 224 },
+    { "P-224"            , ECC_SECP224R1, 224 },
     { SN_X9_62_prime256v1, ECC_SECP256R1, 256 },
+    { "P-256"            , ECC_SECP256R1, 256 },
     { SN_secp384r1       , ECC_SECP384R1, 384 },
+    { "P-384"            , ECC_SECP384R1, 384 },
     { SN_secp521r1       , ECC_SECP521R1, 521 },
+    { "P-521"            , ECC_SECP521R1, 521 },
 };
 
 /** Number of entries in elliptic curve mapping. */
@@ -1569,6 +1574,9 @@ static int wp_ecc_gen_set_template(wp_EccGenCtx* ctx, wp_Ecc* ecc)
     return ok;
 }
 
+#define WP_EC_ENCODING_NAMED_CURVE_STR "named_curve"
+#define WP_EC_ENCODING_NAMED_CURVE_STR_LEN 11
+
 /**
  * Sets the parameters into the ECC generation context object.
  *
@@ -1589,6 +1597,19 @@ static int wp_ecc_gen_set_params(wp_EccGenCtx* ctx, const OSSL_PARAM params[])
     if (ok && (!wp_params_get_utf8_string(params, OSSL_PKEY_PARAM_GROUP_NAME,
         ctx->curveName, sizeof(ctx->curveName)))) {
         ok = 0;
+    }
+    if (ok) {
+        p = OSSL_PARAM_locate_const(params,
+                OSSL_PKEY_PARAM_EC_ENCODING);
+        if ((p != NULL) && ((p->data_type != OSSL_PARAM_UTF8_STRING) ||
+                            (p->data_size != \
+                              WP_EC_ENCODING_NAMED_CURVE_STR_LEN) ||
+                            (XMEMCMP(p->data, WP_EC_ENCODING_NAMED_CURVE_STR,
+                                p->data_size) != 0))) {
+            WOLFPROV_ERROR_MSG(WP_LOG_PK,
+                "only named curve encoding supported");
+            ok = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -1685,6 +1706,7 @@ static const OSSL_PARAM* wp_ecc_gen_settable_params(wp_EccGenCtx* ctx,
     static OSSL_PARAM wp_ecc_gen_supported_settable_params[] = {
         OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_USE_COFACTOR_ECDH, NULL),
+        OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_EC_ENCODING, NULL, 0),
         OSSL_PARAM_END
     };
     (void)ctx;
