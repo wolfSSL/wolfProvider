@@ -979,9 +979,11 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
 
     if (priv) {
         cnt = WP_RSA_PARAM_NUMS_CNT;
+        rsa->key.type = RSA_PRIVATE;
     }
     else {
         cnt = WP_RSA_PARAM_PUB_NUMS_CNT;
+        rsa->key.type = RSA_PUBLIC;
     }
 
     for (i = 0; ok && (i < cnt); i++) {
