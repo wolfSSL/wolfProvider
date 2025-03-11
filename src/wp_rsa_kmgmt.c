@@ -961,6 +961,16 @@ static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
     return ok;
 }
 
+static int wp_params_count(const OSSL_PARAM *p)
+{
+    int cnt = 0;
+    while ((p != NULL) && (p->key != NULL)) {
+         cnt++;
+         p++;
+     }
+     return cnt;
+}
+
 /**
  * Import the key data into RSA key object from parameters.
  *
@@ -977,7 +987,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
     int i;
     int cnt;
 
-    if (priv) {
+    if (priv && (wp_params_count(params) > 2)) {
         cnt = WP_RSA_PARAM_NUMS_CNT;
     }
     else {
