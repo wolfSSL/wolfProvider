@@ -236,6 +236,7 @@ int test_rsa_enc_dec_pkcs1(void *data);
 int test_rsa_enc_dec_oaep(void *data);
 int test_rsa_pkey_keygen(void *data);
 int test_rsa_pkey_invalid_key_size(void *data);
+int test_rsa_get_params(void *data);
 
 int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);
