@@ -1,0 +1,41 @@
+name: Fips simple tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  fips_make_check:
+    strategy:
+      matrix:
+        config: [
+          # Add new configs here
+          'OPENSSL_TAG=openssl-3.2.0 WOLFSSL_TAG=v5.7.4-stable WOLFSSL_ISFIPS=1',
+        ]
+    name: fips make check
+    runs-on: ubuntu-latest
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout wolfProvider
+
+      - name: Test wolfProvider
+        run: |
+          ${{ matrix.config }} ./scripts/build-wolfprovider.sh
+          make check
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi

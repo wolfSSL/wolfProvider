@@ -462,8 +462,10 @@ int test_rsa_sign_verify_x931(void *data)
 
     (void)data;
 
+#ifndef HAVE_FIPS
     /* Use SHA-1 (default) for MD and MGF1 MD. */
     err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha1(), NULL) == 1;
+#endif
 #ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD. */
