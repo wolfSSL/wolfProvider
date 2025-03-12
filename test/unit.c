@@ -160,6 +160,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_enc_dec_oaep, NULL),
     TEST_DECL(test_rsa_pkey_keygen, NULL),
     TEST_DECL(test_rsa_pkey_invalid_key_size, NULL),
+    TEST_DECL(test_rsa_get_params, NULL),
     TEST_DECL(test_rsa_load_key, NULL),
     TEST_DECL(test_rsa_load_cert, NULL),
 #endif /* WP_HAVE_RSA */

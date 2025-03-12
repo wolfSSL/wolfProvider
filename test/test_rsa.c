@@ -707,6 +707,83 @@ int test_rsa_pkey_keygen(void *data)
     return err;
 }
 
+int test_rsa_get_params(void *data)
+{
+    int err;
+    EVP_PKEY *pkey = NULL;
+    unsigned char n[2048 / 8];
+    unsigned char e[2048 / 8];
+    OSSL_PARAM params[3];
+    EVP_PKEY_CTX *ctx = NULL;
+    BIGNUM *eCmd = NULL;
+    BIGNUM *eRet = NULL;
+    const int newKeySize = 2048;
+    (void)data;
+
+    err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL)) == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Change the key size w/ ctrl command");
+        err = EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN,
+                                EVP_PKEY_CTRL_RSA_KEYGEN_BITS, newKeySize,
+                                NULL) <= 0;
+    }
+    if (err == 0) {
+        err = (eCmd = BN_new()) == NULL;
+    }
+    if (err == 0) {
+        err = BN_set_word(eCmd, 3) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Change the public exponent w/ ctrl command");
+        err = EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN,
+                                EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP, 0, eCmd) <= 0;
+    }
+    if (err == 0) {
+        PRINT_MSG("Generate RSA key w/ new parameters");
+        err = EVP_PKEY_keygen(ctx, &pkey) != 1;
+    }
+    if (pkey == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        memset(e, 0, sizeof(e));
+        memset(n, 0, sizeof(n));
+        params[0] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_RSA_N, n, sizeof(n));
+        params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_RSA_E, e, sizeof(e));
+        params[2] = OSSL_PARAM_construct_end();
+
+        PRINT_MSG("Getting RSA params");
+
+        if (EVP_PKEY_get_params(pkey, params) != 1) {
+            err = 1;
+        }
+    }
+    /* Check return sizes, then verify e matches the one we set */
+    if (err == 0) {
+        if ((params[0].return_size != (size_t)(newKeySize / 8)) ||
+            (params[1].return_size != 1)) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        eRet = BN_bin2bn(e, params[1].return_size, NULL);
+        if (eRet == NULL) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = BN_cmp((const BIGNUM *)eCmd, (const BIGNUM *)eRet);
+    }
+
+    BN_free(eCmd);
+    BN_free(eRet);
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
 int test_rsa_pkey_invalid_key_size(void *data) {
     int err;
     EVP_PKEY *pkey = NULL;
