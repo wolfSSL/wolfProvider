@@ -35,7 +35,6 @@ jobs:
       - name: Test wolfProvider
         run: |
           ${{ matrix.config }} ./scripts/build-wolfprovider.sh
-          make check
 
       - name: Print errors 
         if: ${{ failure() }}

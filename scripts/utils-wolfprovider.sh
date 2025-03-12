@@ -24,7 +24,7 @@ source ${SCRIPT_DIR}/utils-wolfssl.sh
 
 WOLFPROV_SOURCE_DIR=${SCRIPT_DIR}/..
 WOLFPROV_INSTALL_DIR=${SCRIPT_DIR}/../wolfprov-install
-if [ "$WOLFSSL_ISFIPS" -eq "1" ]; then
+if [ "$WOLFSSL_ISFIPS" -eq "1" ] || [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
     WOLFPROV_CONFIG=${WOLFPROV_CONFIG:-"$WOLFPROV_SOURCE_DIR/provider-fips.conf"}
 else
     WOLFPROV_CONFIG=${WOLFPROV_CONFIG:-"$WOLFPROV_SOURCE_DIR/provider.conf"}
