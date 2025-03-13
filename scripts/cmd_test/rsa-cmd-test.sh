@@ -219,66 +219,63 @@ test_sign_verify_interop() {
     fi
 }
 
-echo "=== Testing RSA Key Generation with genpkey ==="
-
-for key_size in "${KEY_SIZES[@]}"; do
-    echo -e "\n=== Testing RSA-${key_size} Key Generation with genpkey ==="
+# Function to generate and test RSA keys
+generate_and_test_rsa_key() {
+    local method=$1
+    local key_size=$2
+    local output_file="rsa_outputs/rsa_wolf_${method}_${key_size}.pem"
     
-    # Generate RSA key with wolfProvider using genpkey
-    echo "Generating RSA-${key_size} key with wolfProvider using genpkey..."
-    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:${key_size} \
-        -provider-path $WOLFPROV_PATH -provider libwolfprov \
-        -out "rsa_outputs/rsa_wolf_genpkey_${key_size}.pem" -pass pass:
+    echo -e "\n=== Testing RSA-${key_size} Key Generation with ${method} ==="
+    
+    # Generate RSA key with wolfProvider
+    echo "Generating RSA-${key_size} key with wolfProvider using ${method}..."
+    
+    if [ "$method" = "genpkey" ]; then
+        # Generate key using genpkey
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:${key_size} \
+            -provider-path $WOLFPROV_PATH -provider libwolfprov \
+            -out "$output_file" -pass pass:
+    elif [ "$method" = "genrsa" ]; then
+        # Generate key using genrsa
+        # Note: For genrsa, provider options must come before the key size
+        openssl genrsa -provider-path $WOLFPROV_PATH -provider libwolfprov \
+            -out "$output_file" ${key_size}
+    else
+        echo "[FAIL] Unknown key generation method: ${method}"
+        exit 1
+    fi
 
     # Verify the key was generated
-    if [ -s "rsa_outputs/rsa_wolf_genpkey_${key_size}.pem" ]; then
-        echo "[PASS] RSA-${key_size} key generation with genpkey successful"
+    if [ -s "$output_file" ]; then
+        echo "[PASS] RSA-${key_size} key generation with ${method} successful"
     else
-        echo "[FAIL] RSA-${key_size} key generation with genpkey failed"
+        echo "[FAIL] RSA-${key_size} key generation with ${method} failed"
         exit 1
     fi
     
     # Display key information
     echo "Key information:"
-    openssl rsa -in "rsa_outputs/rsa_wolf_genpkey_${key_size}.pem" -text -noout \
+    openssl rsa -in "$output_file" -text -noout \
         -provider-path $WOLFPROV_PATH -provider libwolfprov
     
     # Validate key using default provider only
-    validate_key "$key_size" "rsa_outputs/rsa_wolf_genpkey_${key_size}.pem"
+    validate_key "$key_size" "$output_file"
     
     # Test interoperability between wolfProvider and OpenSSL
-    test_sign_verify_interop "$key_size" "rsa_outputs/rsa_wolf_genpkey_${key_size}.pem"
-done
+    test_sign_verify_interop "$key_size" "$output_file"
+}
 
-echo "=== Testing RSA Key Generation with genrsa ==="
+# Test RSA key generation with both genpkey and genrsa
+echo "=== Testing RSA Key Generation with genpkey and genrsa ==="
 
+# Array of key generation methods to test
+KEY_METHODS=("genpkey" "genrsa")
+
+# Use a single loop to test all combinations of key sizes and methods
 for key_size in "${KEY_SIZES[@]}"; do
-    echo -e "\n=== Testing RSA-${key_size} Key Generation with genrsa ==="
-    
-    # Generate RSA key with wolfProvider using genrsa
-    # Note: For genrsa, provider options must come before the key size
-    echo "Generating RSA-${key_size} key with wolfProvider using genrsa..."
-    openssl genrsa -provider-path $WOLFPROV_PATH -provider libwolfprov \
-        -out "rsa_outputs/rsa_wolf_genrsa_${key_size}.pem" ${key_size}
-
-    # Verify the key was generated
-    if [ -s "rsa_outputs/rsa_wolf_genrsa_${key_size}.pem" ]; then
-        echo "[PASS] RSA-${key_size} key generation with genrsa successful"
-    else
-        echo "[FAIL] RSA-${key_size} key generation with genrsa failed"
-        exit 1
-    fi
-    
-    # Display key information
-    echo "Key information:"
-    openssl rsa -in "rsa_outputs/rsa_wolf_genrsa_${key_size}.pem" -text -noout \
-        -provider-path $WOLFPROV_PATH -provider libwolfprov
-    
-    # Validate key using default provider only
-    validate_key "$key_size" "rsa_outputs/rsa_wolf_genrsa_${key_size}.pem"
-    
-    # Test interoperability between wolfProvider and OpenSSL
-    test_sign_verify_interop "$key_size" "rsa_outputs/rsa_wolf_genrsa_${key_size}.pem"
+    for method in "${KEY_METHODS[@]}"; do
+        generate_and_test_rsa_key "$method" "$key_size"
+    done
 done
 
 echo -e "\n=== All RSA key generation and sign/verify tests completed successfully ==="
