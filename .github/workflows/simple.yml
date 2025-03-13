@@ -36,6 +36,7 @@ jobs:
         run: |
           ${{ matrix.config }} ./scripts/build-wolfprovider.sh
           make check
+          ./scripts/cmd_test/do-cmd-tests.sh
 
       - name: Print errors 
         if: ${{ failure() }}
