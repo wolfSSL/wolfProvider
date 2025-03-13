@@ -83,29 +83,22 @@ for key_size in "${KEY_SIZES[@]}"; do
     echo "Key information:"
     openssl rsa -in "rsa_outputs/rsa_wolf_${key_size}.pem" -text -noout \
         -provider-path $WOLFPROV_PATH -provider libwolfprov
-done
-
-# Function to test sign and verify with generated keys
-test_sign_verify() {
-    local key_size=$1
-    local key_file="rsa_outputs/rsa_wolf_${key_size}.pem"
-    local signature_file="rsa_outputs/signature_${key_size}.bin"
-    local data_file="rsa_outputs/test_data.txt"
     
+    # Test sign and verify with the generated key
     echo -e "\n=== Testing RSA-${key_size} Sign/Verify ==="
     
     # Extract public key for verification
-    openssl rsa -in "$key_file" -pubout \
+    openssl rsa -in "rsa_outputs/rsa_wolf_${key_size}.pem" -pubout \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
         -out "rsa_outputs/rsa_wolf_${key_size}_pub.pem"
     
     # Sign data with wolfProvider
     echo "Signing data with RSA-${key_size} key..."
-    openssl dgst -sha256 -sign "$key_file" \
+    openssl dgst -sha256 -sign "rsa_outputs/rsa_wolf_${key_size}.pem" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
-        -out "$signature_file" "$data_file"
+        -out "rsa_outputs/signature_${key_size}.bin" "rsa_outputs/test_data.txt"
     
-    if [ ! -s "$signature_file" ]; then
+    if [ ! -s "rsa_outputs/signature_${key_size}.bin" ]; then
         echo "[FAIL] RSA-${key_size} signing failed"
         exit 1
     fi
@@ -114,7 +107,7 @@ test_sign_verify() {
     echo "Verifying signature with RSA-${key_size} key..."
     openssl dgst -sha256 -verify "rsa_outputs/rsa_wolf_${key_size}_pub.pem" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
-        -signature "$signature_file" "$data_file"
+        -signature "rsa_outputs/signature_${key_size}.bin" "rsa_outputs/test_data.txt"
     
     if [ $? -eq 0 ]; then
         echo "[PASS] RSA-${key_size} sign/verify successful"
@@ -122,11 +115,6 @@ test_sign_verify() {
         echo "[FAIL] RSA-${key_size} sign/verify failed"
         exit 1
     fi
-}
-
-# Test sign/verify for each key size
-for key_size in "${KEY_SIZES[@]}"; do
-    test_sign_verify "$key_size"
 done
 
 echo -e "\n=== All RSA key generation and sign/verify tests completed successfully ==="
