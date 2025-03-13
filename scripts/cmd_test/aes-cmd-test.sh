@@ -67,7 +67,7 @@ for key_size in "${KEY_SIZES[@]}"; do
             -in test.txt -out "$enc_file" -p
         
         # Decryption with wolfProvider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
+        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
             -in "$enc_file" -out "$dec_file" -d -p
         
         if cmp -s "test.txt" "$dec_file"; then
@@ -81,7 +81,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Interop testing (encrypt with wolfProvider, decrypt with default):"
         
         # Encryption with wolfProvider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
+        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
             -in test.txt -out "$enc_file" -p
         
         # Decryption with OpenSSL default provider
