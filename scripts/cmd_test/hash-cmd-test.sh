@@ -18,10 +18,10 @@ init_wolfprov
 
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
-if ! openssl list -providers | grep -q "wolf"; then
+if ! $OPENSSL_BIN list -providers | grep -q "wolf"; then
     echo "[FAIL] wolfProvider not found in OpenSSL providers!"
     echo "Current provider list:"
-    openssl list -providers
+    $OPENSSL_BIN list -providers
     exit 1
 fi
 echo "[PASS] wolfProvider is properly configured"
@@ -30,6 +30,7 @@ echo "[PASS] wolfProvider is properly configured"
 echo "Environment variables:"
 echo "OPENSSL_MODULES: ${OPENSSL_MODULES}"
 echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+echo "OPENSSL_BIN: ${OPENSSL_BIN}"
 
 # Create test data and output directories
 mkdir -p hash_outputs
@@ -42,7 +43,7 @@ run_hash_test() {
     local output_file="$3"
     
     # Run the hash algorithm with specified provider options
-    openssl dgst -$algo $provider_opts -out "$output_file" test.txt
+    $OPENSSL_BIN dgst -$algo $provider_opts -out "$output_file" test.txt
     
     # Print the hash for verification
     cat "$output_file"

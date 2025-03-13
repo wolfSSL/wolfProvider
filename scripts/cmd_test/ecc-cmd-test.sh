@@ -38,10 +38,10 @@ init_wolfprov
 
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
-if ! openssl list -providers | grep -q "libwolfprov"; then
+if ! $OPENSSL_BIN list -providers | grep -q "libwolfprov"; then
     echo "[FAIL] wolfProvider not found in OpenSSL providers!"
     echo "Current provider list:"
-    openssl list -providers
+    $OPENSSL_BIN list -providers
     exit 1
 fi
 echo "[PASS] wolfProvider is properly configured"
@@ -50,6 +50,7 @@ echo "[PASS] wolfProvider is properly configured"
 echo "Environment variables:"
 echo "OPENSSL_MODULES: ${OPENSSL_MODULES}"
 echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+echo "OPENSSL_BIN: ${OPENSSL_BIN}"
 
 # Create test directories
 mkdir -p ecc_outputs
@@ -75,7 +76,7 @@ validate_key() {
     
     # Try to extract public key
     local pub_key_file="ecc_outputs/ecc_${curve}_pub.pem"
-    if openssl ec -in "$key_file" -pubout -out "$pub_key_file" 2>/dev/null; then
+    if $OPENSSL_BIN ec -in "$key_file" -pubout -out "$pub_key_file" 2>/dev/null; then
         echo "[PASS] ECC key (${curve}) public key extraction successful"
     else
         echo "[WARN] ECC key (${curve}) public key extraction failed"
@@ -101,7 +102,7 @@ test_sign_verify_pkeyutl() {
     
     # Extract public key if it doesn't exist
     if [ ! -s "$pub_key_file" ]; then
-        openssl ec -in "$key_file" -pubout -out "$pub_key_file" 2>/dev/null || {
+        $OPENSSL_BIN ec -in "$key_file" -pubout -out "$pub_key_file" 2>/dev/null || {
             echo "[WARN] Could not extract public key for ${curve}, skipping pkeyutl test"
             return
         }
@@ -112,14 +113,14 @@ test_sign_verify_pkeyutl() {
     
     # Sign data with OpenSSL default
     echo "Signing data with OpenSSL default..."
-    if ! openssl pkeyutl -sign -inkey "$key_file" -in "$data_file" -out "$sig_file" 2>/dev/null; then
+    if ! $OPENSSL_BIN pkeyutl -sign -inkey "$key_file" -in "$data_file" -out "$sig_file" 2>/dev/null; then
         echo "[WARN] ECC (${curve}) signing with pkeyutl failed - this may be expected for some curves"
         return
     fi
     
     # Verify signature with wolfProvider
     echo "Verifying signature with wolfProvider..."
-    if openssl pkeyutl -verify -pubin -inkey "$pub_key_file" -in "$data_file" -sigfile "$sig_file" \
+    if $OPENSSL_BIN pkeyutl -verify -pubin -inkey "$pub_key_file" -in "$data_file" -sigfile "$sig_file" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov 2>/dev/null; then
         echo "[PASS] Interop: OpenSSL sign, wolfProvider verify successful with pkeyutl"
     else
@@ -132,13 +133,13 @@ test_sign_verify_pkeyutl() {
     # Sign data with wolfProvider
     local wolf_sig_file="ecc_outputs/${key_basename}_pkeyutl_wolf_sig.bin"
     echo "Signing data with wolfProvider..."
-    if openssl pkeyutl -sign -inkey "$key_file" -in "$data_file" -out "$wolf_sig_file" \
+    if $OPENSSL_BIN pkeyutl -sign -inkey "$key_file" -in "$data_file" -out "$wolf_sig_file" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov 2>/dev/null; then
         echo "[PASS] wolfProvider signing with pkeyutl successful"
         
         # Verify signature with OpenSSL default
         echo "Verifying signature with OpenSSL default..."
-        if openssl pkeyutl -verify -pubin -inkey "$pub_key_file" -in "$data_file" -sigfile "$wolf_sig_file" 2>/dev/null; then
+        if $OPENSSL_BIN pkeyutl -verify -pubin -inkey "$pub_key_file" -in "$data_file" -sigfile "$wolf_sig_file" 2>/dev/null; then
             echo "[PASS] Interop: wolfProvider sign, OpenSSL verify successful with pkeyutl"
         else
             echo "[INFO] Interop: wolfProvider sign, OpenSSL verify failed with pkeyutl - this may be expected"
@@ -157,7 +158,7 @@ generate_and_test_ecc_key() {
     
     # Generate ECC key
     echo "Generating ECC key (${curve})..."
-    openssl ecparam -name $curve -genkey -out "$output_file" 2>/dev/null
+    $OPENSSL_BIN ecparam -name $curve -genkey -out "$output_file" 2>/dev/null
     
     # Verify the key was generated
     if [ -s "$output_file" ]; then
@@ -175,7 +176,7 @@ generate_and_test_ecc_key() {
     echo "Checking if wolfProvider can use the key..."
     
     # Try to use the key with wolfProvider (just check if it loads)
-    if openssl ec -in "$output_file" -check -provider-path $WOLFPROV_PATH -provider libwolfprov 2>/dev/null; then
+    if $OPENSSL_BIN ec -in "$output_file" -check -provider-path $WOLFPROV_PATH -provider libwolfprov 2>/dev/null; then
         echo "[PASS] wolfProvider can use ECC key (${curve})"
         
         # Test sign/verify interoperability with pkeyutl

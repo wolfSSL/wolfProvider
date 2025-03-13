@@ -22,27 +22,34 @@
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
+UTILS_DIR="${REPO_ROOT}/scripts"
+
+# Source OpenSSL utilities and initialize OpenSSL
+source "${UTILS_DIR}/utils-openssl.sh"
+init_openssl
 
 echo "=== Running wolfProvider Command-Line Tests ==="
+echo "Using OpenSSL binary: ${OPENSSL_BIN}"
 
 # Run the hash comparison test
 echo -e "\n=== Running Hash Comparison Test ==="
-"$SCRIPT_DIR/hash-cmd-test.sh"
+cd "$SCRIPT_DIR" && ./hash-cmd-test.sh
 HASH_RESULT=$?
 
 # Run the AES comparison test
 echo -e "\n=== Running AES Comparison Test ==="
-"$SCRIPT_DIR/aes-cmd-test.sh"
+cd "$SCRIPT_DIR" && ./aes-cmd-test.sh
 AES_RESULT=$?
 
 # Run the RSA key generation test
 echo -e "\n=== Running RSA Key Generation Test ==="
-"$SCRIPT_DIR/rsa-cmd-test.sh"
+cd "$SCRIPT_DIR" && ./rsa-cmd-test.sh
 RSA_RESULT=$?
 
 # Run the ECC key generation test
 echo -e "\n=== Running ECC Key Generation Test ==="
-"$SCRIPT_DIR/ecc-cmd-test.sh"
+cd "$SCRIPT_DIR" && ./ecc-cmd-test.sh
 ECC_RESULT=$?
 
 # Check results

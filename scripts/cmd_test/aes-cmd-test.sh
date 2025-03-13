@@ -18,10 +18,10 @@ init_wolfprov
 
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
-if ! openssl list -providers | grep -q "wolf"; then
+if ! $OPENSSL_BIN list -providers | grep -q "wolf"; then
     echo "[FAIL] wolfProvider not found in OpenSSL providers!"
     echo "Current provider list:"
-    openssl list -providers
+    $OPENSSL_BIN list -providers
     exit 1
 fi
 echo "[PASS] wolfProvider is properly configured"
@@ -30,6 +30,7 @@ echo "[PASS] wolfProvider is properly configured"
 echo "Environment variables:"
 echo "OPENSSL_MODULES: ${OPENSSL_MODULES}"
 echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+echo "OPENSSL_BIN: ${OPENSSL_BIN}"
 
 # Create test data and output directories
 mkdir -p aes_outputs
@@ -49,10 +50,10 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo -e "\n=== Testing AES-${key_size}-${mode} ==="
         
         # Generate random key and IV
-        key=$(openssl rand -hex $((key_size/8)))
+        key=$($OPENSSL_BIN rand -hex $((key_size/8)))
         iv=""
         if [ "$mode" != "ecb" ]; then
-            iv="-iv $(openssl rand -hex 16)"
+            iv="-iv $($OPENSSL_BIN rand -hex 16)"
         fi
         
         # Output files
@@ -63,11 +64,11 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Interop testing (encrypt with default, decrypt with wolfProvider):"
         
         # Encryption with OpenSSL default provider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider default \
+        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
             -in test.txt -out "$enc_file" -p
         
         # Decryption with wolfProvider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
             -in "$enc_file" -out "$dec_file" -d -p
         
         if cmp -s "test.txt" "$dec_file"; then
@@ -81,11 +82,11 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Interop testing (encrypt with wolfProvider, decrypt with default):"
         
         # Encryption with wolfProvider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
             -in test.txt -out "$enc_file" -p
         
         # Decryption with OpenSSL default provider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider default \
+        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
             -in "$enc_file" -out "$dec_file" -d -p
         
         if cmp -s "test.txt" "$dec_file"; then

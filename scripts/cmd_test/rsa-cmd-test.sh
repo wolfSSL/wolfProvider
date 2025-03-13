@@ -38,10 +38,10 @@ init_wolfprov
 
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
-if ! openssl list -providers | grep -q "libwolfprov"; then
+if ! $OPENSSL_BIN list -providers | grep -q "libwolfprov"; then
     echo "[FAIL] wolfProvider not found in OpenSSL providers!"
     echo "Current provider list:"
-    openssl list -providers
+    $OPENSSL_BIN list -providers
     exit 1
 fi
 echo "[PASS] wolfProvider is properly configured"
@@ -50,6 +50,7 @@ echo "[PASS] wolfProvider is properly configured"
 echo "Environment variables:"
 echo "OPENSSL_MODULES: ${OPENSSL_MODULES}"
 echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+echo "OPENSSL_BIN: ${OPENSSL_BIN}"
 
 # Create test directories
 mkdir -p rsa_outputs
@@ -82,7 +83,7 @@ validate_key() {
     
     # Test 1: Check if key can be parsed with -text -noout
     echo "Test 1: Parsing key with -text -noout..."
-    if ! openssl $key_cmd -in "$key_file" -text -noout \
+    if ! $OPENSSL_BIN $key_cmd -in "$key_file" -text -noout \
         -provider default -passin pass: > /dev/null 2>&1; then
         echo "[FAIL] RSA${is_pss:+-PSS}-${key_size} key parsing with -text -noout failed"
         exit 1
@@ -90,7 +91,7 @@ validate_key() {
     echo "[PASS] RSA${is_pss:+-PSS}-${key_size} key parsing with -text -noout successful"
     
     # Extract public key for verification using default provider
-    openssl $key_cmd -in "$key_file" -pubout \
+    $OPENSSL_BIN $key_cmd -in "$key_file" -pubout \
         -provider default -passin pass: \
         -out "$pub_key_file"
     
@@ -107,7 +108,7 @@ validate_key() {
         
         # Check if -modulus option works with private key
         echo "Testing -modulus with private key..."
-        modulus_output=$(openssl rsa -in "$key_file" -modulus -noout \
+        modulus_output=$($OPENSSL_BIN rsa -in "$key_file" -modulus -noout \
             -provider default -passin pass:)
         
         if [ -z "$modulus_output" ]; then
@@ -118,7 +119,7 @@ validate_key() {
         
         # Check if -modulus option works with public key
         echo "Testing -modulus with public key..."
-        modulus_output=$(openssl rsa -pubin -in "$pub_key_file" -modulus -noout \
+        modulus_output=$($OPENSSL_BIN rsa -pubin -in "$pub_key_file" -modulus -noout \
             -provider default)
         
         if [ -z "$modulus_output" ]; then
@@ -132,7 +133,7 @@ validate_key() {
         
         # Sign data with default provider
         echo "Signing data with default provider..."
-        openssl dgst -sha256 -sign "$key_file" \
+        $OPENSSL_BIN dgst -sha256 -sign "$key_file" \
             -provider default -passin pass: \
             -out "$sig_file" "$data_file"
         
@@ -143,7 +144,7 @@ validate_key() {
         
         # Verify signature with default provider
         echo "Verifying signature with default provider..."
-        openssl dgst -sha256 -verify "$pub_key_file" \
+        $OPENSSL_BIN dgst -sha256 -verify "$pub_key_file" \
             -provider default \
             -signature "$sig_file" "$data_file"
         
@@ -181,7 +182,7 @@ test_sign_verify_interop() {
     
     # Extract public key for verification if it doesn't exist
     if [ ! -s "$pub_key_file" ]; then
-        openssl rsa -in "$key_file" -pubout \
+        $OPENSSL_BIN rsa -in "$key_file" -pubout \
             -provider default -passin pass: \
             -out "$pub_key_file"
     fi
@@ -191,7 +192,7 @@ test_sign_verify_interop() {
     
     # Sign data with wolfProvider
     echo "Signing data with wolfProvider..."
-    openssl dgst -sha256 -sign "$key_file" \
+    $OPENSSL_BIN dgst -sha256 -sign "$key_file" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
         -out "$wolf_sig_file" "$data_file"
     
@@ -202,7 +203,7 @@ test_sign_verify_interop() {
     
     # Verify signature with OpenSSL default
     echo "Verifying signature with OpenSSL default..."
-    openssl dgst -sha256 -verify "$pub_key_file" \
+    $OPENSSL_BIN dgst -sha256 -verify "$pub_key_file" \
         -provider default \
         -signature "$wolf_sig_file" "$data_file"
     
@@ -218,7 +219,7 @@ test_sign_verify_interop() {
     
     # Sign data with OpenSSL default
     echo "Signing data with OpenSSL default..."
-    openssl dgst -sha256 -sign "$key_file" \
+    $OPENSSL_BIN dgst -sha256 -sign "$key_file" \
         -provider default -passin pass: \
         -out "$openssl_sig_file" "$data_file"
     
@@ -229,7 +230,7 @@ test_sign_verify_interop() {
     
     # Verify signature with wolfProvider
     echo "Verifying signature with wolfProvider..."
-    openssl dgst -sha256 -verify "$pub_key_file" \
+    $OPENSSL_BIN dgst -sha256 -verify "$pub_key_file" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
         -signature "$openssl_sig_file" "$data_file"
     
@@ -246,7 +247,7 @@ test_sign_verify_interop() {
     
     # Sign with wolfProvider using pkeyutl
     echo "Signing data with wolfProvider using pkeyutl..."
-    openssl pkeyutl -sign -inkey "$key_file" \
+    $OPENSSL_BIN pkeyutl -sign -inkey "$key_file" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
         -in "$data_file" -out "$pkeyutl_sig_file"
     
@@ -257,7 +258,7 @@ test_sign_verify_interop() {
     
     # Verify with OpenSSL default using pkeyutl
     echo "Verifying signature with OpenSSL default using pkeyutl..."
-    openssl pkeyutl -verify -pubin -inkey "$pub_key_file" \
+    $OPENSSL_BIN pkeyutl -verify -pubin -inkey "$pub_key_file" \
         -provider default \
         -in "$data_file" -sigfile "$pkeyutl_sig_file"
     
@@ -272,7 +273,7 @@ test_sign_verify_interop() {
     echo "Signing data with OpenSSL default using pkeyutl..."
     local pkeyutl_openssl_sig_file="rsa_outputs/pkeyutl_openssl_signature_${key_basename}.bin"
     
-    openssl pkeyutl -sign -inkey "$key_file" \
+    $OPENSSL_BIN pkeyutl -sign -inkey "$key_file" \
         -provider default -passin pass: \
         -in "$data_file" -out "$pkeyutl_openssl_sig_file"
     
@@ -283,7 +284,7 @@ test_sign_verify_interop() {
     
     # Verify with wolfProvider using pkeyutl
     echo "Verifying signature with wolfProvider using pkeyutl..."
-    openssl pkeyutl -verify -pubin -inkey "$pub_key_file" \
+    $OPENSSL_BIN pkeyutl -verify -pubin -inkey "$pub_key_file" \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
         -in "$data_file" -sigfile "$pkeyutl_openssl_sig_file"
     
@@ -308,13 +309,13 @@ generate_and_test_rsa_key() {
     
     if [ "$method" = "genpkey" ]; then
         # Generate key using genpkey
-        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:${key_size} \
+        $OPENSSL_BIN genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:${key_size} \
             -provider-path $WOLFPROV_PATH -provider libwolfprov \
             -out "$output_file" -pass pass:
     elif [ "$method" = "genrsa" ]; then
         # Generate key using genrsa
         # Note: For genrsa, provider options must come before the key size
-        openssl genrsa -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        $OPENSSL_BIN genrsa -provider-path $WOLFPROV_PATH -provider libwolfprov \
             -out "$output_file" ${key_size}
     else
         echo "[FAIL] Unknown key generation method: ${method}"
@@ -331,7 +332,7 @@ generate_and_test_rsa_key() {
     
     # Display key information
     echo "Key information:"
-    openssl rsa -in "$output_file" -text -noout \
+    $OPENSSL_BIN rsa -in "$output_file" -text -noout \
         -provider-path $WOLFPROV_PATH -provider libwolfprov
     
     # Validate key using default provider
@@ -366,7 +367,7 @@ for key_size in "${KEY_SIZES[@]}"; do
     echo "Generating RSA-PSS-${key_size} key with wolfProvider using genpkey..."
     output_file="rsa_outputs/rsa_pss_wolf_genpkey_${key_size}.pem"
     
-    openssl genpkey -algorithm RSA-PSS -pkeyopt rsa_keygen_bits:${key_size} \
+    $OPENSSL_BIN genpkey -algorithm RSA-PSS -pkeyopt rsa_keygen_bits:${key_size} \
         -provider-path $WOLFPROV_PATH -provider libwolfprov \
         -out "$output_file" -pass pass:
     
@@ -380,7 +381,7 @@ for key_size in "${KEY_SIZES[@]}"; do
     
     # Display key information
     echo "Key information:"
-    openssl pkey -in "$output_file" -text -noout \
+    $OPENSSL_BIN pkey -in "$output_file" -text -noout \
         -provider-path $WOLFPROV_PATH -provider libwolfprov
     
     # Validate key using default provider
