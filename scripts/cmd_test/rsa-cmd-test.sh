@@ -1,6 +1,6 @@
 #!/bin/bash
 # rsa-cmd-test.sh
-# RSA key generation test for wolfProvider
+# RSA key generation and sign/verify test for wolfProvider
 #
 # Copyright (C) 2006-2024 wolfSSL Inc.
 #
@@ -54,6 +54,9 @@ echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
 # Create test directories
 mkdir -p rsa_outputs
 
+# Create test data for signing
+echo "This is test data for RSA signing and verification." > rsa_outputs/test_data.txt
+
 # Array of RSA key sizes to test
 KEY_SIZES=("2048" "3072" "4096")
 
@@ -82,5 +85,49 @@ for key_size in "${KEY_SIZES[@]}"; do
         -provider-path $WOLFPROV_PATH -provider libwolfprov
 done
 
-echo -e "\n=== All RSA key generation tests completed successfully ==="
+# Function to test sign and verify with generated keys
+test_sign_verify() {
+    local key_size=$1
+    local key_file="rsa_outputs/rsa_wolf_${key_size}.pem"
+    local signature_file="rsa_outputs/signature_${key_size}.bin"
+    local data_file="rsa_outputs/test_data.txt"
+    
+    echo -e "\n=== Testing RSA-${key_size} Sign/Verify ==="
+    
+    # Extract public key for verification
+    openssl rsa -in "$key_file" -pubout \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -out "rsa_outputs/rsa_wolf_${key_size}_pub.pem"
+    
+    # Sign data with wolfProvider
+    echo "Signing data with RSA-${key_size} key..."
+    openssl dgst -sha256 -sign "$key_file" \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -out "$signature_file" "$data_file"
+    
+    if [ ! -s "$signature_file" ]; then
+        echo "[FAIL] RSA-${key_size} signing failed"
+        exit 1
+    fi
+    
+    # Verify signature with wolfProvider
+    echo "Verifying signature with RSA-${key_size} key..."
+    openssl dgst -sha256 -verify "rsa_outputs/rsa_wolf_${key_size}_pub.pem" \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -signature "$signature_file" "$data_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "[PASS] RSA-${key_size} sign/verify successful"
+    else
+        echo "[FAIL] RSA-${key_size} sign/verify failed"
+        exit 1
+    fi
+}
+
+# Test sign/verify for each key size
+for key_size in "${KEY_SIZES[@]}"; do
+    test_sign_verify "$key_size"
+done
+
+echo -e "\n=== All RSA key generation and sign/verify tests completed successfully ==="
 exit 0
