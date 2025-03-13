@@ -35,13 +35,19 @@ echo -e "\n=== Running AES Comparison Test ==="
 "$SCRIPT_DIR/aes-cmd-test.sh"
 AES_RESULT=$?
 
+# Run the RSA key generation test
+echo -e "\n=== Running RSA Key Generation Test ==="
+"$SCRIPT_DIR/rsa-cmd-test.sh"
+RSA_RESULT=$?
+
 # Check results
-if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ]; then
+if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ]; then
     echo -e "\n=== All Command-Line Tests Passed ==="
     exit 0
 else
     echo -e "\n=== Command-Line Tests Failed ==="
     echo "Hash Test Result: $HASH_RESULT (0=success)"
     echo "AES Test Result: $AES_RESULT (0=success)"
+    echo "RSA Test Result: $RSA_RESULT (0=success)"
     exit 1
 fi
