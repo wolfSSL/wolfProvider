@@ -34,22 +34,22 @@ echo "Using OpenSSL binary: ${OPENSSL_BIN}"
 
 # Run the hash comparison test
 echo -e "\n=== Running Hash Comparison Test ==="
-cd "$SCRIPT_DIR" && ./hash-cmd-test.sh
+"${REPO_ROOT}/scripts/cmd_test/hash-cmd-test.sh"
 HASH_RESULT=$?
 
 # Run the AES comparison test
 echo -e "\n=== Running AES Comparison Test ==="
-cd "$SCRIPT_DIR" && ./aes-cmd-test.sh
+"${REPO_ROOT}/scripts/cmd_test/aes-cmd-test.sh"
 AES_RESULT=$?
 
 # Run the RSA key generation test
 echo -e "\n=== Running RSA Key Generation Test ==="
-cd "$SCRIPT_DIR" && ./rsa-cmd-test.sh
+"${REPO_ROOT}/scripts/cmd_test/rsa-cmd-test.sh"
 RSA_RESULT=$?
 
 # Run the ECC key generation test
 echo -e "\n=== Running ECC Key Generation Test ==="
-cd "$SCRIPT_DIR" && ./ecc-cmd-test.sh
+"${REPO_ROOT}/scripts/cmd_test/ecc-cmd-test.sh"
 ECC_RESULT=$?
 
 # Check results
