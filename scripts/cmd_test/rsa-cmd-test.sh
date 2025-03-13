@@ -239,6 +239,60 @@ test_sign_verify_interop() {
         echo "[FAIL] Interop: OpenSSL sign, wolfProvider verify failed"
         exit 1
     fi
+    
+    # Test 3: Sign/verify using pkeyutl command
+    echo "Test 3: Sign/verify using pkeyutl command"
+    local pkeyutl_sig_file="rsa_outputs/pkeyutl_signature_${key_basename}.bin"
+    
+    # Sign with wolfProvider using pkeyutl
+    echo "Signing data with wolfProvider using pkeyutl..."
+    openssl pkeyutl -sign -inkey "$key_file" \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -in "$data_file" -out "$pkeyutl_sig_file"
+    
+    if [ ! -s "$pkeyutl_sig_file" ]; then
+        echo "[FAIL] RSA-${key_size} signing with pkeyutl (wolfProvider) failed"
+        exit 1
+    fi
+    
+    # Verify with OpenSSL default using pkeyutl
+    echo "Verifying signature with OpenSSL default using pkeyutl..."
+    openssl pkeyutl -verify -pubin -inkey "$pub_key_file" \
+        -provider default \
+        -in "$data_file" -sigfile "$pkeyutl_sig_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "[PASS] Interop: wolfProvider pkeyutl sign, OpenSSL pkeyutl verify successful"
+    else
+        echo "[FAIL] Interop: wolfProvider pkeyutl sign, OpenSSL pkeyutl verify failed"
+        exit 1
+    fi
+    
+    # Sign with OpenSSL default using pkeyutl
+    echo "Signing data with OpenSSL default using pkeyutl..."
+    local pkeyutl_openssl_sig_file="rsa_outputs/pkeyutl_openssl_signature_${key_basename}.bin"
+    
+    openssl pkeyutl -sign -inkey "$key_file" \
+        -provider default -passin pass: \
+        -in "$data_file" -out "$pkeyutl_openssl_sig_file"
+    
+    if [ ! -s "$pkeyutl_openssl_sig_file" ]; then
+        echo "[FAIL] RSA-${key_size} signing with pkeyutl (OpenSSL default) failed"
+        exit 1
+    fi
+    
+    # Verify with wolfProvider using pkeyutl
+    echo "Verifying signature with wolfProvider using pkeyutl..."
+    openssl pkeyutl -verify -pubin -inkey "$pub_key_file" \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -in "$data_file" -sigfile "$pkeyutl_openssl_sig_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "[PASS] Interop: OpenSSL pkeyutl sign, wolfProvider pkeyutl verify successful"
+    else
+        echo "[FAIL] Interop: OpenSSL pkeyutl sign, wolfProvider pkeyutl verify failed"
+        exit 1
+    fi
 }
 
 # Function to generate and test RSA keys
