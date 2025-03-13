@@ -97,5 +97,16 @@ for key_size in "${KEY_SIZES[@]}"; do
     done
 done
 
+# Note: AES-GCM testing is not included in this script
+# The openssl enc command does not support GCM mode directly from the command line
+# GCM mode requires the EVP interface which is not easily accessible from shell scripts
+# For GCM testing, refer to the C test suite in test/test_aes_gcm.c
+
+echo -e "\n=== AES-GCM Testing Note ==="
+echo "AES-GCM mode testing is not supported via the openssl enc command."
+echo "GCM mode requires the EVP interface which is not easily accessible from shell scripts."
+echo "For GCM testing, refer to the C test suite in test/test_aes_gcm.c"
+echo "The wolfProvider unit tests already include comprehensive AES-GCM interop testing."
+
 echo -e "\n=== All AES tests completed successfully ==="
 exit 0
