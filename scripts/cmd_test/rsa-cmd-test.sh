@@ -69,8 +69,31 @@ validate_key() {
     local pub_key_file="rsa_outputs/rsa_wolf_${key_size}_pub.pem"
     local data_file="rsa_outputs/test_data.txt"
     local sig_file="rsa_outputs/default_signature_${key_size}.bin"
+    local priv_modulus_file="rsa_outputs/priv_modulus_${key_size}.txt"
+    local pub_modulus_file="rsa_outputs/pub_modulus_${key_size}.txt"
     
     echo -e "\n=== Validating RSA-${key_size} Key with Default Provider ==="
+    
+    # Test 1: Check if key can be parsed with -text -noout
+    echo "Test 1: Parsing key with -text -noout..."
+    if ! openssl rsa -in "$key_file" -text -noout \
+        -provider default -passin pass: > /dev/null 2>&1; then
+        echo "[FAIL] RSA-${key_size} key parsing with -text -noout failed"
+        exit 1
+    fi
+    echo "[PASS] RSA-${key_size} key parsing with -text -noout successful"
+    
+    # Test 2: Check if -modulus option works and matches between private and public keys
+    echo "Test 2: Checking -modulus option..."
+    
+    # Get modulus from private key
+    openssl rsa -in "$key_file" -modulus -noout \
+        -provider default -passin pass: > "$priv_modulus_file"
+    
+    if [ ! -s "$priv_modulus_file" ]; then
+        echo "[FAIL] RSA-${key_size} modulus extraction from private key failed"
+        exit 1
+    fi
     
     # Extract public key for verification using default provider
     openssl rsa -in "$key_file" -pubout \
@@ -81,6 +104,27 @@ validate_key() {
         echo "[FAIL] RSA-${key_size} public key extraction failed"
         exit 1
     fi
+    
+    # Get modulus from public key
+    openssl rsa -pubin -in "$pub_key_file" -modulus -noout \
+        -provider default > "$pub_modulus_file"
+    
+    if [ ! -s "$pub_modulus_file" ]; then
+        echo "[FAIL] RSA-${key_size} modulus extraction from public key failed"
+        exit 1
+    fi
+    
+    # Compare moduli
+    if ! cmp -s "$priv_modulus_file" "$pub_modulus_file"; then
+        echo "[FAIL] RSA-${key_size} moduli from private and public keys don't match"
+        echo "Private key modulus: $(cat "$priv_modulus_file")"
+        echo "Public key modulus: $(cat "$pub_modulus_file")"
+        exit 1
+    fi
+    echo "[PASS] RSA-${key_size} moduli from private and public keys match"
+    
+    # Test 3: Sign/verify test
+    echo "Test 3: Sign/verify test..."
     
     # Sign data with default provider
     echo "Signing data with default provider..."
