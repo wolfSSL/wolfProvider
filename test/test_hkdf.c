@@ -91,6 +91,80 @@ static int test_hkdf_calc(OSSL_LIB_CTX* libCtx, unsigned char *key, int keyLen,
     return err;
 }
 
+static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
+    int keyLen, const EVP_MD *md, int mode)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    unsigned char inKey[32] = { 0, };
+    unsigned char salt[32] = { 0, };
+    unsigned char info[32] = { 0, };
+    size_t len = keyLen;
+
+    if (mode == EVP_PKEY_HKDEF_MODE_EXTRACT_ONLY) {
+        len = EVP_MD_get_size(md);
+    }
+
+    ctx = EVP_PKEY_CTX_new_from_name(libCtx, "HKDF", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        if (EVP_PKEY_derive_init(ctx) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_CTX_hkdf_mode(ctx, mode) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_CTX_set_hkdf_md(ctx, md) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_CTX_set1_hkdf_key(ctx, inKey, sizeof(inKey)) != 1) {
+            err = 1;
+        }
+    }
+    if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXPAND_ONLY)) {
+        if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 1) {
+            err = 1;
+        }
+    }
+    if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXPAND_ONLY)) {
+        if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, salt, sizeof(salt)) != 1) {
+            err = 1;
+        }
+    }
+    if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXTRACT_ONLY)) {
+        if (EVP_PKEY_CTX_add1_hkdf_info(ctx, info, sizeof(info)) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_derive(ctx, key, &len) != 1) {
+            err = 1;
+        }
+    }
+
+    if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXTRACT_ONLY)) {
+        if (len != (size_t)keyLen) {
+            err = 1;
+        }
+    }
+    else {
+        if (len != (size_t)EVP_MD_size(md)) {
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
 static int test_hkdf_md(const EVP_MD *md, int mode)
 {
     int err = 0;
@@ -114,6 +188,29 @@ static int test_hkdf_md(const EVP_MD *md, int mode)
         }
     }
 
+    if ((err == 0) && (memcmp(oKey, wKey, sizeof(oKey)) != 0)) {
+        PRINT_BUFFER("OpenSSL key", oKey, sizeof(oKey));
+        PRINT_BUFFER("wolfSSL key", wKey, sizeof(wKey));
+        err = 1;
+    }
+
+    memset(oKey, 0, sizeof(oKey));
+    memset(wKey, 0, sizeof(wKey));
+
+    if (err == 0) {
+        err = test_hkdf_double_set_salt(osslLibCtx, oKey, sizeof(oKey), md, mode);
+        if (err == 1) {
+            PRINT_MSG("FAILED OpenSSL");
+        }
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Calc with wolfSSL");
+        err = test_hkdf_double_set_salt(wpLibCtx, wKey, sizeof(wKey), md, mode);
+        if (err == 1) {
+            PRINT_MSG("FAILED wolfSSL");
+        }
+    }
 
     if ((err == 0) && (memcmp(oKey, wKey, sizeof(oKey)) != 0)) {
         PRINT_BUFFER("OpenSSL key", oKey, sizeof(oKey));
