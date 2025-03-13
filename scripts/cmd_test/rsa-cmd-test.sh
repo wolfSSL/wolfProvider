@@ -62,6 +62,77 @@ KEY_SIZES=("2048" "3072" "4096")
 
 echo "=== Running RSA Key Generation Tests ==="
 
+# Function to test interoperability between wolfProvider and OpenSSL
+test_sign_verify_interop() {
+    local key_size=$1
+    local key_file="rsa_outputs/rsa_wolf_${key_size}.pem"
+    local pub_key_file="rsa_outputs/rsa_wolf_${key_size}_pub.pem"
+    local data_file="rsa_outputs/test_data.txt"
+    local wolf_sig_file="rsa_outputs/wolf_signature_${key_size}.bin"
+    local openssl_sig_file="rsa_outputs/openssl_signature_${key_size}.bin"
+    
+    echo -e "\n=== Testing RSA-${key_size} Sign/Verify Interoperability ==="
+    
+    # Extract public key for verification
+    openssl rsa -in "$key_file" -pubout \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -out "$pub_key_file"
+    
+    # Test 1: Sign with wolfProvider, verify with OpenSSL default
+    echo "Test 1: Sign with wolfProvider, verify with OpenSSL default"
+    
+    # Sign data with wolfProvider
+    echo "Signing data with wolfProvider..."
+    openssl dgst -sha256 -sign "$key_file" \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -out "$wolf_sig_file" "$data_file"
+    
+    if [ ! -s "$wolf_sig_file" ]; then
+        echo "[FAIL] RSA-${key_size} signing with wolfProvider failed"
+        exit 1
+    fi
+    
+    # Verify signature with OpenSSL default
+    echo "Verifying signature with OpenSSL default..."
+    openssl dgst -sha256 -verify "$pub_key_file" \
+        -provider default \
+        -signature "$wolf_sig_file" "$data_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "[PASS] Interop: wolfProvider sign, OpenSSL verify successful"
+    else
+        echo "[FAIL] Interop: wolfProvider sign, OpenSSL verify failed"
+        exit 1
+    fi
+    
+    # Test 2: Sign with OpenSSL default, verify with wolfProvider
+    echo -e "\nTest 2: Sign with OpenSSL default, verify with wolfProvider"
+    
+    # Sign data with OpenSSL default
+    echo "Signing data with OpenSSL default..."
+    openssl dgst -sha256 -sign "$key_file" \
+        -provider default -passin pass: \
+        -out "$openssl_sig_file" "$data_file"
+    
+    if [ ! -s "$openssl_sig_file" ]; then
+        echo "[FAIL] RSA-${key_size} signing with OpenSSL default failed"
+        exit 1
+    fi
+    
+    # Verify signature with wolfProvider
+    echo "Verifying signature with wolfProvider..."
+    openssl dgst -sha256 -verify "$pub_key_file" \
+        -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        -signature "$openssl_sig_file" "$data_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "[PASS] Interop: OpenSSL sign, wolfProvider verify successful"
+    else
+        echo "[FAIL] Interop: OpenSSL sign, wolfProvider verify failed"
+        exit 1
+    fi
+}
+
 for key_size in "${KEY_SIZES[@]}"; do
     echo -e "\n=== Testing RSA-${key_size} Key Generation ==="
     
@@ -84,37 +155,8 @@ for key_size in "${KEY_SIZES[@]}"; do
     openssl rsa -in "rsa_outputs/rsa_wolf_${key_size}.pem" -text -noout \
         -provider-path $WOLFPROV_PATH -provider libwolfprov
     
-    # Test sign and verify with the generated key
-    echo -e "\n=== Testing RSA-${key_size} Sign/Verify ==="
-    
-    # Extract public key for verification
-    openssl rsa -in "rsa_outputs/rsa_wolf_${key_size}.pem" -pubout \
-        -provider-path $WOLFPROV_PATH -provider libwolfprov \
-        -out "rsa_outputs/rsa_wolf_${key_size}_pub.pem"
-    
-    # Sign data with wolfProvider
-    echo "Signing data with RSA-${key_size} key..."
-    openssl dgst -sha256 -sign "rsa_outputs/rsa_wolf_${key_size}.pem" \
-        -provider-path $WOLFPROV_PATH -provider libwolfprov \
-        -out "rsa_outputs/signature_${key_size}.bin" "rsa_outputs/test_data.txt"
-    
-    if [ ! -s "rsa_outputs/signature_${key_size}.bin" ]; then
-        echo "[FAIL] RSA-${key_size} signing failed"
-        exit 1
-    fi
-    
-    # Verify signature with wolfProvider
-    echo "Verifying signature with RSA-${key_size} key..."
-    openssl dgst -sha256 -verify "rsa_outputs/rsa_wolf_${key_size}_pub.pem" \
-        -provider-path $WOLFPROV_PATH -provider libwolfprov \
-        -signature "rsa_outputs/signature_${key_size}.bin" "rsa_outputs/test_data.txt"
-    
-    if [ $? -eq 0 ]; then
-        echo "[PASS] RSA-${key_size} sign/verify successful"
-    else
-        echo "[FAIL] RSA-${key_size} sign/verify failed"
-        exit 1
-    fi
+    # Test interoperability between wolfProvider and OpenSSL
+    test_sign_verify_interop "$key_size"
 done
 
 echo -e "\n=== All RSA key generation and sign/verify tests completed successfully ==="
