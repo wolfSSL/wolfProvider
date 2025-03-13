@@ -56,10 +56,8 @@ for key_size in "${KEY_SIZES[@]}"; do
         fi
         
         # Output files
-        enc_file="aes_outputs/openssl_aes${key_size}_${mode}.enc"
-        dec_file="aes_outputs/openssl_aes${key_size}_${mode}.dec"
-        wolf_enc_file="aes_outputs/wolf_aes${key_size}_${mode}.enc"
-        wolf_dec_file="aes_outputs/wolf_aes${key_size}_${mode}.dec"
+        enc_file="aes_outputs/aes${key_size}_${mode}.enc"
+        dec_file="aes_outputs/aes${key_size}_${mode}.dec"
         
        # Interop testing: Encrypt with default provider, decrypt with wolfProvider
         echo "Interop testing (encrypt with default, decrypt with wolfProvider):"
@@ -84,13 +82,13 @@ for key_size in "${KEY_SIZES[@]}"; do
         
         # Encryption with wolfProvider
         openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
-            -in test.txt -out "$wolf_enc_file" -p
+            -in test.txt -out "$enc_file" -p
         
         # Decryption with OpenSSL default provider
         openssl enc -aes-${key_size}-${mode} -K $key $iv -provider default \
-            -in "$wolf_enc_file" -out "$wolf_dec_file" -d -p
+            -in "$enc_file" -out "$dec_file" -d -p
         
-        if cmp -s "test.txt" "$wolf_dec_file"; then
+        if cmp -s "test.txt" "$dec_file"; then
             echo "[PASS] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
         else
             echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
