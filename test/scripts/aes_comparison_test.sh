@@ -61,48 +61,39 @@ for key_size in "${KEY_SIZES[@]}"; do
         wolf_enc_file="aes_outputs/wolf_aes${key_size}_${mode}.enc"
         wolf_dec_file="aes_outputs/wolf_aes${key_size}_${mode}.dec"
         
-        # Test with OpenSSL default provider
-        echo "Testing with OpenSSL default provider:"
+       # Interop testing: Encrypt with default provider, decrypt with wolfProvider
+        echo "Interop testing (encrypt with default, decrypt with wolfProvider):"
+        
+        # Encryption with OpenSSL default provider
         openssl enc -aes-${key_size}-${mode} -K $key $iv -provider default \
             -in test.txt -out "$enc_file" -p
         
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider default \
+        # Decryption with wolfProvider
+        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
             -in "$enc_file" -out "$dec_file" -d -p
         
         if cmp -s "test.txt" "$dec_file"; then
-            echo "[PASS] OpenSSL default provider AES-${key_size}-${mode} encryption/decryption"
+            echo "[PASS] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
         else
-            echo "[FAIL] OpenSSL default provider AES-${key_size}-${mode} encryption/decryption"
+            echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
             exit 1
         fi
         
-        # Test with wolfProvider
-        echo "Testing with wolfProvider:"
+        # Interop testing: Encrypt with wolfProvider, decrypt with default provider
+        echo "Interop testing (encrypt with wolfProvider, decrypt with default):"
         
         # Encryption with wolfProvider
         openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
             -in test.txt -out "$wolf_enc_file" -p
         
-        # Decryption with wolfProvider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
+        # Decryption with OpenSSL default provider
+        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider default \
             -in "$wolf_enc_file" -out "$wolf_dec_file" -d -p
         
         if cmp -s "test.txt" "$wolf_dec_file"; then
-            echo "[PASS] wolfProvider AES-${key_size}-${mode} encryption/decryption"
+            echo "[PASS] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
         else
-            echo "[FAIL] wolfProvider AES-${key_size}-${mode} encryption/decryption"
-            exit 1
-        fi
-        
-        # Cross-provider test: Encrypt with OpenSSL, decrypt with wolfProvider
-        echo "Cross-provider test (OpenSSL encrypt, wolfProvider decrypt):"
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
-            -in "$enc_file" -out "aes_outputs/cross_dec_${key_size}_${mode}.txt" -d -p
-        
-        if cmp -s "test.txt" "aes_outputs/cross_dec_${key_size}_${mode}.txt"; then
-            echo "[PASS] Cross-provider AES-${key_size}-${mode} decryption"
-        else
-            echo "[FAIL] Cross-provider AES-${key_size}-${mode} decryption"
+            echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
             exit 1
         fi
     done
