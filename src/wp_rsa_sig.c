@@ -1365,17 +1365,35 @@ static int wp_rsa_verify_recover_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, const unsigned char* rout,
+static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, unsigned char* rout,
     size_t* routlen, size_t routsize, const unsigned char* sig, size_t sigLen)
 {
-    /* TODO: implement */
-    (void)ctx;
-    (void)rout;
-    (void)routlen;
-    (void)routsize;
-    (void)sig;
-    (void)sigLen;
-    return 0;
+    int rc;
+    int ok = 1;
+
+    if ((ctx == NULL) || (rout == NULL) || (routlen == NULL) || (sig == NULL)) {
+        ok = 0;
+    }
+
+    /* Only PKCS1 supported for now */
+    if (ok && (ctx->padMode != RSA_PKCS1_PADDING)) {
+        WOLFPROV_ERROR_MSG(WP_LOG_PK, "Only PKCS1 padding supported"
+                                      " for verify recover");
+        ok = 0;
+    }
+
+    if (ok) {
+        rc = wc_RsaSSL_Verify(sig, (word32)sigLen, rout, (word32)routsize,
+            wp_rsa_get_key(ctx->rsa));
+        if (rc < 0) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        *routlen = (size_t)rc;
+    }
+
+    return ok;
 }
 
 /**

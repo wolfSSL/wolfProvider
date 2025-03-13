@@ -213,6 +213,8 @@ int test_pkey_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
 int test_pkey_verify(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
     size_t hashLen, unsigned char *sig, size_t sigLen, int padMode,
     const EVP_MD *rsaMd, const EVP_MD *rsaMgf1Md);
+int test_pkey_verify_recover(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
+    size_t hashLen, unsigned char *sig, size_t sigLen, int padMode);
 
 int test_pkey_enc(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *msg,
     size_t msgLen, unsigned char *ciphertext, size_t cipherLen, int padMode,
@@ -230,6 +232,7 @@ int test_pkey_dec_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
                   const EVP_MD *rsaMd, const EVP_MD *rsaMgf1Md);
 int test_rsa_sign_sha1(void *data);
 int test_rsa_sign_verify_pkcs1(void *data);
+int test_rsa_sign_verify_recover_pkcs1(void *data);
 int test_rsa_sign_verify_pss(void *data);
 int test_rsa_sign_verify_x931(void *data);
 int test_rsa_enc_dec_pkcs1(void *data);

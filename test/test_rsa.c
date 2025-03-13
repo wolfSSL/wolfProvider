@@ -361,6 +361,84 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
     return err;
 }
 
+
+static int test_rsa_sign_verify_recover(int padMode)
+{
+    int err;
+    int res;
+    EVP_PKEY *pkey = NULL;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    const RSA *rsaKey = NULL;
+#else
+    RSA *rsaKey = NULL;
+#endif
+    unsigned char *rsaSig = NULL;
+    size_t rsaSigLen = 0;
+    size_t bufLen = 20;
+    unsigned char *buf = NULL;
+    const unsigned char *p = rsa_key_der_2048;
+
+    PRINT_MSG("Load RSA key");
+    pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
+    err = pkey == NULL;
+    if (err == 0) {
+        rsaKey = EVP_PKEY_get0_RSA(pkey);
+        err = rsaKey == NULL;
+    }
+    if (err == 0) {
+        rsaSigLen = RSA_size(rsaKey);
+        rsaSig = (unsigned char*)OPENSSL_malloc(rsaSigLen);
+        err = rsaSig == NULL;
+    }
+    if (err == 0) {
+        buf = (unsigned char *)OPENSSL_malloc(bufLen);
+        err = buf == NULL;
+    }
+    if (err == 0) {
+        err = RAND_bytes(buf, (int)bufLen) == 0;
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Test signing/verifying arbitrary data");
+        PRINT_MSG("Sign with OpenSSL");
+        err = test_pkey_sign(pkey, osslLibCtx, buf, bufLen, rsaSig, &rsaSigLen,
+            padMode, NULL, NULL);
+    }
+    if (err == 0) {
+        PRINT_MSG("Verify with wolfprovider");
+        err = test_pkey_verify_recover(pkey, wpLibCtx, buf, bufLen, rsaSig, rsaSigLen,
+            padMode);
+    }
+    if (err == 0) {
+        PRINT_MSG("Verify bad signature with wolfprovider");
+        rsaSig[1] ^= 0x80;
+        res = test_pkey_verify_recover(pkey, wpLibCtx, buf, bufLen, rsaSig, rsaSigLen,
+            padMode);
+        if (res != 1)
+            err = 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Sign with wolfprovider");
+        rsaSigLen = RSA_size(rsaKey);
+        err = test_pkey_sign(pkey, wpLibCtx, buf, bufLen, rsaSig, &rsaSigLen,
+            padMode, NULL, NULL);
+    }
+    if (err == 0) {
+        PRINT_MSG("Verify with OpenSSL");
+        err = test_pkey_verify_recover(pkey, osslLibCtx, buf, bufLen, rsaSig, rsaSigLen,
+            padMode);
+    }
+
+    EVP_PKEY_free(pkey);
+
+    if (rsaSig)
+        OPENSSL_free(rsaSig);
+    if (buf)
+        OPENSSL_free(buf);
+
+    return err;
+}
+
 int test_rsa_sign_sha1(void *data)
 {
     int err = 0;
@@ -427,6 +505,13 @@ int test_rsa_sign_verify_pkcs1(void *data)
     (void)data;
 
     return test_rsa_sign_verify_pad(RSA_PKCS1_PADDING, NULL, NULL);
+}
+
+int test_rsa_sign_verify_recover_pkcs1(void *data)
+{
+    (void)data;
+
+    return test_rsa_sign_verify_recover(RSA_PKCS1_PADDING);
 }
 
 int test_rsa_sign_verify_pss(void *data)
