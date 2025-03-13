@@ -40,8 +40,13 @@ echo -e "\n=== Running RSA Key Generation Test ==="
 "$SCRIPT_DIR/rsa-cmd-test.sh"
 RSA_RESULT=$?
 
+# Run the ECC key generation test
+echo -e "\n=== Running ECC Key Generation Test ==="
+"$SCRIPT_DIR/ecc-cmd-test.sh"
+ECC_RESULT=$?
+
 # Check results
-if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ]; then
+if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ] && [ $ECC_RESULT -eq 0 ]; then
     echo -e "\n=== All Command-Line Tests Passed ==="
     exit 0
 else
@@ -49,5 +54,6 @@ else
     echo "Hash Test Result: $HASH_RESULT (0=success)"
     echo "AES Test Result: $AES_RESULT (0=success)"
     echo "RSA Test Result: $RSA_RESULT (0=success)"
+    echo "ECC Test Result: $ECC_RESULT (0=success)"
     exit 1
 fi
