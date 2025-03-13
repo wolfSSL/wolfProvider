@@ -80,7 +80,7 @@ for algo in "${HASH_ALGOS[@]}"; do
     run_hash_test $algo "-provider default" "hash_outputs/openssl_${algo}.txt"
     
     # Test with wolfProvider
-    run_hash_test $algo "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME" "hash_outputs/wolf_${algo}.txt"
+    run_hash_test $algo "-provider-path $WOLFPROV_PATH" "hash_outputs/wolf_${algo}.txt"
     
     # Compare results
     compare_hashes $algo || exit 1

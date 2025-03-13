@@ -80,11 +80,11 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Testing with wolfProvider:"
         
         # Encryption with wolfProvider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME \
+        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
             -in test.txt -out "$wolf_enc_file" -p
         
         # Decryption with wolfProvider
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME \
+        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
             -in "$wolf_enc_file" -out "$wolf_dec_file" -d -p
         
         if cmp -s "test.txt" "$wolf_dec_file"; then
@@ -96,7 +96,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         
         # Cross-provider test: Encrypt with OpenSSL, decrypt with wolfProvider
         echo "Cross-provider test (OpenSSL encrypt, wolfProvider decrypt):"
-        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME \
+        openssl enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH \
             -in "$enc_file" -out "aes_outputs/cross_dec_${key_size}_${mode}.txt" -d -p
         
         if cmp -s "test.txt" "aes_outputs/cross_dec_${key_size}_${mode}.txt"; then
