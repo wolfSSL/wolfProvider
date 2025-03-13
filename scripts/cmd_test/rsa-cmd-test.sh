@@ -62,6 +62,51 @@ KEY_SIZES=("2048" "3072" "4096")
 
 echo "=== Running RSA Key Generation Tests ==="
 
+# Function to validate key using only the default provider
+validate_key() {
+    local key_size=$1
+    local key_file="rsa_outputs/rsa_wolf_${key_size}.pem"
+    local pub_key_file="rsa_outputs/rsa_wolf_${key_size}_pub.pem"
+    local data_file="rsa_outputs/test_data.txt"
+    local sig_file="rsa_outputs/default_signature_${key_size}.bin"
+    
+    echo -e "\n=== Validating RSA-${key_size} Key with Default Provider ==="
+    
+    # Extract public key for verification using default provider
+    openssl rsa -in "$key_file" -pubout \
+        -provider default -passin pass: \
+        -out "$pub_key_file"
+    
+    if [ ! -s "$pub_key_file" ]; then
+        echo "[FAIL] RSA-${key_size} public key extraction failed"
+        exit 1
+    fi
+    
+    # Sign data with default provider
+    echo "Signing data with default provider..."
+    openssl dgst -sha256 -sign "$key_file" \
+        -provider default -passin pass: \
+        -out "$sig_file" "$data_file"
+    
+    if [ ! -s "$sig_file" ]; then
+        echo "[FAIL] RSA-${key_size} signing with default provider failed"
+        exit 1
+    fi
+    
+    # Verify signature with default provider
+    echo "Verifying signature with default provider..."
+    openssl dgst -sha256 -verify "$pub_key_file" \
+        -provider default \
+        -signature "$sig_file" "$data_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "[PASS] Default provider: RSA-${key_size} sign/verify successful"
+    else
+        echo "[FAIL] Default provider: RSA-${key_size} sign/verify failed"
+        exit 1
+    fi
+}
+
 # Function to test interoperability between wolfProvider and OpenSSL
 test_sign_verify_interop() {
     local key_size=$1
@@ -154,6 +199,9 @@ for key_size in "${KEY_SIZES[@]}"; do
     echo "Key information:"
     openssl rsa -in "rsa_outputs/rsa_wolf_${key_size}.pem" -text -noout \
         -provider-path $WOLFPROV_PATH -provider libwolfprov
+    
+    # Validate key using default provider only
+    validate_key "$key_size"
     
     # Test interoperability between wolfProvider and OpenSSL
     test_sign_verify_interop "$key_size"
