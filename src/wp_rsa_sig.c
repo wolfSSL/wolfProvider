@@ -1377,7 +1377,8 @@ static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, unsigned char* rout,
 
     /* Only PKCS1 supported for now */
     if (ok && (ctx->padMode != RSA_PKCS1_PADDING)) {
-        WOLFPROV_ERROR_MSG(WP_LOG_PK, "Only PKCS1 padding supported for verify recover");
+        WOLFPROV_ERROR_MSG(WP_LOG_PK, "Only PKCS1 padding supported"
+                                      " for verify recover");
         ok = 0;
     }
 
