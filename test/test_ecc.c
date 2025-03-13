@@ -268,6 +268,115 @@ static const unsigned char ecc_derived_521[] = {
 
 #ifdef WP_HAVE_ECKEYGEN
 
+static int test_eckeygen_name_ex(const char *name, int setEncoding, int expectFail) {
+    int err;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *key = NULL;
+    (void)expectFail;
+
+    PRINT_MSG("Create public key context");
+    err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL)) == NULL;
+    if (err == 0) {
+        PRINT_MSG("Initialize key generation");
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Set named curve");
+        err = EVP_PKEY_CTX_ctrl_str(ctx, "ec_paramgen_curve", name) != 1;
+    }
+    if (err == 0 && setEncoding) {
+        /* For now only testing explictly setting named curve encoding */
+        err = EVP_PKEY_CTX_ctrl_str(ctx, "ec_param_enc",
+                OSSL_PKEY_EC_ENCODING_GROUP) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Generate key");
+        err = EVP_PKEY_keygen(ctx, &key) != 1;
+    #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+        if (expectFail) {
+            err = err != 1;
+            if (err == 0) {
+                PRINT_MSG("Key gen failed, expected"
+                          "(P-192 not allowed w/ FIPS)");
+            }
+            else {
+                PRINT_MSG("Key gen succeeded, unexpected"
+                          "(P-192 not allowed w/FIPS)");
+            }
+        }
+    #endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
+    }
+
+    EVP_PKEY_free(key);
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
+
+int test_eckeygen_name(void *data) {
+    int err = 0;
+    (void)data;
+#ifdef WP_HAVE_EC_P192
+#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+    err = test_eckeygen_name_ex("P-192", 0, 1);
+#else
+    err = test_eckeygen_name_ex("P-192", 0, 0);
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-192", 1, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex(SN_X9_62_prime192v1, 1, 0);
+    }
+#endif
+#endif
+#ifdef WP_HAVE_EC_P224
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-192", 0, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-192", 1, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex(SN_secp224r1, 1, 0);
+    }
+#endif
+#ifdef WP_HAVE_EC_P256
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-256", 0, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-256", 1, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex(SN_X9_62_prime256v1, 1, 0);
+    }
+#endif
+#ifdef WP_HAVE_EC_P384
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-384", 0, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-384", 1, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex(SN_secp384r1, 1, 0);
+    }
+#endif
+#ifdef WP_HAVE_EC_P521
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-521", 0, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex("P-521", 1, 0);
+    }
+    if (err == 0) {
+        err = test_eckeygen_name_ex(SN_secp521r1, 1, 0);
+    }
+#endif
+
+    return err;
+}
+
 #ifdef WP_HAVE_EC_P192
 int test_eckeygen_p192(void *data)
 {
