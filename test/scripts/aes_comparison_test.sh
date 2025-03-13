@@ -38,7 +38,7 @@ echo "This is test data for AES encryption testing." > test.txt
 # Arrays for test configurations
 KEY_SIZES=("128" "192" "256")
 # Only include modes supported by wolfProvider
-MODES=("ecb" "cbc" "ctr")
+MODES=("ecb" "cbc" "ctr" "cfb")
 
 
 echo "=== Running AES Algorithm Comparisons ==="
