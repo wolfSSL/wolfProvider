@@ -260,6 +260,10 @@ TEST_CASE test_case[] = {
     #endif
     #endif
 #endif
+#ifdef WP_HAVE_ECKEYGEN
+    TEST_DECL(test_eckeygen_name, NULL),
+#endif
+
 #ifdef WP_HAVE_ECDSA
     TEST_DECL(test_ec_load_key, NULL),
     TEST_DECL(test_ec_load_cert, NULL),
