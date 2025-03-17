@@ -295,6 +295,7 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
     const OSSL_PARAM params[])
 {
     int ok = 1;
+    OSSL_PARAM *p;
 
     if (params != NULL) {
         if (!wp_params_get_digest(params, NULL, ctx->provCtx->libCtx,
@@ -304,13 +305,27 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
         if (ok && (!wp_hkdf_base_get_mode(params, &ctx->mode))) {
             ok = 0;
         }
-        if (ok && (!wp_params_get_octet_string(params, OSSL_KDF_PARAM_KEY,
-                &ctx->key, &ctx->keySz, 1))) {
-            ok = 0;
+        if (ok) {
+            p = OSSL_PARAM_locate((OSSL_PARAM *)params, OSSL_KDF_PARAM_KEY);
+            if ((p != NULL) && (p->data != NULL)) {
+                OPENSSL_clear_free(ctx->key, ctx->keySz);
+                ctx->key = NULL;
+                if (!OSSL_PARAM_get_octet_string(
+                        p, (void**)&ctx->key, 0, &ctx->keySz)) {
+                    ok = 0;
+                }
+            }
         }
-        if (ok && (!wp_params_get_octet_string(params, OSSL_KDF_PARAM_SALT,
-                &ctx->salt, &ctx->saltSz, 0))) {
-            ok = 0;
+        if (ok) {
+            p = OSSL_PARAM_locate((OSSL_PARAM *)params, OSSL_KDF_PARAM_SALT);
+            if ((p != NULL) && (p->data != NULL)) {
+                OPENSSL_free(ctx->salt);
+                ctx->salt = NULL;
+                if (!OSSL_PARAM_get_octet_string(
+                        p, (void**)&ctx->salt, 0, &ctx->saltSz)) {
+                    ok = 0;
+                }
+            }
         }
     }
 
