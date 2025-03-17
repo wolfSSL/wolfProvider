@@ -33,32 +33,38 @@ WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
-    if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
-        WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
-        if [ "${WOLFSSL_TAG_CUR}" != "${WOLFSSL_TAG}" ]; then # force a rebuild
-            printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR} (expected: ${WOLFSSL_TAG}, got: ${WOLFSSL_TAG_CUR})\n"
-            do_cleanup
-            exit 1
+    if [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
+        rm -rf ${WOLFSSL_SOURCE_DIR}
+        mkdir ${WOLFSSL_SOURCE_DIR}
+        cp -pr ${WOLFSSL_FIPS_BUNDLE}/* ${WOLFSSL_SOURCE_DIR}/
+    else
+        if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
+            WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
+            if [ "${WOLFSSL_TAG_CUR}" != "${WOLFSSL_TAG}" ]; then # force a rebuild
+                printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR} (expected: ${WOLFSSL_TAG}, got: ${WOLFSSL_TAG_CUR})\n"
+                do_cleanup
+                exit 1
+            fi
         fi
-    fi
 
-    if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
-        printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
-        if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
-                 ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-            RET=$?
-        else
-            git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
-                 ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-            RET=$?
+        if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
+            printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
+            if [ "$WOLFPROV_DEBUG" = "1" ]; then
+                git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
+                    ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+                RET=$?
+            else
+                git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
+                    ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+                RET=$?
+            fi
+            if [ $RET != 0 ]; then
+                printf "ERROR cloning\n"
+                do_cleanup
+                exit 1
+            fi
+            printf "Done.\n"
         fi
-        if [ $RET != 0 ]; then
-            printf "ERROR cloning\n"
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
     fi
 }
 
@@ -76,7 +82,15 @@ install_wolfssl() {
             CONF_ARGS+=" --enable-debug --enable-debug-trace-errcodes=backtrace --enable-keylog-export"
             WOLFSSL_CONFIG_CFLAGS+=" -DWOLFSSL_LOGGINGENABLED_DEFAULT=1"
         fi
-        if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+        if [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
+            if [ ! -n "$WOLFSSL_FIPS_VERSION" ]; then
+                printf "ERROR, must specify version if using FIPS bundle (v5, v6, ready)"
+                do_cleanup
+                exit 1
+            fi
+            printf "using FIPS bundle ... "
+            CONF_ARGS+=" --enable-fips=$WOLFSSL_FIPS_VERSION"
+        elif [ "$WOLFSSL_ISFIPS" = "1" ]; then
             printf "with FIPS ... "
             CONF_ARGS+=" --enable-fips=v5"
             if [ ! -e "XXX-fips-test" ]; then
@@ -117,6 +131,10 @@ install_wolfssl() {
             exit 1
         fi
         printf "Done.\n"
+
+        if [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
+            ./fips-hash.sh
+        fi
 
         printf "\tInstalling wolfSSL ${WOLFSSL_TAG} ... "
         make install >>$LOG_FILE 2>&1

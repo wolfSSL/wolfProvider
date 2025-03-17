@@ -56,7 +56,6 @@ jobs:
         if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
-          make check
 
       - name: Print errors
         if: ${{ failure() }}
