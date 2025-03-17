@@ -254,6 +254,8 @@ int test_dh_pkey(void *data);
 
 #ifdef WP_HAVE_ECKEYGEN
 
+int test_eckeygen_name(void *data);
+
 #ifdef WP_HAVE_EC_P192
 int test_eckeygen_p192(void *data);
 #endif /* WP_HAVE_EC_P192 */
