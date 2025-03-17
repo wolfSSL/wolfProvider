@@ -162,6 +162,42 @@ int test_pkey_verify(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
     return err;
 }
 
+int test_pkey_verify_recover(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
+    size_t hashLen, unsigned char *sig, size_t sigLen, int padMode)
+{
+    int err;
+    EVP_PKEY_CTX *ctx = NULL;
+    unsigned char rout[512];
+    size_t routLen = 512;
+
+    err = (ctx = EVP_PKEY_CTX_new_from_pkey(libCtx, pkey, NULL)) == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_verify_recover_init(ctx) != 1;
+    }
+    if ((err == 0) && padMode) {
+        err = EVP_PKEY_CTX_set_rsa_padding(ctx, padMode) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_verify_recover(ctx, rout, &routLen, sig, sigLen) != 1;
+    }
+    if (err == 0) {
+        if ((routLen != hashLen) ||
+            (memcmp(rout, hash, hashLen) != 0)) {
+                err = 1;
+        }
+    }
+    if (err == 0) {
+        PRINT_MSG("Signature verified");
+    }
+    else {
+        PRINT_MSG("Signature not verified");
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
+
 int test_pkey_enc(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *msg,
     size_t msgLen, unsigned char *ciphertext, size_t cipherLen, int padMode,
     const EVP_MD *rsaMd, const EVP_MD *rsaMgf1Md)
