@@ -331,10 +331,10 @@ int test_eckeygen_name(void *data) {
 #endif
 #ifdef WP_HAVE_EC_P224
     if (err == 0) {
-        err = test_eckeygen_name_ex("P-192", 0, 0);
+        err = test_eckeygen_name_ex("P-224", 0, 0);
     }
     if (err == 0) {
-        err = test_eckeygen_name_ex("P-192", 1, 0);
+        err = test_eckeygen_name_ex("P-224", 1, 0);
     }
     if (err == 0) {
         err = test_eckeygen_name_ex(SN_secp224r1, 1, 0);
