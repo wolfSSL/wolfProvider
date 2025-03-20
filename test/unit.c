@@ -282,7 +282,7 @@ static void usage(void)
     printf("  --help          Show this usage information.\n");
     printf("  --static        Run the tests using the static provider.\n");
     printf("  --dir <path>    Location of wolfprovider shared library.\n");
-    printf("                  Default: .libs\n");
+    printf("                  Default: .libs (relative to test directory)\n");
     printf("  --provider <str>  Name of wolfssl provider. Default: libwolfprov\n");
     printf("  --no-key-limits   No limits on key size.\n");
 #ifdef TEST_MULTITHREADED
