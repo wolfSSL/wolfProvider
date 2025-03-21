@@ -858,7 +858,7 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
             ok = 0;
         }
         else if (mp_cmp(&toMp, &nMinusTo) == MP_GT) {
-            rc = mp_to_unsigned_bin(&nMinusTo, sig);
+            rc = mp_to_unsigned_bin_len(&nMinusTo, sig, *sigLen);
             if (rc != MP_OKAY) {
                 ok = 0;
             }
