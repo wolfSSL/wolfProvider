@@ -16,12 +16,15 @@ lib_LTLIBRARIES = libwolfprov.la
 
 EXTRA_DIST+=ChangeLog.md
 EXTRA_DIST+=README.md
+EXTRA_DIST+=IDE
+EXTRA_DIST+=examples
 
 include src/include.am
 include include/include.am
 include test/include.am
 include certs/include.am
 include scripts/include.am
+include examples/include.am
 
 #noinst_PROGRAMS += bench
 #bench_SOURCES    = bench.c
