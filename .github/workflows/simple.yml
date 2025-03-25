@@ -35,8 +35,10 @@ jobs:
       - name: Test wolfProvider
         run: |
           ${{ matrix.config }} ./scripts/build-wolfprovider.sh
+          make check
+          ./scripts/cmd_test/do-cmd-tests.sh
 
-      - name: Print errors 
+      - name: Print errors
         if: ${{ failure() }}
         run: |
           if [ -f test-suite.log ] ; then
