@@ -258,30 +258,34 @@ static int wp_ecx_digest_verify_init(wp_EcxSigCtx *ctx, const char *mdName,
 }
 
 /**
- * Put DER encoding of the ECX signature algorithm in the parameter object.
+ * Put DER encoding of the Ed25519 signature algorithm in the parameter object.
  *
  * @param [in] ctx  ECX signature context object.
  * @param [in] p    Parameter object.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_ecx_get_alg_id(wp_EcxSigCtx *ctx, OSSL_PARAM *p)
+static int wp_ed25519_get_alg_id(wp_EcxSigCtx *ctx, OSSL_PARAM *p)
 {
-    /* TODO: implement */
+    /* Ed25519 Algorithm Id: SEQ OBJ 2b 65 70 */
+    static const byte ed25519AlgId[] = {
+        0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70,
+    };
+
     (void)ctx;
-    (void)p;
-    return 0;
+
+    return OSSL_PARAM_set_octet_string(p, ed25519AlgId, sizeof(ed25519AlgId));
 }
 
 /**
- * Put data from ECX signture context object into parameter objects.
+ * Put data from Ed25519 signture context object into parameter objects.
  *
  * @param [in] ctx     ECX signature context object.
  * @param [in] params  Array of parameter objects.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_ecx_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
+static int wp_ed25519_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
 {
     int ok = 1;
     OSSL_PARAM *p;
@@ -293,7 +297,55 @@ static int wp_ecx_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
     if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
         if (p != NULL) {
-            ok = wp_ecx_get_alg_id(ctx, p);
+            ok = wp_ed25519_get_alg_id(ctx, p);
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Put DER encoding of the Ed448 signature algorithm in the parameter object.
+ *
+ * @param [in] ctx  ECX signature context object.
+ * @param [in] p    Parameter object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed448_get_alg_id(wp_EcxSigCtx *ctx, OSSL_PARAM *p)
+{
+    /* Ed448 Algorithm Id: SEQ OBJ 2b 65 71 */
+    static const byte ed448AlgId[] = {
+        0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x71,
+    };
+
+    (void)ctx;
+
+    return OSSL_PARAM_set_octet_string(p, ed448AlgId, sizeof(ed448AlgId));
+}
+
+/**
+ * Put data from Ed448 signture context object into parameter objects.
+ *
+ * @param [in] ctx     ECX signature context object.
+ * @param [in] params  Array of parameter objects.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed448_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
+{
+    int ok = 1;
+    OSSL_PARAM *p;
+
+    if (ctx == NULL) {
+        ok = 0;
+    }
+
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
+        if (p != NULL) {
+            ok = wp_ed448_get_alg_id(ctx, p);
         }
     }
 
@@ -458,7 +510,7 @@ const OSSL_DISPATCH wp_ed25519_signature_functions[] = {
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_INIT,
                                             (DFUNC)wp_ecx_digest_verify_init  },
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY,    (DFUNC)wp_ed25519_digest_verify   },
-    { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,   (DFUNC)wp_ecx_get_ctx_params      },
+    { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,   (DFUNC)wp_ed25519_get_ctx_params  },
     { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,
                                             (DFUNC)wp_ecx_gettable_ctx_params },
     { 0, NULL }
@@ -606,7 +658,7 @@ const OSSL_DISPATCH wp_ed448_signature_functions[] = {
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_INIT,
                                             (DFUNC)wp_ecx_digest_verify_init  },
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY,    (DFUNC)wp_ed448_digest_verify     },
-    { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,   (DFUNC)wp_ecx_get_ctx_params      },
+    { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,    (DFUNC)wp_ed448_get_ctx_params   },
     { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,
                                             (DFUNC)wp_ecx_gettable_ctx_params },
     { 0, NULL }

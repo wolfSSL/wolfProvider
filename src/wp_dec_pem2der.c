@@ -294,7 +294,8 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataFormat = "SubjectPublicKeyInfo";
         obj = OSSL_OBJECT_PKEY;
     }
-    else if (XMEMCMP(data, "-----BEGIN DH PARAMETERS-----", 29) == 0) {
+    else if ((XMEMCMP(data, "-----BEGIN DH PARAMETERS-----", 29) == 0) ||
+             (XMEMCMP(data, "-----BEGIN X9.42 DH PARAMETERS-----", 35) == 0)) {
         type = DH_PARAM_TYPE;
         dataType = NULL;
         dataFormat = "type-specific";

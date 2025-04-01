@@ -99,6 +99,8 @@
 /** Maximum salt length for PKCS. */
 #define WP_MAX_SALT_SIZE    64
 
+/** Default salt length for PSS. */
+#define WP_RSA_DEFAULT_SALT_LEN     20
 
 /* These values are taken from ssl.h.
  * Can't include this header as it re-declares OpenSSL types.

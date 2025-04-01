@@ -866,8 +866,9 @@ static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
+    /* Check the curve ID to see whether the parameters are the same. */
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) &&
-        (ecc1->key.dp->id != ecc2->key.dp->id)) {
+            (ecc1->curveId != ecc2->curveId)) {
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0)) {
@@ -2535,9 +2536,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
                (ctx->format == WP_ENC_FORMAT_X9_62))) {
         if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
-            if (ctx->format == WP_ENC_FORMAT_X9_62) {
-                pemType = ECC_PRIVATEKEY_TYPE;
-            }
+            pemType = ECC_PRIVATEKEY_TYPE;
             private = 1;
             if (!wp_ecc_encode_priv(key, derData, &derLen)) {
                 ok = 0;

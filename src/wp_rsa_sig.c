@@ -33,9 +33,8 @@
 
 /* wolfCrypt FIPS does not have this defined */
 #ifndef RSA_PSS_SALT_LEN_DEFAULT
-    #define RSA_PSS_SALT_LEN_DEFAULT -1
+    #define RSA_PSS_SALT_LEN_DEFAULT    -1
 #endif
-
 
 /**
  * Maximum DER digest size, taken from wolfSSL. Sum of the maximum size of the
@@ -55,7 +54,7 @@ static OSSL_ITEM wp_pad_mode[] = {
 #define WP_PAD_MODE_LEN    (sizeof(wp_pad_mode) / sizeof(*wp_pad_mode))
 
 /** Default message digest for RSA. */
-#define WP_RSA_DEFAULT_MD       "SHA1"
+#define WP_RSA_DEFAULT_MD       "SHA256"
 
 /**
  * RSA signature context.
@@ -381,6 +380,11 @@ static int wp_pss_salt_len_to_wc(int saltLen, enum wc_HashType hashType,
         saltLen = RSA_PSS_SALT_LEN_DISCOVER;
     #endif
     }
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+    else if (saltLen == RSA_PSS_SALTLEN_AUTO_DIGEST_MAX) {
+        saltLen = wc_HashGetDigestSize(hashType);
+    }
+#endif
 
     return saltLen;
 }
@@ -419,9 +423,15 @@ static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx* ctx)
         ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_SALT_LENGTH);
         ok = 0;
     }
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+    if (ok && (ctx->saltLen < RSA_PSS_SALTLEN_AUTO_DIGEST_MAX)) {
+        ok = 0;
+    }
+#else
     if (ok && (ctx->saltLen < RSA_PSS_SALTLEN_MAX)) {
         ok = 0;
     }
+#endif
     if (ok && (ctx->saltLen >= 0) && (ctx->saltLen < ctx->minSaltLen)) {
         ok = 0;
     }
@@ -466,17 +476,31 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
         }
     }
     if (ok) {
-        ctx->saltLen = RSA_PSS_SALTLEN_AUTO;
-
         if (wp_rsa_get_type(ctx->rsa) == RSA_FLAG_TYPE_RSA) {
             if (ctx->padMode != RSA_X931_PADDING) {
                 ctx->padMode = RSA_PKCS1_PADDING;
             }
         }
+        else if (!wp_rsa_get_pss_params_set(ctx->rsa)) {
+            ctx->padMode = RSA_PKCS1_PSS_PADDING;
+        #ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+            ctx->saltLen = RSA_PSS_SALTLEN_AUTO_DIGEST_MAX;
+        #else
+            ctx->saltLen = WP_RSA_DEFAULT_SALT_LEN;
+        #endif
+            ctx->minSaltLen = 0;
+        }
         else {
             char* mdName;
             char* mgfMdName;
+
             ctx->padMode = RSA_PKCS1_PSS_PADDING;
+        #ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+            ctx->saltLen = RSA_PSS_SALTLEN_AUTO_DIGEST_MAX;
+        #else
+            ctx->saltLen = RSA_PSS_SALTLEN_AUTO;
+        #endif
+
             wp_rsa_get_pss_mds(ctx->rsa, &mdName, &mgfMdName);
             if ((mdName == NULL) || (mdName[0] == '\0')) {
                 mdName = (char*)WP_RSA_DEFAULT_MD;
@@ -494,7 +518,7 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
                 ctx->minSaltLen = wp_rsa_get_pss_salt_len(ctx->rsa);
                 if (ok && !wp_rsa_check_pss_salt_len(ctx)) {
                     ok = 0;
-                }
+               }
             }
         }
     }
@@ -1599,6 +1623,35 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
     return ok;
 }
 
+/** Maximum buffer size for encoding RSA-PSS parameters into. */
+#define MAX_RSA_PSS_PARAMS_DER_LEN  128
+
+/**
+ * Get the RSA-PSS Algorithm ID DER encoding into the parameter.
+ *
+ * @param [in] ctx  RSA signature context object.
+ * @param [in] p    Parameter object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_pss_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
+{
+    int ok;
+    byte pssAlgId[MAX_RSA_PSS_PARAMS_DER_LEN];
+    word32 len = MAX_RSA_PSS_PARAMS_DER_LEN;
+
+    /* Encode RSA-PSS parameters into buffer. */
+    ok = wp_rsa_pss_encode_alg_id(ctx->rsa, ctx->mdName, ctx->mgf1MdName,
+        ctx->saltLen, pssAlgId, &len);
+    if (ok) {
+        /* Set RSA-PSS parameters into OpenSSL parameter. */
+        ok = OSSL_PARAM_set_octet_string(p, pssAlgId, len);
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
 /**
  * Put DER encoding of the RSA signature algorithm in the parameter object.
  *
@@ -1611,12 +1664,14 @@ static int wp_rsa_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
 {
     int ok = 0;
 
-    if ((XMEMCMP(ctx->mdName, "SHA256", 7) == 0) ||
+    if (ctx->padMode == RSA_PKCS1_PSS_PADDING) {
+        ok = wp_rsa_pss_get_alg_id(ctx, p);
+    }
+    else if ((XMEMCMP(ctx->mdName, "SHA256", 7) == 0) ||
         (XMEMCMP(ctx->mdName, "sha256", 7) == 0)) {
         static const byte sha256WithRSAEncryptionOid[] = {
-            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-            0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00, 0x04,
-            0x10
+            0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+            0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00
         };
         ok = OSSL_PARAM_set_octet_string(p, sha256WithRSAEncryptionOid,
             sizeof(sha256WithRSAEncryptionOid));
@@ -1624,9 +1679,8 @@ static int wp_rsa_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
     else if ((XMEMCMP(ctx->mdName, "SHA384", 7) == 0) ||
              (XMEMCMP(ctx->mdName, "sha384", 7) == 0)) {
         static const byte sha384WithRSAEncryptionOid[] = {
-            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-            0xf7, 0x0d, 0x01, 0x01, 0x0c, 0x05, 0x00, 0x04,
-            0x10
+            0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+            0xf7, 0x0d, 0x01, 0x01, 0x0c, 0x05, 0x00
         };
         ok = OSSL_PARAM_set_octet_string(p, sha384WithRSAEncryptionOid,
             sizeof(sha384WithRSAEncryptionOid));
@@ -1634,9 +1688,8 @@ static int wp_rsa_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
     else if ((XMEMCMP(ctx->mdName, "SHA512", 7) == 0) ||
              (XMEMCMP(ctx->mdName, "sha512", 7) == 0)) {
         static const byte sha512WithRSAEncryptionOid[] = {
-            0x30, 0x0b, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-            0xf7, 0x0d, 0x01, 0x01, 0x0d, 0x05, 0x00, 0x04,
-            0x10
+            0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+            0xf7, 0x0d, 0x01, 0x01, 0x0d, 0x05, 0x00
         };
         ok = OSSL_PARAM_set_octet_string(p, sha512WithRSAEncryptionOid,
             sizeof(sha512WithRSAEncryptionOid));
@@ -1717,6 +1770,11 @@ static int wp_rsa_get_salt_len(int saltLen, OSSL_PARAM* p)
         case RSA_PSS_SALTLEN_AUTO:
             saltLenStr = OSSL_PKEY_RSA_PSS_SALT_LEN_AUTO;
             break;
+    #ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+        case RSA_PSS_SALTLEN_AUTO_DIGEST_MAX:
+            saltLenStr = OSSL_PKEY_RSA_PSS_SALT_LEN_AUTO_DIGEST_MAX;
+            break;
+    #endif
         default:
             len = XSNPRINTF(p->data, p->data_size, "%d", saltLen);
             if (len <= 0) {
@@ -1958,6 +2016,12 @@ static int wp_rsa_set_salt_len(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
                           p->data_size) == 0) {
             ctx->saltLen = RSA_PSS_SALTLEN_AUTO;
         }
+    #ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+        else if (XSTRNCMP(p->data, OSSL_PKEY_RSA_PSS_SALT_LEN_AUTO_DIGEST_MAX,
+                          p->data_size) == 0) {
+            ctx->saltLen = RSA_PSS_SALTLEN_AUTO_DIGEST_MAX;
+        }
+    #endif
         else {
             ctx->saltLen = XATOI(p->data);
         }
