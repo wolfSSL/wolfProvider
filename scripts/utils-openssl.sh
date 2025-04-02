@@ -32,9 +32,10 @@ OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+USE_CUR_TAG=${USE_CUR_TAG:-0}
 
 clone_openssl() {
-    if [ -d ${OPENSSL_SOURCE_DIR} ]; then
+    if [ -d ${OPENSSL_SOURCE_DIR} ] && [ "$USE_CUR_TAG" != "1" ]; then
         OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
         if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
             printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR} (expected: ${OPENSSL_TAG}, got: ${OPENSSL_TAG_CUR})\n"
@@ -44,16 +45,17 @@ clone_openssl() {
     fi
 
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
-        printf "\tClone OpenSSL ${OPENSSL_TAG} ... "
-        if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            git clone -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
-                 ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-            RET=$?
-        else
-            git clone --depth=1 -b ${OPENSSL_TAG} ${OPENSSL_GIT} \
-                 ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-            RET=$?
-        fi
+        CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
+        CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
+
+        printf "\tClone OpenSSL ${CLONE_TAG} ... "
+
+        DEPTH_ARG=${WOLFPROV_DEBUG:+""}
+        DEPTH_ARG=${DEPTH_ARG:---depth=1}
+
+        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+        RET=$?
+
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
             do_cleanup

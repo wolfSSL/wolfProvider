@@ -25,12 +25,29 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
 UTILS_DIR="${REPO_ROOT}/scripts"
 
+# Get the built versions
+if [ -d "${REPO_ROOT}/openssl-source" ] && [ -d "${REPO_ROOT}/wolfssl-source" ]; then
+    # Get the actual versions that were built
+    export OPENSSL_TAG=$(cd ${REPO_ROOT}/openssl-source &&
+        (git describe --tags 2>/dev/null || git branch --show-current))
+    export WOLFSSL_TAG=$(cd ${REPO_ROOT}/wolfssl-source &&
+        (git describe --tags 2>/dev/null || git branch --show-current))
+else
+    echo "[FAIL] OpenSSL or wolfSSL source directories not found"
+    echo "Please run build-wolfprovider.sh first"
+    exit 1
+fi
+
+# Use the current version tags for testing
+export USE_CUR_TAG=1
+
 # Source OpenSSL utilities and initialize OpenSSL
 source "${UTILS_DIR}/utils-openssl.sh"
 init_openssl
 
 echo "=== Running wolfProvider Command-Line Tests ==="
-echo "Using OpenSSL binary: ${OPENSSL_BIN}"
+echo "Using OpenSSL version: ${OPENSSL_TAG}"
+echo "Using wolfSSL version: ${WOLFSSL_TAG}"
 
 # Run the hash comparison test
 echo -e "\n=== Running Hash Comparison Test ==="
