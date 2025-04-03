@@ -71,8 +71,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        haproxy_ref: [ 'master', '2.8' ]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        # List of refs to test
+        ref: [ master ]
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -95,7 +95,7 @@ jobs:
             wolfprov-install
             provider.conf
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install HAProxy dependencies
@@ -114,14 +114,21 @@ jobs:
         # Special flags due to: https://github.com/vtest/VTest/issues/12
         run: make FLAGS='-O2 -s -Wall'
 
-      - name: Build HAProxy
-        uses: wolfSSL/actions-build-autotools-project@v1
+      - name: Checkout HaProxy
+        uses: actions/checkout@v4
         with:
           repository: haproxy/haproxy
           path: haproxy
-          ref: ${{ matrix.haproxy_ref }}
-          configure: USE_OPENSSL=1 SSL_INC=$GITHUB_WORKSPACE/openssl-install/include SSL_LIB=$GITHUB_WORKSPACE/openssl-install/lib64
-          check: false
+          ref: ${{ matrix.ref }}
+
+      - name: Build HaProxy
+        working-directory: haproxy
+        run: >-
+          make -j TARGET=linux-glibc DEBUG='-DDEBUG_MEMORY_POOLS -DDEBUG_STRICT'
+          USE_OPENSSL=1 USE_QUIC=1
+          SSL_INC=$GITHUB_WORKSPACE/openssl-install/include/
+          SSL_LIB=$GITHUB_WORKSPACE/openssl-install/lib64/
+          ADDLIB=-Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64
 
       - name: Test HAProxy with wolfProvider
         working-directory: haproxy
