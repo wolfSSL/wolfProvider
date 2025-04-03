@@ -71,7 +71,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        stunnel_ref: [ 5.76 ]
+        stunnel_ref: [ 5.67 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
       - name: Retrieving OpenSSL from cache
