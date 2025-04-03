@@ -16,7 +16,7 @@ jobs:
   build_wolfprovider:
     name: Build wolfProvider
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
@@ -68,10 +68,10 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 10
     strategy:
       matrix:
-        stunnel_ref: [ 'master', '5.71' ]
+        stunnel_ref: [ 5.76 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
       - name: Retrieving OpenSSL from cache
@@ -103,20 +103,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwrap0-dev
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+
       - name: Build stunnel
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
           repository: mtrojnar/stunnel
+          ref: stunnel-${{ matrix.stunnel_ref }}
           path: stunnel
-          ref: ${{ matrix.stunnel_ref }}
-          configure: --with-ssl=$GITHUB_WORKSPACE/openssl-install
-          check: false
+          patch-file: $GITHUB_WORKSPACE/osp/stunnel/${{ matrix.stunnel_ref }}/stunnel-${{ matrix.stunnel_ref }}.patch
+          configure: --enable-wolfssl SSLDIR=$GITHUB_WORKSPACE/build-dir
+          check: true
 
-      - name: Test stunnel with wolfProvider
-        working-directory: stunnel
-        run: |
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
-          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          ./src/stunnel -version
-          make check
+      - name: Confirm stunnel built with wolfSSL
+        working-directory: ./stunnel
+        run: ldd src/stunnel | grep wolfssl
+
