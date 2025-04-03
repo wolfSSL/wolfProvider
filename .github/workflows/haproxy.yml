@@ -103,6 +103,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libpcre3-dev zlib1g-dev
 
+      - name: Checkout VTest
+        uses: actions/checkout@v4
+        with:
+          repository: vtest/VTest
+          path: VTest
+
+      - name: Build VTest
+        working-directory: VTest
+        # Special flags due to: https://github.com/vtest/VTest/issues/12
+        run: make FLAGS='-O2 -s -Wall'
+
       - name: Build HAProxy
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
@@ -115,8 +126,13 @@ jobs:
       - name: Test HAProxy with wolfProvider
         working-directory: haproxy
         run: |
+          # Set up the environment for wolfProvider
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+
+          # Show HAProxy version and OpenSSL information
           ./haproxy -vv
-          make reg-tests REGTESTS_TYPES=ssl
+
+          # Run tests exactly like wolfSSL does
+          make reg-tests reg-tests/ssl VTEST_PROGRAM=$GITHUB_WORKSPACE/VTest/vtest
