@@ -116,10 +116,14 @@ jobs:
           ref: stunnel-${{ matrix.stunnel_ref }}
           path: stunnel
           patch-file: $GITHUB_WORKSPACE/osp/stunnel/${{ matrix.stunnel_ref }}/stunnel-${{ matrix.stunnel_ref }}.patch
-          configure: --enable-wolfssl SSLDIR=$GITHUB_WORKSPACE/build-dir
+          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install/
           check: true
 
       - name: Confirm stunnel built with wolfSSL
         working-directory: ./stunnel
-        run: ldd src/stunnel | grep wolfssl
+        run: |
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          ldd src/stunnel | grep wolfssl
 
