@@ -14,16 +14,41 @@ concurrency:
 
 jobs:
   build_wolfprovider:
-    name: Build wolfProvider
-    runs-on: ubuntu-22.04
+    name: Build with ${{ matrix.CC }}
+    runs-on: ${{ matrix.OS }}
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        compiler: [gcc, clang]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        include:
+          - CC: gcc-10
+            CXX: g++-10
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+          - CC: gcc-10
+            CXX: g++-10
+            OS: ubuntu-22.04
+            wolfssl_ref: v5.7.4-stable
+          - CC: gcc-11
+            CXX: g++-11
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+          - CC: clang-12
+            CXX: clang++-12
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+          - CC: clang-14
+            CXX: clang++-14
+            OS: ubuntu-22.04
+            wolfssl_ref: master
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }} automake libtool
 
       # Check if this version of wolfssl/wolfprovider has already been built,
       # mark to cache these items on post if we do end up building
@@ -37,12 +62,12 @@ jobs:
             wolfprov-install
             provider.conf
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.compiler }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.CC }}-${{ github.sha }}
           lookup-only: true
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -50,83 +75,24 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends-${{ matrix.compiler }}
-
-      # Set up compiler environment
-      - name: Set up compiler
-        run: |
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            echo "CC=clang" >> $GITHUB_ENV
-            echo "CXX=clang++" >> $GITHUB_ENV
-          else
-            echo "CC=gcc" >> $GITHUB_ENV
-            echo "CXX=g++" >> $GITHUB_ENV
-          fi
+          key: ossl-${{ matrix.CC }}-depends
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        env:
+          CC: ${{ matrix.CC }}
+          CXX: ${{ matrix.CXX }}
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Print errors
         if: ${{ failure() }}
         run: |
-          if [ -f test-suite.log ] ; then
+          if [ -f test-suite.log ]; then
             cat test-suite.log
           fi
-
-  test_multi_compiler:
-    runs-on: ubuntu-22.04
-    needs: build_wolfprovider
-    # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
-    strategy:
-      matrix:
-        compiler: [gcc, clang]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-    steps:
-      - name: Retrieving OpenSSL from cache
-        uses: actions/cache/restore@v4
-        id: openssl-cache
-        with:
-          path: |
-            openssl-source
-            openssl-install
-
-          key: ossl-depends-${{ matrix.compiler }}
-          fail-on-cache-miss: true
-
-      - name: Retrieving wolfSSL/wolfProvider from cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-source
-            wolfssl-install
-            wolfprov-install
-            provider.conf
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.compiler }}-${{ github.sha }}
-          fail-on-cache-miss: true
-
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
-      # Set up compiler environment
-      - name: Set up compiler
-        run: |
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            echo "CC=clang" >> $GITHUB_ENV
-            echo "CXX=clang++" >> $GITHUB_ENV
-          else
-            echo "CC=gcc" >> $GITHUB_ENV
-            echo "CXX=g++" >> $GITHUB_ENV
+          if [ -f config.log ]; then
+            cat config.log
           fi
 
-      - name: Test wolfProvider
-        run: |
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
-          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          ./scripts/test-openssl.sh
