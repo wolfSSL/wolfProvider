@@ -119,11 +119,12 @@ jobs:
           configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install/
           check: true
 
-      - name: Confirm stunnel built with wolfSSL
+      - name: Verify stunnel with wolfProvider
         working-directory: ./stunnel
         run: |
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          ldd src/stunnel | grep wolfssl
+          ldd src/stunnel | grep -E '(libssl|libcrypto)'
+          ./src/stunnel -version
 
