@@ -1,0 +1,244 @@
+name: Stunnel Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        run: |
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  build_wolfprovider_force_fail:
+    name: Build wolfProvider with FORCE_FAIL
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-force-fail-cache
+        with:
+          path: |
+            wolfssl-source-force-fail
+            wolfssl-install-force-fail
+            wolfprov-install-force-fail
+            provider-force-fail.conf
+
+          key: wolfprov-force-fail-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-force-fail-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+
+      # If not yet built this version, build it now with FORCE_FAIL
+      - name: Build wolfProvider with FORCE_FAIL
+        if: steps.wolfprov-force-fail-cache.outputs.cache-hit != 'true'
+        run: |
+          # Build with FORCE_FAIL enabled
+          WOLFPROV_DEBUG=1 WOLFPROV_FORCE_FAIL=1 WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+          WOLFSSL_SOURCE_DIR=$GITHUB_WORKSPACE/wolfssl-source-force-fail \
+          WOLFSSL_INSTALL_DIR=$GITHUB_WORKSPACE/wolfssl-install-force-fail \
+          WOLFPROV_INSTALL_DIR=$GITHUB_WORKSPACE/wolfprov-install-force-fail \
+          ./scripts/build-wolfprovider.sh
+
+          # Create a provider.conf file for the force-fail build
+          cp provider.conf provider-force-fail.conf
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  test_stunnel:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        stunnel_ref: [ 'master', '5.71' ]
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install stunnel dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwrap0-dev
+
+      - name: Build stunnel
+        uses: wolfSSL/actions-build-autotools-project@v1
+        with:
+          repository: mtrojnar/stunnel
+          path: stunnel
+          ref: ${{ matrix.stunnel_ref }}
+          configure: --with-ssl=$GITHUB_WORKSPACE/openssl-install
+          check: false
+
+      - name: Test stunnel with wolfProvider
+        working-directory: stunnel
+        run: |
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          ./src/stunnel -version
+          make check
+
+  test_stunnel_force_fail:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider_force_fail
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        stunnel_ref: [ 'master', '5.71' ]
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-force-fail-cache
+        with:
+          path: |
+            wolfssl-source-force-fail
+            wolfssl-install-force-fail
+            wolfprov-install-force-fail
+            provider-force-fail.conf
+
+          key: wolfprov-force-fail-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install stunnel dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwrap0-dev
+
+      - name: Build stunnel
+        uses: wolfSSL/actions-build-autotools-project@v1
+        with:
+          repository: mtrojnar/stunnel
+          path: stunnel
+          ref: ${{ matrix.stunnel_ref }}
+          configure: --with-ssl=$GITHUB_WORKSPACE/openssl-install
+          check: false
+
+      - name: Test stunnel with wolfProvider (FORCE_FAIL)
+        working-directory: stunnel
+        run: |
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install-force-fail/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider-force-fail.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install-force-fail/lib
+
+          # Verify that stunnel fails when using wolfProvider with FORCE_FAIL
+          # First check that stunnel version works (doesn't use provider)
+          ./src/stunnel -version
+
+          # Now run a test that should fail due to WOLFPROV_FORCE_FAIL=1
+          # We expect this to fail, so we invert the exit code
+          ! make check || (echo "ERROR: Tests passed with WOLFPROV_FORCE_FAIL=1, which indicates wolfProvider is not being used" && exit 1)
