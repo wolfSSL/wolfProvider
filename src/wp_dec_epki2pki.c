@@ -210,6 +210,22 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
         done = 1;
         ok = 1;
     }
+    if ((!done) && ok) {
+        /* Try decrypting without password and look for ASN_PARSE_E to indicate
+         * that the format is not PKCS#8 encrypted.
+         * TODO: should be parsing the structure without decrypting to
+         *       determine it is encrypted PKCS#8.
+         */
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+        rc = wc_DecryptPKCS8Key(data, len, password, 0);
+    #else
+        rc = wp_DecryptPKCS8Key(data, len, password, 0);
+    #endif
+        if (rc == ASN_PARSE_E) {
+            done = 1;
+            ok = 1;
+        }
+    }
     if ((!done) && ok && (!pwCb(password, sizeof(password), &passwordLen, NULL,
             pwCbArg))) {
         done = 1;

@@ -142,7 +142,18 @@ int wolfProv_SetLogComponents(int componentMask);
     WOLFPROV_ERROR_FUNC_NULL_LINE(type, funcName, ret, __FILE__, __LINE__)
 
 void WOLFPROV_ENTER(int type, const char* msg);
-void WOLFPROV_LEAVE(int type, const char* msg, int ret);
+/* Call the extended version of the API with the function name of the caller. */
+#ifdef _WIN32
+    #define WOLFPROV_LEAVE(type, msg, ret) \
+        WOLFPROV_LEAVE_EX(type, __FUNCTION__, msg, ret)
+#elif __STDC__ && __STDC_VERSION__ >= 199901L
+    #define WOLFPROV_LEAVE(type, msg, ret) \
+        WOLFPROV_LEAVE_EX(type, __func__, msg, ret)
+#else
+    #define WOLFPROV_LEAVE(type, msg, ret) \
+        WOLFPROV_LEAVE_EX(type, "", msg, ret)
+#endif
+void WOLFPROV_LEAVE_EX(int type, const char* func, const char* msg, int ret);
 void WOLFPROV_MSG(int type, const char* fmt, ...);
 void WOLFPROV_MSG_VERBOSE(int type, const char* fmt, ...);
 void WOLFPROV_ERROR_LINE(int type, int err, const char* file, int line);

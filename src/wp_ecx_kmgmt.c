@@ -2571,8 +2571,22 @@ const OSSL_DISPATCH wp_ed25519_spki_decoder_functions[] = {
 static int wp_Ed25519PublicKeyToDer(ed25519_key* key, byte* output,
     word32 inLen)
 {
-    /* Always include the algorithm. */
-    return wc_Ed25519PublicKeyToDer(key, output, inLen, 1);
+    int ok = 1;
+
+    /* Check if this is private key only. */
+    if (!key->pubKeySet) {
+        int rc;
+        /* Make the public key to encode. */
+        rc = wc_ed25519_make_public(key, key->p, ED25519_PUB_KEY_SIZE);
+        ok = key->pubKeySet = (rc == 0);
+    }
+    if (ok) {
+        /* Always include the algorithm. */
+        ok = wc_Ed25519PublicKeyToDer(key, output, inLen, 1);
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**
@@ -3202,8 +3216,22 @@ const OSSL_DISPATCH wp_ed448_spki_decoder_functions[] = {
  */
 static int wp_Ed448PublicKeyToDer(ed448_key* key, byte* output, word32 inLen)
 {
-    /* Always include the algorithm. */
-    return wc_Ed448PublicKeyToDer(key, output, inLen, 1);
+    int ok = 1;
+
+    /* Check if this is private key only. */
+    if (!key->pubKeySet) {
+        int rc;
+        /* Make the public key to encode. */
+        rc = wc_ed448_make_public(key, key->p, ED448_PUB_KEY_SIZE);
+        ok = key->pubKeySet = (rc == 0);
+    }
+    if (ok) {
+        /* Always include the algorithm. */
+        ok = wc_Ed448PublicKeyToDer(key, output, inLen, 1);
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**

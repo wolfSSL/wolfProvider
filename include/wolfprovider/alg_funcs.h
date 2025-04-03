@@ -185,7 +185,10 @@ int wp_rsa_get_bits(wp_Rsa* rsa);
 RsaKey* wp_rsa_get_key(wp_Rsa* rsa);
 void wp_rsa_get_pss_mds(wp_Rsa* rsa, char** mdName, char** mgfMdName);
 int wp_rsa_get_pss_salt_len(wp_Rsa* rsa);
+int wp_rsa_get_pss_params_set(wp_Rsa* rsa);
 int wp_rsa_check_key_size(wp_Rsa* rsa, int allow1024);
+int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
+    const char* mgf1Name, int saltLen, byte* pssAlgId, word32* len);
 
 /* Internal ECC types and functions. */
 typedef struct wp_Ecc wp_Ecc;

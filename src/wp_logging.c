@@ -241,18 +241,20 @@ void WOLFPROV_ENTER(int component, const char* msg)
 }
 
 /**
- * Log function used to record function exit.
+ * Log function used to record function exit. Extended for function name.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param func [IN] Name of function that exitting.
  * @param msg  [IN] Log message.
  * @param ret  [IN] Value that function will be returning.
  */
-void WOLFPROV_LEAVE(int component, const char* msg, int ret)
+void WOLFPROV_LEAVE_EX(int component, const char* func, const char* msg,
+    int ret)
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), "wolfProv Leaving %s, return %d",
-                  msg, ret);
+        XSNPRINTF(buffer, sizeof(buffer), "wolfProv Leaving %s, return %d (%s)",
+                  msg, ret, func);
         wolfprovider_log(WP_LOG_LEAVE, component, buffer);
     }
 }
