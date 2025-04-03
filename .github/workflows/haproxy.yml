@@ -124,8 +124,8 @@ jobs:
       - name: Build HaProxy
         working-directory: haproxy
         run: >-
-          make -j TARGET=linux-glibc DEBUG='-DDEBUG_MEMORY_POOLS -DDEBUG_STRICT'
-          USE_OPENSSL=1 USE_QUIC=1
+          make -j TARGET=linux-glibc
+          USE_OPENSSL=1
           SSL_INC=$GITHUB_WORKSPACE/openssl-install/include/
           SSL_LIB=$GITHUB_WORKSPACE/openssl-install/lib64/
           ADDLIB=-Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64
