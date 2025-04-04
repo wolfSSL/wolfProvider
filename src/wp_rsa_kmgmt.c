@@ -2596,7 +2596,7 @@ static int wp_rsa_encode_spki(const wp_Rsa* rsa, unsigned char* keyData,
     int ok = 1;
     int ret;
 
-    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
     if (ret <= 0) {
         ok = 0;
     }
