@@ -30,6 +30,7 @@ WOLFSSL_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-all-crypto --with-eccminsz=
 WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DRSA_MIN_SIZE=1024"}
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+USE_CUR_TAG=${USE_CUR_TAG:-0}
 
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
@@ -38,7 +39,7 @@ clone_wolfssl() {
         mkdir ${WOLFSSL_SOURCE_DIR}
         cp -pr ${WOLFSSL_FIPS_BUNDLE}/* ${WOLFSSL_SOURCE_DIR}/
     else
-        if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
+        if [ -d ${WOLFSSL_SOURCE_DIR} ] && [ "$USE_CUR_TAG" != "1" ]; then
             WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
             if [ "${WOLFSSL_TAG_CUR}" != "${WOLFSSL_TAG}" ]; then # force a rebuild
                 printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR} (expected: ${WOLFSSL_TAG}, got: ${WOLFSSL_TAG_CUR})\n"
@@ -48,16 +49,17 @@ clone_wolfssl() {
         fi
 
         if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
-            printf "\tClone wolfSSL ${WOLFSSL_TAG} ... "
-            if [ "$WOLFPROV_DEBUG" = "1" ]; then
-                git clone -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
-                    ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-                RET=$?
-            else
-                git clone --depth=1 -b ${WOLFSSL_TAG} ${WOLFSSL_GIT} \
-                    ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-                RET=$?
-            fi
+            CLONE_TAG=${USE_CUR_TAG:+${WOLFSSL_TAG_CUR}}
+            CLONE_TAG=${CLONE_TAG:-${WOLFSSL_TAG}}
+
+            printf "\tClone wolfSSL ${CLONE_TAG} ... "
+
+            DEPTH_ARG=${WOLFPROV_DEBUG:+""}
+            DEPTH_ARG=${DEPTH_ARG:---depth=1}
+
+            git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${WOLFSSL_GIT} ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+
             if [ $RET != 0 ]; then
                 printf "ERROR cloning\n"
                 do_cleanup
