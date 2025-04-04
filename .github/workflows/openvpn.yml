@@ -98,20 +98,33 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
                      linux-libc-dev man2html libcmocka-dev python3-docutils \
                      libtool automake autoconf libnl-genl-3-dev libnl-genl-3-200
 
-      - name: Build and test OpenVPN
+      - name: workaround high-entropy ASLR
+        # not needed after either an update to llvm or runner is done
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
+      - if: ${{ matrix.openvpn_ref != 'master' }}
+        name: Build openvpn with fsanitize
+        run: |
+          echo 'extra_c_flags=CC="gcc -fsanitize=address" CFLAGS="-fno-omit-frame-pointer -O2"' >> $GITHUB_ENV
+
+      - name: Build OpenVPN with OpenSSL
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
           repository: OpenVPN/openvpn
-          path: openvpn
           ref: ${{ matrix.openvpn_ref }}
-          configure:
+          path: openvpn
+          configure: >-
+            --with-crypto-library=openssl
+            OPENSSL_CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
+            OPENSSL_LIBS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lssl -lcrypto"
+            ${{ env.extra_c_flags }}
           check: false
 
       - name: Test OpenVPN with wolfProvider
@@ -120,4 +133,7 @@ jobs:
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          ldd src/openvpn/openvpn | grep -E '(libssl|libcrypto)'
+          ./src/openvpn/openvpn --version
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl engine -c
           make check
