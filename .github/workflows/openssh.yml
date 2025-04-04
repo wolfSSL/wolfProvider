@@ -123,7 +123,7 @@ jobs:
             --with-ssl-dir=$GITHUB_WORKSPACE/openssl-install
             --with-rpath=-Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64
             --without-openssl-header-check
-            --with-prngd-port=EGD:/dev/urandom
+            --with-random=/dev/urandom
           check: false
 
       - name: Test openssh with wolfProvider
