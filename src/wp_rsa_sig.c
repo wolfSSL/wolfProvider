@@ -867,7 +867,7 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
     }
     if (ok) {
-        rc = mp_read_unsigned_bin(&toMp, sig, *sigLen);
+        rc = mp_read_unsigned_bin(&toMp, sig, (word32)*sigLen);
         if (rc != MP_OKAY) {
             ok = 0;
         }
@@ -882,7 +882,7 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
             ok = 0;
         }
         else if (mp_cmp(&toMp, &nMinusTo) == MP_GT) {
-            rc = mp_to_unsigned_bin_len(&nMinusTo, sig, *sigLen);
+            rc = mp_to_unsigned_bin_len(&nMinusTo, sig, (int)*sigLen);
             if (rc != MP_OKAY) {
                 ok = 0;
             }
