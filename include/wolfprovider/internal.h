@@ -103,7 +103,7 @@
 #define WP_RSA_DEFAULT_SALT_LEN     20
 
 /* These values are taken from ssl.h.
- * Can't include this header as it re-declares OpenSSL types.
+ * Can't include this header as it redeclares OpenSSL types.
  */
 /* Named Groups */
 enum {

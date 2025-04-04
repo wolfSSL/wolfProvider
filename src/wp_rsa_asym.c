@@ -32,7 +32,7 @@
 #ifdef WP_HAVE_RSA
 
 /* This define taken from ssl.h.
- * Can't include this header as it re-declares OpenSSL types.
+ * Can't include this header as it redeclares OpenSSL types.
  */
 #define WOLFSSL_MAX_MASTER_KEY_LENGTH   48
 
@@ -475,7 +475,7 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
  *
  * @param [in, out] ctx      RSA asymmetric cipher context object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -517,7 +517,7 @@ static int wp_rsaa_setup_md(wp_RsaAsymCtx* ctx, const char* mdName,
  *
  * @param [in, out] ctx      RSA asymmetric cipher context object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @return  1 on success.
  * @return  0 on failure.
  */

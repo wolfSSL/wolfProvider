@@ -209,7 +209,7 @@ const unsigned char wp_curve25519_order[] = {
  * Can put the secret through a KDF.
  *
  * @param [in]  ctx      ECX key exchange context object.
- * @param [out] secert   Buffer to hold secret/key.
+ * @param [out] secret   Buffer to hold secret/key.
  * @param [out] secLen   Length of secret/key data in bytes.
  * @param [in]  secSize  Size of buffer in bytes.
  * @return 1 on success.
@@ -295,7 +295,7 @@ const OSSL_DISPATCH wp_x25519_keyexch_functions[] = {
  * Can put the secret through a KDF.
  *
  * @param [in]  ctx      ECX key exchange context object.
- * @param [out] secert   Buffer to hold secret/key.
+ * @param [out] secret   Buffer to hold secret/key.
  * @param [out] secLen   Length of secret/key data in bytes.
  * @param [in]  secSize  Size of buffer in bytes.
  * @return 1 on success.

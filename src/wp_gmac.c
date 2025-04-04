@@ -208,7 +208,7 @@ static int wp_gmac_init(wp_GmacCtx* macCtx, const unsigned char* key,
  * Update the MAC state with data.
  *
  * @param [in, out] macCtx   GMAC context object to update.
- * @parma [in]      data     Data to be MACed.
+ * @param [in]      data     Data to be MACed.
  * @param [in]      dataLen  Length of data in bytes.
  * @return  1 on success.
  * @return  0 on failure.
