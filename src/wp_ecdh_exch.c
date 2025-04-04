@@ -290,7 +290,7 @@ static int wp_ecdh_derive_secret(wp_EcdhCtx* ctx, unsigned char* secret,
  * Can put the ECDH secret through a KDF.
  *
  * @param [in]  ctx      ECDH key exchange context object.
- * @param [out] secert   Buffer to hold secret/key.
+ * @param [out] secret   Buffer to hold secret/key.
  * @param [out] secLen   Length of secret/key data in bytes.
  * @param [in]  secSize  Size of buffer in bytes.
  * @return 1 on success.

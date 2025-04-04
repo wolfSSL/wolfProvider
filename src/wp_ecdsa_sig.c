@@ -406,7 +406,7 @@ static int wp_ecdsa_verify_recover(wp_EcdsaSigCtx *ctx, const unsigned char *rou
  *
  * @param [in, out] ctx      ECDSA signature context object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @param [in]      op       Signature operation being performed.
  * @return  1 on success.
  * @return  0 on failure.

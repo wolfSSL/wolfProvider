@@ -213,7 +213,7 @@ static int wp_kdf_tls1_prf_get_seed(wp_Tls1Prf_Ctx* ctx,
     const OSSL_PARAM *p;
     unsigned char* q = ctx->seed + ctx->seedSz;
 
-    /* Combine all the data in the seed parametrs. */
+    /* Combine all the data in the seed parameters. */
     while (ok && ((p = OSSL_PARAM_locate_const(params,
             OSSL_KDF_PARAM_SEED)) != NULL)) {
         size_t sz = 0;

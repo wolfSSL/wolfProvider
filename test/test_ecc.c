@@ -285,7 +285,7 @@ static int test_eckeygen_name_ex(const char *name, int setEncoding, int expectFa
         err = EVP_PKEY_CTX_ctrl_str(ctx, "ec_paramgen_curve", name) != 1;
     }
     if (err == 0 && setEncoding) {
-        /* For now only testing explictly setting named curve encoding */
+        /* For now only testing explicitly setting named curve encoding */
         err = EVP_PKEY_CTX_ctrl_str(ctx, "ec_param_enc",
                 OSSL_PKEY_EC_ENCODING_GROUP) != 1;
     }
