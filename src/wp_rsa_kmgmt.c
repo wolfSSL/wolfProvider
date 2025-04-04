@@ -2224,7 +2224,7 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     }
     if (ok) {
         /* Decrypt to encoded private key. */
-        int ret = wc_DecryptPKCS8Key(data, len, password, passwordSz);
+        int ret = wc_DecryptPKCS8Key(data, len, password, (int)passwordSz);
         if (ret <= 0) {
             ok = 0;
         }
@@ -2596,7 +2596,7 @@ static int wp_rsa_encode_spki(const wp_Rsa* rsa, unsigned char* keyData,
     int ok = 1;
     int ret;
 
-    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2692,7 +2692,7 @@ static int wp_rsa_encode_pub(const wp_Rsa* rsa, unsigned char* keyData,
     }
 #else
     /* TODO: Encodes with header. Strip it off. */
-    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2879,8 +2879,8 @@ static int wp_rsa_encode_enc_pki_size(const wp_RsaEncDecCtx* ctx,
     ok = wp_rsa_encode_pki_size(rsa, &len, RSA_ALGO_ID(ctx));
     if (ok) {
         /* Get encrypted encode private key. */
-        if (wc_EncryptPKCS8Key(fakeData, len, NULL, &outSz, "", 0, WP_PKCS5,
-                WP_PBES2, ctx->cipher, fakeSalt, sizeof(fakeSalt),
+        if (wc_EncryptPKCS8Key(fakeData, (word32)len, NULL, &outSz, "", 0,
+                WP_PKCS5, WP_PBES2, ctx->cipher, fakeSalt, sizeof(fakeSalt),
                 WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(ctx->provCtx),
                 NULL) != LENGTH_ONLY_E) {
             ok = 0;
@@ -2914,7 +2914,7 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
 {
     int ok = 1;
     size_t len;
-    word32 outSz = *keyLen;
+    word32 outSz = (word32)*keyLen;
     byte salt[WP_MAX_SALT_SIZE];
     int saltLen = 16;
     char password[1024];
@@ -2947,10 +2947,10 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
     }
     if (ok) {
         /* Encrypt encoded key - in and out buffers must be different. */
-        if (wc_EncryptPKCS8Key(encodedKey, len, keyData, &outSz, password,
-                passwordSz, WP_PKCS5, WP_PBES2, ctx->cipher, salt, saltLen,
-                WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(ctx->provCtx),
-                NULL) <= 0) {
+        if (wc_EncryptPKCS8Key(encodedKey, (word32)len, keyData, &outSz,
+                password, (word32)passwordSz, WP_PKCS5, WP_PBES2, ctx->cipher,
+                salt, saltLen, WP_PKCS12_ITERATIONS_DEFAULT,
+                wp_provctx_get_rng(ctx->provCtx), NULL) <= 0) {
             ok = 0;
         }
         else {
