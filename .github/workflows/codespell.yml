@@ -21,6 +21,12 @@ jobs:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
 
+      - name: Create exclude file if needed
+        run: |
+          if [ ! -f .codespellexcludelines ]; then
+            touch .codespellexcludelines
+          fi
+
       - name: Run codespell
         uses: codespell-project/actions-codespell@v2.1
         with:
