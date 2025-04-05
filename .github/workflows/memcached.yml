@@ -118,7 +118,11 @@ jobs:
           ./autogen.sh
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64:$LD_LIBRARY_PATH
           export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib/pkgconfig
-          ./configure --enable-wolfssl
+
+          # Configure with explicit pthread flags
+          LDFLAGS="-lpthread" CFLAGS="-pthread" ./configure --enable-wolfssl
+
+          # Build memcached
           make -j$(nproc)
 
       - name: Confirm memcached built with wolfSSL
