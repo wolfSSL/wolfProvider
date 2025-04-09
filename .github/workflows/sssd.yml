@@ -100,6 +100,7 @@ jobs:
           path: |
             openssl-source
             openssl-install
+
           key: ossl-depends
           fail-on-cache-miss: true
 
@@ -112,6 +113,7 @@ jobs:
             wolfssl-install
             wolfprov-install
             provider.conf
+
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
