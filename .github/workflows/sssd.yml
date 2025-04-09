@@ -1,0 +1,136 @@
+name: sssd Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        run: |
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  sssd_check:
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [ '2.9.1' ]
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    name: ${{ matrix.ref }}-${{ matrix.wolfssl_ref }}
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/sssd/ci-client-devel:ubuntu-latest
+      env:
+        LD_LIBRARY_PATH: /usr/local/lib
+    timeout-minutes: 20
+    needs: build_wolfprovider
+    steps:
+      - name: Install dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf libldb-dev libldb2 python3-ldb bc
+
+      - name: Setup env
+        run: |
+          ln -s samba-4.0/ldb.h /usr/include/ldb.h
+          ln -s samba-4.0/ldb_errors.h /usr/include/ldb_errors.h
+          ln -s samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
+          ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
+          ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
+
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+
+      - name: Build and test sssd
+        uses: wolfSSL/actions-build-autotools-project@v1
+        with:
+          repository: SSSD/sssd
+          ref: ${{ matrix.ref }}
+          path: sssd
+          patch-file: $GITHUB_WORKSPACE/osp/sssd/${{ matrix.ref }}.patch
+          configure: >-
+            --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
+            --without-manpages --without-pam-srv
+            WOLFSSL_INSTALL_DIR=$GITHUB_WORKSPACE/wolfssl-install
+            WOLFPROV_INSTALL_DIR=$GITHUB_WORKSPACE/wolfprov-install
+          check: true
