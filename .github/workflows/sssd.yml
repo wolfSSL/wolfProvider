@@ -48,7 +48,6 @@ jobs:
           path: |
             openssl-source
             openssl-install
-
           key: ossl-depends
 
       # If not yet built this version, build it now
@@ -56,6 +55,26 @@ jobs:
         if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Save OpenSSL to cache
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends
+
+      - name: Save wolfSSL/wolfProvider to cache
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
 
       - name: Print errors
         if: ${{ failure() }}
@@ -79,6 +98,28 @@ jobs:
     timeout-minutes: 20
     needs: build_wolfprovider
     steps:
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
       - name: Install dependencies
         run: |
           export DEBIAN_FRONTEND=noninteractive
@@ -92,30 +133,6 @@ jobs:
           ln -s samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
           ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
           ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
-
-      - name: Retrieving OpenSSL from cache
-        uses: actions/cache/restore@v4
-        id: openssl-cache
-        with:
-          path: |
-            openssl-source
-            openssl-install
-
-          key: ossl-depends
-          fail-on-cache-miss: true
-
-      - name: Retrieving wolfSSL/wolfProvider from cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-source
-            wolfssl-install
-            wolfprov-install
-            provider.conf
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
-          fail-on-cache-miss: true
 
       - name: Checkout OSP
         uses: actions/checkout@v4
