@@ -136,7 +136,7 @@ jobs:
           configure: >-
             --without-samba --disable-cifs-idmap-plugin
             --without-nfsv4-idmapd-plugin --with-oidc-child=no
-            --without-manpages
+            --without-manpages --disable-all-experimental
           check: true
         env:
           OPENSSL_CONF: /github/home/provider.conf
