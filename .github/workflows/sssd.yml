@@ -112,7 +112,7 @@ jobs:
           libpcre2-dev libssl-dev libcmocka-dev libdbus-1-dev \
           libkeyutils-dev libsystemd-dev libpam0g-dev libcollection-dev \
           libtdb-dev libini-config-dev libbasicobjects-dev libdhash-dev \
-          libc-ares-dev
+          libc-ares-dev libkrad-dev
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -121,6 +121,6 @@ jobs:
           ref: ${{ matrix.ref }}
           path: sssd
           configure: >-
-            --without-samba --disable-cifs-idmap-plugin
-            --without-nfsv4-idmapd-plugin --with-oidc-child=no
+            --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
+            --without-manpages --without-krad
           check: true
