@@ -105,9 +105,8 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf automake \
-          libtool gettext pkg-config libldb-dev libldb2 python3-ldb bc \
-          docbook-xml docbook-xsl libxml2-utils xsltproc python3-ldb \
-          gettext-dev
+          libtool gettext gettext-base pkg-config libldb-dev libldb2 \
+          python3-ldb bc docbook-xml docbook-xsl libxml2-utils xsltproc
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
