@@ -24,56 +24,90 @@ jobs:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
 
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+
       - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
-      - name: tar build files
+      - name: Print errors
+        if: ${{ failure() }}
         run: |
-          tar -zcf provider-build.tgz wolfssl-install wolfprov-install provider.conf openssl-source openssl-install
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
 
-      - name: Upload build files
-        uses: actions/upload-artifact@v4
-        with:
-          name: wolfprov-install-sssd
-          path: provider-build.tgz
-          retention-days: 5
-
-  sssd_check:
+  test_sssd:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
     strategy:
       matrix:
         ref: [ '2.9.1' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-    name: ${{ matrix.ref }}-${{ matrix.wolfssl_ref }}
-    runs-on: ubuntu-latest
-    container:
-      image: quay.io/sssd/ci-client-devel:ubuntu-latest
-      env:
-        LD_LIBRARY_PATH: /usr/local/lib
-    timeout-minutes: 20
-    needs: build_wolfprovider
     steps:
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
       - name: Install dependencies
         run: |
+          # Don't prompt for anything
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf libldb-dev libldb2 python3-ldb bc
 
       - name: Setup env
         run: |
-          ln -s samba-4.0/ldb.h /usr/include/ldb.h
-          ln -s samba-4.0/ldb_errors.h /usr/include/ldb_errors.h
-          ln -s samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
-          ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
-          ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
-
-      - name: Download build files
-        uses: actions/download-artifact@v4
-        with:
-          name: wolfprov-install-sssd
-
-      - name: untar build files
-        run: tar -xf provider-build.tgz
+          sudo ln -s /usr/include/samba-4.0/ldb.h /usr/include/ldb.h
+          sudo ln -s /usr/include/samba-4.0/ldb_errors.h /usr/include/ldb_errors.h
+          sudo ln -s /usr/include/samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
+          sudo ln -s /usr/include/samba-4.0/ldb_module.h /usr/include/ldb_module.h
+          sudo ln -s /usr/include/samba-4.0/ldb_version.h /usr/include/ldb_version.h
 
       - name: Checkout OSP
         uses: actions/checkout@v4
