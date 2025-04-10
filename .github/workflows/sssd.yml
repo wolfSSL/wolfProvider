@@ -134,7 +134,6 @@ jobs:
           path: sssd
           patch-file: $GITHUB_WORKSPACE/osp/sssd/${{ matrix.ref }}.patch
           configure: >-
-            --without-samba --disable-cifs-idmap-plugin
-            --without-nfsv4-idmapd-plugin --with-oidc-child=no
-            --without-manpages --disable-all-experimental
+            --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
+            --without-manpages OPENSSL_INSTALL_DIR=/github/home/openssl-install
           check: true

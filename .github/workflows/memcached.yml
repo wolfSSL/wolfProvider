@@ -112,9 +112,17 @@ jobs:
           export LD_LIBRARY_PATH=/wolfssl-install/lib:/openssl-install/lib64
           export OPENSSL_CONF=/provider.conf
           export OPENSSL_MODULES=/wolfprov-install/lib
+          export OPENSSL_ENGINES=/wolfprov-install/lib
+          export SSL_TEST=1
 
           cd /memcached
-          make test_tls
+          # Use sh explicitly and verify OpenSSL/Provider setup
+          echo "OpenSSL Version and Providers:"
+          openssl version -a
+          openssl list-providers
+
+          # Run the tests with sh shell
+          make -f Makefile test_tls SHELL=/bin/sh
           EOF
 
           chmod +x memcached-test.sh
@@ -175,7 +183,7 @@ jobs:
               -v $GITHUB_WORKSPACE/openssl-install:/openssl-install \
               -v $GITHUB_WORKSPACE/wolfprov-install:/wolfprov-install \
               -v $GITHUB_WORKSPACE/provider.conf:/provider.conf \
-              alpine:latest sh -c "apk add --no-cache make perl libevent-dev && /memcached-test.sh" || MEMCACHED_RES=$?
+              alpine:latest sh -c "apk add --no-cache make perl libevent-dev bash openssl openssl-dev python3 && /memcached-test.sh" || MEMCACHED_RES=$?
 
             if [ "$MEMCACHED_RES" -eq "0" ]; then
               break
