@@ -116,10 +116,6 @@ jobs:
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
-        env:
-          LD_LIBRARY_PATH: ${{ github.workspace }}/wolfssl-install/lib:${{ github.workspace }}/openssl-install/lib64
-          OPENSSL_CONF: ${{ github.workspace }}/provider.conf
-          OPENSSL_MODULES: ${{ github.workspace }}/wolfprov-install/lib
         with:
           repository: SSSD/sssd
           ref: ${{ matrix.ref }}
