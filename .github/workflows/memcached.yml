@@ -112,17 +112,9 @@ jobs:
           export LD_LIBRARY_PATH=/wolfssl-install/lib:/openssl-install/lib64
           export OPENSSL_CONF=/provider.conf
           export OPENSSL_MODULES=/wolfprov-install/lib
-          export OPENSSL_ENGINES=/wolfprov-install/lib
-          export SSL_TEST=1
 
           cd /memcached
-          # Use sh explicitly and verify OpenSSL/Provider setup
-          echo "OpenSSL Version and Providers:"
-          openssl version -a
-          openssl list-providers
-
-          # Run the tests with sh shell
-          make -f Makefile test_tls SHELL=/bin/sh
+          make test_tls
           EOF
 
           chmod +x memcached-test.sh
