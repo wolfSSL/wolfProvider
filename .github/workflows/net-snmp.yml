@@ -1,4 +1,4 @@
-name: Bind9 Tests
+name: Net-SNMP Tests
 
 # START OF COMMON SECTION
 on:
@@ -24,7 +24,8 @@ jobs:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
 
-      # Check if this version of wolfssl/wolfprovider has already been built
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
       - name: Checking wolfSSL/wolfProvider in cache
         uses: actions/cache@v4
         id: wolfprov-cache
@@ -55,7 +56,7 @@ jobs:
       - name: Build wolfProvider
         if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
-          OPENSSL_TAG=openssl-3.2.0 WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Print errors
         if: ${{ failure() }}
@@ -64,7 +65,7 @@ jobs:
             cat test-suite.log
           fi
 
-  test_bind:
+  test_net_snmp:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
@@ -72,7 +73,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bind_ref: [ '9.18.0', '9.18.28' ]
+        # List of releases to test
+        include:
+          - ref: 5.9.3
+            test_opts: -e 'agentxperl'
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
       - name: Retrieving OpenSSL from cache
@@ -95,58 +99,37 @@ jobs:
             wolfssl-install
             wolfprov-install
             provider.conf
-            openssl-install
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
-
-      - name: Install dependencies
-        run: |
-          # Don't prompt for anything
-          export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update
-          # bind9 dependencies
-          sudo apt-get install -y libuv1-dev libnghttp2-dev libcap-dev libcmocka-dev
 
       - name: Checkout OSP
         uses: actions/checkout@v4
         with:
           repository: wolfssl/osp
           path: osp
-          fetch-depth: 1
 
-      - name: Checkout bind9
-        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libperl-dev
+
+      - name: Build net-snmp with wolfProvider
+        uses: wolfSSL/actions-build-autotools-project@v1
         with:
-          repository: isc-projects/bind9
-          path: bind
-          ref: v${{ matrix.bind_ref }}
+          repository: net-snmp/net-snmp
+          ref: v${{ matrix.ref }}
+          path: net-snmp
+          patch-file: $GITHUB_WORKSPACE/osp/net-snmp/${{ matrix.ref }}.patch
+          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install
+          check: false
 
-      - name: Build and test bind9 with wolfProvider
-        working-directory: bind
+      - name: Run net-snmp tests with wolfProvider
+        working-directory: net-snmp
         run: |
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
-
-          patch -p1 < $GITHUB_WORKSPACE/osp/bind9/${{ matrix.bind_ref }}.patch
-
-          # Generate configure script
-          autoreconf -ivf
-          ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
-          sed -i 's/SUBDIRS = system//g' bin/tests/Makefile # remove failing tests
-          make -j$(nproc) V=1
-
-          # Output success
-          echo "Bind9 build completed successfully"
-
-      # Only run tests if the build was successful
-      - name: Test bind9
-        if: steps.build-bind.outcome == 'success'
-        working-directory: bind9
-        run: |
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
-          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          make -j$(nproc) V=1 check
+          
+          autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
+          make -j test TESTOPTS="${{ matrix.test_opts }}"
