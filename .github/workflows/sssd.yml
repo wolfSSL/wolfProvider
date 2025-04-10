@@ -38,7 +38,6 @@ jobs:
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           lookup-only: true
-          enableCrossOsArchive: true
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
@@ -52,7 +51,6 @@ jobs:
 
           key: ossl-depends
           fail-on-cache-miss: false
-          enableCrossOsArchive: true
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
@@ -70,34 +68,13 @@ jobs:
   test_sssd:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        # List of releases to test
         ref: [ 2.9.1 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-    container:
-      image: quay.io/sssd/ci-client-devel:ubuntu-latest
-      env:
-        LD_LIBRARY_PATH: /usr/local/lib:/github/home/wolfssl-install/lib:/github/home/openssl-install/lib64
     steps:
-      - name: Install dependencies
-        run: |
-          # Don't prompt for anything
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y build-essential autoconf libldb-dev libldb2 python3-ldb bc
-
-      - name: Setup env
-        run: |
-          ln -s samba-4.0/ldb.h /usr/include/ldb.h
-          ln -s samba-4.0/ldb_errors.h /usr/include/ldb_errors.h
-          ln -s samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
-          ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
-          ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
-
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -108,7 +85,6 @@ jobs:
 
           key: ossl-depends
           fail-on-cache-miss: true
-          enableCrossOsArchive: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -122,10 +98,18 @@ jobs:
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
-          enableCrossOsArchive: true
+
+      - name: Install dependencies
+        run: |
+          # Don't prompt for anything
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf libldb-dev libldb2 python3-ldb bc
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib:${{ github.workspace }}/wolfssl-install/lib:${{ github.workspace }}/openssl-install/lib64
         with:
           repository: SSSD/sssd
           ref: ${{ matrix.ref }}
