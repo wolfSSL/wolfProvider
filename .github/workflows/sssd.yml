@@ -41,7 +41,7 @@ jobs:
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -54,7 +54,7 @@ jobs:
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -64,18 +64,6 @@ jobs:
           if [ -f test-suite.log ] ; then
             cat test-suite.log
           fi
-
-      # Create a tarball of the build artifacts for use in the container
-      - name: Create tarball of build artifacts
-        run: |
-          tar -zcf wolfprov-artifacts.tgz wolfssl-source wolfssl-install wolfprov-install provider.conf openssl-source openssl-install
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: wolfprov-artifacts-${{ matrix.wolfssl_ref }}
-          path: wolfprov-artifacts.tgz
-          retention-days: 5
 
   test_sssd:
     runs-on: ubuntu-22.04
@@ -108,17 +96,29 @@ jobs:
           ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
           ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
         with:
-          name: wolfprov-artifacts-${{ matrix.wolfssl_ref }}
-          path: /github/home
+          path: |
+            openssl-source
+            openssl-install
 
-      - name: Extract artifacts
-        working-directory: /github/home
-        run: |
-          tar -xf wolfprov-artifacts.tgz
-          ls -la
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -127,6 +127,6 @@ jobs:
           ref: ${{ matrix.ref }}
           path: sssd
           configure: >-
-            --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
-            --without-manpages
+            --without-samba --disable-cifs-idmap-plugin
+            --without-nfsv4-idmapd-plugin --with-oidc-child=no
           check: true
