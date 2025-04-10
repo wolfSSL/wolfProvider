@@ -95,7 +95,6 @@ jobs:
             wolfssl-install
             wolfprov-install
             provider.conf
-            openssl-install
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true

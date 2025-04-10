@@ -130,6 +130,6 @@ jobs:
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          
+
           autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
-          make -j test TESTOPTS="${{ matrix.test_opts }}"
+          make -j$(nproc)

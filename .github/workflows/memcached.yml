@@ -146,14 +146,20 @@ jobs:
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
+          export LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64"
+          export CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
+          ./configure --enable-tls --with-openssl=$GITHUB_WORKSPACE/openssl-install
           make -j$(nproc)
 
       - name: Confirm memcached built with OpenSSL
         working-directory: ./memcached
         run: |
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          ldd memcached | grep -E '(libssl|libcrypto)'
+          # Print library path for debugging
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+          echo "Checking memcached binary dependencies:"
+          ldd ./memcached
+          echo "Checking for OpenSSL libraries:"
+          ldd ./memcached | grep -E '(libssl|libcrypto)'
 
       - name: Run memcached tests
         working-directory: ./memcached

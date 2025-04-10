@@ -134,8 +134,9 @@ jobs:
           path: sssd
           patch-file: $GITHUB_WORKSPACE/osp/sssd/${{ matrix.ref }}.patch
           configure: >-
-             --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
-             --without-manpages --with-openssl=/github/home/openssl-install
+            --without-samba --disable-cifs-idmap-plugin
+            --without-nfsv4-idmapd-plugin --with-oidc-child=no
+            --without-manpages
           check: true
 
       - name: Test sssd with wolfProvider
