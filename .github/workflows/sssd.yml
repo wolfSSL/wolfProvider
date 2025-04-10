@@ -110,7 +110,8 @@ jobs:
           autopoint po4a m4 bison flex libpopt-dev libtevent-dev \
           libtalloc-dev libldap2-dev libsasl2-dev libkrb5-dev \
           libpcre2-dev libssl-dev libcmocka-dev libdbus-1-dev \
-          libkeyutils-dev libsystemd-dev libpam0g-dev
+          libkeyutils-dev libsystemd-dev libpam0g-dev libcollection-dev \
+          libtdb-dev libini-config-dev libbasicobjects-dev
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
