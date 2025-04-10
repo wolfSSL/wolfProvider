@@ -38,10 +38,11 @@ jobs:
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           lookup-only: true
+          enableCrossOsArchive: true
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -51,10 +52,11 @@ jobs:
 
           key: ossl-depends
           fail-on-cache-miss: false
+          enableCrossOsArchive: true
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -106,6 +108,7 @@ jobs:
 
           key: ossl-depends
           fail-on-cache-miss: true
+          enableCrossOsArchive: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -119,6 +122,7 @@ jobs:
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
+          enableCrossOsArchive: true
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
