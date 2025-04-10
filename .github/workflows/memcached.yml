@@ -175,7 +175,7 @@ jobs:
               -v $GITHUB_WORKSPACE/openssl-install:/openssl-install \
               -v $GITHUB_WORKSPACE/wolfprov-install:/wolfprov-install \
               -v $GITHUB_WORKSPACE/provider.conf:/provider.conf \
-              alpine:latest sh -c "apk add --no-cache make perl libevent-dev bash openssl openssl-dev python3 && /memcached-test.sh" || MEMCACHED_RES=$?
+              alpine:latest sh -c "apk add --no-cache make perl libevent-dev bash openssl openssl-dev python3 gcc musl-dev && /memcached-test.sh" || MEMCACHED_RES=$?
 
             if [ "$MEMCACHED_RES" -eq "0" ]; then
               break

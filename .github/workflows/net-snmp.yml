@@ -103,12 +103,6 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/osp
-          path: osp
-
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -120,16 +114,8 @@ jobs:
           repository: net-snmp/net-snmp
           ref: v${{ matrix.ref }}
           path: net-snmp
-          patch-file: $GITHUB_WORKSPACE/osp/net-snmp/${{ matrix.ref }}.patch
-          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install
           check: false
-
-      - name: Run net-snmp tests with wolfProvider
-        working-directory: net-snmp
-        run: |
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
-          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-
-          autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
-          make -j$(nproc)
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/wolfssl-install/lib:${{ github.workspace }}/openssl-install/lib64
+          OPENSSL_CONF: ${{ github.workspace }}/provider.conf
+          OPENSSL_MODULES: ${{ github.workspace }}/wolfprov-install/lib
