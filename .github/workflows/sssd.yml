@@ -104,15 +104,15 @@ jobs:
           # Don't prompt for anything
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install -y build-essential autoconf automake \
-          libtool gettext gettext-base pkg-config libldb-dev libldb2 \
-          python3-ldb bc docbook-xml docbook-xsl libxml2-utils xsltproc \
-          autopoint po4a m4 bison flex libpopt-dev libtevent-dev \
-          libtalloc-dev libldap2-dev libsasl2-dev libkrb5-dev \
-          libpcre2-dev libssl-dev libcmocka-dev libdbus-1-dev \
-          libkeyutils-dev libsystemd-dev libpam0g-dev libcollection-dev \
-          libtdb-dev libini-config-dev libbasicobjects-dev libdhash-dev \
-          libc-ares-dev libkrad-dev
+          sudo apt-get install -y build-essential autoconf libldb-dev libldb2 python3-ldb bc
+
+      - name: Setup env
+        run: |
+          sudo ln -s samba-4.0/ldb.h /usr/include/ldb.h
+          sudo ln -s samba-4.0/ldb_errors.h /usr/include/ldb_errors.h
+          sudo ln -s samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
+          sudo ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
+          sudo ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -122,5 +122,5 @@ jobs:
           path: sssd
           configure: >-
             --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
-            --without-manpages --without-krad
+            --without-manpages
           check: true
