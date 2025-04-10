@@ -138,10 +138,3 @@ jobs:
             --without-nfsv4-idmapd-plugin --with-oidc-child=no
             --without-manpages --disable-all-experimental
           check: true
-        env:
-          OPENSSL_CONF: /github/home/provider.conf
-          OPENSSL_MODULES: /github/home/wolfprov-install/lib
-          LD_LIBRARY_PATH: /github/home/wolfssl-install/lib:/github/home/openssl-install/lib64
-          CFLAGS: -I/github/home/wolfssl-install/include -I/github/home/openssl-install/include
-          CPPFLAGS: -I/github/home/wolfssl-install/include -I/github/home/openssl-install/include
-          LDFLAGS: -L/github/home/wolfssl-install/lib -L/github/home/openssl-install/lib64
