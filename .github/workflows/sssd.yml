@@ -106,10 +106,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf automake \
           libtool gettext gettext-base pkg-config libldb-dev libldb2 \
-          python3-ldb bc docbook-xml docbook-xsl libxml2-utils xsltproc
+          python3-ldb bc docbook-xml docbook-xsl libxml2-utils xsltproc \
+          autopoint po4a m4 bison flex libpopt-dev libtevent-dev \
+          libtalloc-dev libldap2-dev libsasl2-dev libkrb5-dev \
+          libpcre2-dev libssl-dev libcmocka-dev libdbus-1-dev \
+          libkeyutils-dev libsystemd-dev libpam0g-dev
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/wolfssl-install/lib:${{ github.workspace }}/openssl-install/lib64
+          OPENSSL_CONF: ${{ github.workspace }}/provider.conf
+          OPENSSL_MODULES: ${{ github.workspace }}/wolfprov-install/lib
         with:
           repository: SSSD/sssd
           ref: ${{ matrix.ref }}
