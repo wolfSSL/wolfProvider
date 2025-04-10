@@ -112,6 +112,7 @@ jobs:
           libpcre2-dev libssl-dev libcmocka-dev libdbus-1-dev \
           libkeyutils-dev libsystemd-dev libpam0g-dev libcollection-dev \
           libtdb-dev libini-config-dev libbasicobjects-dev libdhash-dev \
+          libc-ares-dev
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
