@@ -104,7 +104,8 @@ jobs:
           # Don't prompt for anything
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install -y build-essential autoconf libldb-dev libldb2 python3-ldb bc
+          sudo apt-get install -y build-essential autoconf libldb-dev \
+          libldb2 python3-ldb bc sssd-krb5-common sssd-common sssd-dev autopoint
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
