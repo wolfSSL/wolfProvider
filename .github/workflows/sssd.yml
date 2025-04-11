@@ -109,7 +109,7 @@ jobs:
           libini-config-dev libkrad-dev libjansson-dev libunistring-dev \
           libsemanage-dev libsss-idmap-dev libpopt-dev libpam0g-dev \
           libtevent-dev libsasl2-dev libldap2-dev libcollection-dev \
-          libdhash-dev libref-array-dev libbasicobjects-dev libcares-dev\
+          libdhash-dev libref-array-dev libbasicobjects-dev libc-ares-dev \
           libsss-certmap-dev libsss-nss-idmap-dev libkrb5-dev
 
       - name: Set environment variables
