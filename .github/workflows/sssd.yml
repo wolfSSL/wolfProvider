@@ -1,0 +1,61 @@
+name: SSSD Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  test_sssd:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    container:
+      image: quay.io/sssd/ci-client-devel:ubuntu-latest
+      env:
+        LD_LIBRARY_PATH: /usr/local/lib:/github/home/wolfssl-install/lib:/github/home/openssl-install/lib64
+    strategy:
+      fail-fast: false
+      matrix:
+        sssd_ref: [ 2.9.1 ]
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Build wolfProvider
+        run: |
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Install dependencies
+        run: |
+          # Don't prompt for anything
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y build-essential autoconf libldb-dev \
+          libldb2 python3-ldb bc
+
+      - name: Setup env
+        run: |
+          ln -s samba-4.0/ldb.h /usr/include/ldb.h
+          ln -s samba-4.0/ldb_errors.h /usr/include/ldb_errors.h
+          ln -s samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
+          ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
+          ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
+
+      - name: Build sssd with wolfProvider
+        uses: wolfSSL/actions-build-autotools-project@v1
+        with:
+          repository: SSSD/sssd
+          ref: ${{ matrix.sssd_ref }}
+          path: sssd
+          configure: >-
+            --without-samba --disable-cifs-idmap-plugin
+            --without-nfsv4-idmapd-plugin --with-oidc-child=no
+          check: true
