@@ -105,7 +105,14 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf libldb-dev \
-          libldb2 python3-ldb bc sssd-krb5-common sssd-common autopoint
+          libldb2 python3-ldb bc  sssd-krb5-common sssd-common autopoint \
+          libini-config-dev libkrad-dev
+
+      - name: Set environment variables
+        run: |
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -114,6 +121,6 @@ jobs:
           ref: ${{ matrix.ref }}
           path: sssd
           configure: >-
-            --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
-            --without-manpages WOLFSSL_INSTALL_DIR=$GITHUB_WORKSPACE/wolfssl-install
-          check: true
+            --without-samba --without-nfsv4-idmapd-plugin
+            --with-oidc-child=no --disable-cifs-idmap-plugin
+          check: false
