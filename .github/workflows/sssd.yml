@@ -106,14 +106,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf libldb-dev libldb2 python3-ldb bc
 
-      - name: Setup env
-        run: |
-          sudo ln -s samba-4.0/ldb.h /usr/include/ldb.h
-          sudo ln -s samba-4.0/ldb_errors.h /usr/include/ldb_errors.h
-          sudo ln -s samba-4.0/ldb_handlers.h /usr/include/ldb_handlers.h
-          sudo ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
-          sudo ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
-
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
@@ -122,5 +114,5 @@ jobs:
           path: sssd
           configure: >-
             --without-samba --without-nfsv4-idmapd-plugin --with-oidc-child=no
-            --without-manpages
+            --without-manpages WOLFSSL_INSTALL_DIR=$GITHUB_WORKSPACE/wolfssl-install
           check: true
