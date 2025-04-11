@@ -107,7 +107,7 @@ jobs:
           sudo apt-get install -y build-essential autoconf libldb-dev \
           libldb2 python3-ldb bc sssd-krb5-common sssd-common autopoint \
           libini-config-dev libkrad-dev libjansson-dev libunistring-dev \
-          libsemanage-dev libsss-idmap-dev libpopt-dev \
+          libsemanage-dev libsss-idmap-dev libpopt-dev libpam0g-dev \
           libtevent-dev libsasl2-dev libldap2-dev libcollection-dev \
           libdhash-dev libref-array-dev libbasicobjects-dev \
           libsss-certmap-dev libsss-nss-idmap-dev libkrb5-dev
