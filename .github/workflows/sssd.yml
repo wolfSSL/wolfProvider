@@ -110,7 +110,7 @@ jobs:
           libsemanage-dev libsss-idmap-dev libpopt-dev \
           libtevent-dev libsasl2-dev libldap2-dev libcollection-dev \
           libdhash-dev libref-array-dev libbasicobjects-dev \
-          libsss-certmap-dev libsss-nss-idmap-dev
+          libsss-certmap-dev libsss-nss-idmap-dev libkrb5-dev
 
       - name: Set environment variables
         run: |
