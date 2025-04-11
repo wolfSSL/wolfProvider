@@ -110,7 +110,8 @@ jobs:
           libsemanage-dev libsss-idmap-dev libpopt-dev libpam0g-dev \
           libtevent-dev libsasl2-dev libldap2-dev libcollection-dev \
           libdhash-dev libref-array-dev libbasicobjects-dev libc-ares-dev \
-          libsss-certmap-dev libsss-nss-idmap-dev libkrb5-dev libdbus-1-dev
+          libsss-certmap-dev libsss-nss-idmap-dev libkrb5-dev libdbus-1-dev \
+          xsltproc
 
       - name: Set environment variables
         run: |
