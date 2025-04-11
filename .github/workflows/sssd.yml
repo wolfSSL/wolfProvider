@@ -111,7 +111,7 @@ jobs:
           libtevent-dev libsasl2-dev libldap2-dev libcollection-dev \
           libdhash-dev libref-array-dev libbasicobjects-dev libc-ares-dev \
           libsss-certmap-dev libsss-nss-idmap-dev libkrb5-dev libdbus-1-dev \
-          xsltproc
+          xsltproc libxml2-utils sssd-dev
 
       - name: Set environment variables
         run: |
