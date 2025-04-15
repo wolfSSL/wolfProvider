@@ -67,7 +67,7 @@ typedef struct wp_AeadCtx {
     /** Current state of IV/nonce.  */
     int ivState;
 
-    /** Initialized for encrpytion or decryption. */
+    /** Initialized for encryption or decryption. */
     unsigned int enc:1;
     /** IV/nonce has been generated. */
     unsigned int ivGen:1;
@@ -263,7 +263,7 @@ static int wp_aead_tls_init(wp_AeadCtx* ctx, unsigned char* aad, size_t aadLen)
  *
  * @param [in, out] ctx    AEAD context object.
  * @param [in]      in     More AAD data.
- * @parma [in]      inLen  Length of new AAD data.
+ * @param [in]      inLen  Length of new AAD data.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -299,7 +299,7 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
  *
  * @param [in, out] ctx    AEAD context object.
  * @param [in]      in     More AAD data.
- * @parma [in]      inLen  Length of new AAD data.
+ * @param [in]      inLen  Length of new AAD data.
  * @return  1 on success.
  * @return  0 on failure.
  */

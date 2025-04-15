@@ -265,7 +265,7 @@ static wp_Mac* wp_mac_dup(const wp_Mac *src, int selection)
             }
         }
         dst->keyLen = src->keyLen;
-        /* Copy properites if set. */
+        /* Copy properties if set. */
         if (src->properties != NULL) {
             size_t propLen = XSTRLEN(src->properties) + 1;
             dst->properties = OPENSSL_malloc(propLen);
@@ -319,8 +319,8 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
 /**
  * Check that two MAC key objects match for the components specified.
  *
- * @parma [in] mac1       First ECC key object.
- * @parma [in] mac2       Second ECC key object.
+ * @param [in] mac1       First ECC key object.
+ * @param [in] mac2       Second ECC key object.
  * @param [in] selection  Parts of key to match.
  * @return  1 on success.
  * @return  0 on failure.
@@ -595,7 +595,7 @@ static void wp_mac_gen_cleanup(wp_MacGenCtx *ctx)
  * Return the MAC key object taken out of the reference.
  *
  * @param [in, out] pMac  Pointer to a MAC key object.
- * @parma [in]      size  Size of data structure that is the MAC key object.
+ * @param [in]      size  Size of data structure that is the MAC key object.
  *                        Unused.
  * @return  NULL when no MAC key object at reference.
  * @return  MAC key object from reference on success.

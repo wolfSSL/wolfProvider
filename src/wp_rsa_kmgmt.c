@@ -578,7 +578,7 @@ static int wp_rsa_pss_params_set_pss_defaults(wp_RsaPssParams* pss)
  *
  * @param [in, out] pss      RSA PSS parameters object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @param [in]      libCtx   Library context.
  * @return  1 on success.
  * @return  0 on failure.
@@ -603,7 +603,7 @@ static int wp_rsa_pss_params_setup_mgf1_md(wp_RsaPssParams* pss,
  *
  * @param [in, out] pss      RSA PSS parameters object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @param [in]      libCtx   Library context.
  * @return  1 on success.
  * @return  0 on failure.
@@ -710,7 +710,7 @@ static int wp_rsa_pss_params_set_mgf1_digest(wp_RsaPssParams* pss,
  *
  * @param [in, out] pss          RSA PSS parameters object.
  * @param [in, out] defaultsSet  Whether default PSS parameters have been set.
- * @param [in]      params       Array of parameters and valus.
+ * @param [in]      params       Array of parameters and values.
  * @param [in]      libCtx       Library context.
  * @return  1 on success.
  * @return  0 on failure.
@@ -777,7 +777,7 @@ static int wp_rsa_pss_params_set_params(wp_RsaPssParams* pss,
  * Return the RSA key object taken out of the reference.
  *
  * @param [in, out] pRsa  Pointer to a RSA key object.
- * @parma [in]      size  Size of data structure that is the RSA key object.
+ * @param [in]      size  Size of data structure that is the RSA key object.
  *                        Unused.
  * @param [in]      type  Expected RSA type: PKCS#1.5 or PSS.
  * @return  NULL when no RSA key object at reference or not matching type.
@@ -981,8 +981,8 @@ static int wp_rsa_has(const wp_Rsa* rsa, int selection)
 /**
  * Check that two RSA key objects match for the components specified.
  *
- * @parma [in] rsa1       First RSA key object.
- * @parma [in] rsa2       Second RSA key object.
+ * @param [in] rsa1       First RSA key object.
+ * @param [in] rsa2       Second RSA key object.
  * @param [in] selection  Parts of key to match.
  * @return  1 on success.
  * @return  0 on failure.
@@ -1601,7 +1601,7 @@ static const OSSL_PARAM* wp_rsa_gen_settable_params(wp_RsaGenCtx* gctx,
  * Return the RSA key object taken out of the reference.
  *
  * @param [in, out] pRsa  Pointer to a RSA key object.
- * @parma [in]      size  Size of data structure that is the RSA key object.
+ * @param [in]      size  Size of data structure that is the RSA key object.
  *                        Unused.
  * @return  NULL when no RSA key object at reference or not RSA PKCS#1.5 type.
  * @return  RSA key object from reference on success.
@@ -1658,7 +1658,7 @@ static wp_Rsa* wp_rsapss_new(WOLFPROV_CTX* provctx)
  * Return the RSA key object taken out of the reference.
  *
  * @param [in, out] pRsa  Pointer to a RSA key object.
- * @parma [in]      size  Size of data structure that is the RSA key object.
+ * @param [in]      size  Size of data structure that is the RSA key object.
  *                        Unused.
  * @return  NULL when no RSA key object at reference or not RSA PSS type.
  * @return  RSA key object from reference on success.
@@ -3201,7 +3201,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
  *
  * @param [in] ctx          RSA encoder/decoder context object.
  * @param [in] rsa          RSA key object.
- * @oaram [in] size         Size of key object.
+ * @param [in] size         Size of key object.
  * @param [in] exportCb     Callback to export key.
  * @param [in] exportCbArg  Argument to pass to callback.
  * @return  1 on success.
