@@ -43,15 +43,15 @@ jobs:
             wolfssl_ref: master
           - CC: clang-10
             CXX: clang++-10
-            OS: ubuntu-20.04
+            OS: ubuntu-22.04
             wolfssl_ref: master
           - CC: clang-11
             CXX: clang++-11
-            OS: ubuntu-20.04
+            OS: ubuntu-22.04
             wolfssl_ref: master
           - CC: clang-12
             CXX: clang++-12
-            OS: ubuntu-20.04
+            OS: ubuntu-22.04
             wolfssl_ref: master
           - CC: clang-14
             CXX: clang++-14
