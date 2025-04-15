@@ -682,6 +682,26 @@ int test_rsa_enc_dec_pkcs1(void *data)
     return err;
 }
 
+int test_rsa_enc_dec_nopad(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    if (!noKeyLimits) {
+        PRINT_MSG("Check that private decrypt fails with invalid key size.");
+        err = test_rsa_enc_dec(rsa_key_der_256, sizeof(rsa_key_der_256),
+        RSA_NO_PADDING, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Check that private decrypt works with valid key size.");
+        err = test_rsa_enc_dec(rsa_key_der_2048, sizeof(rsa_key_der_2048),
+        RSA_NO_PADDING, NULL, NULL);
+    }
+
+    return err;
+}
+
 int test_rsa_enc_dec_oaep(void *data)
 {
     int err = 0;
