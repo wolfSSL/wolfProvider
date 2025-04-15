@@ -856,7 +856,7 @@ int test_rsa_get_params(void *data)
         }
     }
     if (err == 0) {
-        eRet = BN_bin2bn(e, params[1].return_size, NULL);
+        eRet = BN_bin2bn(e, (int)params[1].return_size, NULL);
         if (eRet == NULL) {
             err = 1;
         }
