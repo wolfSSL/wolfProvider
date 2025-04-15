@@ -528,7 +528,7 @@ static int wp_ecc_set_params_x_y(wp_Ecc *ecc, const OSSL_PARAM params[])
             ecc->key.pubkey.y))) {
         ok = 0;
     }
-    if (ok && mp_iszero(ecc->key.pubkey.x)) {
+    if (ok && mp_iszero(ecc->key.pubkey.y)) {
         ok = 0;
     }
     if (ok) {
@@ -591,10 +591,38 @@ static int wp_ecc_set_params(wp_Ecc *ecc, const OSSL_PARAM params[])
     const OSSL_PARAM *p;
 
     if (params != NULL) {
-        if (!wp_ecc_set_params_x_y(ecc, params)) {
-            if (!wp_ecc_set_params_enc_pub_key(ecc, params,
-                    OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY)) {
-                ok = 0;
+        if (!wp_ecc_set_params_enc_pub_key(ecc, params,
+                OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY)) {
+            ok = 0;
+        }
+        if (ok) {
+            p = OSSL_PARAM_locate_const(params,
+                OSSL_PKEY_PARAM_EC_PUB_X);
+            if (p != NULL) {
+                if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_X,
+                        ecc->key.pubkey.x)) {
+                    ok = 0;
+                }
+                if (ok && mp_iszero(ecc->key.pubkey.x)) {
+                    ok = 0;
+                }
+                if (ok) {
+                    ecc->key.type = ECC_PUBLICKEY;
+                    ecc->hasPub = 1;
+                }
+            }
+        }
+        if (ok) {
+            p = OSSL_PARAM_locate_const(params,
+                OSSL_PKEY_PARAM_EC_PUB_Y);
+            if (p != NULL) {
+                if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y,
+                        ecc->key.pubkey.y)) {
+                    ok = 0;
+                }
+                if (ok && mp_iszero(ecc->key.pubkey.y)) {
+                    ok = 0;
+                }
             }
         }
         if (ok) {

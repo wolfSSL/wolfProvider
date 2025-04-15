@@ -187,7 +187,7 @@ static int wp_ecdsa_signverify_init(wp_EcdsaSigCtx *ctx, wp_Ecc* ecc,
 
     if (ctx->ecc != ecc) {
         wp_ecc_free(ctx->ecc);
-        if (!wp_ecc_up_ref(ecc)) {
+        if (ecc != NULL && !wp_ecc_up_ref(ecc)) {
             ok = 0;
         }
     }
