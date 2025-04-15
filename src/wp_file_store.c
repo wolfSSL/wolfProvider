@@ -48,7 +48,7 @@ typedef struct wp_FileCtx {
 
     /** Decoder context for processing the contents of the file. */
     OSSL_DECODER_CTX* decCtx;
-    /** Properites query. */
+    /** Properties query. */
     char* propQuery;
     /** Type of data: key, certificate, CRL, ... */
     int type;

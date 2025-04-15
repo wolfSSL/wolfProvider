@@ -306,7 +306,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
  * Can put the DH secret through a KDF.
  *
  * @param [in]  ctx      DH key exchange context object.
- * @param [out] secert   Buffer to hold secret/key.
+ * @param [out] secret   Buffer to hold secret/key.
  * @param [out] secLen   Length of secret/key data in bytes.
  * @param [in]  secSize  Size of buffer in bytes.
  * @return 1 on success.

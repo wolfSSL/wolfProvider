@@ -244,7 +244,7 @@ void WOLFPROV_ENTER(int component, const char* msg)
  * Log function used to record function exit. Extended for function name.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param func [IN] Name of function that exitting.
+ * @param func [IN] Name of function that exiting.
  * @param msg  [IN] Log message.
  * @param ret  [IN] Value that function will be returning.
  */

@@ -269,7 +269,7 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
 }
 
 /**
- * Generate a secret value and corresponding ciphertext (encapsulte).
+ * Generate a secret value and corresponding ciphertext (encapsulate).
  *
  * NIST.SP.800-56Br2
  * 7.2.1.2 RSASVE Generate Operation (RSASVE.GENERATE).
@@ -372,7 +372,7 @@ static int wp_rsakem_encapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
 }
 
 /**
- * Recover the secret from the encapsualted data (decapsulate).
+ * Recover the secret from the encapsulated data (decapsulate).
  *
  * NIST.SP.800-56Br2
  * 7.2.1.3 RSASVE Recovery Operation (RSASVE.RECOVER).
@@ -381,7 +381,7 @@ static int wp_rsakem_encapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
  * @param [out] out        Buffer to hold secret.
  * @param [out] outLen     Length of secret in bytes.
  * @param [out] in         Buffer holding encapsulated secret.
- * @param [out] secretLen  Length of encapsualted data in bytes.
+ * @param [out] secretLen  Length of encapsulated data in bytes.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -438,7 +438,7 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
  * @param [out] out        Buffer to hold secret.
  * @param [out] outLen     Length of secret in bytes.
  * @param [out] in         Buffer holding encapsulated secret.
- * @param [out] secretLen  Length of encapsualted data in bytes.
+ * @param [out] secretLen  Length of encapsulated data in bytes.
  * @return  1 on success.
  * @return  0 on failure.
  */

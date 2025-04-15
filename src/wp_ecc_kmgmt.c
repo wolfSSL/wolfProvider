@@ -468,7 +468,7 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
  * Return the ECC key object taken out of the reference.
  *
  * @param [in, out] pEcc  Pointer to a ECC key object.
- * @parma [in]      size  Size of data structure that is the ECC key object.
+ * @param [in]      size  Size of data structure that is the ECC key object.
  *                        Unused.
  * @return  NULL when no ECC key object at reference.
  * @return  ECC key object from reference on success.
@@ -852,8 +852,8 @@ static int wp_ecc_has(const wp_Ecc* ecc, int selection)
 /**
  * Check that two ECC key objects match for the components specified.
  *
- * @parma [in] ecc1       First ECC key object.
- * @parma [in] ecc2       Second ECC key object.
+ * @param [in] ecc1       First ECC key object.
+ * @param [in] ecc2       Second ECC key object.
  * @param [in] selection  Parts of key to match.
  * @return  1 on success.
  * @return  0 on failure.
@@ -2633,7 +2633,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
  *
  * @param [in] ctx          ECC encoder/decoder context object.
  * @param [in] ecc          ECC key object.
- * @oaram [in] size         Size of key object.
+ * @param [in] size         Size of key object.
  * @param [in] exportCb     Callback to export key.
  * @param [in] exportCbArg  Argument to pass to callback.
  * @return  1 on success.

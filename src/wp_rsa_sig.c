@@ -109,7 +109,7 @@ static int wp_rsa_set_ctx_params(wp_RsaSigCtx* ctx, const OSSL_PARAM params[]);
  *
  * @param [in, out] ctx      RSA signature context object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @param [in]      op       Signature operation being performed.
  * @return  1 on success.
  * @return  0 on failure.
@@ -198,7 +198,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
  *
  * @param [in, out] ctx      RSA signature context object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @return  1 on success.
  * @return  0 on failure.
  */

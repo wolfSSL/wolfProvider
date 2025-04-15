@@ -380,7 +380,7 @@ static int wp_hkdf_base_set_info(wp_HkdfCtx* ctx, const OSSL_PARAM params[])
     unsigned char* q = ctx->info;
 
     ctx->infoSz = 0;
-    /* Combine all the data in the info parametrs. */
+    /* Combine all the data in the info parameters. */
     while (ok && ((p = OSSL_PARAM_locate_const(params,
             OSSL_KDF_PARAM_INFO)) != NULL)) {
         size_t sz = 0;
