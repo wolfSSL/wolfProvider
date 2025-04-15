@@ -37,7 +37,7 @@ if [ ! -e ${WORKSPACE}/openssl-install ]; then
     export OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256"
     git clone https://github.com/openssl/openssl.git --branch=${OPENSSL_BRANCH} ${WORKSPACE}/openssl-source && \
         cd ${WORKSPACE}/openssl-source && \
-        ./Configure android-x86_64 --prefix=${WORKSPACE}/openssl-install && \
+        ./Configure android-x86_64 no-sm3 no-sm4 --prefix=${WORKSPACE}/openssl-install && \
         sed -i 's/-ldl//g' Makefile && \
         sed -i 's/-pie//g' Makefile && \
         make -j && \
