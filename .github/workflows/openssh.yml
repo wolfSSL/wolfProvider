@@ -70,7 +70,9 @@ jobs:
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
-    
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
