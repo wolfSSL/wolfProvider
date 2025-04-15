@@ -1,0 +1,144 @@
+name: Socat Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        run: |
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  test_socat:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install socat dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install build-essential autoconf libtool pkg-config clang libc++-dev
+
+      - name: Download socat
+        run: curl -O http://www.dest-unreach.org/socat/download/socat-1.8.0.0.tar.gz && tar xvf socat-1.8.0.0.tar.gz
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+
+      - name: Build socat
+        working-directory: ./socat-1.8.0.0
+        run: |
+          # Apply patch
+          patch -p1 < ../osp/socat/1.8.0.0/socat-1.8.0.0.patch
+
+          # Configure with OpenSSL
+          autoreconf -vfi
+          ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
+
+          # Build socat
+          make
+
+      - name: Run socat tests
+        working-directory: ./socat-1.8.0.0
+        run: |
+          # Set up the environment for wolfProvider
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export SHELL=/bin/bash
+
+          # Verify OpenSSL loads wolfProvider
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+
+          # Show socat version (includes OpenSSL version info)
+          ./socat -V
+
+          # Run the tests with expected failures
+          SOCAT=$GITHUB_WORKSPACE/socat-1.8.0.0/socat ./test.sh -t 0.5 --expect-fail 146,216,309,310,386,399,402,459,460,467,468,478,492,528,530
+
