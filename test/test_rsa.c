@@ -868,6 +868,7 @@ int test_rsa_get_params(void *data)
     BN_free(eCmd);
     BN_free(eRet);
     EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
     return err;
 }
 
