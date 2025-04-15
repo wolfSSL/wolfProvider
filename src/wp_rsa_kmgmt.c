@@ -1950,6 +1950,37 @@ static int wp_rsa_determine_type(wp_Rsa* rsa, unsigned char* data, word32 len)
 }
 
 /**
+ * Decode the SubjectPublicInfo DER encoded RSA key into the RSA key object.
+ *
+ * @param [in, out] rsa   RSA key object.
+ * @param [in]      data  DER encoding.
+ * @param [in]      len   Length, in bytes, of DER encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
+{
+    int ok = 1;
+    int rc;
+    word32 idx = 0;
+
+    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
+    if (rc != 0) {
+        ok = 0;
+    }
+    if (ok && !wp_rsa_determine_type(rsa, data, len)) {
+        ok = 0;
+    }
+    if (ok) {
+        rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
+        rsa->hasPub = 1;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
  * Get the PSS parameters from the DER encoded RSA-PSS parameters.
  *
  * TODO: rework to use tables of DER encodings.
@@ -2083,44 +2114,6 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
         rsa->pssDefSet = 1;
     }
 
-    return ok;
-}
-
-/**
- * Decode the SubjectPublicInfo DER encoded RSA key into the RSA key object.
- *
- * @param [in, out] rsa   RSA key object.
- * @param [in]      data  DER encoding.
- * @param [in]      len   Length, in bytes, of DER encoding.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
-{
-    int ok = 1;
-    int rc;
-    word32 idx = 0;
-
-    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
-    if (rc != 0) {
-        ok = 0;
-    }
-    if (ok && !wp_rsa_determine_type(rsa, data, len)) {
-        ok = 0;
-    }
-    if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS)) {
-        /* We need to check for pss params to allow a rejection for non-pkcs8
-         * keys. If we dont reject then the keytype gets set to RSA-PSS
-         * which is wrong. For non-pkcs8 fail here for PSS decoder
-         * and let the base RSA pick it up instead */
-        ok = wp_rsa_pss_get_params(rsa, data, len);
-    }
-    if (ok) {
-        rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
-        rsa->hasPub = 1;
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
