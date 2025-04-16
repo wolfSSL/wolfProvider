@@ -103,20 +103,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwrap0-dev
 
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/osp
-          path: osp
-
       - name: Build stunnel
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
           repository: mtrojnar/stunnel
           ref: stunnel-${{ matrix.stunnel_ref }}
           path: stunnel
-          patch-file: $GITHUB_WORKSPACE/osp/stunnel/${{ matrix.stunnel_ref }}/stunnel-${{ matrix.stunnel_ref }}.patch
-          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install/
+          configure: --with-ssl=$GITHUB_WORKSPACE/openssl-install/
           check: true
 
       - name: Verify stunnel with wolfProvider
@@ -130,4 +123,3 @@ jobs:
           # Verify stunnel
           ldd src/stunnel | grep -E '(libssl|libcrypto)'
           ./src/stunnel -version
-
