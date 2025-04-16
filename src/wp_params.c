@@ -204,7 +204,7 @@ void wp_param_set_mp_buf(OSSL_PARAM* p, const char* key, unsigned char* num,
  * Copies the name and returns the wolfSSL hash type and length of output.
  *
  * @param [in]  params  Array of parameters.
- * @parma [out] name    Buffer to hold hash name.
+ * @param [out] name    Buffer to hold hash name.
  * @param [in]  libCtx  Library context to lookup name in.
  * @param [out] type    wolfCrypt hash type corresponding to name. May be NULL.
  * @param [out] len     Length of digest output in bytes. May be NULL.

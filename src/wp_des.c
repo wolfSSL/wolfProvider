@@ -778,7 +778,7 @@ static int wp_des3_block_set_ctx_params(wp_Des3BlockCtx *ctx,
  * @param [in, out] ctx      DES3 block context object.
  * @param [in]      kBits    Number of bits in a valid key.
  * @param [in]      ivBits   Number of bits in a valid IV. 0 indicates no IV.
- * @parma [in]      mode     DES3 block mode: ECB or CBC.
+ * @param [in]      mode     DES3 block mode: ECB or CBC.
  * @return  1 on success.
  * @return  0 on failure.
  */

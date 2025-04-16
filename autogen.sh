@@ -2,7 +2,7 @@
 #
 # autogen.sh
 #
-# Create configure and makfile stuff...
+# Create configure and makefile stuff...
 #
 
 autoreconf --install --force --verbose
