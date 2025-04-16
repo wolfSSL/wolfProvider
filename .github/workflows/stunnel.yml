@@ -101,7 +101,9 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwrap0-dev autoconf automake libtool pkg-config
+          sudo apt-get install -y build-essential autoconf automake \
+          libtool pkg-config libwrap0-dev autoconf-archive \
+          autotools-dev m4
 
       - name: Build stunnel
         uses: wolfSSL/actions-build-autotools-project@v1
