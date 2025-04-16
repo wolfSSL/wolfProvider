@@ -64,7 +64,6 @@ jobs:
             cat test-suite.log
           fi
   
-
   openssh_check:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
@@ -110,14 +109,9 @@ jobs:
           repository: openssh/openssh-portable
           path: openssh-portable
       
-      # move the patch file to wolf prov ?
       - name: Build openssh-portable
         working-directory: openssh-portable
         run: |
-          echo "about to echo"
-          echo $GITHUB_WORKSPACE
-          echo "about to ls"
-          ls $GITHUB_WORKSPACE
           patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-9.9.p1-wolfprov.patch          
           autoreconf
           ./configure 
