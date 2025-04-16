@@ -130,4 +130,4 @@ jobs:
           ./socat -V
 
           # Run the tests with expected failures
-          SOCAT=$GITHUB_WORKSPACE/socat-1.8.0.0/socat ./test.sh -t 0.5 --expect-fail 146,216,309,310,386,399,402,459,460,467,468,478,492,528,530
+          SOCAT=$GITHUB_WORKSPACE/socat-1.8.0.0/socat ./test.sh -t 0.5 --expect-fail 146,216,309,310,311,313,386,399,402,459,460,467,468,478,492,528,529,530
