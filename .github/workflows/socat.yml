@@ -105,21 +105,12 @@ jobs:
       - name: Download socat
         run: curl -O http://www.dest-unreach.org/socat/download/socat-1.8.0.0.tar.gz && tar xvf socat-1.8.0.0.tar.gz
 
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/osp
-          path: osp
-
       - name: Build socat
         working-directory: ./socat-1.8.0.0
         run: |
-          # Apply patch
-          patch -p1 < ../osp/socat/1.8.0.0/socat-1.8.0.0.patch
-
           # Configure with OpenSSL
           autoreconf -vfi
-          ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
+          ./configure --enable-openssl-base=$GITHUB_WORKSPACE/openssl-install
 
           # Build socat
           make
