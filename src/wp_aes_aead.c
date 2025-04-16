@@ -819,7 +819,7 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
     #ifdef WOLFSSL_AESGCM_STREAM
         int rc;
 
-        rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, ctx->ivLen);
+        rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, (word32)ctx->ivLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -1199,7 +1199,7 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
 
     if ((!done) && ok) {
         if (ctx->ivState == IV_STATE_BUFFERED) {
-            rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, ctx->ivLen);
+            rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, (word32)ctx->ivLen);
             if (rc != 0) {
                 ok = 0;
             }
