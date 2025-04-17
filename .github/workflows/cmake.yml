@@ -1,0 +1,100 @@
+name: WolfProvider CMake Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        run: |
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  test_cmake:
+    name: Test CMake
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      # Build wolfProvider with standard options
+      - name: Build wolfProvider
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/wolfprov-install" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/openssl-install;$GITHUB_WORKSPACE/install" \
+            -DWITH_OPENSSL3=ON \
+            -DBUILD_SHARED_LIBS=ON \
+            -DBUILD_EXAMPLE=ON \
+            -DBUILD_TESTS=ON \
+            -DCMAKE_C_FLAGS="-Wall -Wextra -Werror" \
+            ..
+          cmake --build .
+          ctest -j $(nproc)
+          cmake --install .
+
+          # clean up
+          cd ..
+          rm -rf build
+
