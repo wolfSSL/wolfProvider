@@ -699,9 +699,21 @@ static int wp_ecc_get_params_enc_pub_key(wp_Ecc* ecc, OSSL_PARAM params[],
             outLen = 1 + 2 * ((ecc->bits + 7) / 8);
         }
         else {
-            rc = wc_ecc_export_x963_ex(&ecc->key, p->data, &outLen, 0);
-            if (rc != 0) {
-               ok = 0;
+            if (ecc->key.type == ECC_PRIVATEKEY_ONLY) {
+#ifdef ECC_TIMING_RESISTANT
+                rc = wc_ecc_make_pub_ex(&ecc->key, NULL, &ecc->rng);
+#else
+                rc = wc_ecc_make_pub_ex(&ecc->key, NULL, NULL);
+#endif
+                if (rc != 0){
+                    ok = 0;
+                }
+            }
+            if (ok) {
+                rc = wc_ecc_export_x963_ex(&ecc->key, p->data, &outLen, 0);
+                if (rc != 0) {
+                   ok = 0;
+                }
             }
         }
         p->return_size = outLen;
