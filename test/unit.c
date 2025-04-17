@@ -269,6 +269,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ec_load_cert, NULL),
 #endif /* WP_HAVE_ECDSA */
 
+    TEST_DECL(test_ec_decode, NULL),
+
 #ifdef WP_HAVE_PBE
     TEST_DECL(test_pbe, NULL),
 #endif

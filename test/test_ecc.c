@@ -24,6 +24,16 @@
 #include <openssl/core_names.h>
 
 #ifdef WP_HAVE_ECC
+/* prime256v1_EC_private_key*/
+static const unsigned char ec_pder[] = {
+    0x30, 0x41, 0x02, 0x01, 0x00, 0x30, 0x13, 0x06, 0x07, 0x2A,
+    0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01, 0x06, 0x08, 0x2A, 0x86,
+    0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x04, 0x27, 0x30, 0x25,
+    0x02, 0x01, 0x01, 0x04, 0x20, 0x8D, 0x06, 0x5C, 0xA7, 0xA8,
+    0x0A, 0xA7, 0x61, 0x7B, 0x3A, 0xF7, 0xEF, 0x34, 0x32, 0x0A,
+    0x99, 0x31, 0xD5, 0x7F, 0xAE, 0x74, 0x23, 0x8E, 0x3D, 0x0D,
+    0x17, 0x48, 0x00, 0x74, 0x7A, 0x93, 0x89
+};
 
 #if defined(WP_HAVE_ECDSA) || defined(WP_HAVE_ECDH)
 
@@ -1575,5 +1585,76 @@ int test_ec_load_cert(void* data)
     return err;
 }
 #endif /* WP_HAVE_ECDSA */
+
+int test_ec_decode(void* data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    PKCS8_PRIV_KEY_INFO* p8inf = NULL;
+    const unsigned char *p = NULL;
+    int len = 0;
+    EVP_PKEY* pkey1 = NULL;
+    EC_KEY* eckey1 = NULL;
+    const EC_GROUP* grp1 = NULL;
+    const BIGNUM* pk1 = NULL;
+    EVP_PKEY* pkey2 = NULL;
+    EC_KEY* eckey2 = NULL;
+    const EC_GROUP* grp2 = NULL;
+    const BIGNUM* pk2 = NULL;
+
+    (void)data;
+
+    p = &ec_pder[0];
+    len = sizeof(ec_pder);
+    p8inf = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&p, len);
+    err = p8inf == NULL;
+
+    if (err == 0) {
+        PRINT_MSG("Decode with OpenSSL and Wolfprovider");
+        pkey1 = EVP_PKCS82PKEY_ex(p8inf, osslLibCtx, NULL);
+        pkey2 = EVP_PKCS82PKEY_ex(p8inf, wpLibCtx, NULL);
+        PKCS8_PRIV_KEY_INFO_free(p8inf);
+        err = (pkey1 == NULL || pkey2 == NULL);
+    }
+
+    if (err == 0) {
+        eckey1 = EVP_PKEY_get1_EC_KEY(pkey1);
+        eckey2 = EVP_PKEY_get1_EC_KEY(pkey2);
+        err = (eckey1 == NULL || eckey2 == NULL);
+    }
+
+    if (err == 0) {
+        grp1 = EC_KEY_get0_group(eckey1);
+        err = grp1 == NULL;
+    }
+    if (err == 0) {
+        pk1 = EC_KEY_get0_private_key(eckey1);
+        err = pk1 == NULL;
+    }
+
+    if (err == 0) {
+        grp2 = EC_KEY_get0_group(eckey2);
+        err = grp2 == NULL;
+    }
+    if (err == 0) {
+        pk2 = EC_KEY_get0_private_key(eckey2);
+        err = pk2 == NULL;
+    }
+
+    if (err == 0) {
+        err = EC_GROUP_cmp(grp1, grp2, NULL) != 0;
+    }
+    if (err == 0) {
+        err = BN_cmp(pk1, pk2) != 0;
+    }
+
+    EC_KEY_free(eckey1);
+    EC_KEY_free(eckey2);
+    EVP_PKEY_free(pkey1);
+    EVP_PKEY_free(pkey2);
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
 
 #endif /* WP_HAVE_ECC */
