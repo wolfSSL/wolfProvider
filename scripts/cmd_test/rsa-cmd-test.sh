@@ -36,6 +36,9 @@ source "${UTILS_DIR}/utils-wolfprovider.sh"
 # Initialize the environment
 init_wolfprov
 
+# Fail flag
+FAIL=0
+
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
 if ! $OPENSSL_BIN list -providers | grep -q "libwolfprov"; then
@@ -87,10 +90,16 @@ validate_key() {
     local provider_args=$4
     echo -e "\n=== Validating ${key_type} Key (${key_size}) ==="
     
-    # Check if key exists and has content
+    # First check if file exists
+    if [ ! -f "$key_file" ]; then
+        echo "[FAIL] ${key_type} key (${key_size}) file does not exist"
+        FAIL=1
+    fi
+
+    # Then check if file is empty (has size 0)
     if [ ! -s "$key_file" ]; then
-        echo "[FAIL] ${key_type} key (${key_size}) file is empty or does not exist"
-        exit 1
+        echo "[FAIL] ${key_type} key (${key_size}) file is empty"
+        FAIL=1
     fi
     echo "[PASS] ${key_type} key file exists and has content"
     
@@ -101,7 +110,7 @@ validate_key() {
         echo "[PASS] ${key_type} Public key extraction successful"
     else
         echo "[FAIL] ${key_type} Public key extraction failed"
-        exit 1
+        FAIL=1
     fi
 }
 
@@ -210,11 +219,11 @@ test_sign_verify_pkeyutl() {
             echo "[PASS] Default provider verify successful"
         else
             echo "[FAIL] Default provider verify failed"
-            exit 1
+            FAIL=1
         fi
     else
         echo "[FAIL] Default provider signing failed"
-        exit 1
+        FAIL=1
     fi
 
     # Test 2: Sign and verify with wolfProvider
@@ -227,31 +236,35 @@ test_sign_verify_pkeyutl() {
             echo "[PASS] wolfProvider sign/verify successful"
         else
             echo "[FAIL] wolfProvider verify failed"
-            exit 1
+            FAIL=1
         fi
     else
         echo "[FAIL] wolfProvider signing failed"
-        exit 1
+        FAIL=1
     fi
     
     # Test 3: Cross-provider verification (default sign, wolf verify)
-    use_wolf_provider
-    echo "Test 3: Cross-provider verification (default sign, wolf verify)"
-    if $verify_func "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
-        echo "[PASS] wolfProvider can verify OpenSSL default signature"
-    else
-        echo "[FAIL] wolfProvider cannot verify OpenSSL default signature"
-        exit 1
-    fi
-    
-    # Test 4: Cross-provider verification (wolf sign, default verify)
-    use_default_provider
-    echo "Test 4: Cross-provider verification (wolf sign, default verify)"
-    if $verify_func "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
-        echo "[PASS] OpenSSL default can verify wolfProvider signature"
-    else
-        echo "[FAIL] OpenSSL default cannot verify wolfProvider signature"
-        exit 1
+    if [ $FAIL -eq 0 ]; then # only verify if previous tests passed
+        use_wolf_provider
+        echo "Test 3: Cross-provider verification (default sign, wolf verify)"
+        if $verify_func "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
+            echo "[PASS] wolfProvider can verify OpenSSL default signature"
+        else
+            echo "[FAIL] wolfProvider cannot verify OpenSSL default signature"
+            FAIL=1
+        fi
+        
+        # Test 4: Cross-provider verification (wolf sign, default verify)
+        use_default_provider
+        echo "Test 4: Cross-provider verification (wolf sign, default verify)"
+        if $verify_func "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
+            echo "[PASS] OpenSSL default can verify wolfProvider signature"
+        else
+            echo "[FAIL] OpenSSL default cannot verify wolfProvider signature"
+            FAIL=1
+        fi
+    else 
+        echo "[INFO] Cannot verify cross-provider signatures no key available"
     fi
 }
 
@@ -276,7 +289,7 @@ generate_and_test_key() {
             echo "[PASS] RSA-PSS key generation successful"
         else
             echo "[FAIL] RSA-PSS key generation failed"
-            exit 1
+            FAIL=1
         fi
     else
         # Regular RSA key generation
@@ -287,7 +300,7 @@ generate_and_test_key() {
             echo "[PASS] RSA key generation successful"
         else
             echo "[FAIL] RSA key generation failed"
-            exit 1
+            FAIL=1
         fi
     fi
 
@@ -296,7 +309,7 @@ generate_and_test_key() {
         echo "[PASS] ${key_type} key (${key_size}) generation successful"
     else
         echo "[FAIL] ${key_type} key (${key_size}) generation failed"
-        exit 1
+        FAIL=1
     fi
     
     # Validate key
@@ -312,7 +325,7 @@ generate_and_test_key() {
         echo "[PASS] provider default can use ${key_type} key (${key_size})"
     else
         echo "[FAIL] provider default cannot use ${key_type} key (${key_size})"
-        exit 1
+        FAIL=1
     fi
 }
 
@@ -334,5 +347,10 @@ for key_type in "${KEY_TYPES[@]}"; do
     done
 done
 
-echo -e "\n=== All RSA key generation tests completed successfully ==="
-exit 0
+if [ $FAIL -eq 0 ]; then
+    echo -e "\n=== All RSA key generation tests completed successfully ==="
+    exit 0
+else
+    echo -e "\n=== RSA key generation tests completed with failures ==="
+    exit 1
+fi

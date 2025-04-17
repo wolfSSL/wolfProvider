@@ -44,10 +44,9 @@ jobs:
               exit 1 # failure was unexpected (normal test)
             fi
           }
-          if [ -z "${{ matrix.force_fail }}" ]; then
-            ./scripts/cmd_test/do-cmd-tests.sh
-          fi
-        id: run_tests
+
+          # Run the command-line tests
+          ./scripts/cmd_test/do-cmd-tests.sh
 
       - name: Print test logs
         if: always()

@@ -16,15 +16,19 @@ source "${UTILS_DIR}/utils-wolfprovider.sh"
 # Initialize the environment
 init_wolfprov
 
+# Fail flag
+FAIL=0
+
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
 if ! $OPENSSL_BIN list -providers | grep -q "wolf"; then
     echo "[FAIL] wolfProvider not found in OpenSSL providers!"
     echo "Current provider list:"
     $OPENSSL_BIN list -providers
-    exit 1
+    FAIL=1
+else
+    echo "[PASS] wolfProvider is properly configured"
 fi
-echo "[PASS] wolfProvider is properly configured"
 
 # Print environment for verification
 echo "Environment variables:"
@@ -40,7 +44,6 @@ echo "This is test data for AES encryption testing." > test.txt
 KEY_SIZES=("128" "192" "256")
 # Only include modes supported by wolfProvider
 MODES=("ecb" "cbc" "ctr" "cfb")
-
 
 echo "=== Running AES Algorithm Comparisons ==="
 
@@ -60,45 +63,69 @@ for key_size in "${KEY_SIZES[@]}"; do
         enc_file="aes_outputs/aes${key_size}_${mode}.enc"
         dec_file="aes_outputs/aes${key_size}_${mode}.dec"
         
-       # Interop testing: Encrypt with default provider, decrypt with wolfProvider
+        # Interop testing: Encrypt with default provider, decrypt with wolfProvider
         echo "Interop testing (encrypt with default, decrypt with wolfProvider):"
         
         # Encryption with OpenSSL default provider
-        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
-            -in test.txt -out "$enc_file" -p
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
+            -in test.txt -out "$enc_file" -p; then
+            echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt failed"
+            FAIL=1
+        fi
         
         # Decryption with wolfProvider
-        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
-            -in "$enc_file" -out "$dec_file" -d -p
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
+            -in "$enc_file" -out "$dec_file" -d -p; then
+            echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider decrypt failed"
+            FAIL=1
+        fi
         
-        if cmp -s "test.txt" "$dec_file"; then
-            echo "[PASS] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
+        if [ $FAIL -eq 0 ]; then
+            if cmp -s "test.txt" "$dec_file"; then
+                echo "[PASS] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
+            else
+                echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
+                FAIL=1
+            fi
         else
-            echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
-            exit 1
+            echo "[INFO] Cannot verify encryption/decryption - no key available"
         fi
         
         # Interop testing: Encrypt with wolfProvider, decrypt with default provider
         echo "Interop testing (encrypt with wolfProvider, decrypt with default):"
         
         # Encryption with wolfProvider
-        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
-            -in test.txt -out "$enc_file" -p
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
+            -in test.txt -out "$enc_file" -p; then
+            echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt failed"
+            FAIL=1
+        fi
         
         # Decryption with OpenSSL default provider
-        $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
-            -in "$enc_file" -out "$dec_file" -d -p
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
+            -in "$enc_file" -out "$dec_file" -d -p; then
+            echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL decrypt failed"
+            FAIL=1
+        fi
         
-        if cmp -s "test.txt" "$dec_file"; then
-            echo "[PASS] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
+        if [ $FAIL -eq 0 ]; then
+            if cmp -s "test.txt" "$dec_file"; then
+                echo "[PASS] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
+            else
+                echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
+                FAIL=1
+            fi
         else
-            echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
-            exit 1
+            echo "[INFO] Cannot verify encryption/decryption - no key available"
         fi
     done
 done
 
-# End of AES testing
-
-echo -e "\n=== All AES tests completed successfully ==="
-exit 0
+# Change end of script to check FAIL flag
+if [ $FAIL -eq 0 ]; then
+    echo -e "\n=== All AES tests completed successfully ==="
+    exit 0
+else
+    echo -e "\n=== AES tests completed with failures ==="
+    exit 1
+fi
