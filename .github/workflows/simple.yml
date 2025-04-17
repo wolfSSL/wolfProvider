@@ -15,30 +15,41 @@ concurrency:
 
 jobs:
   make_check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     strategy:
       matrix:
-        config: [
-          # Add new configs here
-          '',
-          'OPENSSL_TAG=master',
-          'WOLFSSL_TAG=master',
-          'OPENSSL_TAG=master WOLFSSL_TAG=master',
-        ]
-    name: make check
-    runs-on: ubuntu-latest
-    # This should be a safe limit for the tests to run.
-    timeout-minutes: 10
+        config:
+          - ''
+          - 'OPENSSL_TAG=master'
+          - 'WOLFSSL_TAG=master'
+          - 'OPENSSL_TAG=master WOLFSSL_TAG=master'
+        force_fail:
+          - ''
+          - 'WOLFPROV_FORCE_FAIL=1'
+
     steps:
       - uses: actions/checkout@v4
-        name: Checkout wolfProvider
+        name: Checkout repository
 
-      - name: Test wolfProvider
+      - name: Run Tests
         run: |
-          ${{ matrix.config }} ./scripts/build-wolfprovider.sh
-
-      - name: Print errors 
-        if: ${{ failure() }}
-        run: |
-          if [ -f test-suite.log ] ; then
-            cat test-suite.log
+          ${{ matrix.config }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh || {
+            if [ -n "${{ matrix.force_fail }}" ]; then
+              cp test-suite.log test-suite-force-fail.log || true
+              echo "Test failed as expected with force fail enabled"
+              exit 0 # failure was expected (force fail)
+            else
+              exit 1 # failure was unexpected (normal test)
+            fi
+          }
+          if [ -z "${{ matrix.force_fail }}" ]; then
+            ./scripts/cmd_test/do-cmd-tests.sh
           fi
+        id: run_tests
+
+      - name: Print test logs
+        if: always()
+        run: |
+          [ -f test-suite.log ] && cat test-suite.log
