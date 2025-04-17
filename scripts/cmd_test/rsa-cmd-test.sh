@@ -261,6 +261,7 @@ generate_and_test_key() {
     local key_size=$2
     local provider_args=$3
     local output_file="rsa_outputs/${key_type}_${key_size}.pem"
+    local key_status=0
     
     echo -e "\n=== Testing ${key_type} Key Generation (${key_size}) with provider default ==="
     echo "Generating ${key_type} key (${key_size})..."
@@ -276,7 +277,7 @@ generate_and_test_key() {
             echo "[PASS] RSA-PSS key generation successful"
         else
             echo "[FAIL] RSA-PSS key generation failed"
-            exit 1
+            key_status=1
         fi
     else
         # Regular RSA key generation
@@ -287,7 +288,7 @@ generate_and_test_key() {
             echo "[PASS] RSA key generation successful"
         else
             echo "[FAIL] RSA key generation failed"
-            exit 1
+            key_status=1
         fi
     fi
 
@@ -296,11 +297,17 @@ generate_and_test_key() {
         echo "[PASS] ${key_type} key (${key_size}) generation successful"
     else
         echo "[FAIL] ${key_type} key (${key_size}) generation failed"
-        exit 1
+        key_status=1
+        if [ $key_status -ne 0 ]; then
+            TEST_STATUS=1
+        fi
+        return 1
     fi
     
     # Validate key
-    validate_key "$key_type" "$key_size" "$output_file" "$provider_args"
+    if ! validate_key "$key_type" "$key_size" "$output_file" "$provider_args"; then
+        key_status=1
+    fi
 
     # Try to use the key with provider default
     echo -e "\n=== Testing ${key_type} Key (${key_size}) with provider default ==="
@@ -312,8 +319,14 @@ generate_and_test_key() {
         echo "[PASS] provider default can use ${key_type} key (${key_size})"
     else
         echo "[FAIL] provider default cannot use ${key_type} key (${key_size})"
-        exit 1
+        key_status=1
     fi
+    
+    if [ $key_status -ne 0 ]; then
+        TEST_STATUS=1
+    fi
+    
+    return $key_status
 }
 
 # Test key generation for each type, size, and provider
@@ -334,5 +347,18 @@ for key_type in "${KEY_TYPES[@]}"; do
     done
 done
 
-echo -e "\n=== All RSA key generation tests completed successfully ==="
-exit 0
+if [ $TEST_STATUS -eq 0 ]; then
+    if [ $EXPECT_FAILURE -eq 1 ]; then
+        echo -e "\n=== RSA tests completed with expected failures ==="
+    else
+        echo -e "\n=== All RSA key generation tests completed successfully ==="
+    fi
+    exit 0
+else
+    if [ $EXPECT_FAILURE -eq 1 ]; then
+        echo -e "\n=== RSA tests failed in unexpected ways ==="
+    else
+        echo -e "\n=== RSA tests failed ==="
+    fi
+    exit 1
+fi
