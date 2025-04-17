@@ -1355,10 +1355,23 @@ static int wp_ecc_export_keypair(wp_Ecc* ecc, OSSL_PARAM* params, int* pIdx,
     int i = *pIdx;
     word32 outLen;
 
+    if (ecc->key.type == ECC_PRIVATEKEY_ONLY){
+#ifdef ECC_TIMING_RESISTANT
+        rc = wc_ecc_make_pub_ex(&ecc->key, NULL, &ecc->rng);
+#else
+        rc = wc_ecc_make_pub_ex(&ecc->key, NULL, NULL);
+#endif
+        if (rc != 0){
+            ok = 0;
+        }
+    }
+
     outLen = WP_ECC_PUBLIC_KEY_SIZE(ecc);
-    rc = wc_ecc_export_x963_ex(&ecc->key, data + *idx, &outLen, 0);
-    if (rc != 0) {
-        ok = 0;
+    if (ok) {
+        rc = wc_ecc_export_x963_ex(&ecc->key, data + *idx, &outLen, 0);
+        if (rc != 0) {
+            ok = 0;
+        }
     }
     if (ok) {
         wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PUB_KEY,
