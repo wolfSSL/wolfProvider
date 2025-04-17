@@ -1,4 +1,4 @@
-name: OpenVPN Tests
+name: HAProxy Tests
 
 # START OF COMMON SECTION
 on:
@@ -64,15 +64,20 @@ jobs:
             cat test-suite.log
           fi
 
-  test_openvpn:
+  test_haproxy:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        openvpn_ref: [ 'master' ]
+<<<<<<< HEAD
+        # List of refs to test
+        ref: [ master ]
+=======
+        haproxy_ref: [ 'master', '2.8' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+>>>>>>> 6ac5ab1 (Add additional CI workflows based on wolfssl patterns)
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -95,45 +100,74 @@ jobs:
             wolfprov-install
             provider.conf
 
+<<<<<<< HEAD
+          key: wolfprov-${{ matrix.ref }}-${{ github.sha }}
+=======
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+>>>>>>> 6ac5ab1 (Add additional CI workflows based on wolfssl patterns)
           fail-on-cache-miss: true
 
-      - name: Install dependencies
+      - name: Install HAProxy dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
-                     linux-libc-dev man2html libcmocka-dev python3-docutils \
-                     libtool automake autoconf libnl-genl-3-dev libnl-genl-3-200
+          sudo apt-get install -y libpcre3-dev zlib1g-dev
 
-      - name: workaround high-entropy ASLR
-        # not needed after either an update to llvm or runner is done
-        run: sudo sysctl vm.mmap_rnd_bits=28
+<<<<<<< HEAD
+      - name: Checkout VTest
+        uses: actions/checkout@v4
+        with:
+          repository: vtest/VTest
+          path: VTest
 
-      - if: ${{ matrix.openvpn_ref != 'master' }}
-        name: Build openvpn with fsanitize
-        run: |
-          echo 'extra_c_flags=CC="gcc -fsanitize=address" CFLAGS="-fno-omit-frame-pointer -O2"' >> $GITHUB_ENV
+      - name: Build VTest
+        working-directory: VTest
+        # Special flags due to: https://github.com/vtest/VTest/issues/12
+        run: make FLAGS='-O2 -s -Wall'
 
-      - name: Build OpenVPN with OpenSSL
+      - name: Checkout HaProxy
+        uses: actions/checkout@v4
+        with:
+          repository: haproxy/haproxy
+          path: haproxy
+          ref: ${{ matrix.ref }}
+
+      - name: Build HaProxy
+        working-directory: haproxy
+        run: >-
+          make -j TARGET=linux-glibc
+          USE_OPENSSL=1
+          SSL_INC=$GITHUB_WORKSPACE/openssl-install/include/
+          SSL_LIB=$GITHUB_WORKSPACE/openssl-install/lib64/
+          ADDLIB=-Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64
+=======
+      - name: Build HAProxy
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
-          repository: OpenVPN/openvpn
-          ref: ${{ matrix.openvpn_ref }}
-          path: openvpn
-          configure: >-
-            --with-crypto-library=openssl
-            OPENSSL_CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
-            OPENSSL_LIBS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lssl -lcrypto"
-            ${{ env.extra_c_flags }}
+          repository: haproxy/haproxy
+          path: haproxy
+          ref: ${{ matrix.haproxy_ref }}
+          configure: USE_OPENSSL=1 SSL_INC=$GITHUB_WORKSPACE/openssl-install/include SSL_LIB=$GITHUB_WORKSPACE/openssl-install/lib64
           check: false
+>>>>>>> 6ac5ab1 (Add additional CI workflows based on wolfssl patterns)
 
-      - name: Test OpenVPN with wolfProvider
-        working-directory: openvpn
+      - name: Test HAProxy with wolfProvider
+        working-directory: haproxy
         run: |
+<<<<<<< HEAD
+          # Set up the environment for wolfProvider
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          ldd src/openvpn/openvpn | grep -E '(libssl|libcrypto)'
-          ./src/openvpn/openvpn --version
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl engine -c
-          make check
+
+          # Show HAProxy version and OpenSSL information
+          ./haproxy -vv
+
+          # Run tests exactly like wolfSSL does
+          make reg-tests reg-tests/ssl VTEST_PROGRAM=$GITHUB_WORKSPACE/VTest/vtest
+=======
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          ./haproxy -vv
+          make reg-tests REGTESTS_TYPES=ssl
+>>>>>>> 6ac5ab1 (Add additional CI workflows based on wolfssl patterns)

@@ -1,4 +1,4 @@
-name: OpenVPN Tests
+name: gRPC Tests
 
 # START OF COMMON SECTION
 on:
@@ -41,7 +41,7 @@ jobs:
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -50,10 +50,11 @@ jobs:
             openssl-install
 
           key: ossl-depends
+          fail-on-cache-miss: false
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -64,16 +65,29 @@ jobs:
             cat test-suite.log
           fi
 
-  test_openvpn:
+  test_grpc:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
-        openvpn_ref: [ 'master' ]
+        include:
+          - ref: v1.60.0
+            tests: >-
+              bad_ssl_alpn_test bad_ssl_cert_test client_ssl_test
+              crl_ssl_transport_security_test server_ssl_test
+              ssl_transport_security_test ssl_transport_security_utils_test
+              test_core_security_ssl_credentials_test test_cpp_end2end_ssl_credentials_test
+              h2_ssl_cert_test h2_ssl_session_reuse_test
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
+      - name: Confirm IPv4 and IPv6 support
+        run: |
+          ip addr list lo | grep 'inet '
+          ip addr list lo | grep 'inet6 '
+
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -83,7 +97,7 @@ jobs:
             openssl-install
 
           key: ossl-depends
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -98,42 +112,52 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install dependencies
+      - name: Install prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
-                     linux-libc-dev man2html libcmocka-dev python3-docutils \
-                     libtool automake autoconf libnl-genl-3-dev libnl-genl-3-200
+          sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev
 
-      - name: workaround high-entropy ASLR
-        # not needed after either an update to llvm or runner is done
-        run: sudo sysctl vm.mmap_rnd_bits=28
-
-      - if: ${{ matrix.openvpn_ref != 'master' }}
-        name: Build openvpn with fsanitize
-        run: |
-          echo 'extra_c_flags=CC="gcc -fsanitize=address" CFLAGS="-fno-omit-frame-pointer -O2"' >> $GITHUB_ENV
-
-      - name: Build OpenVPN with OpenSSL
-        uses: wolfSSL/actions-build-autotools-project@v1
+      - name: Setup cmake version
+        uses: jwlawson/actions-setup-cmake@v2
         with:
-          repository: OpenVPN/openvpn
-          ref: ${{ matrix.openvpn_ref }}
-          path: openvpn
-          configure: >-
-            --with-crypto-library=openssl
-            OPENSSL_CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
-            OPENSSL_LIBS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lssl -lcrypto"
-            ${{ env.extra_c_flags }}
-          check: false
+          cmake-version: '3.25.x'
 
-      - name: Test OpenVPN with wolfProvider
-        working-directory: openvpn
+      - name: Checkout grpc
+        uses: actions/checkout@v4
+        with:
+          repository: grpc/grpc
+          path: grpc
+          ref: ${{ matrix.ref }}
+
+      - name: Build grpc with wolfProvider
+        working-directory: ./grpc
         run: |
+          # Setup environment for wolfProviders
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          ldd src/openvpn/openvpn | grep -E '(libssl|libcrypto)'
-          ./src/openvpn/openvpn --version
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl engine -c
-          make check
+
+          # Initialize submodules
+          git submodule update --init
+
+          # Build
+          mkdir -p cmake/build
+          cd cmake/build
+
+          # Configure with OpenSSL and wolfProvider
+          cmake -DgRPC_BUILD_TESTS=ON -DgRPC_SSL_PROVIDER=package \
+            -DOPENSSL_ROOT_DIR=$GITHUB_WORKSPACE/openssl-install ../..
+
+          # Build the tests
+          make -j $(nproc) ${{ matrix.tests }}
+
+      - name: Run grpc tests with wolfProvider
+        working-directory: ./grpc
+        run: |
+          # Start the port server
+          ./tools/run_tests/start_port_server.py
+
+          # Run the tests
+          for t in ${{ matrix.tests }} ; do
+            ./cmake/build/$t
+          done

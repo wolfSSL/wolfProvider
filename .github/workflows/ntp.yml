@@ -1,4 +1,4 @@
-name: OpenVPN Tests
+name: NTP Tests
 
 # START OF COMMON SECTION
 on:
@@ -41,7 +41,7 @@ jobs:
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -50,10 +50,11 @@ jobs:
             openssl-install
 
           key: ossl-depends
+          fail-on-cache-miss: false
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -64,14 +65,16 @@ jobs:
             cat test-suite.log
           fi
 
-  test_openvpn:
+  test_ntp:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        openvpn_ref: [ 'master' ]
+        # List of releases to test
+        ref: [ 4.2.8p15, 4.2.8p17 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
       - name: Retrieving OpenSSL from cache
@@ -83,7 +86,7 @@ jobs:
             openssl-install
 
           key: ossl-depends
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -98,42 +101,44 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+
+      # Avoid DoS'ing ntp site so cache the tar.gz
+      - name: Check if we have ntp
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: ntp-${{ matrix.ref }}.tar.gz
+          key: ntp-${{ matrix.ref }}.tar.gz
+
+      - name: Download ntp
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          wget https://downloads.nwtime.org/ntp/4.2.8/ntp-${{ matrix.ref }}.tar.gz
+
+      - name: Extract ntp
+        run: |
+          tar -xf ntp-${{ matrix.ref }}.tar.gz
+
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
-                     linux-libc-dev man2html libcmocka-dev python3-docutils \
-                     libtool automake autoconf libnl-genl-3-dev libnl-genl-3-200
+          sudo apt-get install -y libcap-dev
 
-      - name: workaround high-entropy ASLR
-        # not needed after either an update to llvm or runner is done
-        run: sudo sysctl vm.mmap_rnd_bits=28
-
-      - if: ${{ matrix.openvpn_ref != 'master' }}
-        name: Build openvpn with fsanitize
-        run: |
-          echo 'extra_c_flags=CC="gcc -fsanitize=address" CFLAGS="-fno-omit-frame-pointer -O2"' >> $GITHUB_ENV
-
-      - name: Build OpenVPN with OpenSSL
-        uses: wolfSSL/actions-build-autotools-project@v1
-        with:
-          repository: OpenVPN/openvpn
-          ref: ${{ matrix.openvpn_ref }}
-          path: openvpn
-          configure: >-
-            --with-crypto-library=openssl
-            OPENSSL_CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
-            OPENSSL_LIBS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lssl -lcrypto"
-            ${{ env.extra_c_flags }}
-          check: false
-
-      - name: Test OpenVPN with wolfProvider
-        working-directory: openvpn
+      - name: Build and test ntp with wolfProvider
+        working-directory: ntp-${{ matrix.ref }}
         run: |
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          ldd src/openvpn/openvpn | grep -E '(libssl|libcrypto)'
-          ./src/openvpn/openvpn --version
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl engine -c
-          make check
+          
+          patch -p1 < $GITHUB_WORKSPACE/osp/ntp/${{ matrix.ref }}/ntp-${{ matrix.ref }}.patch
+          ./bootstrap
+          ./configure --with-openssl-libdir=$GITHUB_WORKSPACE/openssl-install/lib64 \
+                     --with-openssl-incdir=$GITHUB_WORKSPACE/openssl-install/include
+          make -j
+          make -j check

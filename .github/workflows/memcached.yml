@@ -1,0 +1,187 @@
+name: Memcached Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+          fail-on-cache-miss: false
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        run: |
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  test_memcached:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        memcached_ref: [ '1.6.22' ]
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+          fail-on-cache-miss: false
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Create memcached test script
+        run: |
+          cat > memcached-test.sh << 'EOF'
+          #!/bin/sh
+          set -e
+
+          # Set up environment
+          export LD_LIBRARY_PATH=/wolfssl-install/lib:/openssl-install/lib64
+          export OPENSSL_CONF=/provider.conf
+          export OPENSSL_MODULES=/wolfprov-install/lib
+
+          cd /memcached
+          make test_tls
+          EOF
+
+          chmod +x memcached-test.sh
+
+      - name: Install dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y libevent-dev libevent-2.1-7 automake pkg-config make libio-socket-ssl-perl
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+
+      - name: Checkout memcached
+        uses: actions/checkout@v4
+        with:
+          repository: memcached/memcached
+          ref: ${{ matrix.memcached_ref }}
+          path: memcached
+
+      - name: Configure and build memcached
+        run: |
+          cd $GITHUB_WORKSPACE/memcached/
+          patch -p1 < $GITHUB_WORKSPACE/osp/memcached/memcached_${{ matrix.memcached_ref }}.patch
+          ./autogen.sh
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64"
+          export CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
+          ./configure --enable-tls --with-openssl=$GITHUB_WORKSPACE/openssl-install
+          make -j$(nproc)
+
+      - name: Confirm memcached built with OpenSSL
+        working-directory: ./memcached
+        run: |
+          # Print library path for debugging
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+          echo "Checking memcached binary dependencies:"
+          ldd ./memcached
+          echo "Checking for OpenSSL libraries:"
+          ldd ./memcached | grep -E '(libssl|libcrypto)'
+
+      - name: Run memcached tests
+        working-directory: ./memcached
+        run: |
+          # Retry up to three times
+          for i in {1..3}; do
+            echo "-------- RUNNING TESTS --------"
+            MEMCACHED_RES=0
+            time timeout -s SIGKILL 5m docker run \
+              -v $GITHUB_WORKSPACE/memcached:/memcached \
+              -v $GITHUB_WORKSPACE/memcached-test.sh:/memcached-test.sh \
+              -v $GITHUB_WORKSPACE/wolfssl-install:/wolfssl-install \
+              -v $GITHUB_WORKSPACE/openssl-install:/openssl-install \
+              -v $GITHUB_WORKSPACE/wolfprov-install:/wolfprov-install \
+              -v $GITHUB_WORKSPACE/provider.conf:/provider.conf \
+              alpine:latest sh -c "apk add --no-cache make perl libevent-dev bash openssl openssl-dev python3 gcc musl-dev && /memcached-test.sh" || MEMCACHED_RES=$?
+
+            if [ "$MEMCACHED_RES" -eq "0" ]; then
+              break
+            fi
+          done
+          echo "test ran $i times"
+          if [ "$MEMCACHED_RES" -ne "0" ]; then
+            exit $MEMCACHED_RES
+          fi

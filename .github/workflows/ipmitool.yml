@@ -1,4 +1,4 @@
-name: OpenVPN Tests
+name: IPMItool Tests
 
 # START OF COMMON SECTION
 on:
@@ -41,7 +41,7 @@ jobs:
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -50,10 +50,11 @@ jobs:
             openssl-install
 
           key: ossl-depends
+          fail-on-cache-miss: false
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -64,14 +65,15 @@ jobs:
             cat test-suite.log
           fi
 
-  test_openvpn:
+  test_ipmitool:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        openvpn_ref: [ 'master' ]
+        git_ref: [ c3939dac2c060651361fc71516806f9ab8c38901 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
       - name: Retrieving OpenSSL from cache
@@ -83,7 +85,7 @@ jobs:
             openssl-install
 
           key: ossl-depends
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -100,40 +102,30 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
-                     linux-libc-dev man2html libcmocka-dev python3-docutils \
-                     libtool automake autoconf libnl-genl-3-dev libnl-genl-3-200
+          sudo apt-get install -y libreadline-dev
 
-      - name: workaround high-entropy ASLR
-        # not needed after either an update to llvm or runner is done
-        run: sudo sysctl vm.mmap_rnd_bits=28
-
-      - if: ${{ matrix.openvpn_ref != 'master' }}
-        name: Build openvpn with fsanitize
-        run: |
-          echo 'extra_c_flags=CC="gcc -fsanitize=address" CFLAGS="-fno-omit-frame-pointer -O2"' >> $GITHUB_ENV
-
-      - name: Build OpenVPN with OpenSSL
+      - name: Build ipmitool with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
-          repository: OpenVPN/openvpn
-          ref: ${{ matrix.openvpn_ref }}
-          path: openvpn
-          configure: >-
-            --with-crypto-library=openssl
-            OPENSSL_CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
-            OPENSSL_LIBS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lssl -lcrypto"
-            ${{ env.extra_c_flags }}
+          repository: ipmitool/ipmitool
+          ref: ${{ matrix.git_ref }}
+          path: ipmitool
+          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install
           check: false
 
-      - name: Test OpenVPN with wolfProvider
-        working-directory: openvpn
+      - name: Confirm built with OpenSSL and test with wolfProvider
+        working-directory: ipmitool
         run: |
+          # Setup environment for wolfProvider
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          ldd src/openvpn/openvpn | grep -E '(libssl|libcrypto)'
-          ./src/openvpn/openvpn --version
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl engine -c
-          make check
+
+          # Verify ipmitool was built and linked correctly with OpenSSL
+          ldd src/ipmitool | grep -E '(libssl|libcrypto)'
+          ldd src/ipmievd | grep -E '(libssl|libcrypto)'
+
+          # Run a simple command to verify functionality
+          ./src/ipmitool -V
