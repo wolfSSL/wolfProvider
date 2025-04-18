@@ -33,20 +33,31 @@ jobs:
       - uses: actions/checkout@v4
         name: Checkout repository
 
-      - name: Run Tests
+      - name: Run build and tests
         run: |
-          ${{ matrix.config }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh || {
-            if [ -n "${{ matrix.force_fail }}" ]; then
-              cp test-suite.log test-suite-force-fail.log || true
-              echo "Test failed as expected with force fail enabled"
-              exit 0 # failure was expected (force fail)
-            else
-              exit 1 # failure was unexpected (normal test)
-            fi
-          }
+          # Build first with matrix config
+          ${{ matrix.config }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh
+          BUILD_RESULT=$?
 
-          # Run the command-line tests
-          ./scripts/cmd_test/do-cmd-tests.sh
+          # Run all tests regardless of build result
+          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
+          TEST_RESULT=$?
+
+          # For force_fail, we expect failures (return 1)
+          if [ -n "${{ matrix.force_fail }}" ]; then
+            if [ $BUILD_RESULT -eq 0 ] || [ $TEST_RESULT -eq 0 ]; then
+              echo "Build/Test unexpectedly succeeded with force fail enabled"
+              exit 1 # failure was not seen when expected
+            else
+              echo "Build/Test failed as expected with force fail enabled"
+              exit 0 # expected failure occurred
+            fi
+          else
+            # Normal case - expect success
+            if [ $BUILD_RESULT -ne 0 ] || [ $TEST_RESULT -ne 0 ]; then
+              exit 1 # unexpected failure
+            fi
+          fi
 
       - name: Print test logs
         if: always()
