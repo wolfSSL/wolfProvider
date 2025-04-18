@@ -38,8 +38,11 @@ jobs:
           # Build first with matrix config
           ${{ matrix.config }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh || BUILD_RESULT=$?
 
-          # Run all tests regardless of build result
-          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh || TEST_RESULT=$?
+          # Run all tests
+          ./scripts/cmd_test/do-cmd-tests.sh || TEST_RESULT=$?
+
+          # Run all tests with force fail
+          WOLFPROV_FORCE_FAIL=1 ./scripts/cmd_test/do-cmd-tests.sh || TEST_RESULT=$?
 
           # For force_fail, we expect failures (return 1)
           if [ -n "${{ matrix.force_fail }}" ]; then
