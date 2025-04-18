@@ -36,12 +36,10 @@ jobs:
       - name: Run build and tests
         run: |
           # Build first with matrix config
-          ${{ matrix.config }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh
-          BUILD_RESULT=$?
+          ${{ matrix.config }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh || BUILD_RESULT=$?
 
           # Run all tests regardless of build result
-          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
-          TEST_RESULT=$?
+          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh || TEST_RESULT=$?
 
           # For force_fail, we expect failures (return 1)
           if [ -n "${{ matrix.force_fail }}" ]; then
