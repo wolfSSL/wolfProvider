@@ -33,31 +33,37 @@ jobs:
       - uses: actions/checkout@v4
         name: Checkout repository
 
-      - name: Run build and tests
+      - name: Run normal build and tests
+        if: ${{ !matrix.force_fail }}
         run: |
-          # Build first with matrix config
-          ${{ matrix.config }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh || BUILD_RESULT=$?
+          # Build with matrix config
+          ${{ matrix.config }} ./scripts/build-wolfprovider.sh; BUILD_RESULT=$?
 
-          # Run all tests
-          ./scripts/cmd_test/do-cmd-tests.sh || TEST_RESULT=$?
+          # Run normal tests
+          ./scripts/cmd_test/do-cmd-tests.sh; TEST_RESULT=$?
 
-          # Run all tests with force fail
-          WOLFPROV_FORCE_FAIL=1 ./scripts/cmd_test/do-cmd-tests.sh || TEST_RESULT=$?
+          # Check normal test results
+          if [ $BUILD_RESULT -ne 0 ] || [ $TEST_RESULT -ne 0 ]; then
+            echo "Normal build/test failed unexpectedly"
+            exit 1
+          fi
 
-          # For force_fail, we expect failures (return 1)
-          if [ -n "${{ matrix.force_fail }}" ]; then
-            if [ $BUILD_RESULT -eq 0 ] || [ $TEST_RESULT -eq 0 ]; then
-              echo "Build/Test unexpectedly succeeded with force fail enabled"
-              exit 1 # failure was not seen when expected
-            else
-              echo "Build/Test failed as expected with force fail enabled"
-              exit 0 # expected failure occurred
-            fi
+      - name: Run force-fail build and tests
+        if: ${{ matrix.force_fail }}
+        run: |
+          # Build with matrix config and force fail
+          ${{ matrix.config }} WOLFPROV_FORCE_FAIL=1 ./scripts/build-wolfprovider.sh; BUILD_RESULT=$?
+
+          # Run tests with force fail
+          WOLFPROV_FORCE_FAIL=1 ./scripts/cmd_test/do-cmd-tests.sh; TEST_RESULT=$?
+
+          # Check force-fail results - we expect failures
+          if [ $BUILD_RESULT -eq 0 ] || [ $TEST_RESULT -eq 0 ]; then
+            echo "Force-fail build/test unexpectedly succeeded"
+            exit 1
           else
-            # Normal case - expect success
-            if [ $BUILD_RESULT -ne 0 ] || [ $TEST_RESULT -ne 0 ]; then
-              exit 1 # unexpected failure
-            fi
+            echo "Force-fail build/test failed as expected"
+            exit 0
           fi
 
       - name: Print test logs
