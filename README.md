@@ -123,12 +123,17 @@ make check
 ## Testing
 
 ### Unit Tests
-To run automated unit tests:
 
+To run automated unit tests:
 * `make test`
+
+### Command Tests
+
+To run the command tests:
+* `./scripts/cmd_test/do-cmd-tests.sh`
 
 ### Integration Tests
 
 To run the cipher suite testing:
-* ./scripts/test-wp-cs.sh
+* `./scripts/test-wp-cs.sh`
 
