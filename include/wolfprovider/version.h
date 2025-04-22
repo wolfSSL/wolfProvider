@@ -27,7 +27,7 @@
 extern "C" {
 #endif
 
-#define LIBWOLFPROV_VERSION_STRING "1.1.0-RC"
+#define LIBWOLFPROV_VERSION_STRING "1.0.2"
 #define LIBWOLFPROV_VERSION_HEX @HEX_VERSION@
 
 #ifdef __cplusplus
