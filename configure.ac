@@ -14,7 +14,6 @@ AC_CONFIG_MACRO_DIR([m4])
 dnl m4_include([m4/ax_check_openssl.m4])
 dnl m4_include([m4/ax_check_wolfssl.m4])
 m4_include([m4/hexversion.m4])
-m4_include([m4/hexversion.m4])
 
 AM_INIT_AUTOMAKE([1.11  -Wall -Werror -Wno-portability foreign tar-ustar subdir-objects no-define color-tests])
 LT_INIT([disable-static pic-only])
@@ -132,7 +131,6 @@ CFLAGS="$CFLAGS $USER_C_EXTRA_FLAGS"
 AC_SUBST([AM_CPPFLAGS])
 AC_SUBST([AM_CFLAGS])
 AC_SUBST([AM_LDFLAGS])
-CREATE_HEX_VERSION
 CREATE_HEX_VERSION
 
 AC_CONFIG_FILES([Makefile
