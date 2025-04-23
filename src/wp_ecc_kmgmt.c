@@ -506,44 +506,6 @@ static const OSSL_PARAM* wp_ecc_settable_params(WOLFPROV_CTX* provCtx)
 }
 
 /**
- * Set the public key's X and Y ordinates into ECC key object.
- *
- * @param [in, out] ecc     ECC key object.
- * @param [in]      params  Array of parameters and values.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ecc_set_params_x_y(wp_Ecc *ecc, const OSSL_PARAM params[])
-{
-    int ok = 1;
-
-    if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_X,
-            ecc->key.pubkey.x)) {
-        ok = 0;
-    }
-    if (ok && mp_iszero(ecc->key.pubkey.x)) {
-        ok = 0;
-    }
-    if (ok && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y,
-            ecc->key.pubkey.y))) {
-        ok = 0;
-    }
-    if (ok && mp_iszero(ecc->key.pubkey.x)) {
-        ok = 0;
-    }
-    if (ok) {
-        ok = (mp_set(ecc->key.pubkey.y, 1) == 0);
-    }
-    if (ok) {
-        ecc->key.type = ECC_PUBLICKEY;
-        ecc->hasPub = 1;
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
  * Set the encoded public key parameter into ECC key object.
  *
  * @param [in, out] ecc     ECC key object.
@@ -578,6 +540,56 @@ static int wp_ecc_set_params_enc_pub_key(wp_Ecc *ecc, const OSSL_PARAM params[],
 }
 
 /**
+ * Set the public key values into ECC key object.
+ *
+ * @param [in, out] ecc     ECC key object.
+ * @param [in]      params  Array of parameters and values.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecc_set_params_pub(wp_Ecc *ecc, const OSSL_PARAM params[])
+{
+    int ok = 1;
+    const OSSL_PARAM *p = NULL;
+
+    p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_EC_PUB_X);
+    if (p != NULL) {
+        if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_X,
+                ecc->key.pubkey.x)) {
+            ok = 0;
+        }
+        if (ok && mp_iszero(ecc->key.pubkey.x)) {
+            ok = 0;
+        }
+        if (ok) {
+            ecc->key.type = ECC_PUBLICKEY;
+            ecc->hasPub = 1;
+        }
+    }
+    p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_EC_PUB_Y);
+    if (p != NULL) {
+        if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y,
+                ecc->key.pubkey.y)) {
+            ok = 0;
+        }
+        if (ok && mp_iszero(ecc->key.pubkey.y)) {
+            ok = 0;
+        }
+    }
+    if (wp_ecc_set_params_enc_pub_key(ecc, params,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY) != 1) {
+        ok = 0;
+    }
+    if (wp_ecc_set_params_enc_pub_key(ecc, params,
+        OSSL_PKEY_PARAM_PUB_KEY) != 1) {
+        ok = 0;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
  * Set the ECC key parameters.
  *
  * @param [in, out] ecc     ECC key object.
@@ -591,11 +603,8 @@ static int wp_ecc_set_params(wp_Ecc *ecc, const OSSL_PARAM params[])
     const OSSL_PARAM *p;
 
     if (params != NULL) {
-        if (!wp_ecc_set_params_x_y(ecc, params)) {
-            if (!wp_ecc_set_params_enc_pub_key(ecc, params,
-                    OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY)) {
-                ok = 0;
-            }
+        if (!wp_ecc_set_params_pub(ecc, params)) {
+            ok = 0;
         }
         if (ok) {
             p = OSSL_PARAM_locate_const(params,
@@ -695,19 +704,87 @@ static int wp_ecc_get_params_enc_pub_key(wp_Ecc* ecc, OSSL_PARAM params[],
         int rc;
         word32 outLen = (word32)p->return_size;
 
-        if (p->data == NULL) {
-            outLen = 1 + 2 * ((ecc->bits + 7) / 8);
+        if (ecc->hasPub == 0) {
+            ok = 0;
         }
-        else {
-            rc = wc_ecc_export_x963_ex(&ecc->key, p->data, &outLen, 0);
-            if (rc != 0) {
-               ok = 0;
+        if (ok) {
+            if (p->data == NULL) {
+                outLen = 1 + 2 * ((ecc->bits + 7) / 8);
+            }
+            else {
+                rc = wc_ecc_export_x963_ex(&ecc->key, p->data, &outLen, 0);
+                if (rc != 0) {
+                    ok = 0;
+                }
+            }
+            p->return_size = outLen;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Get the public key into parameters.
+ *
+ * @param [in]      ecc     ECC key object.
+ * @param [in, out] params  Array of parameters and values.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecc_get_params_pub(wp_Ecc* ecc, OSSL_PARAM params[])
+{
+    int ok = 1;
+    OSSL_PARAM* p;
+
+    p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_EC_PUB_X);
+    if ((p != NULL) && (ecc->hasPub == 0)) {
+        ok = 0;
+    }
+    if (ok && p != NULL) {
+        size_t outLen = mp_unsigned_bin_size(ecc->key.pubkey.x);
+        if (p->data != NULL) {
+            if (p->data_size < outLen) {
+                ok = 0;
+            }
+            if (ok && !wp_mp_to_unsigned_bin_le(ecc->key.pubkey.x,
+                                                p->data, outLen)) {
+                ok = 0;
             }
         }
         p->return_size = outLen;
     }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_EC_PUB_Y);
+        if ((p != NULL) && (ecc->hasPub == 0)) {
+            ok = 0;
+        }
+    }
+    if (ok && p != NULL) {
+        size_t outLen = mp_unsigned_bin_size(ecc->key.pubkey.y);
+        if (p->data != NULL) {
+            if (p->data_size < outLen) {
+                ok = 0;
+            }
+            if (ok && !wp_mp_to_unsigned_bin_le(ecc->key.pubkey.y,
+                                                p->data, outLen)) {
+                ok = 0;
+            }
+        }
+        p->return_size = outLen;
+    }
+    /* Encoded public key. */
+    if (ok && (!wp_ecc_get_params_enc_pub_key(ecc, params,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY))) {
+        ok = 0;
+    }
+    /* Public key. */
+    if (ok && (!wp_ecc_get_params_enc_pub_key(ecc, params,
+            OSSL_PKEY_PARAM_PUB_KEY))) {
+        ok = 0;
+    }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -767,25 +844,9 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
             ok = 0;
         }
     }
-    /* X-ordinate of public key. */
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_EC_PUB_X,
-            ecc->key.pubkey.x))) {
-        ok = 0;
-    }
-    /* Y-ordinate of public key. */
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y,
-            ecc->key.pubkey.y))) {
-        ok = 0;
-    }
-    /* Encoded public key. */
-    if (ok && (!wp_ecc_get_params_enc_pub_key(ecc, params,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY))) {
-        ok = 0;
-    }
-    /* Public key. */
-    if (ok && (!wp_ecc_get_params_enc_pub_key(ecc, params,
-            OSSL_PKEY_PARAM_PUB_KEY))) {
-        ok = 0;
+    /* Public key */
+    if (ok) {
+        ok = wp_ecc_get_params_pub(ecc, params);
     }
     if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
 #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
@@ -1041,11 +1102,8 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
 {
     int ok = 1;
 
-    /* This call sets hasPub field in wp_Ecc. */
-    if (!wp_ecc_set_params_x_y(ecc, params)) {
-        /* Try direct import of encoded public key instead. */
-        ok = wp_ecc_set_params_enc_pub_key(ecc, params,
-            OSSL_PKEY_PARAM_PUB_KEY);
+    if (wp_ecc_set_params_pub(ecc, params) != 1) {
+        ok = 0;
     }
     if (ok && priv && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
 #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
@@ -2027,13 +2085,21 @@ static int wp_ecc_decode_pki(wp_Ecc* ecc, unsigned char* data, word32 len)
 #endif
     if (ok) {
         ecc->curveId = ecc->key.dp->id;
-        /* ECC_PRIVATEKEY_ONLY when no public key data. */
-        ecc->hasPub = ecc->key.type == ECC_PRIVATEKEY;
         ecc->hasPriv = 1;
         /* Needs curveId set. */
         if (!wp_ecc_set_bits(ecc)) {
             ok = 0;
         }
+
+        /* Keys decoded from pki should always have public key */
+        if (ecc->key.type == ECC_PRIVATEKEY_ONLY) {
+#ifdef ECC_TIMING_RESISTANT
+            rc = wc_ecc_make_pub_ex(&ecc->key, NULL, &ecc->rng);
+#else
+            rc = wc_ecc_make_pub_ex(&ecc->key, NULL, NULL);
+#endif
+        }
+        ecc->hasPub = 1;
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
