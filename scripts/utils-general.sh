@@ -30,8 +30,14 @@ fi
 check_folder_age() {
     folderA=$1
     folderB=$2
-    folderA_age=$(find "$folderA" -type f -printf '%T@' | sort -n | tail -n 1)
-    folderB_age=$(find "$folderB" -type f -printf '%T@' | sort -n | tail -n 1)
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        folderA_age=$(find "$folderA" -type f -exec stat -f '%Dm' {} \; | sort -n | tail -n 1)
+        folderB_age=$(find "$folderB" -type f -exec stat -f '%Dm' {} \; | sort -n | tail -n 1)
+    else
+        folderA_age=$(find "$folderA" -type f -printf '%T@' | sort -n | tail -n 1)
+        folderB_age=$(find "$folderB" -type f -printf '%T@' | sort -n | tail -n 1)
+    fi
 
     if awk "BEGIN {exit !($folderA_age > $folderB_age)}"; then
         echo 1
