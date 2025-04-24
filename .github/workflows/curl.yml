@@ -20,12 +20,11 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        force_fail: ['', 'WOLFPROV_FORCE_FAIL=1']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
 
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
       - name: Checking wolfSSL/wolfProvider in cache
         uses: actions/cache@v4
         id: wolfprov-cache
@@ -35,27 +34,35 @@ jobs:
             wolfssl-install
             wolfprov-install
             provider.conf
-
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           lookup-only: true
 
-      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
           path: |
             openssl-source
             openssl-install
-
           key: ossl-depends
 
-      # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh || BUILD_RESULT=$?
+
+          if [ -n "${{ matrix.force_fail }}" ]; then
+            if [ $BUILD_RESULT -eq 0 ]; then
+              echo "Build unexpectedly succeeded with force fail enabled"
+              exit 1
+            else
+              echo "Build failed as expected with force fail enabled"
+            fi
+          elif [ $BUILD_RESULT -ne 0 ]; then
+            echo "Build failed unexpectedly"
+            exit 1
+          fi
 
       - name: Print errors
         if: ${{ failure() }}
@@ -67,12 +74,12 @@ jobs:
   test_curl:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
         curl_ref: [ 'master', 'curl-8_4_0' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        force_fail: ['', 'WOLFPROV_FORCE_FAIL=1']
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -81,7 +88,6 @@ jobs:
           path: |
             openssl-source
             openssl-install
-
           key: ossl-depends
           fail-on-cache-miss: true
 
@@ -94,7 +100,6 @@ jobs:
             wolfssl-install
             wolfprov-install
             provider.conf
-
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
@@ -118,4 +123,17 @@ jobs:
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          make -j $(nproc) test-ci
+
+          make -j $(nproc) test-ci || TEST_RESULT=$?
+
+          if [ -n "${{ matrix.force_fail }}" ]; then
+            if [ $TEST_RESULT -eq 0 ]; then
+              echo "Tests unexpectedly succeeded with force fail enabled"
+              exit 1
+            else
+              echo "Tests failed as expected with force fail enabled"
+            fi
+          elif [ $TEST_RESULT -ne 0 ]; then
+            echo "Tests failed unexpectedly"
+            exit 1
+          fi
