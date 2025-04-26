@@ -74,6 +74,9 @@ jobs:
         curl_ref: [ 'master', 'curl-8_4_0' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
     steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -109,13 +112,37 @@ jobs:
           repository: curl/curl
           path: curl
           ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install/
+          configure: --with-openssl
           check: false
 
-      - name: Test curl with wolfProvider
+      - name: Test curl with wolfProvider - default
         working-directory: curl
         run: |
+          # Set environment variables for default
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          make -j $(nproc) test-ci
+          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
+
+          # Run tests
+          make -j$(nproc) test-ci || true
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT 0 curl
+
+      # Test WPFF after default so certs get generated
+      - name: Test curl with wolfProvider - force fail
+        working-directory: curl
+        run: |
+          # Set environment variables for force fail
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
+          export WOLFPROV_FORCE_FAIL=1
+          export CURL_REF=${{ matrix.curl_ref }}
+
+          # Run tests and save output to test.log
+          mkdir -p tests
+          make -j$(nproc) test-ci 2>&1 | tee tests/test.log || true
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT 1 curl
