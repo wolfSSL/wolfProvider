@@ -116,9 +116,9 @@ jobs:
           configure: --with-openssl
           check: false
 
-      - name: Generate certificates for force-fail tests
+      - name: Generate certificates for curl master force-fail tests
         run: |
-          if [ "${{ matrix.force_fail }}" = "1" ]; then
+          if [ "${{ matrix.force_fail }}" = "1" ] && [ "${{ matrix.curl_ref }}" = "master" ]; then
             cd curl/tests/certs
             make test-ca.cacert
             cd ../..
@@ -135,7 +135,8 @@ jobs:
           export WOLFPROV_FORCE_FAIL=${{ matrix.force_fail }}
           export CURL_REF=${{ matrix.curl_ref }}
 
-          # Run tests
-          make -j$(nproc) test-ci || true
+          # Run tests and save output to test.log
+          mkdir -p tests
+          make -j$(nproc) test-ci 2>&1 | tee tests/test.log || true
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl
