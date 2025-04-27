@@ -31,7 +31,6 @@ if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
                 EXPECTED_FAILS="9 31 39 41 44 46 61 64 65 70 71 72 73 88 153 154 158 163 166 167 168 169 170 171 173 186 206 245 246 258 259 273 277 327 335 388 420 444 540 551 552 554 565 579 584 643 645 646 647 648 649 650 651 652 653 654 666 667 668 669 670 671 672 673 977 1001 1002 1030 1053 1060 1061 1071 1072 1079 1095 1105 1133 1136 1151 1155 1158 1160 1161 1186 1187 1189 1190 1191 1192 1193 1194 1195 1196 1198 1199 1229 1284 1285 1286 1293 1315 1404 1412 1415 1418 1437 1568 1903 1905 1916 1917 1964 2024 2026 2027 2028 2030 2058 2059 2060 2061 2062 2063 2064 2065 2066 2067 2068 2069 2073 2076 2200 2201 2202 2203 2204 3017 3018"
                 ;;
             "master")
-                # TODO: Replace with actual master branch expected failures
                 EXPECTED_FAILS="9 31 39 41 44 46 61 64 65 70 71 72 73 88 153 154 158 163 166 167 168 169 170 171 173 186 206 245 246 258 259 273 277 327 335 388 420 444 483 540 551 552 554 565 579 584 643 645 646 647 648 649 650 651 652 653 654 666 667 668 669 670 671 672 673 695 977 1001 1002 1030 1053 1060 1061 1071 1072 1079 1095 1105 1133 1136 1151 1155 1158 1160 1161 1186 1187 1189 1190 1191 1192 1193 1194 1195 1196 1198 1199 1229 1284 1285 1286 1293 1315 1404 1412 1415 1418 1437 1476 1568 1608 1610 1615 1654 1660 1903 1905 1916 1917 1964 2024 2026 2027 2028 2030 2058 2059 2060 2061 2062 2063 2064 2065 2066 2067 2068 2069 2073 2076 2200 2201 2202 2203 2204 3017 3018"
                 ;;
             *)
@@ -45,9 +44,12 @@ if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
         ACTUAL_SORTED="${TEMP_DIR}/actual_sorted.txt"
         EXPECTED_SORTED="${TEMP_DIR}/expected_sorted.txt"
 
-        # Sort both lists, one per line
-        echo "$ACTUAL_FAILS" | tr ' ' '\n' | sort -n > "$ACTUAL_SORTED"
-        echo "$EXPECTED_FAILS" | tr ' ' '\n' | sort -n > "$EXPECTED_SORTED"
+        # Clean and sort both lists and remove empty lines
+        echo "$ACTUAL_FAILS" | tr ' ' '\n' | grep -v '^$' | sort -n > "$ACTUAL_SORTED"
+        echo "$EXPECTED_FAILS" | tr ' ' '\n' | grep -v '^$' | sort -n > "$EXPECTED_SORTED"
+
+        echo "DEBUG: Sorted actual fails: $(tr '\n' ' ' < "$ACTUAL_SORTED")"
+        echo "DEBUG: Sorted expected fails: $(tr '\n' ' ' < "$EXPECTED_SORTED")"
 
         # Find missing in actual (in expected but not in actual)
         MISSING=$(comm -23 "$EXPECTED_SORTED" "$ACTUAL_SORTED" | tr '\n' ' ')
@@ -60,8 +62,7 @@ if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
         echo "Test(s) that should have failed: $MISSING"
         echo "Test(s) that shouldn't have failed: $EXTRA"
 
-        # Check if they match by comparing the original sorted files
-        if [ "$ACTUAL_FAILS" = "$EXPECTED_FAILS" ]; then
+        if [ -z "$MISSING" ] && [ -z "$EXTRA" ]; then
             echo "PASS: Actual failed tests match expected."
             exit 0
         else
