@@ -2,14 +2,15 @@
 
 set -e
 
-if [ $# -lt 1 ]; then
-    echo "Usage: $0 <test_result> [WOLFPROV_FORCE_FAIL] [TEST_SUITE]"
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <build_result> <test_result> [WOLFPROV_FORCE_FAIL] [TEST_SUITE]"
     exit 1
 fi
 
-TEST_RESULT="$1"
-WOLFPROV_FORCE_FAIL="${2:-}"
-TEST_SUITE="${3:-}"
+BUILD_RESULT="$1"
+TEST_RESULT="$2"
+WOLFPROV_FORCE_FAIL="${3:-}"
+TEST_SUITE="${4:-}"
 
 if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
     if [ "$TEST_SUITE" = "curl" ]; then
@@ -69,18 +70,33 @@ if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
             echo "FAIL: Actual failed tests do not match expected."
             exit 1
         fi
-    else
-        # --- generic force-fail logic for other suites ---
-        if [ "$TEST_RESULT" -ne 0 ]; then
-            echo "Tests failed as expected with force fail enabled (suite: $TEST_SUITE)"
-            exit 0
+    elif [ "$TEST_SUITE" = "simple" ]; then
+        # --- simple test suite specific logic ---
+        if [ -f "test-suite.log" ]; then
+            # For simple tests, we expect all tests to fail when force fail is enabled
+            if [ $BUILD_RESULT -eq 0 ] || [ $TEST_RESULT -eq 0 ]; then
+                echo "Simple tests unexpectedly succeeded with force fail enabled"
+                exit 1
+            else
+                echo "Simple tests failed as expected with force fail enabled"
+                exit 0
+            fi
         else
-            echo "Tests unexpectedly succeeded with force fail enabled (suite: $TEST_SUITE)"
+            echo "Error: test-suite.log not found"
             exit 1
         fi
+    else
+        # --- generic force-fail logic for other suites ---
+        if [ $BUILD_RESULT -eq 0 ] || [ $TEST_RESULT -eq 0 ]; then
+            echo "Build/Test unexpectedly succeeded with force fail enabled"
+            exit 1 # failure was not seen when expected
+        else
+            echo "Build/Test failed as expected with force fail enabled"
+            exit 0 # expected failure occurred
+        fi
     fi
-elif [ "$TEST_RESULT" -ne 0 ]; then
-    if [ "$TEST_RESULT" -eq 2 ]; then
+elif [ $BUILD_RESULT -ne 0 ] || [ $TEST_RESULT -ne 0 ]; then
+    if [ $BUILD_RESULT -eq 2 ]; then
         echo "Build/test setup failed unexpectedly"
     else
         echo "Tests failed unexpectedly"
