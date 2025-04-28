@@ -550,15 +550,14 @@ static int wp_ecc_set_params_enc_pub_key(wp_Ecc *ecc, const OSSL_PARAM params[],
 static int wp_ecc_set_params_pub(wp_Ecc *ecc, const OSSL_PARAM params[])
 {
     int ok = 1;
-    const OSSL_PARAM *p = NULL;
+    int set = 0;
 
-    p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_EC_PUB_X);
-    if (p != NULL) {
-        if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_X,
-                ecc->key.pubkey.x)) {
-            ok = 0;
-        }
-        if (ok && mp_iszero(ecc->key.pubkey.x)) {
+    if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_X,
+            ecc->key.pubkey.x, &set)) {
+        ok = 0;
+    }
+    if (ok && (set == 1)) {
+        if (mp_iszero(ecc->key.pubkey.x)) {
             ok = 0;
         }
         if (ok) {
@@ -566,15 +565,9 @@ static int wp_ecc_set_params_pub(wp_Ecc *ecc, const OSSL_PARAM params[])
             ecc->hasPub = 1;
         }
     }
-    p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_EC_PUB_Y);
-    if (p != NULL) {
-        if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y,
-                ecc->key.pubkey.y)) {
-            ok = 0;
-        }
-        if (ok && mp_iszero(ecc->key.pubkey.y)) {
-            ok = 0;
-        }
+    if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y,
+            ecc->key.pubkey.y, NULL)) {
+        ok = 0;
     }
     if (wp_ecc_set_params_enc_pub_key(ecc, params,
             OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY) != 1) {
@@ -736,43 +729,14 @@ static int wp_ecc_get_params_enc_pub_key(wp_Ecc* ecc, OSSL_PARAM params[],
 static int wp_ecc_get_params_pub(wp_Ecc* ecc, OSSL_PARAM params[])
 {
     int ok = 1;
-    OSSL_PARAM* p;
 
-    p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_EC_PUB_X);
-    if ((p != NULL) && (ecc->hasPub == 0)) {
+    if (!wp_params_set_mp(params, OSSL_PKEY_PARAM_EC_PUB_X, ecc->key.pubkey.x,
+                          (ecc->hasPub == 1))) {
         ok = 0;
     }
-    if (ok && p != NULL) {
-        size_t outLen = mp_unsigned_bin_size(ecc->key.pubkey.x);
-        if (p->data != NULL) {
-            if (p->data_size < outLen) {
-                ok = 0;
-            }
-            if (ok && !wp_mp_to_unsigned_bin_le(ecc->key.pubkey.x,
-                                                p->data, outLen)) {
-                ok = 0;
-            }
-        }
-        p->return_size = outLen;
-    }
-    if (ok) {
-        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_EC_PUB_Y);
-        if ((p != NULL) && (ecc->hasPub == 0)) {
-            ok = 0;
-        }
-    }
-    if (ok && p != NULL) {
-        size_t outLen = mp_unsigned_bin_size(ecc->key.pubkey.y);
-        if (p->data != NULL) {
-            if (p->data_size < outLen) {
-                ok = 0;
-            }
-            if (ok && !wp_mp_to_unsigned_bin_le(ecc->key.pubkey.y,
-                                                p->data, outLen)) {
-                ok = 0;
-            }
-        }
-        p->return_size = outLen;
+    if (!wp_params_set_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y, ecc->key.pubkey.y,
+                          (ecc->hasPub == 1))) {
+        ok = 0;
     }
     /* Encoded public key. */
     if (ok && (!wp_ecc_get_params_enc_pub_key(ecc, params,
@@ -850,11 +814,11 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
     }
     if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
 #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
-            wc_ecc_key_get_priv(&ecc->key)
+            wc_ecc_key_get_priv(&ecc->key),
 #else
-            &(ecc->key.k)
+            &(ecc->key.k),
 #endif
-            ))) {
+            1))) {
         ok = 0;
     }
     /* Private key. */
@@ -1107,11 +1071,11 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
     }
     if (ok && priv && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
 #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
-            wc_ecc_key_get_priv(&ecc->key)
+            wc_ecc_key_get_priv(&ecc->key),
 #else
-            &(ecc->key.k)
+            &(ecc->key.k),
 #endif
-            ))) {
+            NULL))) {
         ok = 0;
     }
     if (ok &&
