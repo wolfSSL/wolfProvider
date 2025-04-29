@@ -84,6 +84,36 @@ if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
             echo "Error: test-suite.log not found"
             exit 1
         fi
+    elif [ "$TEST_SUITE" = "nginx" ]; then
+        # --- nginx-specific logic ---
+        # For nginx tests, we expect all tests to fail when force fail is enabled
+        if [ $TEST_RESULT -eq 0 ]; then
+            echo "Nginx tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "Nginx tests failed as expected with force fail enabled"
+            exit 0
+        fi
+    elif [ "$TEST_SUITE" = "openvpn" ]; then
+        # --- openvpn-specific logic ---
+        # For openvpn tests, we expect all tests to fail when force fail is enabled
+        if [ $TEST_RESULT -eq 0 ]; then
+            echo "OpenVPN tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "OpenVPN tests failed as expected with force fail enabled"
+            exit 0
+        fi
+    elif [ "$TEST_SUITE" = "sssd" ]; then
+        # --- sssd-specific logic ---
+        # For sssd tests, we expect all tests to fail when force fail is enabled
+        if [ $TEST_RESULT -eq 0 ]; then
+            echo "SSSD tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "SSSD tests failed as expected with force fail enabled"
+            exit 0
+        fi
     else
         # --- generic force-fail logic for other suites ---
         if [ $TEST_RESULT -eq 0 ]; then
