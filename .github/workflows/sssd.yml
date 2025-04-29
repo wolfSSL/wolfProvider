@@ -25,6 +25,7 @@ jobs:
       matrix:
         sssd_ref: [ 2.9.1 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        force_fail: [ 1, 0 ] # ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -51,6 +52,8 @@ jobs:
 
       - name: Build sssd with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
+        env:
+          WOLFPROV_FORCE_FAIL: ${{ matrix.force_fail }}
         with:
           repository: SSSD/sssd
           ref: ${{ matrix.sssd_ref }}
@@ -59,3 +62,9 @@ jobs:
             --without-samba --disable-cifs-idmap-plugin
             --without-nfsv4-idmapd-plugin --with-oidc-child=no
           check: true
+          
+      - name: Verify test results
+        run: |
+          cd sssd
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} sssd

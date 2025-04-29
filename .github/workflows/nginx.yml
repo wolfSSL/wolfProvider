@@ -73,6 +73,7 @@ jobs:
       matrix:
         nginx_ref: [ 'master', 'release-1.27.4' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        force_fail: [ 1, 0 ] # ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -128,4 +129,9 @@ jobs:
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v .
+          export WOLFPROV_FORCE_FAIL=${{ matrix.force_fail }}
+          
+          # Run tests and save result
+          TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v . || true
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} nginx

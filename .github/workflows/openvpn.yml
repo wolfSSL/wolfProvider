@@ -73,6 +73,7 @@ jobs:
       matrix:
         openvpn_ref: [ 'master' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        force_fail: [ 1, 0 ] # ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -120,4 +121,9 @@ jobs:
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          make check
+          export WOLFPROV_FORCE_FAIL=${{ matrix.force_fail }}
+          
+          # Run tests and save result
+          make check || true
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openvpn
