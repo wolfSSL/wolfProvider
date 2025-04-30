@@ -36,8 +36,17 @@ source "${UTILS_DIR}/utils-wolfprovider.sh"
 # Initialize the environment
 init_wolfprov
 
-# Fail flag
+# Fail flags
 FAIL=0
+FORCE_FAIL=0
+FORCE_FAIL_PASSED=0
+
+# Check for force fail parameter
+if [ "$1" = "WOLFPROV_FORCE_FAIL=1" ]; then
+    export WOLFPROV_FORCE_FAIL=1
+    FORCE_FAIL=1
+    echo -e "\nForce fail mode enabled for ECC tests"
+fi
 
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
@@ -45,9 +54,9 @@ if ! $OPENSSL_BIN list -providers | grep -q "libwolfprov"; then
     echo "[FAIL] wolfProvider not found in OpenSSL providers!"
     echo "Current provider list:"
     $OPENSSL_BIN list -providers
-    exit 1
+    FAIL=1
 fi
-echo "[PASS] wolfProvider is properly configured"
+echo "wolfProvider is properly configured"
 
 # Print environment for verification
 echo "Environment variables:"
@@ -60,10 +69,6 @@ mkdir -p ecc_outputs
 
 # Create test data for signing
 echo "This is test data for ECC signing and verification." > ecc_outputs/test_data.txt
-
-# Array of ECC curves and providers to test
-CURVES=("prime256v1" "secp384r1" "secp521r1")
-PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
 
 # Function to use default provider only
 use_default_provider() {
@@ -79,6 +84,18 @@ use_wolf_provider() {
     echo "Switched to wolfProvider"
 }
 
+# Helper function to handle force fail checks
+check_force_fail() {
+    if [ $FORCE_FAIL -eq 1 ]; then
+        echo "[PASS] Test passed when force fail was enabled"
+        FORCE_FAIL_PASSED=1
+    fi
+}
+
+# Array of ECC curves and providers to test
+CURVES=("prime256v1" "secp384r1" "secp521r1")
+PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
+
 echo "=== Running ECC Key Generation Tests ==="
 
 # Function to validate key
@@ -92,26 +109,28 @@ validate_key() {
     if [ ! -f "$key_file" ]; then
         echo "[FAIL] ECC key (${curve}) file does not exist"
         FAIL=1
-        return 1
+        return
     fi
     
     # Then check if file is empty (has size 0)
     if [ ! -s "$key_file" ]; then
         echo "[FAIL] ECC key (${curve}) file is empty"
         FAIL=1
-        return 1
+        return
+    else
+        echo "[PASS] ECC key file exists and has content"
+        check_force_fail
     fi
-    echo "[PASS] ECC key file exists and has content"
     
-    # Try to extract public key
+    # Only try to extract public key if file exists and has content
     local pub_key_file="ecc_outputs/ecc_${curve}_pub.pem"
     if $OPENSSL_BIN pkey -in "$key_file" -pubout -out "$pub_key_file" \
         ${provider_args} -passin pass: >/dev/null; then
         echo "[PASS] ECC Public key extraction successful"
+        check_force_fail
     else
         echo "[FAIL] ECC Public key extraction failed"
         FAIL=1
-        return 1
     fi
 }
 
@@ -169,8 +188,10 @@ test_sign_verify_pkeyutl() {
     local default_sig_file="ecc_outputs/ecc_${curve}_default_sig.bin"
     if sign_ecc "$key_file" "$data_file" "$default_sig_file" "$provider_args"; then
         echo "[PASS] Signing with OpenSSL default successful"
+        check_force_fail
         if verify_ecc "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
             echo "[PASS] Default provider verify successful"
+            check_force_fail
         else
             echo "[FAIL] Default provider verify failed"
             FAIL=1
@@ -186,8 +207,10 @@ test_sign_verify_pkeyutl() {
     local wolf_sig_file="ecc_outputs/ecc_${curve}_wolf_sig.bin"
     if sign_ecc "$key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
         echo "[PASS] Signing with wolfProvider successful"
+        check_force_fail
         if verify_ecc "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
             echo "[PASS] wolfProvider sign/verify successful"
+            check_force_fail
         else
             echo "[FAIL] wolfProvider verify failed"
             FAIL=1
@@ -203,6 +226,7 @@ test_sign_verify_pkeyutl() {
         echo "Test 3: Cross-provider verification (default sign, wolf verify)"
         if verify_ecc "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
             echo "[PASS] wolfProvider can verify OpenSSL default signature"
+            check_force_fail
         else
             echo "[FAIL] wolfProvider cannot verify OpenSSL default signature"
             FAIL=1
@@ -213,6 +237,7 @@ test_sign_verify_pkeyutl() {
         echo "Test 4: Cross-provider verification (wolf sign, default verify)"
         if verify_ecc "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
             echo "[PASS] OpenSSL default can verify wolfProvider signature"
+            check_force_fail
         else
             echo "[FAIL] OpenSSL default cannot verify wolfProvider signature"
             FAIL=1
@@ -231,10 +256,12 @@ generate_and_test_key() {
     echo -e "\n=== Testing ECC Key Generation (${curve}) with provider default ==="
     echo "Generating ECC key (${curve})..."
     
-    if $OPENSSL_BIN ecparam -name $curve -genkey \
+    if $OPENSSL_BIN genpkey -algorithm EC \
         ${provider_args} \
+        -pkeyopt ec_paramgen_curve:${curve} \
         -out "$output_file" 2>/dev/null; then
         echo "[PASS] ECC key generation successful"
+        check_force_fail
     else
         echo "[FAIL] ECC key generation failed"
         FAIL=1
@@ -243,6 +270,7 @@ generate_and_test_key() {
     # Verify the key was generated
     if [ -s "$output_file" ]; then
         echo "[PASS] ECC key generation successful"
+        check_force_fail
     else
         echo "[FAIL] ECC key generation failed"
         FAIL=1
@@ -259,6 +287,7 @@ generate_and_test_key() {
     if $OPENSSL_BIN pkey -in "$output_file" -check \
         ${provider_args} -passin pass: >/dev/null; then
         echo "[PASS] provider default can use ECC key (${curve})"
+        check_force_fail
     else
         echo "[FAIL] provider default cannot use ECC key (${curve})"
         FAIL=1
@@ -277,10 +306,22 @@ for curve in "${CURVES[@]}"; do
     done
 done
 
-if [ $FAIL -eq 0 ]; then
-    echo -e "\n=== All ECC key generation tests completed successfully ==="
-    exit 0
+if [ $FORCE_FAIL -eq 1 ]; then
+    if [ $FORCE_FAIL_PASSED -eq 1 ]; then
+        echo -e "\n=== ECC Tests Failed With Force Fail Enabled ==="
+        echo "ERROR: Some tests passed when they should have failed"
+        exit 1
+    else
+        echo -e "\n=== ECC Tests Passed With Force Fail Enabled ==="
+        echo "SUCCESS: All tests failed as expected"
+        exit 0
+    fi
 else
-    echo -e "\n=== ECC key generation tests completed with failures ==="
-    exit 1
+    if [ $FAIL -eq 0 ]; then
+        echo -e "\n=== All ECC tests completed successfully ==="
+        exit 0
+    else
+        echo -e "\n=== ECC tests completed with failures ==="
+        exit 1
+    fi
 fi

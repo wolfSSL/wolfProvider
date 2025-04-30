@@ -1,4 +1,24 @@
 #!/bin/bash
+# aes-cmd-test.sh
+# AES encryption test for wolfProvider
+#
+# Copyright (C) 2006-2024 wolfSSL Inc.
+#
+# This file is part of wolfProvider.
+#
+# wolfProvider is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# wolfProvider is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
 # Set up environment
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -16,8 +36,17 @@ source "${UTILS_DIR}/utils-wolfprovider.sh"
 # Initialize the environment
 init_wolfprov
 
-# Fail flag
+# Fail flags
 FAIL=0
+FORCE_FAIL=0
+FORCE_FAIL_PASSED=0
+
+# Check for force fail parameter
+if [ "$1" = "WOLFPROV_FORCE_FAIL=1" ]; then
+    export WOLFPROV_FORCE_FAIL=1
+    FORCE_FAIL=1
+    echo -e "\nForce fail mode enabled for AES tests"
+fi
 
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
@@ -27,7 +56,7 @@ if ! $OPENSSL_BIN list -providers | grep -q "wolf"; then
     $OPENSSL_BIN list -providers
     FAIL=1
 else
-    echo "[PASS] wolfProvider is properly configured"
+    echo "wolfProvider is properly configured"
 fi
 
 # Print environment for verification
@@ -39,6 +68,14 @@ echo "OPENSSL_BIN: ${OPENSSL_BIN}"
 # Create test data and output directories
 mkdir -p aes_outputs
 echo "This is test data for AES encryption testing." > test.txt
+
+# Helper function to handle force fail checks
+check_force_fail() {
+    if [ $FORCE_FAIL -eq 1 ]; then
+        echo "[PASS] Test passed when force fail was enabled"
+        FORCE_FAIL_PASSED=1
+    fi
+}
 
 # Arrays for test configurations
 KEY_SIZES=("128" "192" "256")
@@ -83,6 +120,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         if [ $FAIL -eq 0 ]; then
             if cmp -s "test.txt" "$dec_file"; then
                 echo "[PASS] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
+                check_force_fail
             else
                 echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
                 FAIL=1
@@ -111,6 +149,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         if [ $FAIL -eq 0 ]; then
             if cmp -s "test.txt" "$dec_file"; then
                 echo "[PASS] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
+                check_force_fail
             else
                 echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
                 FAIL=1
@@ -121,11 +160,22 @@ for key_size in "${KEY_SIZES[@]}"; do
     done
 done
 
-# Change end of script to check FAIL flag
-if [ $FAIL -eq 0 ]; then
-    echo -e "\n=== All AES tests completed successfully ==="
-    exit 0
+if [ $FORCE_FAIL -eq 1 ]; then
+    if [ $FORCE_FAIL_PASSED -eq 1 ]; then
+        echo -e "\n=== AES Tests Failed With Force Fail Enabled ==="
+        echo "ERROR: Some tests passed when they should have failed"
+        exit 1
+    else
+        echo -e "\n=== AES Tests Passed With Force Fail Enabled ==="
+        echo "SUCCESS: All tests failed as expected"
+        exit 0
+    fi
 else
-    echo -e "\n=== AES tests completed with failures ==="
-    exit 1
+    if [ $FAIL -eq 0 ]; then
+        echo -e "\n=== All AES tests completed successfully ==="
+        exit 0
+    else
+        echo -e "\n=== AES tests completed with failures ==="
+        exit 1
+    fi
 fi
