@@ -81,7 +81,11 @@ install_wolfssl() {
         CONF_ARGS="-prefix=${WOLFSSL_INSTALL_DIR}"
 
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            CONF_ARGS+=" --enable-debug --enable-debug-trace-errcodes=backtrace --enable-keylog-export"
+            CONF_ARGS+=" --enable-debug --enable-keylog-export"
+            if [[ "$OSTYPE" != "darwin"* ]]; then
+                # macOS doesn't support backtrace
+                CONF_ARGS+=" --enable-debug-trace-errcodes=backtrace"
+            fi
             WOLFSSL_CONFIG_CFLAGS+=" -DWOLFSSL_LOGGINGENABLED_DEFAULT=1"
         fi
         if [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then

@@ -645,3 +645,18 @@ int wp_params_set_octet_string_be(OSSL_PARAM params[], const char* key,
     return ok;
 }
 
+/**
+ * Count the number of parameters in the array, not including the end marker.
+ *
+ * @param [in]      params  Array of parameters.
+ * @return  number of parameters in the array.
+ */
+int wp_params_count(const OSSL_PARAM *p)
+{
+    int cnt = 0;
+    while ((p != NULL) && (p->key != NULL)) {
+         cnt++;
+         p++;
+     }
+     return cnt;
+}
