@@ -1,0 +1,122 @@
+name: openssh Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        run: |
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+  
+  openssh_check:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+    steps:
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+
+      - name: Checkout openssh
+        uses: actions/checkout@v4
+        with:
+          repository: openssh/openssh-portable
+          path: openssh-portable
+
+      - name: Build openssh-portable
+        working-directory: openssh-portable
+        run: |
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-9.9.p1-wolfprov.patch          
+          autoreconf
+          ./configure 
+          make -j
+      - name: Test openssh with wolfProvider
+        working-directory: openssh-portable
+        run: |
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          # Run all the tests except (t-exec) as it takes too long
+          make file-tests interop-tests extra-tests unit
+ 
