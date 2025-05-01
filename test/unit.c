@@ -209,6 +209,8 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_ecdsa_p256_pkey, NULL),
         TEST_DECL(test_ecdsa_p256, NULL),
     #endif
+    TEST_DECL(test_ec_decode, NULL),
+    TEST_DECL(test_ec_import, NULL),
 #endif
 #ifdef WP_HAVE_EC_P384
     #ifdef WP_HAVE_ECKEYGEN

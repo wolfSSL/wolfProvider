@@ -254,21 +254,33 @@ int wp_params_get_digest(const OSSL_PARAM* params, char* name,
  * @param [in]  params  Array of parameters.
  * @param [in]  key     String key to look for.
  * @param [out] mp      Multi-precision number.
+ * @param [out] set     Indicates if mp has been set.
  * @return  1 on success.
  * @return  0 on failure.
  */
-int wp_params_get_mp(const OSSL_PARAM* params, const char* key, mp_int* mp)
+int wp_params_get_mp(const OSSL_PARAM* params, const char* key, mp_int* mp,
+                     int *set)
 {
     int ok = 1;
     const OSSL_PARAM* p;
 
+    if (set != NULL) {
+        *set = 0;
+    }
+
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (p->data_type != OSSL_PARAM_UNSIGNED_INTEGER)) {
-            ok = 0;
-    }
-    if ((p != NULL) && ok && (!wp_mp_read_unsigned_bin_le(mp, p->data,
-            p->data_size))) {
         ok = 0;
+    }
+    if (ok && (p != NULL)) {
+        if (!wp_mp_read_unsigned_bin_le(mp, p->data, p->data_size)) {
+            ok = 0;
+        }
+        else {
+            if (set != NULL) {
+                *set = 1;
+            }
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -577,16 +589,21 @@ int wp_params_get_uint(const OSSL_PARAM* params, const char* key,
  * @param [in, out] params  Array of parameters.
  * @param [in]      key     String key to look for.
  * @param [in]      mp      Multi-precision number.
+ * @param [in]      allow   This mp is allowed to be set.
  * @return  1 on success.
  * @return  0 on failure.
  */
-int wp_params_set_mp(OSSL_PARAM params[], const char* key, mp_int* mp)
+int wp_params_set_mp(OSSL_PARAM params[], const char* key, mp_int* mp,
+                     int allow)
 {
     int ok = 1;
     OSSL_PARAM* p;
 
     p = OSSL_PARAM_locate(params, key);
-    if (p != NULL) {
+    if ((p != NULL) && (allow != 1)) {
+        ok = 0;
+    }
+    if (ok && (p != NULL)) {
         size_t outLen = mp_unsigned_bin_size(mp);
         if (p->data != NULL) {
             if (p->data_size < outLen) {

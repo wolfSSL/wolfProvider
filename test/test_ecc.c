@@ -22,6 +22,7 @@
 
 #include <openssl/store.h>
 #include <openssl/core_names.h>
+#include <openssl/param_build.h>
 
 #ifdef WP_HAVE_ECC
 
@@ -59,6 +60,17 @@ static const unsigned char ecc_key_der_224[] = {
 #endif /* WP_HAVE_EC_P224 */
 
 #ifdef WP_HAVE_EC_P256
+/* prime256v1_EC_private_key*/
+static const unsigned char ec_pder[] = {
+    0x30, 0x41, 0x02, 0x01, 0x00, 0x30, 0x13, 0x06, 0x07, 0x2A,
+    0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01, 0x06, 0x08, 0x2A, 0x86,
+    0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x04, 0x27, 0x30, 0x25,
+    0x02, 0x01, 0x01, 0x04, 0x20, 0x8D, 0x06, 0x5C, 0xA7, 0xA8,
+    0x0A, 0xA7, 0x61, 0x7B, 0x3A, 0xF7, 0xEF, 0x34, 0x32, 0x0A,
+    0x99, 0x31, 0xD5, 0x7F, 0xAE, 0x74, 0x23, 0x8E, 0x3D, 0x0D,
+    0x17, 0x48, 0x00, 0x74, 0x7A, 0x93, 0x89
+};
+
 static const unsigned char ecc_key_der_256[] = {
     0x30, 0x77, 0x02, 0x01, 0x01, 0x04, 0x20, 0x45, 0xB6, 0x69,
     0x02, 0x73, 0x9C, 0x6C, 0x85, 0xA1, 0x38, 0x5B, 0x72, 0xE8,
@@ -73,6 +85,15 @@ static const unsigned char ecc_key_der_256[] = {
     0x92, 0x21, 0x7F, 0xF0, 0xCF, 0x18, 0xDA, 0x91, 0x11, 0x02,
     0x34, 0x86, 0xE8, 0x20, 0x58, 0x33, 0x0B, 0x80, 0x34, 0x89,
     0xD8
+};
+
+/* Raw P256 group and priv key for EVP_PKEY_fromdata() */
+static const char *ecc_p256_group_str = "prime256v1";
+static const unsigned char ecc_p256_priv[] = {
+    0x89, 0x93, 0x7A, 0x74, 0x00, 0x48, 0x17, 0x0D, 0x3D, 0x8E,
+    0x23, 0x74, 0xAE, 0x7F, 0xD5, 0x31, 0x99, 0x0A, 0x32, 0x34,
+    0xEF, 0xF7, 0x3A, 0x7B, 0x61, 0xA7, 0x0A, 0xA8, 0xA7, 0x5C,
+    0x06, 0x8D
 };
 #endif /* WP_HAVE_EC_P256 */
 
@@ -1575,5 +1596,328 @@ int test_ec_load_cert(void* data)
     return err;
 }
 #endif /* WP_HAVE_ECDSA */
+
+static int test_ec_pubkey_match_ex(EVP_PKEY *pkey1, EVP_PKEY *pkey2,
+                                   const char *key)
+{
+    int err = 0;
+    size_t len1 = 0;
+    size_t len2 = 0;
+    unsigned char *pubkey1 = NULL;
+    unsigned char *pubkey2 = NULL;
+
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey1,
+                                key, NULL, 0, &len1) != 1) {
+            err = 1;
+        }
+        if (len1 <= 0){
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        pubkey1 = OPENSSL_malloc(len1);
+        err = pubkey1 == NULL;
+    }
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey1,
+                                key, pubkey1, len1, &len1) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey2,
+                                key, NULL, 0, &len2) != 1) {
+            err = 1;
+        }
+        if (len2 <= 0){
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        pubkey2 = OPENSSL_malloc(len2);
+        err = pubkey2 == NULL;
+    }
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey2,
+                                key, pubkey2, len2, &len2) != 1) {
+            err = 1;
+        }
+        if (len1 != len2) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = memcmp(pubkey1, pubkey2, len1) != 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("ECC public key values do not match!");
+        }
+    }
+
+    OPENSSL_free(pubkey1);
+    OPENSSL_free(pubkey2);
+    return err;
+}
+
+static int test_ec_pubkey_match(EVP_PKEY *pkey1, EVP_PKEY *pkey2) {
+    int err = 0;
+
+    err = test_ec_pubkey_match_ex(pkey1, pkey2, OSSL_PKEY_PARAM_PUB_KEY);
+    if (err == 0) {
+        err = test_ec_pubkey_match_ex(pkey1, pkey2,
+                                      OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY);
+    }
+
+    return err;
+}
+
+static int test_ec_decode1(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    PKCS8_PRIV_KEY_INFO* p8inf = NULL;
+    const unsigned char *p = NULL;
+    int len = 0;
+    EVP_PKEY* pkey1 = NULL;
+    EC_KEY* eckey1 = NULL;
+    const EC_GROUP* grp1 = NULL;
+    const BIGNUM* pk1 = NULL;
+    EVP_PKEY* pkey2 = NULL;
+    EC_KEY* eckey2 = NULL;
+    const EC_GROUP* grp2 = NULL;
+    const BIGNUM* pk2 = NULL;
+
+    p = &ec_pder[0];
+    len = sizeof(ec_pder);
+    p8inf = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&p, len);
+    err = p8inf == NULL;
+
+    if (err == 0) {
+        PRINT_MSG("Decode with OpenSSL and Wolfprovider");
+        pkey1 = EVP_PKCS82PKEY_ex(p8inf, osslLibCtx, NULL);
+        pkey2 = EVP_PKCS82PKEY_ex(p8inf, wpLibCtx, NULL);
+        PKCS8_PRIV_KEY_INFO_free(p8inf);
+        err = (pkey1 == NULL || pkey2 == NULL);
+    }
+
+    /* Pull an old style EC_KEY structure from the decoded pkey */
+    if (err == 0) {
+        eckey1 = EVP_PKEY_get1_EC_KEY(pkey1);
+        eckey2 = EVP_PKEY_get1_EC_KEY(pkey2);
+        err = (eckey1 == NULL || eckey2 == NULL);
+    }
+    if (err == 0) {
+        grp1 = EC_KEY_get0_group(eckey1);
+        err = grp1 == NULL;
+    }
+    if (err == 0) {
+        pk1 = EC_KEY_get0_private_key(eckey1);
+        err = pk1 == NULL;
+    }
+    if (err == 0) {
+        grp2 = EC_KEY_get0_group(eckey2);
+        err = grp2 == NULL;
+    }
+    if (err == 0) {
+        pk2 = EC_KEY_get0_private_key(eckey2);
+        err = pk2 == NULL;
+    }
+
+    /* Ensure we filled out the structure the same as openssl */
+    if (err == 0) {
+        err = EC_GROUP_cmp(grp1, grp2, NULL) != 0;
+    }
+    if (err == 0) {
+        err = BN_cmp(pk1, pk2) != 0;
+    }
+
+    EC_KEY_free(eckey1);
+    EC_KEY_free(eckey2);
+    EVP_PKEY_free(pkey1);
+    EVP_PKEY_free(pkey2);
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
+
+static int test_ec_decode2(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    PKCS8_PRIV_KEY_INFO* p8inf = NULL;
+    const unsigned char *p = NULL;
+    EVP_PKEY* pkey1 = NULL;
+    EVP_PKEY* pkey2 = NULL;
+    BIGNUM* x1 = NULL;
+    BIGNUM* x2 = NULL;
+    BIGNUM* y1 = NULL;
+    BIGNUM* y2 = NULL;
+    int len = 0;
+
+    p = &ec_pder[0];
+    len = sizeof(ec_pder);
+    p8inf = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&p, len);
+    err = p8inf == NULL;
+
+    if (err == 0) {
+        PRINT_MSG("Decode with OpenSSL and Wolfprovider");
+        pkey1 = EVP_PKCS82PKEY_ex(p8inf, osslLibCtx, NULL);
+        pkey2 = EVP_PKCS82PKEY_ex(p8inf, wpLibCtx, NULL);
+        PKCS8_PRIV_KEY_INFO_free(p8inf);
+        err = (pkey1 == NULL || pkey2 == NULL);
+    }
+
+    /* For decoded keys, get bn params should work */
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_X, &x1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_X, &x2) != 1;
+    }
+    if (err == 0) {
+        err = BN_cmp(x1, x2) != 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_Y, &y1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_Y, &y2) != 1;
+    }
+    if (err == 0) {
+        err = BN_cmp(y1, y2) != 0;
+    }
+
+    /* Get public key should work for decoded keys */
+    err = test_ec_pubkey_match(pkey1, pkey2);
+
+    BN_free(x1);
+    BN_free(x2);
+    BN_free(y1);
+    BN_free(y2);
+    EVP_PKEY_free(pkey1);
+    EVP_PKEY_free(pkey2);
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
+
+int test_ec_decode(void* data)
+{
+    int err = 0;
+    (void)data;
+
+    err = test_ec_decode1();
+    if (err == 0) {
+        err = test_ec_decode2();
+    }
+
+    return err;
+}
+
+int test_ec_import(void* data)
+{
+    int err = 0;
+    int len = 0;
+    EVP_PKEY_CTX *ctx1 = NULL;
+    EVP_PKEY_CTX *ctx2 = NULL;
+    EVP_PKEY* pkey1 = NULL;
+    EVP_PKEY* pkey2 = NULL;
+    BIGNUM* x1 = NULL;
+    BIGNUM* x2 = NULL;
+    BIGNUM* y1 = NULL;
+    BIGNUM* y2 = NULL;
+    OSSL_PARAM *params = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    BIGNUM* priv = NULL;
+
+    (void)data;
+
+    /* Hand construct ECC private only key simulating bind9 flow */
+    err = (bld = OSSL_PARAM_BLD_new()) == NULL;
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
+                ecc_p256_group_str, 0) != 1;
+    }
+    if (err == 0) {
+        err = (priv = BN_bin2bn(ecc_p256_priv,
+                    sizeof(ecc_p256_priv), NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PRIV_KEY, priv) != 1;
+    }
+    if (err == 0) {
+        err = (params = OSSL_PARAM_BLD_to_param(bld)) == NULL;
+    }
+    /* Create openssl and wolfprovider backed pkey */
+    if (err == 0) {
+        err = (ctx1 = EVP_PKEY_CTX_new_from_name(osslLibCtx, "EC", NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx1, &pkey1, EVP_PKEY_KEYPAIR, params) != 1;
+    }
+    if (err == 0) {
+        err = (ctx2 = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx2) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx2, &pkey2, EVP_PKEY_KEYPAIR, params) != 1;
+    }
+
+    /* For imported private only keys, get bn params should fail */
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_X, &x1) == 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_X, &x2) == 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_Y, &y1) == 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_Y, &y2) == 1;
+    }
+
+    /* Attempts to get the public key len should fail */
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey1,
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 0) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey2,
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 0) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey1,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 0) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_get_octet_string_param(pkey2,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 0) {
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey1);
+    EVP_PKEY_free(pkey2);
+    EVP_PKEY_CTX_free(ctx1);
+    EVP_PKEY_CTX_free(ctx2);
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    BN_clear_free(priv);
+
+    return err;
+}
+
 
 #endif /* WP_HAVE_ECC */
