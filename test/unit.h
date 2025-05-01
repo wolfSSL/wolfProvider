@@ -248,6 +248,7 @@ int test_rsa_load_cert(void* data);
 #ifdef WP_HAVE_DH
 int test_dh_pgen_pkey(void *data);
 int test_dh_pkey(void *data);
+int test_dh_decode(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC
