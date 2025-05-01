@@ -381,7 +381,7 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
 #ifdef WP_HAVE_AESCFB
     if (ctx->mode == EVP_CIPH_CFB_MODE) {
         int rc;
- 
+
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         if (ctx->enc) {
             rc = wc_AesCfbEncrypt(&ctx->aes, out, in, (word32)inLen);
@@ -578,7 +578,7 @@ static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
  * @param [in, out] ctx      AES stream context object.
  * @param [in]      kBits    Number of bits in a valid key.
  * @param [in]      ivBits   Number of bits in a valid IV. 0 indicates no IV.
- * @parma [in]      mode     AES stream mode: CTR.
+ * @param [in]      mode     AES stream mode: CTR.
  * @return  1 on success.
  * @return  0 on failure.
  */

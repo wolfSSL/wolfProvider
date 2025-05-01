@@ -352,7 +352,7 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
  * Return the ECX key object taken out of the reference.
  *
  * @param [in, out] pEcx  Pointer to a ECX key object.
- * @parma [in]      size  Size of data structure that is the ECX key object.
+ * @param [in]      size  Size of data structure that is the ECX key object.
  *                        Unused.
  * @return  NULL when no ECX key object at reference.
  * @return  ECX key object from reference on success.
@@ -610,8 +610,8 @@ static int wp_ecx_has(const wp_Ecx* ecx, int selection)
 /**
  * Check that two ECX key objects' private keys match.
  *
- * @parma [in] ecx1       First ECX key object.
- * @parma [in] ecx2       Second ECX key object.
+ * @param [in] ecx1       First ECX key object.
+ * @param [in] ecx2       Second ECX key object.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -655,8 +655,8 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
 /**
  * Check that two ECX key objects' public keys match.
  *
- * @parma [in] ecx1       First ECX key object.
- * @parma [in] ecx2       Second ECX key object.
+ * @param [in] ecx1       First ECX key object.
+ * @param [in] ecx2       Second ECX key object.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -702,8 +702,8 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
 /**
  * Check that two ECX key objects match for the components specified.
  *
- * @parma [in] ecx1       First ECX key object.
- * @parma [in] ecx2       Second ECX key object.
+ * @param [in] ecx1       First ECX key object.
+ * @param [in] ecx2       Second ECX key object.
  * @param [in] selection  Parts of key to match.
  * @return  1 on success.
  * @return  0 on failure.
@@ -2081,7 +2081,7 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
  *
  * @param [in] ctx          ECX encoder/decoder context object.
  * @param [in] ecx          ECX key object.
- * @oaram [in] size         Size of key object.
+ * @param [in] size         Size of key object.
  * @param [in] exportCb     Callback to export key.
  * @param [in] exportCbArg  Argument to pass to callback.
  * @return  1 on success.

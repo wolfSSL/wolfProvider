@@ -560,7 +560,7 @@ static wp_Dh* wp_dh_dup(const wp_Dh *src, int selection)
  * Return the DH key object taken out of the reference.
  *
  * @param [in, out] pDh   Pointer to a DH key object.
- * @parma [in]      size  Size of data structure that is the DH key object.
+ * @param [in]      size  Size of data structure that is the DH key object.
  *                        Unused.
  * @return  NULL when no DH key object at reference.
  * @return  DH key object from reference on success.
@@ -737,10 +737,12 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
             ok = 0;
         }
     }
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.p))) {
+    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P,
+                                 &dh->key.p, 1))) {
         ok = 0;
     }
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g))) {
+    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G,
+                                 &dh->key.g, 1))) {
         ok = 0;
     }
     if (ok && (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PUB_KEY,
@@ -790,8 +792,8 @@ static int wp_dh_has(const wp_Dh* dh, int selection)
 /**
  * Check that two DH key objects match for the components specified.
  *
- * @parma [in] dh1        First DH key object.
- * @parma [in] dh2        Second DH key object.
+ * @param [in] dh1        First DH key object.
+ * @param [in] dh2        Second DH key object.
  * @param [in] selection  Parts of key to match.
  * @return  1 on success.
  * @return  0 on failure.
@@ -2565,7 +2567,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
  *
  * @param [in] ctx          DH encoder/decoder context object.
  * @param [in] dh           DH key object.
- * @oaram [in] size         Size of key object.
+ * @param [in] size         Size of key object.
  * @param [in] exportCb     Callback to export key.
  * @param [in] exportCbArg  Argument to pass to callback.
  * @return  1 on success.

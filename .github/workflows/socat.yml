@@ -1,4 +1,4 @@
-name: Curl Tests
+name: Socat Tests
 
 # START OF COMMON SECTION
 on:
@@ -64,20 +64,15 @@ jobs:
             cat test-suite.log
           fi
 
-  test_curl:
+  test_socat:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        curl_ref: [ 'master', 'curl-8_4_0' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -102,41 +97,37 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install curl test dependencies
+      - name: Install socat dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
+          sudo apt-get install build-essential autoconf libtool pkg-config clang libc++-dev
 
-      - name: Build curl
-        uses: wolfSSL/actions-build-autotools-project@v1
-        with:
-          repository: curl/curl
-          path: curl
-          ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl
-          check: false
+      - name: Download socat
+        run: curl -O http://www.dest-unreach.org/socat/download/socat-1.8.0.0.tar.gz && tar xvf socat-1.8.0.0.tar.gz
 
-      - name: Generate certificates for curl master force-fail tests
+      - name: Build socat
+        working-directory: ./socat-1.8.0.0
         run: |
-          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ] &&
-             [ "${{ matrix.curl_ref }}" = "master" ]; then
-            cd curl/tests/certs
-            make test-ca.cacert
-            cd ../..
-          fi
-      - name: Test curl with wolfProvider
-        working-directory: curl
+          # Configure with OpenSSL
+          ./configure --enable-openssl-base=$GITHUB_WORKSPACE/openssl-install
+
+          # Build socat
+          make
+
+      - name: Run socat tests
+        working-directory: ./socat-1.8.0.0
         run: |
-          # Set environment variables
+          # Set up the environment for wolfProvider
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
-          export ${{ matrix.force_fail }}
-          export CURL_REF=${{ matrix.curl_ref }}
+          export SHELL=/bin/bash
 
-          # Run tests and save output to test.log
-          mkdir -p tests
-          make -j$(nproc) test-ci 2>&1 | tee tests/test.log || true
-          TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl
+          # Verify OpenSSL loads wolfProvider
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+
+          # Show socat version (includes OpenSSL version info)
+          ./socat -V
+
+          # Run the tests with expected failures
+          SOCAT=$GITHUB_WORKSPACE/socat-1.8.0.0/socat ./test.sh -t 0.5 --expect-fail 36,64,146,214,216,217,309,310,386,399,402,403,459,460,467,468,475,478,491,492,528,529,530

@@ -109,7 +109,7 @@ static int wp_rsa_set_ctx_params(wp_RsaSigCtx* ctx, const OSSL_PARAM params[]);
  *
  * @param [in, out] ctx      RSA signature context object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @param [in]      op       Signature operation being performed.
  * @return  1 on success.
  * @return  0 on failure.
@@ -198,7 +198,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
  *
  * @param [in, out] ctx      RSA signature context object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -867,7 +867,7 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
     }
     if (ok) {
-        rc = mp_read_unsigned_bin(&toMp, sig, *sigLen);
+        rc = mp_read_unsigned_bin(&toMp, sig, (word32)*sigLen);
         if (rc != MP_OKAY) {
             ok = 0;
         }
@@ -882,7 +882,7 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
             ok = 0;
         }
         else if (mp_cmp(&toMp, &nMinusTo) == MP_GT) {
-            rc = mp_to_unsigned_bin_len(&nMinusTo, sig, *sigLen);
+            rc = mp_to_unsigned_bin_len(&nMinusTo, sig, (int)*sigLen);
             if (rc != MP_OKAY) {
                 ok = 0;
             }

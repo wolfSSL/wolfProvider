@@ -813,7 +813,7 @@ static int wp_aes_block_set_ctx_params(wp_AesBlockCtx *ctx,
  * @param [in, out] ctx      AES block context object.
  * @param [in]      kBits    Number of bits in a valid key.
  * @param [in]      ivBits   Number of bits in a valid IV. 0 indicates no IV.
- * @parma [in]      mode     AES block mode: ECB or CBC.
+ * @param [in]      mode     AES block mode: ECB or CBC.
  * @return  1 on success.
  * @return  0 on failure.
  */

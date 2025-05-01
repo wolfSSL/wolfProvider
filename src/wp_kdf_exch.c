@@ -178,7 +178,7 @@ static int wp_kdf_init(wp_KdfCtx* ctx, wp_Kdf* kdf, const OSSL_PARAM params[])
  * Can put the ECDH secret through a KDF.
  *
  * @param [in]  ctx      ECDH key exchange context object.
- * @param [out] secert   Buffer to hold secret/key.
+ * @param [out] secret   Buffer to hold secret/key.
  * @param [out] secLen   Length of secret/key data in bytes.
  * @param [in]  secSize  Size of buffer in bytes.
  * @return 1 on success.
@@ -238,7 +238,7 @@ static const OSSL_PARAM* wp_hkdf_settable_ctx_params(wp_KdfCtx* ctx,
         OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SALT, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_KDF_PARAM_INFO, NULL, 0),
         OSSL_PARAM_END
-    };    
+    };
     return settable_ctx_params;
 }
 
@@ -260,7 +260,7 @@ static const OSSL_PARAM* wp_tls1_prf_settable_ctx_params(wp_KdfCtx* ctx,
         OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SECRET, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SEED, NULL, 0),
         OSSL_PARAM_END
-    };    
+    };
     return settable_ctx_params;
 }
 

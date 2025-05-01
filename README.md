@@ -56,7 +56,7 @@ The quickest method is to use the `scripts/build-wolfprovider.sh` script as foll
 ./scripts/build-wolfprovider.sh
 ```
 
-It will retreive the dependencies and compile them as necessary. To use other than the default (such as different releases) you can set various environment variables prior to calling the script:
+It will retrieve the dependencies and compile them as necessary. To use other than the default (such as different releases) you can set various environment variables prior to calling the script:
 
 ```
 OPENSSL_TAG=openssl-3.2.0 WOLFSSL_TAG=v5.7.2-stable WOLFPROV_DEBUG=1 scripts/build-wolfprovider.sh
@@ -123,12 +123,17 @@ make check
 ## Testing
 
 ### Unit Tests
-To run automated unit tests:
 
+To run automated unit tests:
 * `make test`
+
+### Command Tests
+
+To run the command tests:
+* `./scripts/cmd_test/do-cmd-tests.sh`
 
 ### Integration Tests
 
 To run the cipher suite testing:
-* ./scripts/test-wp-cs.sh
+* `./scripts/test-wp-cs.sh`
 

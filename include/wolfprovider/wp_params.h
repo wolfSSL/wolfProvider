@@ -51,7 +51,8 @@ void wp_param_set_mp_buf(OSSL_PARAM* p, const char* key, unsigned char* num,
 
 int wp_params_get_digest(const OSSL_PARAM* params, char* name,
     OSSL_LIB_CTX* libCtx, enum wc_HashType* type, size_t* len);
-int wp_params_get_mp(const OSSL_PARAM* params, const char* key, mp_int* mp);
+int wp_params_get_mp(const OSSL_PARAM* params, const char* key, mp_int* mp,
+    int *set);
 int wp_params_get_octet_string(const OSSL_PARAM* params, const char* key,
     unsigned char** data, size_t* len, int secure);
 int wp_params_get_bn_be(const OSSL_PARAM* params, const char* key,
@@ -70,7 +71,8 @@ int wp_params_get_int(const OSSL_PARAM* params, const char* key, int* val);
 int wp_params_get_uint(const OSSL_PARAM* params, const char* key,
     unsigned int* val, int* set);
 
-int wp_params_set_mp(OSSL_PARAM params[], const char* key, mp_int* mp);
+int wp_params_set_mp(OSSL_PARAM params[], const char* key, mp_int* mp,
+    int allow);
 int wp_params_set_octet_string_be(OSSL_PARAM params[], const char* key,
     unsigned char* data, size_t len);
 

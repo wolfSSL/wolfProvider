@@ -3,8 +3,7 @@ name: Simple Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ '*' ]
-#    branches: [ 'master', 'main', 'release/**' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -14,30 +13,62 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
-  make_check:
+  simple_test:
+    name: Simple Test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
     strategy:
       matrix:
-        config: [
-          # Add new configs here
-          '',
-          'OPENSSL_TAG=master',
-          'WOLFSSL_TAG=master',
-          'OPENSSL_TAG=master WOLFSSL_TAG=master',
-        ]
-    name: make check
-    runs-on: ubuntu-latest
-    # This should be a safe limit for the tests to run.
-    timeout-minutes: 10
+        build_ref:
+          - ''
+          - 'OPENSSL_TAG=master'
+          - 'WOLFSSL_TAG=master'
+          - 'OPENSSL_TAG=master WOLFSSL_TAG=master'
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+
     steps:
-      - uses: actions/checkout@v4
-        name: Checkout wolfProvider
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
 
-      - name: Test wolfProvider
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.build_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.build_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.build_ref }}-cache.hit != 'true'
         run: |
-          ${{ matrix.config }} ./scripts/build-wolfprovider.sh
+          ${{ matrix.build_ref.openssl }} ${{ matrix.build_ref.wolfssl }} ./scripts/build-wolfprovider.sh
 
-      - name: Print errors 
-        if: ${{ failure() }}
+      - name: Run simple tests
+        run: |
+          ./scripts/cmd_test/do-cmd-tests.sh ${{ matrix.force_fail }}
+
+      - name: Print test logs
+        if: always()
         run: |
           if [ -f test-suite.log ] ; then
             cat test-suite.log

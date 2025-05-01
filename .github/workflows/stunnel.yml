@@ -1,4 +1,4 @@
-name: Curl Tests
+name: Stunnel Tests
 
 # START OF COMMON SECTION
 on:
@@ -16,7 +16,7 @@ jobs:
   build_wolfprovider:
     name: Build wolfProvider
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
@@ -64,20 +64,16 @@ jobs:
             cat test-suite.log
           fi
 
-  test_curl:
+  test_stunnel:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 10
     strategy:
       matrix:
-        curl_ref: [ 'master', 'curl-8_4_0' ]
+        stunnel_ref: [ 5.67 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -102,41 +98,30 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install curl test dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
+          sudo apt-get install -y build-essential autoconf automake \
+          libtool pkg-config libwrap0-dev autoconf-archive \
+          autotools-dev m4
 
-      - name: Build curl
+      - name: Build stunnel
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
-          repository: curl/curl
-          path: curl
-          ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl
-          check: false
+          repository: mtrojnar/stunnel
+          ref: stunnel-${{ matrix.stunnel_ref }}
+          path: stunnel
+          configure: --with-ssl=$GITHUB_WORKSPACE/openssl-install/
+          check: true
 
-      - name: Generate certificates for curl master force-fail tests
+      - name: Verify stunnel with wolfProvider
+        working-directory: ./stunnel
         run: |
-          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ] &&
-             [ "${{ matrix.curl_ref }}" = "master" ]; then
-            cd curl/tests/certs
-            make test-ca.cacert
-            cd ../..
-          fi
-      - name: Test curl with wolfProvider
-        working-directory: curl
-        run: |
-          # Set environment variables
+          # Setup environment for wolfProvider
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
-          export ${{ matrix.force_fail }}
-          export CURL_REF=${{ matrix.curl_ref }}
 
-          # Run tests and save output to test.log
-          mkdir -p tests
-          make -j$(nproc) test-ci 2>&1 | tee tests/test.log || true
-          TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl
+          # Verify stunnel
+          ldd src/stunnel | grep -E '(libssl|libcrypto)'
+          ./src/stunnel -version

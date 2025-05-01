@@ -67,7 +67,7 @@ typedef struct wp_AeadCtx {
     /** Current state of IV/nonce.  */
     int ivState;
 
-    /** Initialized for encrpytion or decryption. */
+    /** Initialized for encryption or decryption. */
     unsigned int enc:1;
     /** IV/nonce has been generated. */
     unsigned int ivGen:1;
@@ -263,7 +263,7 @@ static int wp_aead_tls_init(wp_AeadCtx* ctx, unsigned char* aad, size_t aadLen)
  *
  * @param [in, out] ctx    AEAD context object.
  * @param [in]      in     More AAD data.
- * @parma [in]      inLen  Length of new AAD data.
+ * @param [in]      inLen  Length of new AAD data.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -299,7 +299,7 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
  *
  * @param [in, out] ctx    AEAD context object.
  * @param [in]      in     More AAD data.
- * @parma [in]      inLen  Length of new AAD data.
+ * @param [in]      inLen  Length of new AAD data.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -819,7 +819,7 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
     #ifdef WOLFSSL_AESGCM_STREAM
         int rc;
 
-        rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, ctx->ivLen);
+        rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, (word32)ctx->ivLen);
         if (rc != 0) {
             ok = 0;
         }
@@ -1199,7 +1199,7 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
 
     if ((!done) && ok) {
         if (ctx->ivState == IV_STATE_BUFFERED) {
-            rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, ctx->ivLen);
+            rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, (word32)ctx->ivLen);
             if (rc != 0) {
                 ok = 0;
             }

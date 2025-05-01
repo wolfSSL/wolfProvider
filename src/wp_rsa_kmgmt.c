@@ -578,7 +578,7 @@ static int wp_rsa_pss_params_set_pss_defaults(wp_RsaPssParams* pss)
  *
  * @param [in, out] pss      RSA PSS parameters object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @param [in]      libCtx   Library context.
  * @return  1 on success.
  * @return  0 on failure.
@@ -603,7 +603,7 @@ static int wp_rsa_pss_params_setup_mgf1_md(wp_RsaPssParams* pss,
  *
  * @param [in, out] pss      RSA PSS parameters object.
  * @param [in]      mdName   Name of digest.
- * @param [in]      mdProps  Digest properites.
+ * @param [in]      mdProps  Digest properties.
  * @param [in]      libCtx   Library context.
  * @return  1 on success.
  * @return  0 on failure.
@@ -710,7 +710,7 @@ static int wp_rsa_pss_params_set_mgf1_digest(wp_RsaPssParams* pss,
  *
  * @param [in, out] pss          RSA PSS parameters object.
  * @param [in, out] defaultsSet  Whether default PSS parameters have been set.
- * @param [in]      params       Array of parameters and valus.
+ * @param [in]      params       Array of parameters and values.
  * @param [in]      libCtx       Library context.
  * @return  1 on success.
  * @return  0 on failure.
@@ -777,7 +777,7 @@ static int wp_rsa_pss_params_set_params(wp_RsaPssParams* pss,
  * Return the RSA key object taken out of the reference.
  *
  * @param [in, out] pRsa  Pointer to a RSA key object.
- * @parma [in]      size  Size of data structure that is the RSA key object.
+ * @param [in]      size  Size of data structure that is the RSA key object.
  *                        Unused.
  * @param [in]      type  Expected RSA type: PKCS#1.5 or PSS.
  * @return  NULL when no RSA key object at reference or not matching type.
@@ -981,8 +981,8 @@ static int wp_rsa_has(const wp_Rsa* rsa, int selection)
 /**
  * Check that two RSA key objects match for the components specified.
  *
- * @parma [in] rsa1       First RSA key object.
- * @parma [in] rsa2       Second RSA key object.
+ * @param [in] rsa1       First RSA key object.
+ * @param [in] rsa2       Second RSA key object.
  * @param [in] selection  Parts of key to match.
  * @return  1 on success.
  * @return  0 on failure.
@@ -1601,7 +1601,7 @@ static const OSSL_PARAM* wp_rsa_gen_settable_params(wp_RsaGenCtx* gctx,
  * Return the RSA key object taken out of the reference.
  *
  * @param [in, out] pRsa  Pointer to a RSA key object.
- * @parma [in]      size  Size of data structure that is the RSA key object.
+ * @param [in]      size  Size of data structure that is the RSA key object.
  *                        Unused.
  * @return  NULL when no RSA key object at reference or not RSA PKCS#1.5 type.
  * @return  RSA key object from reference on success.
@@ -1658,7 +1658,7 @@ static wp_Rsa* wp_rsapss_new(WOLFPROV_CTX* provctx)
  * Return the RSA key object taken out of the reference.
  *
  * @param [in, out] pRsa  Pointer to a RSA key object.
- * @parma [in]      size  Size of data structure that is the RSA key object.
+ * @param [in]      size  Size of data structure that is the RSA key object.
  *                        Unused.
  * @return  NULL when no RSA key object at reference or not RSA PSS type.
  * @return  RSA key object from reference on success.
@@ -1950,37 +1950,6 @@ static int wp_rsa_determine_type(wp_Rsa* rsa, unsigned char* data, word32 len)
 }
 
 /**
- * Decode the SubjectPublicInfo DER encoded RSA key into the RSA key object.
- *
- * @param [in, out] rsa   RSA key object.
- * @param [in]      data  DER encoding.
- * @param [in]      len   Length, in bytes, of DER encoding.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
-{
-    int ok = 1;
-    int rc;
-    word32 idx = 0;
-
-    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
-    if (rc != 0) {
-        ok = 0;
-    }
-    if (ok && !wp_rsa_determine_type(rsa, data, len)) {
-        ok = 0;
-    }
-    if (ok) {
-        rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
-        rsa->hasPub = 1;
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
  * Get the PSS parameters from the DER encoded RSA-PSS parameters.
  *
  * TODO: rework to use tables of DER encodings.
@@ -2118,6 +2087,44 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
 }
 
 /**
+ * Decode the SubjectPublicInfo DER encoded RSA key into the RSA key object.
+ *
+ * @param [in, out] rsa   RSA key object.
+ * @param [in]      data  DER encoding.
+ * @param [in]      len   Length, in bytes, of DER encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
+{
+    int ok = 1;
+    int rc;
+    word32 idx = 0;
+
+    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
+    if (rc != 0) {
+        ok = 0;
+    }
+    if (ok && !wp_rsa_determine_type(rsa, data, len)) {
+        ok = 0;
+    }
+    if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS)) {
+        /* We need to check for pss params to allow a rejection for non-pkcs8
+         * keys. If we dont reject then the keytype gets set to RSA-PSS
+         * which is wrong. For non-pkcs8 fail here for PSS decoder
+         * and let the base RSA pick it up instead */
+        ok = wp_rsa_pss_get_params(rsa, data, len);
+    }
+    if (ok) {
+        rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
+        rsa->hasPub = 1;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
  * Decode the PrivateKeyInfo DER encoded RSA key into the RSA key object.
  *
  * @param [in, out] rsa   RSA key object.
@@ -2224,7 +2231,7 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     }
     if (ok) {
         /* Decrypt to encoded private key. */
-        int ret = wc_DecryptPKCS8Key(data, len, password, passwordSz);
+        int ret = wc_DecryptPKCS8Key(data, len, password, (int)passwordSz);
         if (ret <= 0) {
             ok = 0;
         }
@@ -2596,7 +2603,7 @@ static int wp_rsa_encode_spki(const wp_Rsa* rsa, unsigned char* keyData,
     int ok = 1;
     int ret;
 
-    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2692,7 +2699,7 @@ static int wp_rsa_encode_pub(const wp_Rsa* rsa, unsigned char* keyData,
     }
 #else
     /* TODO: Encodes with header. Strip it off. */
-    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, *keyLen);
+    ret = wc_RsaKeyToPublicDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
     if (ret <= 0) {
         ok = 0;
     }
@@ -2879,8 +2886,8 @@ static int wp_rsa_encode_enc_pki_size(const wp_RsaEncDecCtx* ctx,
     ok = wp_rsa_encode_pki_size(rsa, &len, RSA_ALGO_ID(ctx));
     if (ok) {
         /* Get encrypted encode private key. */
-        if (wc_EncryptPKCS8Key(fakeData, len, NULL, &outSz, "", 0, WP_PKCS5,
-                WP_PBES2, ctx->cipher, fakeSalt, sizeof(fakeSalt),
+        if (wc_EncryptPKCS8Key(fakeData, (word32)len, NULL, &outSz, "", 0,
+                WP_PKCS5, WP_PBES2, ctx->cipher, fakeSalt, sizeof(fakeSalt),
                 WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(ctx->provCtx),
                 NULL) != LENGTH_ONLY_E) {
             ok = 0;
@@ -2914,7 +2921,7 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
 {
     int ok = 1;
     size_t len;
-    word32 outSz = *keyLen;
+    word32 outSz = (word32)*keyLen;
     byte salt[WP_MAX_SALT_SIZE];
     int saltLen = 16;
     char password[1024];
@@ -2947,10 +2954,10 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
     }
     if (ok) {
         /* Encrypt encoded key - in and out buffers must be different. */
-        if (wc_EncryptPKCS8Key(encodedKey, len, keyData, &outSz, password,
-                passwordSz, WP_PKCS5, WP_PBES2, ctx->cipher, salt, saltLen,
-                WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(ctx->provCtx),
-                NULL) <= 0) {
+        if (wc_EncryptPKCS8Key(encodedKey, (word32)len, keyData, &outSz,
+                password, (word32)passwordSz, WP_PKCS5, WP_PBES2, ctx->cipher,
+                salt, saltLen, WP_PKCS12_ITERATIONS_DEFAULT,
+                wp_provctx_get_rng(ctx->provCtx), NULL) <= 0) {
             ok = 0;
         }
         else {
@@ -3201,7 +3208,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
  *
  * @param [in] ctx          RSA encoder/decoder context object.
  * @param [in] rsa          RSA key object.
- * @oaram [in] size         Size of key object.
+ * @param [in] size         Size of key object.
  * @param [in] exportCb     Callback to export key.
  * @param [in] exportCbArg  Argument to pass to callback.
  * @return  1 on success.

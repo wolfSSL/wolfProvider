@@ -367,6 +367,9 @@ int test_ec_load_key(void* data);
 int test_ec_load_cert(void* data);
 #endif /* WP_HAVE_ECDSA */
 
+int test_ec_decode(void* data);
+int test_ec_import(void* data);
+
 #endif /* WP_HAVE_ECC */
 
 #ifdef WP_HAVE_PBE
