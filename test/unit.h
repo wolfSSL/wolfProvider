@@ -47,8 +47,8 @@
 #define PRINT_MSG(str)
 #define PRINT_ERR_MSG(str)
 #else
-#define PRINT_MSG(str)         printf("MSG: %s\n", str)
-#define PRINT_ERR_MSG(str)     printf("ERR: %s\n", str)
+#define PRINT_MSG(str, ...)     printf("MSG: " str "\n", ##__VA_ARGS__)
+#define PRINT_ERR_MSG(str, ...) printf("ERR: " str "\n", ##__VA_ARGS__)
 #endif
 #ifdef WOLFPROV_DEBUG
 void print_buffer(const char *desc, const unsigned char *buffer, size_t len);
@@ -244,6 +244,7 @@ int test_rsa_get_params(void *data);
 
 int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);
+int test_rsa_fromdata(void* data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH

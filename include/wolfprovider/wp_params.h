@@ -75,6 +75,6 @@ int wp_params_set_mp(OSSL_PARAM params[], const char* key, mp_int* mp,
     int allow);
 int wp_params_set_octet_string_be(OSSL_PARAM params[], const char* key,
     unsigned char* data, size_t len);
-
+int wp_params_count(const OSSL_PARAM *p);
 #endif /* WP_PARAMS_H */
 

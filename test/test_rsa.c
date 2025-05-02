@@ -26,6 +26,10 @@
 
 #ifdef WP_HAVE_RSA
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#endif
+
 static const unsigned char rsa_key_der_256[] =
 {
     0x30, 0x81, 0xC1, 0x02, 0x01, 0x00, 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86,
@@ -1025,4 +1029,154 @@ int test_rsa_load_cert(void* data)
     OSSL_STORE_close(ctx);
     return err;
 }
+
+int test_rsa_fromdata(void* data)
+{
+    (void)data;
+    int err = 0;
+    EVP_PKEY_CTX *ctx_wolf = NULL;
+    EVP_PKEY_CTX *ctx_ossl = NULL;
+
+    PRINT_MSG("Testing EVP_PKEY_fromdata");
+
+    ctx_wolf = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL);
+    ctx_ossl = EVP_PKEY_CTX_new_from_name(osslLibCtx, "RSA", NULL);
+    if (ctx_wolf == NULL || ctx_ossl == NULL) {
+        err = 1;
+    }
+
+    if (err == 0) {
+        /* EVP_PKEY_fromdata_init returns 1 on success */
+        err |= EVP_PKEY_fromdata_init(ctx_wolf) != 1;
+        err |= EVP_PKEY_fromdata_init(ctx_ossl) != 1;
+    }
+
+    if (err == 0) {
+        EVP_PKEY *pkey_wolf = NULL;
+        EVP_PKEY *pkey_ossl = NULL;
+
+        /* Permutations of the selection field to test */
+        static const int selections[] = {
+            EVP_PKEY_KEYPAIR,
+            EVP_PKEY_PUBLIC_KEY,
+            EVP_PKEY_PRIVATE_KEY,
+        };
+
+        /* Parameter data fields */
+        unsigned long rsa_n = 0xbc747fc5;
+        unsigned long rsa_e = 0x10001;
+        unsigned long rsa_d = 0x7b133399;
+        const char *foo = "some string";
+        size_t foo_l = strlen(foo);
+        const char bar[] = "some other string";
+        
+        /* Permutations of the params field to test */
+        OSSL_PARAM params_none[] = {
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_n[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_e[] = {
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_d[] = {
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_ne[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_nd[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_ed[] = {
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_ned[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_extra_ulong[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_ulong("asdf", &rsa_d),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_extra_str[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            { "foo", OSSL_PARAM_UTF8_PTR, &foo, foo_l, 0 },
+            { "bar", OSSL_PARAM_UTF8_STRING, (void *)&bar, sizeof(bar) - 1, 0 },
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM* params_table[] = {
+            params_none,
+            params_n,
+            params_e,
+            params_d,
+            params_ne,
+            params_nd,
+            params_ed,
+            params_ned,
+            params_extra_ulong,
+            params_extra_str,
+        };
+
+        for (unsigned i = 0; i < ARRAY_SIZE(selections); i++) {
+            for (unsigned j = 0; j < ARRAY_SIZE(params_table); j++) {
+                int status_wolf = EVP_PKEY_fromdata(ctx_wolf, &pkey_wolf, 
+                                    selections[i], &params_table[j][0]);
+                int status_ossl = EVP_PKEY_fromdata(ctx_ossl, &pkey_ossl, 
+                                    selections[i], &params_table[j][0]);
+
+                if (status_wolf != status_ossl) {
+                    PRINT_MSG("EVP_PKEY_fromdata (wolf=%d) and (ossl=%d) status "
+                              "mismatch for selection %d (0x%08X) and params %d",
+                                status_wolf, status_ossl, i, selections[i], j); 
+                    err = 1;
+                }
+                else if (status_wolf == 1) {
+                    PRINT_MSG("EVP_PKEY_fromdata (wolf) succeeded for "
+                              "selection %d (0x%08X) and params %d",
+                                i, selections[i], j); 
+
+                    if (EVP_PKEY_cmp(pkey_wolf, pkey_ossl) != 1) {
+                        PRINT_MSG("EVP_PKEY_cmp failed for selection %d "
+                                  "(0x%08X)", i, selections[i]); 
+                        err = 1;
+                    }
+                    if (EVP_PKEY_cmp_parameters(pkey_wolf, pkey_ossl) != 1) {
+                        PRINT_MSG("EVP_PKEY_cmp_parameters failed for "
+                                  "selection %d (0x%08X)", i, selections[i]); 
+                        err = 1;
+                    }
+                }
+
+                EVP_PKEY_free(pkey_wolf);
+                EVP_PKEY_free(pkey_ossl);
+                pkey_wolf = NULL;
+                pkey_ossl = NULL;
+            }
+        }
+    }
+
+    EVP_PKEY_CTX_free(ctx_wolf);
+    EVP_PKEY_CTX_free(ctx_ossl);
+
+    return err;
+}
+
 #endif /* WP_HAVE_RSA */
