@@ -18,6 +18,7 @@ test_unit_test_SOURCES = \
 	test/test_dh.c \
 	test/test_digest.c \
 	test/test_ecc.c \
+	test/test_ecx.c \
 	test/test_gmac.c \
 	test/test_hkdf.c \
 	test/test_hmac.c \

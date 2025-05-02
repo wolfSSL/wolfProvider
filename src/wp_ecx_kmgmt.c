@@ -1508,6 +1508,10 @@ static int wp_ed25519_export_public(ed25519_key* key, const byte* out,
 
     if (!key->pubKeySet) {
         ret = wc_ed25519_make_public(key, (byte*)out, *outLen);
+        if (ret == 0) {
+            /* Store the generated public key in the key object for future use. */
+            ret = wc_ed25519_import_public((byte*)out, *outLen, key);
+        }
     }
     else {
         ret = wc_ed25519_export_public(key, (byte*)out, outLen);
@@ -1638,6 +1642,10 @@ static int wp_ed448_export_public(ed448_key* key, const byte* out,
 
     if (!key->pubKeySet) {
         ret = wc_ed448_make_public(key, (byte*)out, *outLen);
+        if (ret == 0) {
+            /* Store the generated public key in the key object for future use. */
+            ret = wc_ed448_import_public((byte*)out, *outLen, key);
+        }
     }
     else {
         ret = wc_ed448_export_public(key, (byte*)out, outLen);

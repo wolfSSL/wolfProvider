@@ -377,4 +377,10 @@ int test_ec_import(void* data);
 int test_pbe(void *data);
 #endif /* WP_HAVE_PBE */
 
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
+int test_ecx_sign_verify(void *data);
+int test_ecx_sign_verify_raw_priv(void *data);
+int test_ecx_sign_verify_raw_pub(void *data);
+#endif
+
 #endif /* UNIT_H */
