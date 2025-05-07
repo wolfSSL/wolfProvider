@@ -383,6 +383,7 @@ int test_pbe(void *data);
 int test_ecx_sign_verify(void *data);
 int test_ecx_sign_verify_raw_priv(void *data);
 int test_ecx_sign_verify_raw_pub(void *data);
+int test_ecx_misc(void *data);
 #endif
 
 #endif /* UNIT_H */
