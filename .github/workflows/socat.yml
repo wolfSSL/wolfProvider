@@ -55,6 +55,7 @@ jobs:
       - name: Build wolfProvider
         if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
+          export WOLFSSL_CONFIG_CFLAGS_EXTRA="-DWOLFSSL_OLD_OID_SUM" 
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Print errors
