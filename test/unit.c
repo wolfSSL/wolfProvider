@@ -277,6 +277,12 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_PBE
     TEST_DECL(test_pbe, NULL),
 #endif
+
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
+    TEST_DECL(test_ecx_sign_verify, NULL),
+    TEST_DECL(test_ecx_sign_verify_raw_priv, NULL),
+    TEST_DECL(test_ecx_sign_verify_raw_pub, NULL),
+#endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
 
