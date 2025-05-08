@@ -67,6 +67,7 @@ jobs:
           fi
 
   test_openldap:
+    if: ${{ !(matrix.force_fail != '' && matrix.git_ref == 'master') }}
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
@@ -74,12 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # List of releases to test
-          - osp_ref: 2.5.13
-            git_ref: OPENLDAP_REL_ENG_2_5_13
-          - osp_ref: 2.6.7
-            git_ref: OPENLDAP_REL_ENG_2_6_7
+        openldap_ref: [ 'master', 'OPENLDAP_REL_ENG_2_5_13', 'OPENLDAP_REL_ENG_2_6_7' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
         openssl_ref: [ 'openssl-3.2.0' ]
     steps:
@@ -117,7 +113,7 @@ jobs:
         with:
           repository: openldap/openldap
           path: openldap
-          ref: ${{ matrix.git_ref }}
+          ref: ${{ matrix.openldap_ref }}
 
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap

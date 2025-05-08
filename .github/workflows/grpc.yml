@@ -67,6 +67,7 @@ jobs:
           fi
 
   test_grpc:
+    if: ${{ !(matrix.force_fail != '' && matrix.grpc_ref == 'master') }}
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
@@ -75,7 +76,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ref: v1.60.0
+          - grpc_ref: [ 'master', 'v1.60.0' ]
             tests: >-
               bad_ssl_alpn_test bad_ssl_cert_test client_ssl_test
               crl_ssl_transport_security_test server_ssl_test
@@ -132,7 +133,7 @@ jobs:
         with:
           repository: grpc/grpc
           path: grpc
-          ref: ${{ matrix.ref }}
+          ref: ${{ matrix.grpc_ref }}
 
       - name: Build grpc with wolfProvider
         working-directory: ./grpc

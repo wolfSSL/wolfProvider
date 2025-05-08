@@ -66,13 +66,14 @@ jobs:
           fi
 
   test_openvpn:
+    if: ${{ !(matrix.force_fail != '' && matrix.openvpn_ref == 'master') }}
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        openvpn_ref: [ 'master' ]
+        openvpn_ref: [ 'master', 'v2.6.7' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
         openssl_ref: [ 'openssl-3.2.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
