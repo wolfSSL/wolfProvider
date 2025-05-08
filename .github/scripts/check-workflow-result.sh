@@ -101,6 +101,9 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
         if [ -f "openvpn-test.log" ]; then
             # Extract failed tests from the log
             ACTUAL_FAILS=$(grep -a '^FAIL: ' openvpn-test.log | sed 's/^FAIL: //' | sort)
+
+            # Get OpenVPN version from the workflow ref
+            OPENVPN_VERSION="${OPENVPN_REF:-}"
             
             # Define expected failures based on OpenVPN version
             case "$OPENVPN_VERSION" in
