@@ -107,7 +107,7 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
                 "master")
                     EXPECTED_FAILS="auth_token_testdriver crypto_testdriver pkt_testdriver tls_crypt_testdriver"
                     ;;
-                "release/2.6")
+                "v2.6.7")
                     EXPECTED_FAILS="auth_token_testdriver crypto_testdriver pkt_testdriver ssl_testdriver tls_crypt_testdriver"
                     ;;
                 *)

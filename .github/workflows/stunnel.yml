@@ -125,7 +125,9 @@ jobs:
           git clone https://github.com/mtrojnar/stunnel.git
           cd stunnel
           git checkout ${{ matrix.stunnel_ref }}
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/stunnel/stunnel-WPFF-5.67-wolfprov.patch
+          if [ ${{ matrix.force_fail }} != '' ]; then
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/stunnel/stunnel-WPFF-5.67-wolfprov.patch
+          fi
           autoreconf -ivf
           ./configure --with-ssl=$GITHUB_WORKSPACE/openssl-install/
           make -j
