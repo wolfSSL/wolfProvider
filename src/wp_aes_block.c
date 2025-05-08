@@ -693,7 +693,9 @@ static int wp_aes_block_cipher(wp_AesBlockCtx* ctx, unsigned char* out,
     if (ok && (outSize < inLen)) {
         ok = 0;
     }
-    if (ok && !wp_aes_block_doit(ctx, out, in, inLen)) {
+    /* NULL in, NULL out, 0 len is OK */
+    if (ok && (out != NULL && in != NULL && inLen != 0) &&
+            !wp_aes_block_doit(ctx, out, in, inLen)) {
         ok = 0;
     }
     if (ok) {
