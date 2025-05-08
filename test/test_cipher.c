@@ -344,6 +344,92 @@ static int test_stream_enc_dec(void *data, const char *cipher, int keyLen,
     return err;
 }
 
+static int test_cipher_null_zero_ex(void *data, const char *cipher, int keyLen,
+    int ivLen)
+{
+    int err = 0;
+    unsigned char msg[16] = "Test pattern";
+    unsigned char key[32];
+    unsigned char iv[16];
+    unsigned char enc[sizeof(msg) + 16];
+    EVP_CIPHER *ocipher;
+    EVP_CIPHER *wcipher;
+    EVP_CIPHER_CTX *ctx;
+
+    (void)data;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, cipher, "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, cipher, "");
+
+    if (RAND_bytes(key, keyLen) != 1) {
+        err = 1;
+    }
+    if (err == 0) {
+        if (RAND_bytes(iv, ivLen) != 1) {
+            err = 1;
+        }
+    }
+
+    /* Test that a final call with NULL/NULL/0 yields the correct return
+     * value, flow mimics that of libssh2 */
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_CipherInit(ctx, ocipher, key, iv, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(ctx, enc, msg, sizeof(msg)) <= 0;
+    }
+    /* Return is 0, not negative value for NULL/NULL/0 input */
+    if (err == 0) {
+        err = EVP_Cipher(ctx, NULL, NULL, 0) != 0;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_CipherInit(ctx, wcipher, key, iv, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(ctx, enc, msg, sizeof(msg)) <= 0;
+    }
+    /* Return is 0, not negative value for NULL/NULL/0 input */
+    if (err == 0) {
+        err = EVP_Cipher(ctx, NULL, NULL, 0) != 0;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+int test_cipher_null_zero(void *data)
+{
+    int err = 0;
+
+#ifdef WP_HAVE_AESECB
+    err = test_cipher_null_zero_ex(data, "AES-256-ECB", 32, 16);
+#endif
+#ifdef WP_HAVE_AESCBC
+    if (err == 0) {
+        err = test_cipher_null_zero_ex(data, "AES-256-CBC", 32, 16);
+    }
+#endif
+#ifdef WP_HAVE_AESCTR
+    if (err == 0) {
+        err = test_cipher_null_zero_ex(data, "AES-256-CTR", 32, 16);
+    }
+#endif
+#ifdef WP_HAVE_AESCFB
+    if (err == 0) {
+        err = test_cipher_null_zero_ex(data, "AES-256-CFB", 32, 16);
+    }
+#endif
+
+    return err;
+}
+
 #endif /* WP_HAVE_DES3CBC || WP_HAVE_AESCBC */
 
 /******************************************************************************/
