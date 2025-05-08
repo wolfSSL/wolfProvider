@@ -131,7 +131,6 @@ jobs:
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
           export ${{ matrix.force_fail }}
-          export OPENVPN_REF=${{ matrix.openvpn_ref }}
 
           # Run tests and save result
           make check 2>&1 | tee openvpn-test.log || true

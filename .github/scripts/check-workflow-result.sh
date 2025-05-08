@@ -102,22 +102,8 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             # Extract failed tests from the log
             ACTUAL_FAILS=$(grep -a '^FAIL: ' openvpn-test.log | sed 's/^FAIL: //' | sort)
 
-            # Get OpenVPN version from the workflow ref
-            OPENVPN_VERSION="${OPENVPN_REF:-}"
-            
-            # Define expected failures based on OpenVPN version
-            case "$OPENVPN_VERSION" in
-                "master")
-                    EXPECTED_FAILS="auth_token_testdriver crypto_testdriver pkt_testdriver tls_crypt_testdriver"
-                    ;;
-                "v2.6.7")
-                    EXPECTED_FAILS="auth_token_testdriver crypto_testdriver pkt_testdriver ssl_testdriver tls_crypt_testdriver"
-                    ;;
-                *)
-                    echo "Error: Unknown OpenVPN version: $OPENVPN_VERSION"
-                    exit 1
-                    ;;
-            esac
+            # Define expected failures
+            EXPECTED_FAILS="auth_token_testdriver crypto_testdriver pkt_testdriver tls_crypt_testdriver"
             
             # Create temporary files for sorted lists
             TEMP_DIR=$(mktemp -d)
