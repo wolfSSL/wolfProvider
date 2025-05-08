@@ -73,7 +73,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y build-essential autoconf libldb-dev \
-          libldb2 python3-ldb bc
+          libldb2 python3-ldb bc libcap-dev libutf8proc-dev
 
       - name: Setup env
         run: |
