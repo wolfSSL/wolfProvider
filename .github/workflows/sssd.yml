@@ -14,7 +14,6 @@ concurrency:
 
 jobs:
   test_sssd:
-    if: ${{ !(matrix.force_fail != '' && matrix.sssd_ref == 'master') }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     container:
@@ -28,6 +27,9 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
         openssl_ref: [ 'openssl-3.2.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - sssd_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4

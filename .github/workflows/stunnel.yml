@@ -66,7 +66,6 @@ jobs:
           fi
 
   test_stunnel:
-    if: ${{ !(matrix.force_fail != '' && matrix.stunnel_ref == 'master') }}
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
@@ -77,6 +76,9 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
         openssl_ref: [ 'openssl-3.3.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - stunnel_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4

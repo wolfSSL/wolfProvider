@@ -67,7 +67,6 @@ jobs:
           fi
 
   test_openldap:
-    if: ${{ !(matrix.force_fail != '' && matrix.git_ref == 'master') }}
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
