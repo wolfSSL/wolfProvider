@@ -283,6 +283,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_sign_verify, NULL),
     TEST_DECL(test_ecx_sign_verify_raw_priv, NULL),
     TEST_DECL(test_ecx_sign_verify_raw_pub, NULL),
+    TEST_DECL(test_ecx_misc, NULL),
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
