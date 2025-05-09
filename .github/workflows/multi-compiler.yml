@@ -111,4 +111,3 @@ jobs:
           if [ -f config.log ]; then
             cat config.log
           fi
-

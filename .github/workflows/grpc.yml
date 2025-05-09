@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -49,7 +50,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
           fail-on-cache-miss: false
 
       # If not yet built this version, build it now
@@ -74,7 +75,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ref: v1.60.0
+          - grpc_ref: [ 'master', 'v1.60.0' ]
             tests: >-
               bad_ssl_alpn_test bad_ssl_cert_test client_ssl_test
               crl_ssl_transport_security_test server_ssl_test
@@ -82,7 +83,14 @@ jobs:
               test_core_security_ssl_credentials_test test_cpp_end2end_ssl_credentials_test
               h2_ssl_cert_test h2_ssl_session_reuse_test
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
+        exclude:
+          - grpc_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
       - name: Confirm IPv4 and IPv6 support
         run: |
           ip addr list lo | grep 'inet '
@@ -96,7 +104,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
           fail-on-cache-miss: false
 
       - name: Retrieving wolfSSL/wolfProvider from cache
@@ -127,7 +135,7 @@ jobs:
         with:
           repository: grpc/grpc
           path: grpc
-          ref: ${{ matrix.ref }}
+          ref: ${{ matrix.grpc_ref }}
 
       - name: Build grpc with wolfProvider
         working-directory: ./grpc

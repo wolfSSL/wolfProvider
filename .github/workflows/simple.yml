@@ -24,6 +24,7 @@ jobs:
           - 'OPENSSL_TAG=master'
           - 'WOLFSSL_TAG=master'
           - 'OPENSSL_TAG=master WOLFSSL_TAG=master'
+        openssl_ref: [ 'openssl-3.2.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
 
     steps:
@@ -55,7 +56,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
 
       # If not yet built this version, build it now
       - name: Build wolfProvider

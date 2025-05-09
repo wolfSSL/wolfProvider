@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -49,7 +50,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
           fail-on-cache-miss: false
 
       # If not yet built this version, build it now
@@ -73,13 +74,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # List of releases to test
-          - osp_ref: 2.5.13
-            git_ref: OPENLDAP_REL_ENG_2_5_13
-          - osp_ref: 2.6.7
-            git_ref: OPENLDAP_REL_ENG_2_6_7
+        openldap_ref: [ 'master', 'OPENLDAP_REL_ENG_2_5_13', 'OPENLDAP_REL_ENG_2_6_7' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -89,7 +86,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
           fail-on-cache-miss: false
 
       - name: Retrieving wolfSSL/wolfProvider from cache
@@ -115,7 +112,7 @@ jobs:
         with:
           repository: openldap/openldap
           path: openldap
-          ref: ${{ matrix.git_ref }}
+          ref: ${{ matrix.openldap_ref }}
 
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap
