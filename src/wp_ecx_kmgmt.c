@@ -168,6 +168,8 @@ struct wp_Ecx {
     unsigned int hasPub:1;
     /** Private key available. */
     unsigned int hasPriv:1;
+    /* Private key was imported and has been clamped */
+    unsigned int clamped:1;
 };
 
 /**
@@ -877,6 +879,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             if (ok) {
                 ecx->hasPriv = 1;
                 ecx->hasPub = 1;
+                ecx->clamped = 1;
             }
         }
     }
@@ -1020,8 +1023,10 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
         outLen = ecx->data->len;
         rc = (*ecx->data->exportPriv)((void*)&ecx->key, data + *idx, &outLen);
         if (ok) {
-            data[*idx + 0         ] = ecx->unclamped[0];
-            data[*idx + outLen - 1] = ecx->unclamped[1];
+            if (ecx->clamped) {
+                data[*idx + 0         ] = ecx->unclamped[0];
+                data[*idx + outLen - 1] = ecx->unclamped[1];
+            }
             wp_param_set_octet_string_ptr(&params[i++],
                 OSSL_PKEY_PARAM_PRIV_KEY, data + *idx, outLen);
         }
@@ -1503,6 +1508,10 @@ static int wp_ed25519_export_public(ed25519_key* key, const byte* out,
 
     if (!key->pubKeySet) {
         ret = wc_ed25519_make_public(key, (byte*)out, *outLen);
+        if (ret == 0) {
+            /* Store the generated public key in the key object for future use. */
+            ret = wc_ed25519_import_public((byte*)out, *outLen, key);
+        }
     }
     else {
         ret = wc_ed25519_export_public(key, (byte*)out, outLen);
@@ -1633,6 +1642,10 @@ static int wp_ed448_export_public(ed448_key* key, const byte* out,
 
     if (!key->pubKeySet) {
         ret = wc_ed448_make_public(key, (byte*)out, *outLen);
+        if (ret == 0) {
+            /* Store the generated public key in the key object for future use. */
+            ret = wc_ed448_import_public((byte*)out, *outLen, key);
+        }
     }
     else {
         ret = wc_ed448_export_public(key, (byte*)out, outLen);

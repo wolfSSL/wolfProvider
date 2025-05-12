@@ -2,7 +2,7 @@
 
 set -e
 
-if [ $# -lt 2 ]; then
+if [ $# -lt 1 ]; then
     echo "Usage: $0 <test_result> [WOLFPROV_FORCE_FAIL] [TEST_SUITE]"
     exit 1
 fi
@@ -11,7 +11,12 @@ TEST_RESULT="$1"
 WOLFPROV_FORCE_FAIL="${2:-}"
 TEST_SUITE="${3:-}"
 
-if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
+# If force fail is empty treat second arg as test suite
+if [ -z "$WOLFPROV_FORCE_FAIL" ]; then
+    TEST_SUITE="${2:-}"
+fi
+
+if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
     if [ "$TEST_SUITE" = "curl" ]; then
         # --- curl-specific logic ---
         if [ -f "tests/test.log" ]; then
@@ -67,21 +72,6 @@ if [ "$WOLFPROV_FORCE_FAIL" = "1" ]; then
             exit 0
         else
             echo "FAIL: Actual failed tests do not match expected."
-            exit 1
-        fi
-    elif [ "$TEST_SUITE" = "simple" ]; then
-        # --- simple test suite specific logic ---
-        if [ -f "test-suite.log" ]; then
-            # For simple tests, we expect all tests to fail when force fail is enabled
-            if [ $TEST_RESULT -eq 0 ]; then
-                echo "Simple tests unexpectedly succeeded with force fail enabled"
-                exit 1
-            else
-                echo "Simple tests failed as expected with force fail enabled"
-                exit 0
-            fi
-        else
-            echo "Error: test-suite.log not found"
             exit 1
         fi
     else

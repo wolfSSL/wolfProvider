@@ -737,10 +737,12 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
             ok = 0;
         }
     }
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.p))) {
+    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P,
+                                 &dh->key.p, 1))) {
         ok = 0;
     }
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g))) {
+    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G,
+                                 &dh->key.g, 1))) {
         ok = 0;
     }
     if (ok && (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PUB_KEY,
@@ -2119,14 +2121,14 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         ok = 0;
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
-        if ((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) {
-            if (!wp_dh_decode_params(dh, data, len)) {
+        if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0){
+            if (!wp_dh_decode_pki(dh, data, len)) {
                 ok = 0;
                 decoded = 0;
             }
         }
         else {
-            if (!wp_dh_decode_pki(dh, data, len)) {
+            if (!wp_dh_decode_params(dh, data, len)) {
                 ok = 0;
                 decoded = 0;
             }

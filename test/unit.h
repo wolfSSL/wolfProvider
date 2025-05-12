@@ -47,8 +47,8 @@
 #define PRINT_MSG(str)
 #define PRINT_ERR_MSG(str)
 #else
-#define PRINT_MSG(str)         printf("MSG: %s\n", str)
-#define PRINT_ERR_MSG(str)     printf("ERR: %s\n", str)
+#define PRINT_MSG(str, ...)     printf("MSG: " str "\n", ##__VA_ARGS__)
+#define PRINT_ERR_MSG(str, ...) printf("ERR: " str "\n", ##__VA_ARGS__)
 #endif
 #ifdef WOLFPROV_DEBUG
 void print_buffer(const char *desc, const unsigned char *buffer, size_t len);
@@ -237,17 +237,21 @@ int test_rsa_sign_verify_pss(void *data);
 int test_rsa_sign_verify_x931(void *data);
 int test_rsa_enc_dec_pkcs1(void *data);
 int test_rsa_enc_dec_oaep(void *data);
+int test_rsa_enc_dec_nopad(void *data);
 int test_rsa_pkey_keygen(void *data);
 int test_rsa_pkey_invalid_key_size(void *data);
 int test_rsa_get_params(void *data);
 
 int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);
+int test_rsa_fromdata(void* data);
+int test_rsa_decode(void* data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH
 int test_dh_pgen_pkey(void *data);
 int test_dh_pkey(void *data);
+int test_dh_decode(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC
@@ -366,10 +370,19 @@ int test_ec_load_key(void* data);
 int test_ec_load_cert(void* data);
 #endif /* WP_HAVE_ECDSA */
 
+int test_ec_decode(void* data);
+int test_ec_import(void* data);
+
 #endif /* WP_HAVE_ECC */
 
 #ifdef WP_HAVE_PBE
 int test_pbe(void *data);
 #endif /* WP_HAVE_PBE */
+
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
+int test_ecx_sign_verify(void *data);
+int test_ecx_sign_verify_raw_priv(void *data);
+int test_ecx_sign_verify_raw_pub(void *data);
+#endif
 
 #endif /* UNIT_H */

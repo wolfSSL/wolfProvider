@@ -24,7 +24,7 @@ jobs:
           - 'OPENSSL_TAG=master'
           - 'WOLFSSL_TAG=master'
           - 'OPENSSL_TAG=master WOLFSSL_TAG=master'
-        force_fail: [ 1, 0 ] # ['WOLFPROV_FORCE_FAIL=1', '']
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
 
     steps:
       - name: Checkout wolfProvider
@@ -61,13 +61,11 @@ jobs:
       - name: Build wolfProvider
         if: steps.wolfprov-${{ matrix.build_ref }}-cache.hit != 'true'
         run: |
-          ${{ matrix.build_ref.openssl }} ${{ matrix.build_ref.wolfssl }} WOLFPROV_FORCE_FAIL=${{ matrix.force_fail }} ./scripts/build-wolfprovider.sh || BUILD_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $BUILD_RESULT ${{ matrix.force_fail }} simple
+          ${{ matrix.build_ref.openssl }} ${{ matrix.build_ref.wolfssl }} ./scripts/build-wolfprovider.sh
 
       - name: Run simple tests
         run: |
-          WOLFPROV_FORCE_FAIL=${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh || TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} simple
+          ./scripts/cmd_test/do-cmd-tests.sh ${{ matrix.force_fail }}
 
       - name: Print test logs
         if: always()

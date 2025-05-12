@@ -77,6 +77,9 @@ OSSL_PARAM_BN(OSSL_PKEY_PARAM_RSA_COEFFICIENT1, NULL, 0)
     #define OFFSETOF(type, field) ((size_t)&(((type *)0)->field))
 #endif
 
+#ifndef ARRAY_SIZE
+    #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#endif
 
 /** SHA-256 Algorithm ID DER encoding in PSS parameters. */
 static const byte sha256AlgId[] = {
@@ -1064,16 +1067,6 @@ static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
     return ok;
 }
 
-static int wp_params_count(const OSSL_PARAM *p)
-{
-    int cnt = 0;
-    while ((p != NULL) && (p->key != NULL)) {
-         cnt++;
-         p++;
-     }
-     return cnt;
-}
-
 /**
  * Import the key data into RSA key object from parameters.
  *
@@ -1087,28 +1080,48 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
     int priv)
 {
     int ok = 1;
-    int i;
-    int cnt;
+    int i, j, index = -1;
+    int cnt = 0;
+    mp_int* mp = NULL;
+    const OSSL_PARAM* p = NULL;
 
-    if (priv && (wp_params_count(params) > 2)) {
-        cnt = WP_RSA_PARAM_NUMS_CNT;
-        rsa->key.type = RSA_PRIVATE;
-    }
-    else {
-        cnt = WP_RSA_PARAM_PUB_NUMS_CNT;
-        rsa->key.type = RSA_PUBLIC;
+    /* N and E params are the only ones required by OSSL, so match that.
+     * See ossl_rsa_fromdata() and RSA_set0_key() in OpenSSL. */
+    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N) == NULL || 
+        OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E) == NULL) {
+        WOLFPROV_MSG(WP_LOG_PK, "Param N or E is missing");
+        ok = 0;
     }
 
-    for (i = 0; ok && (i < cnt); i++) {
-        const OSSL_PARAM* p = OSSL_PARAM_locate_const(params,
-            wp_rsa_param_key[i]);
-        if (p == NULL) {
-            ok = 0;
-        }
-        if (ok) {
-            mp_int* mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[i]);
-            if (!wp_mp_read_unsigned_bin_le(mp, p->data, p->data_size)) {
-                ok = 0;
+    if (ok) {
+        cnt = wp_params_count(params);
+        rsa->key.type = priv ? RSA_PRIVATE : RSA_PUBLIC;
+
+        for (i = 0; i < cnt; i++) {
+            /* Use the table to look up the offset in the rsa struct */
+            p = &params[i];
+            index = -1;
+            for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
+                if (XSTRNCMP(p->key, wp_rsa_param_key[j], p->data_size) == 0) {
+                    index = j; 
+                    break;
+                }
+            }
+            if (index < 0) {
+                /* Follow OSSL implementation and ignore irrelevant fields. */
+                WOLFPROV_MSG(WP_LOG_PK, "Unexpected param %s, skipping.", 
+                    p->key);
+                continue;
+            }
+
+            /* Read the value into the rsa struct */
+            if (ok) {
+                mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[index]);
+                if (!wp_mp_read_unsigned_bin_le(mp, p->data, p->data_size)) {
+                    WOLFPROV_MSG(WP_LOG_PK,
+                        "Failed to read %s from parameters", p->key);
+                    ok = 0;
+                }
             }
         }
     }
@@ -1950,37 +1963,6 @@ static int wp_rsa_determine_type(wp_Rsa* rsa, unsigned char* data, word32 len)
 }
 
 /**
- * Decode the SubjectPublicInfo DER encoded RSA key into the RSA key object.
- *
- * @param [in, out] rsa   RSA key object.
- * @param [in]      data  DER encoding.
- * @param [in]      len   Length, in bytes, of DER encoding.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
-{
-    int ok = 1;
-    int rc;
-    word32 idx = 0;
-
-    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
-    if (rc != 0) {
-        ok = 0;
-    }
-    if (ok && !wp_rsa_determine_type(rsa, data, len)) {
-        ok = 0;
-    }
-    if (ok) {
-        rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
-        rsa->hasPub = 1;
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
  * Get the PSS parameters from the DER encoded RSA-PSS parameters.
  *
  * TODO: rework to use tables of DER encodings.
@@ -2114,6 +2096,44 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
         rsa->pssDefSet = 1;
     }
 
+    return ok;
+}
+
+/**
+ * Decode the SubjectPublicInfo DER encoded RSA key into the RSA key object.
+ *
+ * @param [in, out] rsa   RSA key object.
+ * @param [in]      data  DER encoding.
+ * @param [in]      len   Length, in bytes, of DER encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
+{
+    int ok = 1;
+    int rc;
+    word32 idx = 0;
+
+    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
+    if (rc != 0) {
+        ok = 0;
+    }
+    if (ok && !wp_rsa_determine_type(rsa, data, len)) {
+        ok = 0;
+    }
+    if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS)) {
+        /* We need to check for pss params to allow a rejection for non-pkcs8
+         * keys. If we dont reject then the keytype gets set to RSA-PSS
+         * which is wrong. For non-pkcs8 fail here for PSS decoder
+         * and let the base RSA pick it up instead */
+        ok = wp_rsa_pss_get_params(rsa, data, len);
+    }
+    if (ok) {
+        rsa->bits = wc_RsaEncryptSize(&rsa->key) * 8;
+        rsa->hasPub = 1;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

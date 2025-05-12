@@ -1,4 +1,24 @@
 #!/bin/bash
+# hash-cmd-test.sh
+# Run hash command-line tests for wolfProvider
+#
+# Copyright (C) 2006-2024 wolfSSL Inc.
+#
+# This file is part of wolfProvider.
+#
+# wolfProvider is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# wolfProvider is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
 # Set up environment
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -16,8 +36,17 @@ source "${UTILS_DIR}/utils-wolfprovider.sh"
 # Initialize the environment
 init_wolfprov
 
-# Fail flag
+# Fail flags
 FAIL=0
+FORCE_FAIL=0
+FORCE_FAIL_PASSED=0
+
+# Check for force fail parameter
+if [ "$1" = "WOLFPROV_FORCE_FAIL=1" ]; then
+    export WOLFPROV_FORCE_FAIL=1
+    FORCE_FAIL=1
+    echo -e "\nForce fail mode enabled for hash tests"
+fi
 
 # Verify wolfProvider is properly loaded
 echo -e "\nVerifying wolfProvider configuration:"
@@ -27,7 +56,7 @@ if ! $OPENSSL_BIN list -providers | grep -q "wolf"; then
     $OPENSSL_BIN list -providers
     FAIL=1
 else
-    echo "[PASS] wolfProvider is properly configured"
+    echo "wolfProvider is properly configured"
 fi
 
 # Print environment for verification
@@ -39,6 +68,19 @@ echo "OPENSSL_BIN: ${OPENSSL_BIN}"
 # Create test data and output directories
 mkdir -p hash_outputs
 echo "This is test data for hash algorithm testing." > test.txt
+
+# Helper function to handle force fail checks
+check_force_fail() {
+    if [ $FORCE_FAIL -eq 1 ]; then
+        echo "[PASS] Test passed when force fail was enabled"
+        FORCE_FAIL_PASSED=1
+    fi
+}
+
+# Array of hash algorithms to test
+HASH_ALGOS=("sha1" "sha224" "sha256" "sha384" "sha512")
+
+echo "=== Running Hash Algorithm Comparisons ==="
 
 # Function to run hash test with specified provider options
 run_hash_test() {
@@ -81,17 +123,13 @@ compare_hashes() {
         
         if cmp -s "$openssl_file" "$wolf_file"; then
             echo "[PASS] ${algo} hashes match"
+            check_force_fail
         else
             echo "[FAIL] ${algo} hashes don't match"
             FAIL=1
         fi
     fi
 }
-
-# Array of hash algorithms to test
-HASH_ALGOS=("sha1" "sha224" "sha256" "sha384" "sha512")
-
-echo "=== Running Hash Algorithm Comparisons ==="
 
 # Run tests for each hash algorithm
 for algo in "${HASH_ALGOS[@]}"; do
@@ -108,10 +146,22 @@ for algo in "${HASH_ALGOS[@]}"; do
 done
 
 # Modify end of script
-if [ $FAIL -eq 0 ]; then
-    echo -e "\n=== All hash tests completed successfully ==="
-    exit 0
+if [ $FORCE_FAIL -eq 1 ]; then
+    if [ $FORCE_FAIL_PASSED -eq 1 ]; then
+        echo -e "\n=== Hash Tests Failed With Force Fail Enabled ==="
+        echo "ERROR: Some tests passed when they should have failed"
+        exit 1
+    else
+        echo -e "\n=== Hash Tests Passed With Force Fail Enabled ==="
+        echo "SUCCESS: All tests failed as expected"
+        exit 0
+    fi
 else
-    echo -e "\n=== Hash tests completed with failures ==="
-    exit 1
+    if [ $FAIL -eq 0 ]; then
+        echo -e "\n=== All hash tests completed successfully ==="
+        exit 0
+    else
+        echo -e "\n=== Hash tests completed with failures ==="
+        exit 1
+    fi
 fi

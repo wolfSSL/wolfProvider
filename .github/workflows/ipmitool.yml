@@ -1,4 +1,4 @@
-name: Curl Tests
+name: IPMItool Tests
 
 # START OF COMMON SECTION
 on:
@@ -41,7 +41,7 @@ jobs:
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -50,10 +50,11 @@ jobs:
             openssl-install
 
           key: ossl-depends
+          fail-on-cache-miss: false
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -64,20 +65,17 @@ jobs:
             cat test-suite.log
           fi
 
-  test_curl:
+  test_ipmitool:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        curl_ref: [ 'master', 'curl-8_4_0' ]
+        git_ref: [ c3939dac2c060651361fc71516806f9ab8c38901 ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -87,7 +85,7 @@ jobs:
             openssl-install
 
           key: ossl-depends
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -102,41 +100,32 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install curl test dependencies
+      - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
+          sudo apt-get install -y libreadline-dev
 
-      - name: Build curl
+      - name: Build ipmitool with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
-          repository: curl/curl
-          path: curl
-          ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl
+          repository: ipmitool/ipmitool
+          ref: ${{ matrix.git_ref }}
+          path: ipmitool
+          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install
           check: false
 
-      - name: Generate certificates for curl master force-fail tests
+      - name: Confirm built with OpenSSL and test with wolfProvider
+        working-directory: ipmitool
         run: |
-          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ] &&
-             [ "${{ matrix.curl_ref }}" = "master" ]; then
-            cd curl/tests/certs
-            make test-ca.cacert
-            cd ../..
-          fi
-      - name: Test curl with wolfProvider
-        working-directory: curl
-        run: |
-          # Set environment variables
+          # Setup environment for wolfProvider
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
-          export ${{ matrix.force_fail }}
-          export CURL_REF=${{ matrix.curl_ref }}
 
-          # Run tests and save output to test.log
-          mkdir -p tests
-          make -j$(nproc) test-ci 2>&1 | tee tests/test.log || true
-          TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl
+          # Verify ipmitool was built and linked correctly with OpenSSL
+          ldd src/ipmitool | grep -E '(libssl|libcrypto)'
+          ldd src/ipmievd | grep -E '(libssl|libcrypto)'
+
+          # Run a simple command to verify functionality
+          ./src/ipmitool -V

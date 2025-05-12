@@ -1,4 +1,4 @@
-name: Curl Tests
+name: OpenLDAP Tests
 
 # START OF COMMON SECTION
 on:
@@ -41,7 +41,7 @@ jobs:
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
@@ -50,10 +50,11 @@ jobs:
             openssl-install
 
           key: ossl-depends
+          fail-on-cache-miss: false
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -64,20 +65,22 @@ jobs:
             cat test-suite.log
           fi
 
-  test_curl:
+  test_openldap:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        curl_ref: [ 'master', 'curl-8_4_0' ]
+        include:
+          # List of releases to test
+          - osp_ref: 2.5.13
+            git_ref: OPENLDAP_REL_ENG_2_5_13
+          - osp_ref: 2.6.7
+            git_ref: OPENLDAP_REL_ENG_2_6_7
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -87,7 +90,7 @@ jobs:
             openssl-install
 
           key: ossl-depends
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -102,41 +105,37 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install curl test dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
+          sudo apt-get install -y libsasl2-dev
 
-      - name: Build curl
-        uses: wolfSSL/actions-build-autotools-project@v1
+      - name: Checkout openldap
+        uses: actions/checkout@v4
         with:
-          repository: curl/curl
-          path: curl
-          ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl
-          check: false
+          repository: openldap/openldap
+          path: openldap
+          ref: ${{ matrix.git_ref }}
 
-      - name: Generate certificates for curl master force-fail tests
+      - name: Build and test OpenLDAP with wolfProvider
+        working-directory: openldap
         run: |
-          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ] &&
-             [ "${{ matrix.curl_ref }}" = "master" ]; then
-            cd curl/tests/certs
-            make test-ca.cacert
-            cd ../..
-          fi
-      - name: Test curl with wolfProvider
-        working-directory: curl
-        run: |
-          # Set environment variables
+          # Setup environment for wolfProvider
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
-          export ${{ matrix.force_fail }}
-          export CURL_REF=${{ matrix.curl_ref }}
 
-          # Run tests and save output to test.log
-          mkdir -p tests
-          make -j$(nproc) test-ci 2>&1 | tee tests/test.log || true
-          TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl
+          # Generate configure script
+          rm -f aclocal.m4
+          autoreconf -ivf
+
+          # Configure with OpenSSL
+          ./configure --with-tls=openssl --disable-bdb --disable-hdb \
+            CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include \
+              -L$GITHUB_WORKSPACE/openssl-install/lib64" \
+            LDFLAGS="-Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64"
+
+          # Build OpenLDAP
+          make -j depend
+          make -j
+          make -j check
