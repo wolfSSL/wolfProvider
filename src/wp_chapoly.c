@@ -104,7 +104,7 @@ static OSSL_FUNC_cipher_gettable_ctx_params_fn wp_chacha20_poly1305_gettable_ctx
  */
 static int wp_cp_aead_tls_init(wp_CP_AeadCtx* ctx, unsigned char* aad, size_t aadLen)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_cp_aead_tls_init\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_cp_aead_tls_init");
     int ok = 1;
     size_t len = 0;
     
@@ -184,7 +184,7 @@ static int wp_cp_aead_tls_init(wp_CP_AeadCtx* ctx, unsigned char* aad, size_t aa
  */
 static int wp_cp_aead_tls_iv_set_fixed(wp_CP_AeadCtx* ctx, unsigned char* fixed, size_t flen) 
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_cp_aead_tls_ivSet_fixed\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_cp_aead_tls_ivSet_fixed");
     int ok = 1;
 
     if (!wolfssl_prov_is_running()) {
@@ -330,7 +330,7 @@ static const OSSL_PARAM *wp_cp_aead_settable_ctx_params(wp_CP_AeadCtx* ctx,
  */
 static void *wp_chacha20_poly1305_newctx(void *provctx) 
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_newctx\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_newctx");
 
     wp_CP_AeadCtx *ctx = NULL;
 
@@ -358,7 +358,7 @@ static void *wp_chacha20_poly1305_newctx(void *provctx)
 
 static void *wp_chacha20_poly1305_dupctx(void *provctx)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_dupctx\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_dupctx");
     wp_CP_AeadCtx *ctx = provctx;
     wp_CP_AeadCtx *dctx = NULL;
 
@@ -371,7 +371,7 @@ static void *wp_chacha20_poly1305_dupctx(void *provctx)
 
 static void wp_chacha20_poly1305_freectx(void *vctx)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_freectx\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_freectx");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
 
     if (ctx != NULL) {
@@ -383,7 +383,7 @@ static void wp_chacha20_poly1305_freectx(void *vctx)
 
 static int wp_chacha20_poly1305_get_params(OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_get_params\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_get_params");
     return wp_cp_aead_get_params(params, 0, WP_CHACHA20_POLY1305_AEAD_FLAGS,
                                             CHACHA20_POLY1305_AEAD_KEYSIZE * 8,
                                             WP_CHACHA20_POLY1305_BLKLEN * 8,
@@ -392,7 +392,7 @@ static int wp_chacha20_poly1305_get_params(OSSL_PARAM params[])
 
 static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_get_ctx_params\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_get_ctx_params");
 
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     OSSL_PARAM *p;
@@ -403,7 +403,7 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: IVLEN \n");
+        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: IVLEN ");
     }
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_KEYLEN);
     if (p != NULL ) {
@@ -411,7 +411,7 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: KEYLEN \n");
+        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: KEYLEN ");
     }
     
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TAGLEN);
@@ -420,7 +420,7 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: tagLEN \n");
+        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: tagLEN ");
     }
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD_PAD);
     if (p != NULL ) {
@@ -428,7 +428,7 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: aad pad \n");
+        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: aad pad ");
     }
 
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TAG);
@@ -446,7 +446,7 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             return 0;
         }
         memcpy(p->data, ctx->tag, p->data_size);
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: tag \n");
+        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: tag ");
     }
 
     return 1;
@@ -463,13 +463,13 @@ static const OSSL_PARAM wp_chacha20_poly1305_known_gettable_ctx_params[] = {
 static const OSSL_PARAM *wp_chacha20_poly1305_gettable_ctx_params
     (ossl_unused void *cctx, ossl_unused void *provctx)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_gettable_ctx_params\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_gettable_ctx_params");
     return wp_chacha20_poly1305_known_gettable_ctx_params;
 }
 
 static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM params[]) //*******temp unused void */
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_set_ctx_params\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_set_ctx_params");
     const OSSL_PARAM *p;
     size_t len = 0;
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
@@ -487,7 +487,7 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
             ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"done setting keylen len=%ld\n", len);
+        WOLFPROV_MSG(WP_LOG_PK,"done setting keylen len=%ld", len);
     }
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_IVLEN);
     if (p != NULL) {
@@ -499,7 +499,7 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
             ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_IV_LENGTH);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"done setting ivlen len=%ld\n", len);
+        WOLFPROV_MSG(WP_LOG_PK,"done setting ivlen len=%ld", len);
     }
 
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TAG);
@@ -520,13 +520,13 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
             memcpy(ctx->tag, p->data, p->data_size);
         }
         ctx->tagLen = p->data_size;
-        WOLFPROV_MSG(WP_LOG_PK,"done setting AEAD_TAG len=%ld\n", ctx->tagLen);
+        WOLFPROV_MSG(WP_LOG_PK,"done setting AEAD_TAG len=%ld", ctx->tagLen);
     }
 
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD);
     if (p != NULL) {
         
-        WOLFPROV_MSG(WP_LOG_PK,"located aad\n");
+        WOLFPROV_MSG(WP_LOG_PK,"located aad");
         if (p->data_type != OSSL_PARAM_OCTET_STRING) {
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GET_PARAMETER);
             return 0;
@@ -541,7 +541,7 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
 
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED);
     if (p != NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"located TLS1_IV_FIXED\n");
+        WOLFPROV_MSG(WP_LOG_PK,"located TLS1_IV_FIXED");
         if (p->data_type != OSSL_PARAM_OCTET_STRING) {
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GET_PARAMETER);
             return 0;
@@ -575,7 +575,7 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
                                   size_t keyLen, const unsigned char *iv,
                                   size_t ivLen, const OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_einit\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_einit");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int rc = 0;
@@ -583,16 +583,16 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
     if (!wolfssl_prov_is_running()) {
         return 0;
     }
-    WOLFPROV_MSG(WP_LOG_PK,"yes running\n");
+    WOLFPROV_MSG(WP_LOG_PK,"yes running");
 
     if(key == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"key == NULL\n");
+        WOLFPROV_MSG(WP_LOG_PK,"key == NULL");
     }
     if(iv == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"iv == NULL\n");
+        WOLFPROV_MSG(WP_LOG_PK,"iv == NULL");
     }
-    WOLFPROV_MSG(WP_LOG_PK," keylen= %ld\n", keyLen);
-    WOLFPROV_MSG(WP_LOG_PK," ivlen= %ld\n", ivLen);
+    //WOLFPROV_MSG(WP_LOG_PK," keylen= %ld", keyLen);
+    //WOLFPROV_MSG(WP_LOG_PK," ivlen= %ld", ivLen);
 
     if (key) {
         if (keyLen == 0 || keyLen != CHACHA20_POLY1305_AEAD_KEYSIZE) {
@@ -603,7 +603,7 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
             XMEMCPY(ctx->key, key, keyLen);   
             ctx->keySet = 1;
         }
-        WOLFPROV_MSG(WP_LOG_PK," cache key_Init ok= %d\n", ok);
+        //WOLFPROV_MSG(WP_LOG_PK," cache key_Init ok= %d", ok);
     }
 
     if (iv) {
@@ -615,7 +615,7 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
             XMEMCPY(ctx->iv, iv, ivLen);   
             ctx->ivSet = 1;
         }  
-        WOLFPROV_MSG(WP_LOG_PK," cache iv_Init ok= %d\n", ok);
+        //WOLFPROV_MSG(WP_LOG_PK," cache iv_Init ok= %d", ok);
     }
     
     if (ctx->ivSet && ctx->keySet) {
@@ -634,7 +634,7 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
             // ctx->ivSet = 1;
             ctx->mac_inited = 1;
         }
-        WOLFPROV_MSG(WP_LOG_PK," wc_ChaCha20Poly1305_Init ok= %d\n", ok);   
+        //WOLFPROV_MSG(WP_LOG_PK," wc_ChaCha20Poly1305_Init ok= %d", ok);   
     }
 
     if (ok) {
@@ -667,7 +667,7 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
                                         size_t keyLen, const unsigned char *iv,
                                         size_t ivLen, const OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_dinit\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_dinit");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int rc = 0;
@@ -677,13 +677,13 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
     }
 
     if(key == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"D key == NULL\n");
+        WOLFPROV_MSG(WP_LOG_PK,"D key == NULL");
     }
     if(iv == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"D iv == NULL\n");
+        WOLFPROV_MSG(WP_LOG_PK,"D iv == NULL");
     }
-    WOLFPROV_MSG(WP_LOG_PK,"D keylen= %ld\n", keyLen);
-    WOLFPROV_MSG(WP_LOG_PK,"D ivlen= %ld\n", ivLen);
+    //WOLFPROV_MSG(WP_LOG_PK,"D keylen= %ld", keyLen);
+    //WOLFPROV_MSG(WP_LOG_PK,"D ivlen= %ld", ivLen);
     if (key) {
         if (keyLen == 0 || keyLen != CHACHA20_POLY1305_AEAD_KEYSIZE) {
             ok = 0;
@@ -693,7 +693,7 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
             XMEMCPY(ctx->key, key, keyLen);   
             ctx->keySet = 1;
         }
-        WOLFPROV_MSG(WP_LOG_PK," cache key_Init ok= %d\n", ok);
+        //WOLFPROV_MSG(WP_LOG_PK," cache key_Init ok= %d", ok);
     }
 
     if (iv) {
@@ -705,7 +705,7 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
             XMEMCPY(ctx->iv, iv, ivLen);   
             ctx->ivSet = 1;
         }  
-        WOLFPROV_MSG(WP_LOG_PK," cache iv_Init ok= %d\n", ok);
+        //WOLFPROV_MSG(WP_LOG_PK," cache iv_Init ok= %d", ok);
     }
     
     if (ctx->ivSet && ctx->keySet) {
@@ -724,7 +724,7 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
             // ctx->ivSet = 1;
             ctx->mac_inited = 1;
         }
-        WOLFPROV_MSG(WP_LOG_PK," wc_ChaCha20Poly1305_Init ok= %d\n", ok);   
+        //WOLFPROV_MSG(WP_LOG_PK," wc_ChaCha20Poly1305_Init ok= %d", ok);   
     }
 
     if (ok) {
@@ -754,7 +754,7 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
                                     size_t *outLen, size_t outSize, 
                                     const unsigned char *in, size_t inLen)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_cipher\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_cipher");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int ret = 0;
@@ -776,7 +776,7 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
 
     if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
         //if (inLen != ctx->tlsAadLen + POLY1305_BLOCK_SIZE) { // aadLen + 16 return 0; // ok = 0;
-        WOLFPROV_MSG(WP_LOG_PK," not implemented\n");
+        WOLFPROV_MSG(WP_LOG_PK," not implemented");
 #if 0
         if (out == NULL) {
             if (in == NULL) {
@@ -809,7 +809,7 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
             if (ret != 0) {
                 ok = 0;
             }
-            WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_UpdateAad ok=%d\n", ok);
+            //WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_UpdateAad ok=%d", ok);
             if (ok) {
                 // ctx->len.aad += inLen; ctx->ChaChaPoly_Aead UPDATED
                 ctx->aadSet = 1;
@@ -828,7 +828,7 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
             if (ok) {
                 oLen = (word32)inLen; //->ChaChaPoly_Aead.dataLen;
             }
-            WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_UpdateData ok=%d\n", ok);
+            //WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_UpdateData ok=%d", ok);
 
         }
 
@@ -860,13 +860,13 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
                 ctx->aadSet = 1;
                 oLen = (word32)ctx->tlsAadLen;
             }
-            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateAad ok=%d\n", ok);
+            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateAad ok=%d", ok);
             ret = wc_ChaCha20Poly1305_UpdateData(&ctx->ChaChaPoly_Aead, (const byte*)in, (byte*)out, (word32)inLen);
             if (ret != 0) {
                 ok = 0;
                 oLen = ctx->ChaChaPoly_Aead.dataLen;
             }
-            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateData ok=%d\n", ok);
+            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateData ok=%d", ok);
         }
         else {
              // tls operation not set (by tls-init(aad updated)) OR not expect output (update aad only)
@@ -881,13 +881,13 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
                 ctx->aadSet = 1;
                 oLen = (word32)ctx->tlsAadLen;
             }
-            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateAad ok=%d\n", ok);
+            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateAad ok=%d", ok);
         }
     }
 #endif
 
     //else {
-    //    WOLFPROV_MSG(WP_LOG_PK,"ready for tls cipher, ctx->tlsAadLen != UNINITIALISED_SIZET\n");
+    //    WOLFPROV_MSG(WP_LOG_PK,"ready for tls cipher, ctx->tlsAadLen != UNINITIALISED_SIZET");
     //    //  ok = wp_aesgcm_tls_cipher(ctx, out, outLen, in, inLen);
     //    // call enc/dec directly?
     //}
@@ -909,13 +909,13 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
 static int wp_chacha20_poly1305_final(void *vctx, unsigned char *out, size_t *outl,
                                    size_t outsize)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_final\n");
+    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_final");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int ret = 0;
 
-    WOLFPROV_MSG(WP_LOG_PK,"outSize= %ld\n", outsize); // 0
-    WOLFPROV_MSG(WP_LOG_PK,"CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE= %d\n", CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE); // 16
+    //WOLFPROV_MSG(WP_LOG_PK,"outSize= %ld", outsize); // 0
+    //WOLFPROV_MSG(WP_LOG_PK,"CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE= %d", CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE); // 16
     //(void)outSize;
     (void)outl;
     (void)out;
@@ -923,7 +923,7 @@ static int wp_chacha20_poly1305_final(void *vctx, unsigned char *out, size_t *ou
     byte outAuthTag[CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE];
 
     if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
-        WOLFPROV_MSG(WP_LOG_PK,"ready for tls cipher, ctx->tlsAadLen != UNINITIALISED_SIZET\n");
+        WOLFPROV_MSG(WP_LOG_PK,"ready for tls cipher, ctx->tlsAadLen != UNINITIALISED_SIZET");
         //ok = wp_aesgcm_tls_cipher(ctx, out, outLen, NULL, 0);
     }
     else {
@@ -934,11 +934,11 @@ static int wp_chacha20_poly1305_final(void *vctx, unsigned char *out, size_t *ou
         if (ok) {
             ctx->mac_inited = 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_Final ok=%d\n", ok);
+        //WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_Final ok=%d", ok);
 
-        WOLFPROV_MSG(WP_LOG_PK,"outauthtag: \n");
+        WOLFPROV_MSG(WP_LOG_PK,"outauthtag: ");
         for (int i = 0; i < CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE; i++) WOLFPROV_MSG(WP_LOG_PK,"%02x", outAuthTag[i]);
-        WOLFPROV_MSG(WP_LOG_PK,"\n");
+        WOLFPROV_MSG(WP_LOG_PK,"");
 
         // cmp should be done at caller funcs, 
         memcpy(ctx->tag, outAuthTag, CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE);
