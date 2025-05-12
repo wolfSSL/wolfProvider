@@ -871,7 +871,7 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
         else {
              // tls operation not set (by tls-init(aad updated)) OR not expect output (update aad only)
             // aad not set yet (not from params, no output indicates set here)
-            // check aead state ? (already checked iniside wc_ChaCha20Poly1305_UpdateAad)
+            // check aead state ? (already checked inside wc_ChaCha20Poly1305_UpdateAad)
             ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)ctx->tls_aad, (word32)EVP_AEAD_TLS1_AAD_LEN); // ctx->tlsAadLen
             if (ret != 0) {
                 ok = 0;
@@ -916,7 +916,7 @@ static int wp_chacha20_poly1305_final(void *vctx, unsigned char *out, size_t *ou
 
     //WOLFPROV_MSG(WP_LOG_PK,"outSize= %ld", outsize); // 0
     //WOLFPROV_MSG(WP_LOG_PK,"CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE= %d", CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE); // 16
-    //(void)outSize;
+    (void)outsize;
     (void)outl;
     (void)out;
 
