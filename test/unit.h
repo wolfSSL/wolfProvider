@@ -174,6 +174,8 @@ int test_aes256_cfb_stream(void *data);
 
 #endif
 
+int test_cipher_null_zero(void *data);
+
 #ifdef WP_HAVE_AESGCM
 
 int test_aes128_gcm(void *data);

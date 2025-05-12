@@ -477,7 +477,9 @@ static int wp_aes_stream_cipher(wp_AesStreamCtx* ctx, unsigned char* out,
     if (ok && (outSize < inLen)) {
         ok = 0;
     }
-    if (ok && (!wp_aes_stream_doit(ctx, out, in, inLen))) {
+    /* NULL in, NULL out, 0 len is OK */
+    if (ok && (in != NULL && out != NULL && inLen != 0) &&
+              (!wp_aes_stream_doit(ctx, out, in, inLen))) {
         ok = 0;
     }
 
