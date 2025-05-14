@@ -23,6 +23,8 @@
 #include <openssl/store.h>
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
+#include <wolfssl/wolfcrypt/ed25519.h>
+#include <wolfssl/wolfcrypt/ed448.h>
 
 #if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ECD448)
 
@@ -30,12 +32,8 @@
     #define ARRAY_SIZE(a)   ((sizeof(a)/sizeof(a[0])))
 #endif
 
-#ifndef ED25519_SIGSIZE
-    #define ED25519_SIGSIZE 64
-#endif
-
-#ifndef ED448_SIGSIZE
-    #define ED448_SIGSIZE 114
+#ifndef MAX
+    #define MAX(a,b)       ((a) > (b) ? (a) : (b))
 #endif
 
 #ifdef WP_HAVE_ED25519
@@ -145,10 +143,10 @@ int test_ecx_sign_verify(void *data)
     const unsigned char *p;
 
     #ifdef WP_HAVE_ED25519
-    unsigned char sig_ed25519[ED25519_SIGSIZE];
+    unsigned char sig_ed25519[ED25519_SIG_SIZE];
     #endif
     #ifdef WP_HAVE_ED448
-    unsigned char sig_ed448[ED448_SIGSIZE];
+    unsigned char sig_ed448[ED448_SIG_SIZE];
     #endif
 
     (void)data;
@@ -179,7 +177,8 @@ int test_ecx_sign_verify(void *data)
         p = types[i].key;
 
         if (err == 0) {
-            pkey = d2i_PrivateKey(types[i].type, NULL, &p, types[i].keyLen);
+            pkey = d2i_PrivateKey_ex(types[i].type, NULL, &p, types[i].keyLen, 
+                wpLibCtx, NULL);
             err = pkey == NULL;
             if (err) {
                 PRINT_MSG("could not create key");
@@ -203,12 +202,14 @@ int test_ecx_sign_verify_raw_priv(void *data)
 
     EVP_PKEY *pkey_ossl = NULL;
     EVP_PKEY *pkey_wolf = NULL;
+    unsigned char readback_ossl[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
+    unsigned char readback_wolf[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
 
     #ifdef WP_HAVE_ED25519
-    unsigned char sig_ed25519[ED25519_SIGSIZE];
+    unsigned char sig_ed25519[ED25519_SIG_SIZE];
     #endif
     #ifdef WP_HAVE_ED448
-    unsigned char sig_ed448[ED448_SIGSIZE];
+    unsigned char sig_ed448[ED448_SIG_SIZE];
     #endif
 
     struct {
@@ -233,6 +234,7 @@ int test_ecx_sign_verify_raw_priv(void *data)
         PRINT_MSG("Testing ECX sign/verify with raw keys (%s)", 
             types[i].name);
 
+        /* Create private keys from the byte arrays */
         if (err == 0) {
             pkey_ossl = EVP_PKEY_new_raw_private_key_ex(osslLibCtx, 
                 types[i].name, NULL, types[i].key, types[i].keyLen);
@@ -251,6 +253,7 @@ int test_ecx_sign_verify_raw_priv(void *data)
             }
         }
 
+        /* Compare keys */
         if (err == 0) {
             if (EVP_PKEY_cmp(pkey_wolf, pkey_ossl) != 1) {
                 PRINT_MSG("EVP_PKEY_cmp failed"); 
@@ -259,6 +262,48 @@ int test_ecx_sign_verify_raw_priv(void *data)
             if (EVP_PKEY_cmp_parameters(pkey_wolf, pkey_ossl) != 1) {
                 PRINT_MSG("EVP_PKEY_cmp_parameters failed");
                 err = 1;
+            }
+        }
+
+        /* Verify readback of the key */
+        if (err == 0) {
+            PRINT_MSG("Verify readback of private key with OpenSSL (%s)", types[i].name);
+            size_t readbackLen_ossl = types[i].keyLen;
+            /* EVP_PKEY_get_raw_private_key returns 1 for success */
+            err = EVP_PKEY_get_raw_private_key(pkey_ossl, readback_ossl, &readbackLen_ossl);
+            err = err != 1;
+            if (err) {
+            PRINT_MSG("EVP_PKEY_get_raw_private_key failed");
+            err = 1;
+            }
+            if (readbackLen_ossl != types[i].keyLen) {
+            PRINT_MSG("EVP_PKEY_get_raw_private_key length mismatch");
+            err = 1;
+            }
+            if (memcmp(readback_ossl, types[i].key, readbackLen_ossl) != 0) {
+            PRINT_MSG("EVP_PKEY_get_raw_private_key data mismatch");
+            err = 1;
+            }
+        }
+
+        /* Compare key with WolfSSL */
+        if (err == 0) {
+            PRINT_MSG("Verify readback of private key with WolfSSL (%s)", types[i].name);
+            size_t readbackLen_wolf = types[i].keyLen;
+            /* EVP_PKEY_get_raw_private_key returns 1 for success */
+            err = EVP_PKEY_get_raw_private_key(pkey_wolf, readback_wolf, &readbackLen_wolf);
+            err = err != 1;
+            if (err) {
+            PRINT_MSG("EVP_PKEY_get_raw_private_key failed");
+            err = 1;
+            }
+            if (readbackLen_wolf != types[i].keyLen) {
+            PRINT_MSG("EVP_PKEY_get_raw_private_key length mismatch");
+            err = 1;
+            }
+            if (memcmp(readback_wolf, types[i].key, readbackLen_wolf) != 0) {
+            PRINT_MSG("EVP_PKEY_get_raw_private_key data mismatch");
+            err = 1;
             }
         }
 
@@ -290,12 +335,14 @@ int test_ecx_sign_verify_raw_pub(void *data)
     const unsigned char *p = NULL;
     unsigned char buf[128];
     size_t bufLen = 0;
+    unsigned char readback_ossl[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
+    unsigned char readback_wolf[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
 
     #ifdef WP_HAVE_ED25519
-    unsigned char sig_ed25519[ED25519_SIGSIZE];
+    unsigned char sig_ed25519[ED25519_SIG_SIZE];
     #endif
     #ifdef WP_HAVE_ED448
-    unsigned char sig_ed448[ED448_SIGSIZE];
+    unsigned char sig_ed448[ED448_SIG_SIZE];
     #endif
 
     struct {
@@ -341,7 +388,8 @@ int test_ecx_sign_verify_raw_pub(void *data)
             }
         }
 
-        /* Use OpenSSL to sign the block of random bytes */
+        /* Use OpenSSL to sign the block of random bytes. We will use this 
+         * signature to verify with the public key */
         if (err == 0) {
             PRINT_MSG("Sign with OpenSSL (%s)", types[i].name);
             err = test_digest_sign(pkey_der, osslLibCtx, buf, bufLen, NULL,
@@ -379,6 +427,48 @@ int test_ecx_sign_verify_raw_pub(void *data)
             }
         }
 
+        /* Verify readback of the key with OpenSSL */
+        if (err == 0) {
+            PRINT_MSG("Verify readback of public key with OpenSSL (%s)", types[i].name);
+            size_t readbackLen_ossl = types[i].pubKeyLen;
+            /* EVP_PKEY_get_raw_public_key returns 1 for success */
+            err = EVP_PKEY_get_raw_public_key(pkey_ossl, readback_ossl, &readbackLen_ossl);
+            err = err != 1;
+            if (err) {
+                PRINT_MSG("EVP_PKEY_get_raw_public_key failed");
+                err = 1;
+            }
+            if (readbackLen_ossl != types[i].pubKeyLen) {
+                PRINT_MSG("EVP_PKEY_get_raw_public_key length mismatch");
+                err = 1;
+            }
+            if (memcmp(readback_ossl, types[i].pubKey, readbackLen_ossl) != 0) {
+                PRINT_MSG("EVP_PKEY_get_raw_public_key data mismatch");
+                err = 1;
+            }
+        }
+
+        /* Verify readback of the key with WolfSSL */
+        if (err == 0) {
+            PRINT_MSG("Verify readback of public key with WolfSSL (%s)", types[i].name);
+            size_t readbackLen_wolf = types[i].pubKeyLen;
+            /* EVP_PKEY_get_raw_public_key returns 1 for success */
+            err = EVP_PKEY_get_raw_public_key(pkey_wolf, readback_wolf, &readbackLen_wolf);
+            err = err != 1;
+            if (err) {
+                PRINT_MSG("EVP_PKEY_get_raw_public_key failed");
+                err = 1;
+            }
+            if (readbackLen_wolf != types[i].pubKeyLen) {
+                PRINT_MSG("EVP_PKEY_get_raw_public_key length mismatch");
+                err = 1;
+            }
+            if (memcmp(readback_wolf, types[i].pubKey, readbackLen_wolf) != 0) {
+                PRINT_MSG("EVP_PKEY_get_raw_public_key data mismatch");
+                err = 1;
+            }
+        }
+
         /* Verify the signature with the public keys */
         if (err == 0) {
             PRINT_MSG("Verify with OpenSSL (%s)", types[i].name);
@@ -407,6 +497,130 @@ int test_ecx_sign_verify_raw_pub(void *data)
         EVP_PKEY_free(pkey_der);
         EVP_PKEY_free(pkey_ossl);
         EVP_PKEY_free(pkey_wolf);
+    }
+
+    return err;
+}
+
+int test_ecx_misc(void *data)
+{
+    int err = 0;
+    (void)data;
+
+    EVP_PKEY *pkey_ossl = NULL;
+    EVP_PKEY *pkey_wolf = NULL;
+    EVP_PKEY_CTX *ctx_ossl = NULL;
+    EVP_PKEY_CTX *ctx_wolf = NULL;
+
+    struct {
+        int type;
+        const char* name;
+    } types[] = {
+        #ifdef WP_HAVE_ED25519
+        { EVP_PKEY_ED25519, "ED25519" },
+        #endif
+        #ifdef WP_HAVE_ED448
+        { EVP_PKEY_ED448, "ED448" },
+        #endif
+    };
+
+    for (unsigned i = 0; i < ARRAY_SIZE(types) && err == 0; i++) {
+        /* Generate context */
+        if (err == 0) {
+            ctx_ossl = EVP_PKEY_CTX_new_from_name(osslLibCtx, types[i].name, NULL);
+            err = ctx_ossl == NULL;
+        }
+        if (err == 0) {
+            ctx_wolf = EVP_PKEY_CTX_new_from_name(wpLibCtx, types[i].name, NULL);
+            err = ctx_wolf == NULL;
+        }
+
+        /* Init context */
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx_ossl);
+            err = err != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx_wolf);
+            err = err != 1;
+        }
+
+        /* Generate keys */
+        if (err == 0) {
+            pkey_ossl = NULL;
+            err = EVP_PKEY_generate(ctx_ossl, &pkey_ossl);
+            err = err != 1;
+        }
+        if (err == 0) {
+            pkey_wolf = NULL;
+            err = EVP_PKEY_generate(ctx_wolf, &pkey_wolf);
+            err = err != 1;
+        }
+
+        /* Compare various util routines */
+        if (err == 0) {
+            int id_ossl = EVP_PKEY_get_id(pkey_ossl);
+            int id_wolf = EVP_PKEY_get_id(pkey_wolf);
+            if (id_ossl != id_wolf) {
+                PRINT_MSG("EVP_PKEY_get_id failed %d %d", id_ossl, id_wolf);
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            int base_id_ossl = EVP_PKEY_get_base_id(pkey_ossl);
+            int base_id_wolf = EVP_PKEY_get_base_id(pkey_wolf);
+            if (base_id_ossl != base_id_wolf) {
+                PRINT_MSG("EVP_PKEY_get_base_id failed %d %d",
+                    base_id_ossl, base_id_wolf);
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            int bits_ossl = EVP_PKEY_get_bits(pkey_ossl);
+            int bits_wolf = EVP_PKEY_get_bits(pkey_wolf);
+            if (bits_ossl != bits_wolf) {
+                PRINT_MSG("EVP_PKEY_get_bits failed %d %d", 
+                    bits_ossl, bits_wolf);
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            int sec_ossl = EVP_PKEY_get_security_bits(pkey_ossl);
+            int sec_wolf = EVP_PKEY_get_security_bits(pkey_wolf);
+            if (sec_ossl != sec_wolf) {
+                PRINT_MSG("EVP_PKEY_get_security_bits failed %d %d", 
+                    sec_ossl, sec_wolf);
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            int size_ossl = EVP_PKEY_get_size(pkey_ossl);
+            int size_wolf = EVP_PKEY_get_size(pkey_wolf);
+            if (size_ossl != size_wolf) {
+                PRINT_MSG("EVP_PKEY_get_size failed %d %d", 
+                    size_ossl, size_wolf);
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            int sign_ossl = EVP_PKEY_can_sign(pkey_ossl);
+            int sign_wolf = EVP_PKEY_can_sign(pkey_wolf);
+            if (sign_ossl != sign_wolf) {
+                PRINT_MSG("EVP_PKEY_can_sign failed %d %d", 
+                    sign_ossl, sign_wolf);
+                err = 1;
+            }
+        }
+
+        EVP_PKEY_free(pkey_ossl);
+        EVP_PKEY_free(pkey_wolf);
+        EVP_PKEY_CTX_free(ctx_ossl);
+        EVP_PKEY_CTX_free(ctx_wolf);
     }
 
     return err;
