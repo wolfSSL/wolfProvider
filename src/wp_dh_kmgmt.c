@@ -749,6 +749,10 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
             dh->pub, dh->pubSz))) {
         ok = 0;
     }
+    if (ok && (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
+            dh->priv, dh->privSz))) {
+        ok = 0;
+    }
     if (ok && (!wp_dh_get_params_encoded_public_key(dh, params))) {
         ok = 0;
     }
