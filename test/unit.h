@@ -252,6 +252,7 @@ int test_rsa_decode(void* data);
 int test_dh_pgen_pkey(void *data);
 int test_dh_pkey(void *data);
 int test_dh_decode(void *data);
+int test_dh_get_params(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC

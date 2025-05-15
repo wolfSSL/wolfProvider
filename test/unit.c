@@ -151,6 +151,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),
     TEST_DECL(test_dh_decode, NULL),
+    TEST_DECL(test_dh_get_params, NULL),
 #endif /* WP_HAVE_DH */
 #ifdef WP_HAVE_RSA
     TEST_DECL(test_rsa_sign_sha1, NULL),
