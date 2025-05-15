@@ -89,6 +89,15 @@ static const unsigned char ecc_key_der_256[] = {
 
 /* Raw P256 group and priv key for EVP_PKEY_fromdata() */
 static const char *ecc_p256_group_str = "prime256v1";
+static const unsigned char ecc_p256_pub[] = {
+    0x04, 0x29, 0x48, 0x87, 0x1D, 0x51, 0xEB, 0xC1, 0x20, 0x99,
+    0x6B, 0x2C, 0x2E, 0xAA, 0xCE, 0x2F, 0x8D, 0x28, 0x52, 0x57,
+    0xA6, 0x5D, 0x78, 0xD1, 0x90, 0xAB, 0xDB, 0xF8, 0xA3, 0x7D,
+    0xF9, 0x77, 0x4F, 0x1F, 0x30, 0xE5, 0x67, 0xCF, 0x3F, 0x52,
+    0xA0, 0x6F, 0x98, 0xDE, 0x98, 0x63, 0x88, 0xB2, 0xF1, 0x3F,
+    0x1E, 0x41, 0xB9, 0x03, 0xCB, 0xB0, 0x83, 0x1C, 0x54, 0xA9,
+    0xC4, 0xCA, 0x45, 0xA4, 0x9A
+};
 static const unsigned char ecc_p256_priv[] = {
     0x89, 0x93, 0x7A, 0x74, 0x00, 0x48, 0x17, 0x0D, 0x3D, 0x8E,
     0x23, 0x74, 0xAE, 0x7F, 0xD5, 0x31, 0x99, 0x0A, 0x32, 0x34,
@@ -1814,7 +1823,7 @@ int test_ec_decode(void* data)
     return err;
 }
 
-int test_ec_import(void* data)
+static int test_ec_import_priv(void)
 {
     int err = 0;
     int len = 0;
@@ -1829,8 +1838,6 @@ int test_ec_import(void* data)
     OSSL_PARAM *params = NULL;
     OSSL_PARAM_BLD *bld = NULL;
     BIGNUM* priv = NULL;
-
-    (void)data;
 
     /* Hand construct ECC private only key simulating bind9 flow */
     err = (bld = OSSL_PARAM_BLD_new()) == NULL;
@@ -1915,6 +1922,85 @@ int test_ec_import(void* data)
     OSSL_PARAM_free(params);
     OSSL_PARAM_BLD_free(bld);
     BN_clear_free(priv);
+
+    return err;
+}
+
+static int test_ec_import_pub(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx1 = NULL;
+    EVP_PKEY_CTX *ctx2 = NULL;
+    EVP_PKEY* pkey1 = NULL;
+    EVP_PKEY* pkey2 = NULL;
+    OSSL_PARAM *params = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    BIGNUM* priv = NULL;
+
+    /* Hand construct ECC public only key simulating bind9 flow */
+    err = (bld = OSSL_PARAM_BLD_new()) == NULL;
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
+                ecc_p256_group_str, 0) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_octet_string(bld, OSSL_PKEY_PARAM_PUB_KEY,
+                ecc_p256_pub, sizeof(ecc_p256_pub)) != 1;
+    }
+    if (err == 0) {
+        err = (params = OSSL_PARAM_BLD_to_param(bld)) == NULL;
+    }
+    /* Create openssl and wolfprovider backed pkey */
+    if (err == 0) {
+        err = (ctx1 = EVP_PKEY_CTX_new_from_name(osslLibCtx, "EC", NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx1, &pkey1, EVP_PKEY_KEYPAIR, params) != 1;
+    }
+    if (err == 0) {
+        err = (ctx2 = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx2) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx2, &pkey2, EVP_PKEY_KEYPAIR, params) != 1;
+    }
+
+    /* Perform standard validation of public key data */
+    err = test_ec_pubkey_match(pkey1, pkey2);
+
+    /* Ensure that attempts to get the private key fail appropriately */
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_PRIV_KEY, &priv) != 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_PRIV_KEY, &priv) != 0;
+    }
+
+    EVP_PKEY_free(pkey1);
+    EVP_PKEY_free(pkey2);
+    EVP_PKEY_CTX_free(ctx1);
+    EVP_PKEY_CTX_free(ctx2);
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    BN_clear_free(priv);
+
+    return err;
+}
+
+int test_ec_import(void* data)
+{
+    int err = 0;
+    (void)data;
+
+    err = test_ec_import_priv();
+    if (err == 0) {
+        err = test_ec_import_pub();
+    }
 
     return err;
 }

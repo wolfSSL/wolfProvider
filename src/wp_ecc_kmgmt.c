@@ -818,7 +818,7 @@ static int wp_ecc_get_params(wp_Ecc* ecc, OSSL_PARAM params[])
 #else
             &(ecc->key.k),
 #endif
-            1))) {
+            ecc->hasPriv))) {
         ok = 0;
     }
     /* Private key. */
