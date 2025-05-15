@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -49,7 +50,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
@@ -71,9 +72,17 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        openvpn_ref: [ 'master' ]
+        openvpn_ref: [ 'master', 'v2.6.7' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - openvpn_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -82,7 +91,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
           fail-on-cache-miss: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
@@ -117,7 +126,13 @@ jobs:
       - name: Test OpenVPN with wolfProvider
         working-directory: openvpn
         run: |
+          # Set environment variables
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          make check
+          export ${{ matrix.force_fail }}
+
+          # Run tests and save result
+          make check 2>&1 | tee openvpn-test.log || true
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openvpn

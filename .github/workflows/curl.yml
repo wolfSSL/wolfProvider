@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -49,7 +50,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
@@ -73,7 +74,11 @@ jobs:
       matrix:
         curl_ref: [ 'master', 'curl-8_4_0' ]
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - curl_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -86,7 +91,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
           fail-on-cache-miss: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache

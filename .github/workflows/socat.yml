@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -49,7 +50,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
@@ -72,6 +73,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.0' ]
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -81,7 +83,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}
           fail-on-cache-miss: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
