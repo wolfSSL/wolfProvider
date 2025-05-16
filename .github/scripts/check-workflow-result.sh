@@ -212,6 +212,21 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "Error: stunnel-test.log not found"
             exit 1
         fi
+    # ----- OPENSSH -----
+    elif [ "$TEST_SUITE" = "openssh" ]; then
+        if [ -f "openssh-test.log" ]; then
+            # Check for expected PRNGD socket error and exit code 255
+            if grep -q "Couldn't connect to PRNGD socket" openssh-test.log && grep -q "Error 255" openssh-test.log; then
+                echo "PASS: OpenSSH tests failed as expected with PRNGD socket error"
+                exit 0
+            else
+                echo "FAIL: OpenSSH tests did not fail as expected"
+                exit 1
+            fi
+        else
+            echo "Error: openssh-test.log not found"
+            exit 1
+        fi
     else
         if [ $TEST_RESULT -eq 0 ]; then
             echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"
