@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        openssl_ref: [ 'openssl-3.3.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -73,8 +73,8 @@ jobs:
     strategy:
       matrix:
         stunnel_ref: [ 'master', 'stunnel-5.67' ]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        openssl_ref: [ 'openssl-3.3.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         exclude:
           - stunnel_ref: 'master'

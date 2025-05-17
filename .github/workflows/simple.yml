@@ -24,7 +24,7 @@ jobs:
           - 'OPENSSL_TAG=master'
           - 'WOLFSSL_TAG=master'
           - 'OPENSSL_TAG=master WOLFSSL_TAG=master'
-        openssl_ref: [ 'openssl-3.2.0' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
 
     steps:

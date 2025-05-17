@@ -24,8 +24,8 @@ jobs:
       fail-fast: false
       matrix:
         sssd_ref: [ 'master', '2.9.1' ]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        openssl_ref: [ 'openssl-3.2.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         exclude:
           - sssd_ref: 'master'
@@ -65,7 +65,7 @@ jobs:
       - name: Build wolfProvider
         if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Install dependencies
         run: |
