@@ -50,7 +50,8 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends-${{ matrix.openssl_ref }}
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          lookup-only: true
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
@@ -91,7 +92,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends-${{ matrix.openssl_ref }}
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
