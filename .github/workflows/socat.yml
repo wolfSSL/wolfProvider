@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        openssl_ref: [ 'openssl-3.2.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -56,7 +56,7 @@ jobs:
       - name: Build wolfProvider
         if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Print errors
         if: ${{ failure() }}
@@ -72,8 +72,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        openssl_ref: [ 'openssl-3.2.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
     steps:
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4

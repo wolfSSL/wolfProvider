@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        openssl_ref: [ 'openssl-3.2.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -56,7 +56,7 @@ jobs:
       - name: Build wolfProvider
         if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Print errors
         if: ${{ failure() }}
@@ -73,8 +73,8 @@ jobs:
     strategy:
       matrix:
         curl_ref: [ 'master', 'curl-8_4_0' ]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-        openssl_ref: [ 'openssl-3.2.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         exclude:
           - curl_ref: 'master'
