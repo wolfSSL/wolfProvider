@@ -1,0 +1,142 @@
+name: Bind9 Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        run: |
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  test_bind:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        bind_ref: [ 'v9.18.0', 'v9.18.28' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install bind9 test dependencies
+        run: |
+          # Don't prompt for anything
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          # bind9 dependencies
+          sudo apt-get install -y libuv1-dev libnghttp2-dev libcap-dev libcmocka-dev
+
+      - name: Checkout bind9
+        uses: actions/checkout@v4
+        with:
+          repository: isc-projects/bind9
+          path: bind9
+          ref: ${{ matrix.bind_ref }}
+
+      - name: Build and test bind9 with wolfProvider
+        working-directory: bind9
+        run: |
+          # Setup environment for wolfProvider
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+
+          autoreconf -ivf
+          ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
+
+          # Disable system tests and dst_test
+          sed -i 's/SUBDIRS = system//g' bin/tests/Makefile
+          sed -i 's/dst_test//g' lib/dns/tests/Makefile
+
+          # Build bind9
+          make -j$(nproc) V=1
+
+          # Run tests
+          make -j$(nproc) V=1 check
