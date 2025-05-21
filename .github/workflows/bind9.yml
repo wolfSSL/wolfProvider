@@ -114,6 +114,7 @@ jobs:
           libcap-dev libjemalloc-dev zlib1g-dev libxml2-dev libjson-c-dev \
           libcmocka-dev python3-pytest python3-dnspython python3-hypothesis \
           gnutls-bin
+          sudo PERL_MM_USE_DEFAULT=1 cpan -i Net::DNS
 
       - name: Checkout bind9
         uses: actions/checkout@v4
@@ -121,6 +122,7 @@ jobs:
           repository: isc-projects/bind9
           path: bind9
           ref: ${{ matrix.bind_ref }}
+          fetch-depth: 1
 
       - name: Build and test bind9 with wolfProvider
         working-directory: bind9
@@ -131,14 +133,8 @@ jobs:
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
 
           autoreconf -ivf
-          ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
-
-          # Disable system tests and dst_test
-          sed -i 's/SUBDIRS = system//g' bin/tests/Makefile
-          sed -i 's/dst_test//g' lib/dns/tests/Makefile
-
-          # Build bind9
-          make -j$(nproc) V=1
-
-          # Run tests
-          make -j$(nproc) V=1 check
+          ./configure
+          make clean
+          make -j$(nproc)
+          sudo ./bin/tests/system/ifconfig.sh up
+          make -j$(nproc) check
