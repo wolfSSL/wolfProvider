@@ -73,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bind_ref: [ 'v9.18.0', 'v9.18.28' ]
+        bind_ref: [ 'v9.18.28' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
@@ -107,11 +107,13 @@ jobs:
 
       - name: Install bind9 test dependencies
         run: |
-          # Don't prompt for anything
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          # bind9 dependencies
-          sudo apt-get install -y libuv1-dev libnghttp2-dev libcap-dev libcmocka-dev
+          sudo apt install -y build-essential libssl-dev automake libtool \
+          pkg-config make libidn2-dev libuv1-dev libnghttp2-dev libssl-dev \
+          libcap-dev libjemalloc-dev zlib1g-dev libxml2-dev libjson-c-dev \
+          libcmocka-dev python3-pytest python3-dnspython python3-hypothesis \
+          gnutls-bin
 
       - name: Checkout bind9
         uses: actions/checkout@v4
