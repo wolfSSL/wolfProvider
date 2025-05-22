@@ -182,6 +182,21 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "Error: sssd-test.log not found"
             exit 1
         fi
+    # ----- NET-SNMP -----
+    elif [ "$TEST_SUITE" = "net-snmp" ]; then
+        if [ -f "tests/test.log" ]; then
+            # Check if we have exactly 29 failed tests and a FAIL result
+            if grep -q "We failed these 29 tests:" tests/test.log && grep -q "Result: FAIL" tests/test.log; then
+                echo "PASS: net-snmp tests failed as expected with force fail enabled"
+                exit 0
+            else
+                echo "FAIL: net-snmp tests unexpectedly succeeded with force fail enabled"
+                exit 1
+            fi
+        else
+            echo "Error: tests/test.log not found"
+            exit 1
+        fi
     # ----- NGINX -----
     elif [ "$TEST_SUITE" = "nginx" ]; then
         if [ -f "nginx-test.log" ]; then
