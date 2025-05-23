@@ -33,9 +33,11 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
     steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
       - uses: ./.github/workflows/common.yml
         with:
-          workflow_name: socat
           wolfssl_ref: ${{ matrix.wolfssl_ref }}
           openssl_ref: ${{ matrix.openssl_ref }}
 

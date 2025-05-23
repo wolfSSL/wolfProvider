@@ -3,9 +3,6 @@ name: Common Configuration
 on:
   workflow_call:
     inputs:
-      workflow_name:
-        required: true
-        type: string
       wolfssl_ref:
         required: true
         type: string
@@ -18,9 +15,6 @@ jobs:
     name: Common Configuration
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache

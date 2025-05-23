@@ -36,9 +36,11 @@ jobs:
         openssl_ref: ['openssl-3.5.0']
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
       - uses: ./.github/workflows/common.yml
         with:
-          workflow_name: net-snmp
           wolfssl_ref: ${{ matrix.wolfssl_ref }}
           openssl_ref: ${{ matrix.openssl_ref }}
 
