@@ -193,6 +193,8 @@ int test_aes128_ccm_tls(void *data);
 
 #endif /* WP_HAVE_AESCCM */
 
+int test_chacha20_poly1305(void *data);
+
 #ifdef WP_HAVE_RANDOM
 
 int test_random(void *data);

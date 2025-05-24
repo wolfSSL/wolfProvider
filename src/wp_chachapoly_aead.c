@@ -17,7 +17,6 @@
     ((unsigned int)(p)[0])     | ((unsigned int)(p)[1]<<8) | \
     ((unsigned int)(p)[2]<<16) | ((unsigned int)(p)[3]<<24)  )
 
-// include all define and declaration here, cuz there is no wp_xxx.h ? and no chacha or poly for wp ?
 #define POLY1305_BLOCK_SIZE  16
 #define CHACHA_CTR_SIZE 16
 
@@ -26,13 +25,8 @@
  */
 typedef struct wp_CP_AeadCtx {
     ChaChaPoly_Aead ChaChaPoly_Aead;
-
-    /** Provider context that we are constructed from. */
-    WOLFPROV_CTX* provCtx;
-
     /** Cipher mode: chacha20_poly1305 */
     int mode;
-
     /** Length of key. */
     size_t keyLen;
     /** Length of iv/nonce. */
@@ -43,33 +37,24 @@ typedef struct wp_CP_AeadCtx {
     size_t tlsAadLen;
     /** TLS pad size. */
     size_t tlsAadPadSz;
-
     /** Initialized for encryption or decryption. */
     unsigned int enc:1;
     /** AAD set with call to update. */
     unsigned int aadSet:1;
-    unsigned int ivSet:1;
-    unsigned int keySet:1;
-
-    /** IV/nonce data. */
+    /** IV/nonce data cached with call to init. */
     unsigned char iv[CHACHA20_POLY1305_AEAD_IV_SIZE];
-    unsigned int nonce[12 / 4];
+    /** key data cached with call to init. */
     unsigned char key[CHACHA20_POLY1305_AEAD_KEYSIZE];
+    /** IV/nonce data. */
+    unsigned int nonce[12 / 4];
     /** Buffer to hold tag. */
     unsigned char tag[POLY1305_BLOCK_SIZE];
     /** Buffer to hold TLS AAD. */
     unsigned char tls_aad[POLY1305_BLOCK_SIZE];
-
-    struct { uint64_t aad, text; } len;
-    
-    unsigned int mac_inited : 1; // to remove
-
 } wp_CP_AeadCtx;
-
 
 /** Uninitialized value for a field of type size_t. */
 #define UNINITIALISED_SIZET      ((size_t)-1)
-
 #define WP_CHACHA20_POLY1305_BLKLEN 1
 #define WP_CHACHA20_POLY1305_MAX_IVLEN 12
 #define WP_CHACHA20_POLY1305_MODE 0
@@ -104,7 +89,6 @@ static OSSL_FUNC_cipher_gettable_ctx_params_fn wp_chacha20_poly1305_gettable_ctx
  */
 static int wp_cp_aead_tls_init(wp_CP_AeadCtx* ctx, unsigned char* aad, size_t aadLen)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_cp_aead_tls_init");
     int ok = 1;
     size_t len = 0;
     
@@ -119,14 +103,14 @@ static int wp_cp_aead_tls_init(wp_CP_AeadCtx* ctx, unsigned char* aad, size_t aa
 
     if (ok) {
         /* Cache AAD. */
-        XMEMCPY(ctx->tls_aad, aad, EVP_AEAD_TLS1_AAD_LEN); //XMEMCPY(buf, aad, aadLen);
+        XMEMCPY(ctx->tls_aad, aad, EVP_AEAD_TLS1_AAD_LEN);
         ctx->tlsAadLen = aadLen;
 
         len = aad[EVP_AEAD_TLS1_AAD_LEN - 2] << 8 | aad[EVP_AEAD_TLS1_AAD_LEN - 1];
-        if (len >= POLY1305_BLOCK_SIZE ) { //EVP_AEAD_TLS_EXPLICIT_IV_LEN = 8
+        if (len >= POLY1305_BLOCK_SIZE ) { 
             len -= POLY1305_BLOCK_SIZE;
         }
-        else { // len < POLY1305_BLOCK_SIZE
+        else { 
             ok = 0;
         }
     }
@@ -144,26 +128,10 @@ static int wp_cp_aead_tls_init(wp_CP_AeadCtx* ctx, unsigned char* aad, size_t aa
         }
         ctx->tlsAadLen = len;
 
-        // AEAD_CHACHA20_POLY1305 requires a 96-bit nonce, which is formed as follows:
-        // 1.  The 64-bit record sequence number is serialized as an 8-byte,
-        //     big-endian value and padded on the left with four 0x00 bytes. 
-        // 2.  The padded sequence number is XORed with the client_write_IV
-        //     (when the client is sending) or server_write_IV (when the server is sending).
-        // the |counter| argument is pointer to concatenated nonce and counter values collected into 4 32-bit elements.
-
         /* merge record sequence number as per RFC7905 */
         ctx->ChaChaPoly_Aead.chacha.X[1] = ctx->nonce[0];
         ctx->ChaChaPoly_Aead.chacha.X[2] = ctx->nonce[1] ^ CHACHA_U8TOU32(aad);
         ctx->ChaChaPoly_Aead.chacha.X[3] = ctx->nonce[2] ^ CHACHA_U8TOU32(aad+4);
-
-        ctx->mac_inited = 0;
-        /**
-          * IV(nonce) changes with each record
-          * counter is for what value the block counter should start ... usually 0
-          */
-        // assume iv set? and then merge records. otherwise non-set iv merge is pointless?
-        // tls-init with aad info: store aad val in the ctx for later use. 
-        // same as tls-set-fixed-iv, all only matters after aead init complete?
     }
 
     if (!ok) {
@@ -184,7 +152,6 @@ static int wp_cp_aead_tls_init(wp_CP_AeadCtx* ctx, unsigned char* aad, size_t aa
  */
 static int wp_cp_aead_tls_iv_set_fixed(wp_CP_AeadCtx* ctx, unsigned char* fixed, size_t flen) 
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_cp_aead_tls_ivSet_fixed");
     int ok = 1;
 
     if (!wolfssl_prov_is_running()) {
@@ -196,10 +163,9 @@ static int wp_cp_aead_tls_iv_set_fixed(wp_CP_AeadCtx* ctx, unsigned char* fixed,
     }
 
     if (ok) {
-        // check key init status first ? no one is checking?
-        ctx->nonce[0] = ctx->ChaChaPoly_Aead.chacha.X[1] = CHACHA_U8TOU32(fixed); //LITTLE32(fixed);
-        ctx->nonce[1] = ctx->ChaChaPoly_Aead.chacha.X[2] = CHACHA_U8TOU32(fixed + 4); //LITTLE32(fixed + 4);
-        ctx->nonce[2] = ctx->ChaChaPoly_Aead.chacha.X[3] = CHACHA_U8TOU32(fixed + 8);//LITTLE32(fixed + 8);
+        ctx->nonce[0] = ctx->ChaChaPoly_Aead.chacha.X[1] = CHACHA_U8TOU32(fixed); 
+        ctx->nonce[1] = ctx->ChaChaPoly_Aead.chacha.X[2] = CHACHA_U8TOU32(fixed + 4); 
+        ctx->nonce[2] = ctx->ChaChaPoly_Aead.chacha.X[3] = CHACHA_U8TOU32(fixed + 8);
     }
 
     WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -244,7 +210,7 @@ static const OSSL_PARAM *wp_cp_aead_gettable_params(WOLFPROV_CTX* provCtx)
  * @return  0 on failure.
  */
 static int wp_cp_aead_get_params(OSSL_PARAM params[], unsigned int md,
-     uint64_t flags, size_t keyBits, size_t blkBits, size_t ivBits)
+            uint64_t flags, size_t keyBits, size_t blkBits, size_t ivBits)
 {
     int ok = 1;
     OSSL_PARAM* p;
@@ -330,27 +296,20 @@ static const OSSL_PARAM *wp_cp_aead_settable_ctx_params(wp_CP_AeadCtx* ctx,
  */
 static void *wp_chacha20_poly1305_newctx(void *provctx) 
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_newctx");
-
     wp_CP_AeadCtx *ctx = NULL;
-
     (void)provctx;
 
     if (wolfssl_prov_is_running()) {
         ctx = OPENSSL_zalloc(sizeof(*ctx));
     }
     if (ctx != NULL) {
-        ctx->keyLen = CHACHA20_POLY1305_AEAD_KEYSIZE; // new define or use wssldef ? OSSL ONLY HAS PROV DEFINES
-        ctx->ivLen = CHACHA20_POLY1305_AEAD_IV_SIZE; // TLS_EXPLICIT_IV_LEN ???
+        ctx->keyLen = 0; 
+        ctx->ivLen = 0; 
         ctx->mode = WP_CHACHA20_POLY1305_MODE;
         ctx->tagLen = UNINITIALISED_SIZET;
 
-        // ossl from chacha20_poly1305_initkey || chacha20_poly1305_initiv
-        ctx->len.aad = 0;
-        ctx->len.text = 0;
         ctx->aadSet = 0;
-        ctx->mac_inited = 0;
-        ctx->tlsAadLen = UNINITIALISED_SIZET; // must
+        ctx->tlsAadLen = UNINITIALISED_SIZET; 
         memset(ctx->tls_aad, 0, POLY1305_BLOCK_SIZE);
     }
     return ctx;
@@ -358,7 +317,6 @@ static void *wp_chacha20_poly1305_newctx(void *provctx)
 
 static void *wp_chacha20_poly1305_dupctx(void *provctx)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_dupctx");
     wp_CP_AeadCtx *ctx = provctx;
     wp_CP_AeadCtx *dctx = NULL;
 
@@ -371,7 +329,6 @@ static void *wp_chacha20_poly1305_dupctx(void *provctx)
 
 static void wp_chacha20_poly1305_freectx(void *vctx)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_freectx");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
 
     if (ctx != NULL) {
@@ -383,7 +340,6 @@ static void wp_chacha20_poly1305_freectx(void *vctx)
 
 static int wp_chacha20_poly1305_get_params(OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_get_params");
     return wp_cp_aead_get_params(params, 0, WP_CHACHA20_POLY1305_AEAD_FLAGS,
                                             CHACHA20_POLY1305_AEAD_KEYSIZE * 8,
                                             WP_CHACHA20_POLY1305_BLKLEN * 8,
@@ -392,8 +348,6 @@ static int wp_chacha20_poly1305_get_params(OSSL_PARAM params[])
 
 static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_get_ctx_params");
-
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     OSSL_PARAM *p;
 
@@ -403,7 +357,6 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: IVLEN ");
     }
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_KEYLEN);
     if (p != NULL ) {
@@ -411,7 +364,6 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: KEYLEN ");
     }
     
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TAGLEN);
@@ -420,7 +372,6 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: tagLEN ");
     }
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD_PAD);
     if (p != NULL ) {
@@ -428,7 +379,6 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_SET_PARAMETER);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: aad pad ");
     }
 
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_AEAD_TAG);
@@ -446,7 +396,6 @@ static int wp_chacha20_poly1305_get_ctx_params(void *vctx, OSSL_PARAM params[])
             return 0;
         }
         memcpy(p->data, ctx->tag, p->data_size);
-        WOLFPROV_MSG(WP_LOG_PK,"get_ctx_params: tag ");
     }
 
     return 1;
@@ -463,13 +412,11 @@ static const OSSL_PARAM wp_chacha20_poly1305_known_gettable_ctx_params[] = {
 static const OSSL_PARAM *wp_chacha20_poly1305_gettable_ctx_params
     (ossl_unused void *cctx, ossl_unused void *provctx)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_gettable_ctx_params");
     return wp_chacha20_poly1305_known_gettable_ctx_params;
 }
 
-static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM params[]) //*******temp unused void */
+static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_set_ctx_params");
     const OSSL_PARAM *p;
     size_t len = 0;
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
@@ -487,7 +434,6 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
             ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"done setting keylen len=%ld", len);
     }
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_IVLEN);
     if (p != NULL) {
@@ -499,7 +445,6 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
             ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_IV_LENGTH);
             return 0;
         }
-        WOLFPROV_MSG(WP_LOG_PK,"done setting ivlen len=%ld", len);
     }
 
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TAG);
@@ -520,13 +465,10 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
             memcpy(ctx->tag, p->data, p->data_size);
         }
         ctx->tagLen = p->data_size;
-        WOLFPROV_MSG(WP_LOG_PK,"done setting AEAD_TAG len=%ld", ctx->tagLen);
     }
 
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD);
     if (p != NULL) {
-        
-        WOLFPROV_MSG(WP_LOG_PK,"located aad");
         if (p->data_type != OSSL_PARAM_OCTET_STRING) {
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GET_PARAMETER);
             return 0;
@@ -541,12 +483,10 @@ static int wp_chacha20_poly1305_set_ctx_params(void *vctx, const OSSL_PARAM para
 
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED);
     if (p != NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"located TLS1_IV_FIXED");
         if (p->data_type != OSSL_PARAM_OCTET_STRING) {
             ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GET_PARAMETER);
             return 0;
         }
-
         if (!wp_cp_aead_tls_iv_set_fixed(ctx, (unsigned char*)p->data, (size_t)p->data_size)) {
             ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_IV_LENGTH);
             return 0;
@@ -575,7 +515,6 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
                                   size_t keyLen, const unsigned char *iv,
                                   size_t ivLen, const OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_einit");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int rc = 0;
@@ -583,16 +522,6 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
     if (!wolfssl_prov_is_running()) {
         return 0;
     }
-    WOLFPROV_MSG(WP_LOG_PK,"yes running");
-
-    if(key == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"key == NULL");
-    }
-    if(iv == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"iv == NULL");
-    }
-    //WOLFPROV_MSG(WP_LOG_PK," keylen= %ld", keyLen);
-    //WOLFPROV_MSG(WP_LOG_PK," ivlen= %ld", ivLen);
 
     if (key) {
         if (keyLen == 0 || keyLen != CHACHA20_POLY1305_AEAD_KEYSIZE) {
@@ -601,9 +530,8 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
         if (ok) { 
             // cache user key
             XMEMCPY(ctx->key, key, keyLen);   
-            ctx->keySet = 1;
+            ctx->keyLen = keyLen;
         }
-        //WOLFPROV_MSG(WP_LOG_PK," cache key_Init ok= %d", ok);
     }
 
     if (iv) {
@@ -613,12 +541,11 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
         if (ok) {   
             // cache iv
             XMEMCPY(ctx->iv, iv, ivLen);   
-            ctx->ivSet = 1;
+            ctx->ivLen = ivLen;
         }  
-        //WOLFPROV_MSG(WP_LOG_PK," cache iv_Init ok= %d", ok);
     }
     
-    if (ctx->ivSet && ctx->keySet) {
+    if (ctx->keyLen && ctx->ivLen) {
         rc = wc_ChaCha20Poly1305_Init(&ctx->ChaChaPoly_Aead, 
                                                     (const byte*)ctx->key, 
                                                     (const byte*)ctx->iv, 
@@ -631,10 +558,7 @@ static int wp_chacha20_poly1305_einit(void *vctx, const unsigned char *key,
             ctx->nonce[0] = ctx->ChaChaPoly_Aead.chacha.X[1];
             ctx->nonce[1] = ctx->ChaChaPoly_Aead.chacha.X[2];
             ctx->nonce[2] = ctx->ChaChaPoly_Aead.chacha.X[3];
-            // ctx->ivSet = 1;
-            ctx->mac_inited = 1;
         }
-        //WOLFPROV_MSG(WP_LOG_PK," wc_ChaCha20Poly1305_Init ok= %d", ok);   
     }
 
     if (ok) {
@@ -667,7 +591,6 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
                                         size_t keyLen, const unsigned char *iv,
                                         size_t ivLen, const OSSL_PARAM params[])
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_dinit");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int rc = 0;
@@ -675,15 +598,7 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
     if (!wolfssl_prov_is_running()) {
        return 0;
     }
-
-    if(key == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"D key == NULL");
-    }
-    if(iv == NULL) {
-        WOLFPROV_MSG(WP_LOG_PK,"D iv == NULL");
-    }
-    //WOLFPROV_MSG(WP_LOG_PK,"D keylen= %ld", keyLen);
-    //WOLFPROV_MSG(WP_LOG_PK,"D ivlen= %ld", ivLen);
+    
     if (key) {
         if (keyLen == 0 || keyLen != CHACHA20_POLY1305_AEAD_KEYSIZE) {
             ok = 0;
@@ -691,9 +606,8 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
         if (ok) { 
             // cache user key
             XMEMCPY(ctx->key, key, keyLen);   
-            ctx->keySet = 1;
+            ctx->keyLen = keyLen;
         }
-        //WOLFPROV_MSG(WP_LOG_PK," cache key_Init ok= %d", ok);
     }
 
     if (iv) {
@@ -702,13 +616,12 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
         }
         if (ok) {   
             // cache iv
-            XMEMCPY(ctx->iv, iv, ivLen);   
-            ctx->ivSet = 1;
-        }  
-        //WOLFPROV_MSG(WP_LOG_PK," cache iv_Init ok= %d", ok);
+            XMEMCPY(ctx->iv, iv, ivLen); 
+            ctx->ivLen = ivLen;  
+        }
     }
     
-    if (ctx->ivSet && ctx->keySet) {
+    if (ctx->keyLen && ctx->ivLen) {
         rc = wc_ChaCha20Poly1305_Init(&ctx->ChaChaPoly_Aead, 
                                                     (const byte*)ctx->key, 
                                                     (const byte*)ctx->iv, 
@@ -721,10 +634,7 @@ static int wp_chacha20_poly1305_dinit(void *vctx, const unsigned char *key,
             ctx->nonce[0] = ctx->ChaChaPoly_Aead.chacha.X[1];
             ctx->nonce[1] = ctx->ChaChaPoly_Aead.chacha.X[2];
             ctx->nonce[2] = ctx->ChaChaPoly_Aead.chacha.X[3];
-            // ctx->ivSet = 1;
-            ctx->mac_inited = 1;
         }
-        //WOLFPROV_MSG(WP_LOG_PK," wc_ChaCha20Poly1305_Init ok= %d", ok);   
     }
 
     if (ok) {
@@ -754,7 +664,6 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
                                     size_t *outLen, size_t outSize, 
                                     const unsigned char *in, size_t inLen)
 {
-    WOLFPROV_MSG(WP_LOG_PK,"called wp_chacha20_poly1305_cipher");
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int ret = 0;
@@ -764,133 +673,72 @@ static int wp_chacha20_poly1305_cipher(void *vctx, unsigned char *out,
         return 0;
     }
 
-    if (inLen == 0) { 
-        *outLen = 0;
-        return 1;
-    }
-
     if (outSize < inLen) {
         ERR_raise(ERR_LIB_PROV, PROV_R_OUTPUT_BUFFER_TOO_SMALL);
-        return 0;
+        ok = 0; 
     }
 
-    if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
-        //if (inLen != ctx->tlsAadLen + POLY1305_BLOCK_SIZE) { // aadLen + 16 return 0; // ok = 0;
-        WOLFPROV_MSG(WP_LOG_PK," not implemented");
-#if 0
-        if (out == NULL) {
-            if (in == NULL) {
+    if (ok) {
+        if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
+            WOLFPROV_MSG(WP_LOG_PK, "TLS-AAD is not used in openSSL TLS flow");
+            // TLS-aad case
+            if (out == NULL && in != NULL) {
+                ok = 0;
+            }
+            if (out != NULL && in == NULL) {
+                ok = 0;
+            }
+            
+            if (ok) {
                 ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)ctx->tls_aad, (word32)ctx->tlsAadLen);
-                oLen = (word32)inLen; //inlen == 0
+                if (ret != 0) {
+                    ok = 0;
+                }
+                if (ok) {
+                    ctx->aadSet = 1;
+                    oLen = (word32)ctx->tlsAadLen; 
+                    ctx->tlsAadLen = UNINITIALISED_SIZET; 
+                }
             }
-            else {
-                // buf[ctx->tlsAadLen+inlen]
-                //ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)ctx->tls_aad+in, (word32)ctx->tlsAadLen+inlen);
+            if (ok && out != NULL) {
+                ret = wc_ChaCha20Poly1305_UpdateData(&ctx->ChaChaPoly_Aead, (const byte*)in, (byte*)out, (word32)inLen);
+                if (ret != 0) {
+                    ok = 0;
+                }
+                if (ok) {
+                    oLen += (word32)inLen;
+                }
+            }
+        }
+        else { // non-tls
+            if ((out == NULL) && (in == NULL)) {
+                /* Nothing to do. */
                 oLen = (word32)inLen;
             }
-        }
-        else {
-            ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)ctx->tls_aad, (word32)ctx->tlsAadLen);
-
-            ret = wc_ChaCha20Poly1305_UpdateData(&ctx->ChaChaPoly_Aead, (const byte*)in, (byte*)out, (word32)inLen);
-            oLen = (word32)inLen;
-        }
-#endif
-    }
-    else { // non-tls
-
-        if ((out == NULL) && (in == NULL)) {
-            /* Nothing to do. */
-            oLen = (word32)inLen;
-        }
-        else if ((out == NULL) && (in != NULL)) {
-            /* AAD only. */
-            ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)in, (word32)inLen);
-            if (ret != 0) {
-                ok = 0;
+            else if ((out == NULL) && (in != NULL)) {
+                /* AAD only. */
+                ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)in, (word32)inLen);
+                if (ret != 0) {
+                    ok = 0;
+                }
+                
+                if (ok) {
+                    ctx->aadSet = 1;
+                    oLen = (word32)inLen;
+                }
             }
-            //WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_UpdateAad ok=%d", ok);
-            if (ok) {
-                // ctx->len.aad += inLen; ctx->ChaChaPoly_Aead UPDATED
-                ctx->aadSet = 1;
-                oLen = (word32)inLen;
+            else if (inLen > 0) { 
+                ret = wc_ChaCha20Poly1305_UpdateData(&ctx->ChaChaPoly_Aead, (const byte*)in, (byte*)out, (word32)inLen);
+                if (ret != 0) {
+                    ok = 0;
+                }
+                if (ok) {
+                    oLen = (word32)inLen; 
+                }
             }
-        }
-        else if (outSize < inLen) {
-            ERR_raise(ERR_LIB_PROV, PROV_R_OUTPUT_BUFFER_TOO_SMALL);
-            ok = 0;
-        }
-        else if (inLen > 0) { // out not null, in not null, inlen valid
-            ret = wc_ChaCha20Poly1305_UpdateData(&ctx->ChaChaPoly_Aead, (const byte*)in, (byte*)out, (word32)inLen);
-            if (ret != 0) {
-                ok = 0;
-            }
-            if (ok) {
-                oLen = (word32)inLen; //->ChaChaPoly_Aead.dataLen;
-            }
-            //WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_UpdateData ok=%d", ok);
-
-        }
-
-        *outLen = oLen;
-    }
-#if 0
-    // chacha20_poly1305_not inited (poly auth key not created)
-    //if (!ctx->mac_inited) { // or aead state not ready, COULD IGNORE
-    
-    // tls operation: tlsAadLen set by tls-init(aad updated) and expect output
-    if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
-        if (out != NULL) { 
-            
-            if (inLen != ctx->tlsAadLen + POLY1305_BLOCK_SIZE) { // aadLen + 16
-                return 0; // ok = 0;
-            }
-            // ossl: return chacha20_poly1305_tls_cipher(bctx, out, outl, in, inl);
-            // inited + update aad + update data + final
-            // update add + update data(encdec)
-
-                // tls-init: just store aad val in ctx, dont merge other stuff ?
-            
-            ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)ctx->tls_aad, (word32)ctx->tlsAadLen);
-            if (ret != 0) {
-                ok = 0;
-            }
-            if (ok) {
-                ctx->len.aad = EVP_AEAD_TLS1_AAD_LEN;
-                ctx->aadSet = 1;
-                oLen = (word32)ctx->tlsAadLen;
-            }
-            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateAad ok=%d", ok);
-            ret = wc_ChaCha20Poly1305_UpdateData(&ctx->ChaChaPoly_Aead, (const byte*)in, (byte*)out, (word32)inLen);
-            if (ret != 0) {
-                ok = 0;
-                oLen = ctx->ChaChaPoly_Aead.dataLen;
-            }
-            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateData ok=%d", ok);
-        }
-        else {
-             // tls operation not set (by tls-init(aad updated)) OR not expect output (update aad only)
-            // aad not set yet (not from params, no output indicates set here)
-            // check aead state ? (already checked inside wc_ChaCha20Poly1305_UpdateAad)
-            ret = wc_ChaCha20Poly1305_UpdateAad(&ctx->ChaChaPoly_Aead, (const byte*)ctx->tls_aad, (word32)EVP_AEAD_TLS1_AAD_LEN); // ctx->tlsAadLen
-            if (ret != 0) {
-                ok = 0;
-            }
-            if (ok) {
-                ctx->len.aad = EVP_AEAD_TLS1_AAD_LEN;
-                ctx->aadSet = 1;
-                oLen = (word32)ctx->tlsAadLen;
-            }
-            WOLFPROV_MSG(WP_LOG_PK,"ctx->tlsAadLen: done wc_ChaCha20Poly1305_UpdateAad ok=%d", ok);
+            *outLen = oLen;
         }
     }
-#endif
-
-    //else {
-    //    WOLFPROV_MSG(WP_LOG_PK,"ready for tls cipher, ctx->tlsAadLen != UNINITIALISED_SIZET");
-    //    //  ok = wp_aesgcm_tls_cipher(ctx, out, outLen, in, inLen);
-    //    // call enc/dec directly?
-    //}
 
     WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -913,35 +761,32 @@ static int wp_chacha20_poly1305_final(void *vctx, unsigned char *out, size_t *ou
     wp_CP_AeadCtx *ctx = (wp_CP_AeadCtx *)vctx;
     int ok = 1;
     int ret = 0;
+    byte outAuthTag[CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE];
 
-    //WOLFPROV_MSG(WP_LOG_PK,"outSize= %ld", outsize); // 0
-    //WOLFPROV_MSG(WP_LOG_PK,"CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE= %d", CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE); // 16
-    (void)outsize;
+    (void)outsize; // 0
     (void)outl;
     (void)out;
 
-    byte outAuthTag[CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE];
-
-    if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
-        WOLFPROV_MSG(WP_LOG_PK,"ready for tls cipher, ctx->tlsAadLen != UNINITIALISED_SIZET");
-        //ok = wp_aesgcm_tls_cipher(ctx, out, outLen, NULL, 0);
+    if (!wolfssl_prov_is_running()) {
+        return 0;
     }
-    else {
-        ret = wc_ChaCha20Poly1305_Final(&ctx->ChaChaPoly_Aead, (byte*)outAuthTag); // ctx->tag
-        if (ret != 0) {
-            ok = 0;
-        }
-        if (ok) {
-            ctx->mac_inited = 0;
-        }
-        //WOLFPROV_MSG(WP_LOG_PK,"done wc_ChaCha20Poly1305_Final ok=%d", ok);
 
-        WOLFPROV_MSG(WP_LOG_PK,"outauthtag: ");
-        for (int i = 0; i < CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE; i++) WOLFPROV_MSG(WP_LOG_PK,"%02x", outAuthTag[i]);
-        WOLFPROV_MSG(WP_LOG_PK,"");
+    ret = wc_ChaCha20Poly1305_Final(&ctx->ChaChaPoly_Aead, outAuthTag); 
+    if (ret != 0) {
+        ok = 0;
+    }
+    if (ok) {
+        ctx->aadSet = 0;
 
-        // cmp should be done at caller funcs, 
-        memcpy(ctx->tag, outAuthTag, CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE);
+        if (ctx->enc) {
+            memcpy(ctx->tag, outAuthTag, CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE);
+        }
+        else {
+            ret = memcmp(outAuthTag, ctx->tag, ctx->tagLen);
+            if (ret != 0) {
+                ok = 0;
+            }
+        }
     }
     *outl = 0; 
 
