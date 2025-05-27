@@ -1,0 +1,165 @@
+name: hostap/wpa_supplicant Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+  # allow manual runs of this workflow
+  workflow_dispatch:
+    inputs:
+      run_type:
+        description: 'Reason for manual run'
+        required: false
+        default: 'manual test'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        run: |
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+
+  test_hostap:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        hostap_ref: [ 'hostap_2_11' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          # TODO: change to main branch before merging, after osp patch is merged
+          repository: padelsbach/osp
+          path: osp
+          fetch-depth: 0
+          ref: wp_hostap_patch
+
+      - name: Checkout hostap/wpa_supplicant
+        run: |
+          git clone https://w1.fi/cgit/hostap
+          cd $GITHUB_WORKSPACE/hostap
+          git fetch --tags
+          git checkout ${{ matrix.hostap_ref }}
+
+      - name: Checkout cryptography repository
+        uses: actions/checkout@v4
+        with:
+          repository: pyca/cryptography
+          path: cryptography
+
+      - name: Build and Test hostap/wpa_supplicant
+        working-directory: hostap
+        run: |
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export LDFLAGS="-L$GITHUB_WORKSPACE/.libs -L$GITHUB_WORKSPACE/wolfssl-install/lib -L$GITHUB_WORKSPACE/openssl-install/lib -L$GITHUB_WORKSPACE/hostap/src/cryptowpa"
+          export LIBS_EXTRA="-lssl -lcrypto -lcryptowpa"
+          export ${{ matrix.force_fail }}
+
+          # Apply patch for running the tests with wolfProvider
+          cd $GITHUB_WORKSPACE/hostap
+          git apply $GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap_2_11/hostap_2_11-wolfprov.patch
+
+          # Setup test vectors from cryptography repository
+          mkdir -p $GITHUB_WORKSPACE/hostap/tests/CAVP
+          cp $GITHUB_WORKSPACE/cryptography/vectors/cryptography_vectors/hashes/SHA1/SHA1*.rsp $GITHUB_WORKSPACE/hostap/tests/CAVP
+          cp $GITHUB_WORKSPACE/cryptography/vectors/cryptography_vectors/hashes/SHA2/SHA2*.rsp $GITHUB_WORKSPACE/hostap/tests/CAVP
+          cp $GITHUB_WORKSPACE/cryptography/vectors/cryptography_vectors/asymmetric/RSA/FIPS_186-2/SigVer*.rsp $GITHUB_WORKSPACE/hostap/tests/CAVP
+
+          # Run tests and capture output
+          cd $GITHUB_WORKSPACE/hostap/src/cryptowpa
+          make -j
+          cd $GITHUB_WORKSPACE/hostap/tests
+          make run-tests 2>&1 | tee hostap-test.log
+          TEST_RESULT=$?
+          echo "Test result: $TEST_RESULT"
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} hostap

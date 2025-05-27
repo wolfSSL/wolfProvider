@@ -242,6 +242,21 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "Error: openssh-test.log not found"
             exit 1
         fi
+    # ----- HOSTAP/WPASUPPLICANT -----
+    elif [ "$TEST_SUITE" = "hostap" ]; then
+        if [ -f "hostap-test.log" ]; then
+            # Expect the log to contain "FAILED!" when WOLFPROV_FORCE_FAIL is set
+            if grep -q "FAILED!" hostap-test.log; then
+                echo "PASS: Hostap test passed with WOLFPROV_FORCE_FAIL enabled"
+                exit 0
+            else
+                echo "FAIL: Hostap test did not pass as expected with WOLFPROV_FORCE_FAIL enabled"
+                exit 1
+            fi
+        else
+            echo "Error: hostap-test.log not found with WOLFPROV_FORCE_FAIL enabled"
+            exit 1
+        fi
     else
         if [ $TEST_RESULT -eq 0 ]; then
             echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"
