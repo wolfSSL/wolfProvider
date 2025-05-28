@@ -32,6 +32,16 @@
 
 #if defined(WP_HAVE_AESGCM) || defined(WP_HAVE_AESCCM)
 
+/* For non-streaming AES-GCM, we have to spool all previous updates.
+ * This is the number of extra bytes we add when allocating the internal
+ * buffer used to spool the stream input. This way we if there is space
+ * we can use the existing buffer, reducing the number of full realloc + copy
+ * operations we need to do. Increase this number for better performance and
+ * more memory usage, decrease for worse performance but less overhead */
+#ifndef WP_AES_GCM_EXTRA_BUF_LEN
+#define WP_AES_GCM_EXTRA_BUF_LEN 128
+#endif
+
 /**
  * Authenticated Encryption with Associated Data structure.
  */
@@ -94,10 +104,14 @@ typedef struct wp_AeadCtx {
     /** CCM is not streaming and needs to cache AAD data. */
     unsigned char* aad;
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
-    /** Length of AAD data cached.  */
+    /** Length of data cached.  */
     size_t inLen;
     /** CCM is not streaming and needs to cache AAD data. */
     unsigned char* in;
+    /* Total buffer size */
+    size_t bufSize;
+    /* Original IV */
+    unsigned char origIv[AES_BLOCK_SIZE];
 #endif
 } wp_AeadCtx;
 
@@ -310,14 +324,23 @@ static int wp_aead_cache_in(wp_AeadCtx *ctx, const unsigned char *in,
     unsigned char *p;
 
     if (inLen > 0) {
-        p = (unsigned char*)OPENSSL_realloc(ctx->in, ctx->inLen + inLen);
-        if (p == NULL) {
-            ok = 0;
-        }
-        if (ok) {
-            ctx->in = p;
+        if (inLen < (ctx->bufSize - ctx->inLen)) {
+            /* We can fit this new data into the extra space, dont realloc */
             XMEMCPY(ctx->in + ctx->inLen, in, inLen);
             ctx->inLen += inLen;
+        }
+        else {
+            p = (unsigned char*)OPENSSL_realloc(ctx->in,
+                                ctx->inLen + inLen + WP_AES_GCM_EXTRA_BUF_LEN);
+            if (p == NULL) {
+                ok = 0;
+            }
+            if (ok) {
+                ctx->bufSize = ctx->inLen + inLen + WP_AES_GCM_EXTRA_BUF_LEN;
+                ctx->in = p;
+                XMEMCPY(ctx->in + ctx->inLen, in, inLen);
+                ctx->inLen += inLen;
+            }
         }
     }
 
@@ -823,8 +846,6 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
         if (rc != 0) {
             ok = 0;
         }
-    #else
-        XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
     #endif
     }
     if (ok) {
@@ -833,6 +854,9 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
             olen = ctx->ivLen;
         }
         XMEMCPY(out, ctx->iv + ctx->ivLen - olen, olen);
+#ifndef WOLFSSL_AESGCM_STREAM
+        XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
+#endif
         if (inc) {
             int i;
             unsigned char* p = ctx->iv + ctx->ivLen - 8;
@@ -869,6 +893,9 @@ static int wp_aesgcm_set_rand_iv(wp_AeadCtx *ctx, unsigned char *in,
         ok = 0;
     }
     else {
+#ifndef WOLFSSL_AESGCM_STREAM
+        XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
+#endif
         XMEMCPY(ctx->iv + ctx->ivLen - inLen, in, inLen);
         ctx->ivState = IV_STATE_COPIED;
     }
@@ -1312,65 +1339,96 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
  * @param [out]     outLen   Length of data in output buffer.
  * @param [in]      in       Data to be encrypted/decrypted.
  * @param [in]      inLen    Length of data to be encrypted/decrypted.
+ * @param [in]      offset   Offset into the spooled data buffer.
+ * @param [in]      done     This is a final operation.
+ *
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen)
+static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
+                            size_t offset, int done)
 {
     int ok = 1;
     int rc;
+    unsigned char *tmp = NULL;
+    byte *iv = NULL;
 
     if (ctx->tagLen == UNINITIALISED_SIZET) {
         ctx->tagLen = EVP_GCM_TLS_TAG_LEN;
     }
 
-    if (ctx->enc) {
-        if (!ctx->ivSet) {
-            rc = wc_AesGcmSetExtIV(&ctx->aes, ctx->iv, (word32)ctx->ivLen);
-            if (rc != 0) {
+    if (ctx->inLen > offset || (ctx->tagAvail == 0 && done)) {
+        /* Prepare a temp buffer to store all the output */
+        if (ctx->inLen > 0) {
+            tmp = OPENSSL_zalloc(ctx->inLen);
+            if (tmp == NULL) {
                 ok = 0;
             }
+        }
+        /* Once loaded, always use original IV */
+        iv = ctx->iv;
+        if (ctx->ivState == IV_STATE_COPIED) {
+            iv = ctx->origIv;
         }
         if (ok) {
-            ctx->ivSet = 1;
-            /* IV coming out in this call. */
-            rc = wc_AesGcmEncrypt_ex(&ctx->aes, out, ctx->in,
-                (word32)ctx->inLen, ctx->iv, (word32)ctx->ivLen, ctx->buf,
-                (word32)ctx->tagLen, ctx->aad, (word32)ctx->aadLen);
+            rc = wc_AesGcmSetExtIV(&ctx->aes, iv, (word32)ctx->ivLen);
             if (rc != 0) {
                 ok = 0;
             }
-            if (ok) {
-                ctx->tagAvail = 1;
+
+            if (ok && ctx->ivState == IV_STATE_BUFFERED) {
+                ctx->ivState = IV_STATE_COPIED;
+                XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
             }
         }
+        if (ctx->enc) {
+            if (ok) {
+                ctx->ivSet = 1;
+                /* IV coming out in this call. */
+                rc = wc_AesGcmEncrypt_ex(&ctx->aes, tmp, ctx->in,
+                    (word32)ctx->inLen, iv, (word32)ctx->ivLen, ctx->buf,
+                    (word32)ctx->tagLen, ctx->aad, (word32)ctx->aadLen);
+                if (rc != 0) {
+                    ok = 0;
+                }
+                if (ok) {
+                    ctx->tagAvail = 1;
+                }
+            }
+        }
+        else {
+            /* Only the most recent auth err matters */
+            ctx->authErr = 0;
+            rc = wc_AesGcmDecrypt(&ctx->aes, tmp, ctx->in, (word32)ctx->inLen,
+                iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+                ctx->aad, (word32)ctx->aadLen);
+            if (rc == AES_GCM_AUTH_E) {
+                ctx->authErr = 1;
+                rc = 0;
+            }
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        /* Copy out relevant portion of output */
+        if (ok) {
+            XMEMCPY(out, tmp + offset, (ctx->inLen - offset));
+            *outLen = (ctx->inLen - offset);
+        }
+        OPENSSL_free(tmp);
     }
     else {
-        rc = wc_AesGcmDecrypt(&ctx->aes, out, ctx->in, (word32)ctx->inLen,
-            ctx->iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
-            ctx->aad, (word32)ctx->aadLen);
-        if (rc == AES_GCM_AUTH_E) {
-            ctx->authErr = 1;
-            rc = 0;
-        }
-        if (rc != 0) {
-            ok = 0;
-        }
-        if (ok) {
-            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
-        }
+        *outLen = 0;
     }
-    if (ok) {
-        *outLen = ctx->inLen;
+    if (done) {
+        OPENSSL_free(ctx->aad);
+        ctx->aad = NULL;
+        ctx->aadLen = 0;
+        ctx->aadSet = 0;
+        OPENSSL_free(ctx->in);
+        ctx->in = NULL;
+        ctx->inLen = 0;
     }
-
-    OPENSSL_free(ctx->aad);
-    ctx->aad = NULL;
-    ctx->aadLen = 0;
-    ctx->aadSet = 0;
-    OPENSSL_free(ctx->in);
-    ctx->in = NULL;
-    ctx->inLen = 0;
 
     WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -1392,6 +1450,8 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
     size_t *outLen, size_t outSize, const unsigned char *in, size_t inLen)
 {
     int ok = 1;
+    int process = 0;
+    size_t curLen = 0;
 
     if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
         ok = wp_aesgcm_tls_cipher(ctx, out, outLen, in, inLen);
@@ -1414,12 +1474,22 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
             ok = 0;
         }
         else if (inLen > 0) {
+            curLen = ctx->inLen;
             if (!wp_aead_cache_in(ctx, in, inLen)) {
                 ok = 0;
             }
+            else {
+                process = 1;
+            }
         }
 
-        *outLen = oLen;
+        /* If there is data to process, do it now */
+        if (process) {
+            ok = wp_aesgcm_encdec(ctx, out, outLen, curLen, 0);
+        }
+        else {
+            *outLen = oLen;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -1449,7 +1519,7 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
         ok = 0;
     }
     else {
-        ok = wp_aesgcm_encdec(ctx, out, outLen);
+        ok = wp_aesgcm_encdec(ctx, out, outLen, ctx->inLen, 1);
         ctx->ivSet = 0;
     }
 
