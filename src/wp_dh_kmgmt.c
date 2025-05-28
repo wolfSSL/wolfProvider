@@ -685,21 +685,26 @@ static int wp_dh_get_params_encoded_public_key(wp_Dh* dh, OSSL_PARAM params[])
 
     p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY);
     if (p != NULL) {
-        size_t outLen = mp_unsigned_bin_size(&dh->key.p);
-
-        if (p->data != NULL) {
-            if (p->data_size < outLen) {
-                ok = 0;
-            }
-            if (ok) {
-                unsigned char* data = p->data;
-                size_t padSz = outLen - dh->pubSz;
-                /* Front pad with zeros. */
-                XMEMSET(data, 0, padSz);
-                XMEMCPY(data + padSz, dh->pub, dh->pubSz);
-            }
+        if (p->data_type != OSSL_PARAM_OCTET_STRING) {
+            ok = 0;
         }
-        p->return_size = outLen;
+        if (ok) {
+            size_t outLen = mp_unsigned_bin_size(&dh->key.p);
+
+            if (p->data != NULL) {
+                if (p->data_size < outLen) {
+                    ok = 0;
+                }
+                if (ok) {
+                    unsigned char* data = p->data;
+                    size_t padSz = outLen - dh->pubSz;
+                    /* Front pad with zeros. */
+                    XMEMSET(data, 0, padSz);
+                    XMEMCPY(data + padSz, dh->pub, dh->pubSz);
+                }
+            }
+            p->return_size = outLen;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -719,35 +724,107 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
     int ok = 1;
     OSSL_PARAM* p;
 
-    p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_MAX_SIZE);
-    if ((p != NULL) && !OSSL_PARAM_set_int(p,
-            mp_unsigned_bin_size(&dh->key.p))) {
-        ok = 0;
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_MAX_SIZE);
+        if (p != NULL) {
+            if (!OSSL_PARAM_set_uint(p, mp_unsigned_bin_size(&dh->key.p))) {
+                ok = 0;
+            }
+        }
     }
     if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_BITS);
-        if ((p != NULL) && !OSSL_PARAM_set_int(p, dh->bits)) {
-            ok = 0;
+        if (p != NULL) {
+            if (!OSSL_PARAM_set_int(p, dh->bits)) {
+                ok = 0;
+            }
         }
     }
     if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_BITS);
-        if ((p != NULL) && (!OSSL_PARAM_set_int(p,
-                wp_dh_get_security_bits(dh)))) {
-            ok = 0;
+        if (p != NULL) {
+            if (!OSSL_PARAM_set_int(p, wp_dh_get_security_bits(dh))) {
+                ok = 0;
+            }
         }
     }
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P,
-                                 &dh->key.p, 1))) {
-        ok = 0;
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_FFC_P);
+        if (p != NULL) {
+            /* When buffer is NULL, return the size irrespective of type */
+            if (p->data == NULL) {
+                ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.g, 1);
+            }
+            /* When buffer is non-NULL, type must be int or uint */
+            else 
+            if (p->data_type == OSSL_PARAM_INTEGER || 
+                     p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
+                    ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.p, 1);
+            }
+            else {
+                ok = 0;
+            }
+        }
     }
-    if (ok && (!wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G,
-                                 &dh->key.g, 1))) {
-        ok = 0;
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_FFC_G);
+        if (p != NULL) {
+            /* When buffer is NULL, return the size irrespective of type */
+            if (p->data == NULL) {
+                ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g, 1);
+            }
+            /* When buffer is non-NULL, type must be int or uint */
+            else if (p->data_type == OSSL_PARAM_INTEGER || 
+                     p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
+                    ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g, 1);
+            }
+            else {
+                ok = 0;
+            }
+        }
     }
-    if (ok && (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PUB_KEY,
-            dh->pub, dh->pubSz))) {
-        ok = 0;
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_FFC_Q);
+        if (p != NULL) {
+            /* OSSL does not check the type */
+            ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_Q, &dh->key.q, 1);
+        }
+    }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PUB_KEY);
+        if (p != NULL) {
+            if (p->data == NULL) {
+                p->return_size = dh->pubSz;
+            }
+            else { 
+                /* return_size is set within this function */
+                ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PUB_KEY,
+                    dh->pub, dh->pubSz);
+            }
+        }
+    }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
+        if (p != NULL) {
+            if (p->data == NULL) {
+                p->return_size = dh->pubSz;
+            }
+            else if (p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
+                if (p->data_size < dh->privSz) {
+                    ok = 0;
+                }
+                else {
+                    /* OSSL returns a BIGNUM, but we copy raw bytes*/
+                    XMEMCPY(p->data, dh->priv, dh->privSz);
+                    p->return_size = dh->privSz;
+                }
+            }
+            else { 
+                /* return_size is set within this function */
+                ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
+                    dh->priv, dh->privSz);
+            }
+        }
     }
     if (ok && (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
             dh->priv, dh->privSz))) {
