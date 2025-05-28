@@ -23,6 +23,10 @@
 
 #ifdef WP_HAVE_DH
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif /* ARRAY_SIZE */
+
 /* dh pkcs8 private key der */
 static const unsigned char dh_der[] = {
     0x30, 0x82, 0x02, 0x26, 0x02, 0x01, 0x00, 0x30, 0x82, 0x01, 0x17, 0x06,
@@ -348,6 +352,128 @@ int test_dh_decode(void *data)
     return err;
 }
 
+static int test_dh_get_params_int(
+        EVP_PKEY *keyOpenSSL, EVP_PKEY *keyWolfProvider, 
+        unsigned char *bufOpenSSL, unsigned char *bufWolfProvider,
+        size_t size, unsigned int type, const char *key, const char *mode) 
+{
+    /* Keys that should return the same data for both OpenSSL and WolfProvider */
+    static const char *equalDataKeys[] = {
+        OSSL_PKEY_PARAM_BITS,
+        OSSL_PKEY_PARAM_SECURITY_BITS,
+        OSSL_PKEY_PARAM_MAX_SIZE,
+    };
+
+    /* Keys that should return the same return values and return sizes
+     * for both OpenSSL and WolfProvider */
+    static const char *equalReturnKeys[] = {
+        OSSL_PKEY_PARAM_BITS,
+        OSSL_PKEY_PARAM_SECURITY_BITS,
+        OSSL_PKEY_PARAM_MAX_SIZE,
+        OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY,
+        /* Omitting P, G and Q since OpenSSL returns a BIGNUM and wolfProvider
+         * returns a mp_int */
+        OSSL_PKEY_PARAM_GROUP_NAME,
+        /* Omitting OSSL_PKEY_PARAM_PUB_KEY and OSSL_PKEY_PARAM_PRIV_KEY 
+         * since there is a difference in formatting. */
+    };
+
+    int err = 0;
+    int retOpenSSL;
+    int retWolfProvider;
+
+    OSSL_PARAM paramsOpenSSL[2] = { OSSL_PARAM_END, OSSL_PARAM_END };
+    OSSL_PARAM paramsWolfProvider[2] = { OSSL_PARAM_END, OSSL_PARAM_END };
+
+    paramsOpenSSL[0].key = key;
+    paramsOpenSSL[0].data_type = type;
+    paramsOpenSSL[0].data_size = size;
+    paramsOpenSSL[0].data = bufOpenSSL;
+    paramsOpenSSL[0].return_size = 0;
+    paramsWolfProvider[0].key = key;
+    paramsWolfProvider[0].data_type = type;
+    paramsWolfProvider[0].data_size = size;
+    paramsWolfProvider[0].data = bufWolfProvider;
+    paramsWolfProvider[0].return_size = 0;
+
+    if (bufOpenSSL) {
+        memset(bufOpenSSL, 0, size);
+    }
+    if (bufWolfProvider) {
+        memset(bufWolfProvider, 0, size);
+    }
+
+    retOpenSSL = EVP_PKEY_get_params(keyOpenSSL, paramsOpenSSL);
+    retWolfProvider = EVP_PKEY_get_params(keyWolfProvider, paramsWolfProvider);
+
+    /* Check for identical return values on these keys */
+    for (size_t i = 0; i < ARRAY_SIZE(equalReturnKeys); i++) {
+        if (strcmp(key, equalReturnKeys[i]) == 0) {
+            /* Ensure return codes are the same for the given key type */
+            if (retOpenSSL != retWolfProvider) {
+                PRINT_MSG("EVP_PKEY_get_params has different return values for "
+                    "OpenSSL (%d) and WolfProvider (%d) for key '%s', type %d, "
+                    "and mode '%s'",
+                        retOpenSSL, retWolfProvider, key, type, mode);
+                err = 1;
+            }
+        }
+    }
+
+    /* Only check return size and data type on success */
+    if (retOpenSSL && retWolfProvider) {
+        /* Check for identical data on these keys */
+        for (size_t i = 0; i < ARRAY_SIZE(equalDataKeys); i++) {
+            if (bufOpenSSL == NULL || bufWolfProvider == NULL) {
+                /* If buffers are NULL, we cannot compare data */
+                continue;
+            }
+            if (strcmp(key, equalDataKeys[i]) == 0) {
+                if (memcmp(bufOpenSSL, bufWolfProvider, 
+                        paramsOpenSSL[0].return_size) != 0) {
+                    PRINT_MSG("EVP_PKEY_get_params returned different data "
+                        "for OpenSSL and WolfProvider for key '%s', "
+                        "type %d, and mode '%s'",
+                            key, type, mode);
+                    PRINT_BUFFER("OpenSSL", bufOpenSSL, 
+                        paramsOpenSSL[0].return_size);
+                    PRINT_BUFFER("WolfProvider", bufWolfProvider,
+                        paramsWolfProvider[0].return_size);
+                    err = 1;
+                }
+                break;
+            }
+        }
+
+        /* Check for identical return sizes on these keys */
+        for (size_t i = 0; i < ARRAY_SIZE(equalReturnKeys); i++) {
+            if (strcmp(key, equalReturnKeys[i]) == 0) {
+                if (paramsOpenSSL[0].return_size != 
+                    paramsWolfProvider[0].return_size) {
+                    PRINT_MSG("EVP_PKEY_get_params returned different "
+                        "lengths for OpenSSL (%zu) and WolfProvider (%zu) "
+                        "for key '%s', type %d, and mode '%s'",
+                            paramsOpenSSL[0].return_size, 
+                            paramsWolfProvider[0].return_size, 
+                            key, type, mode);
+                    err = 1;
+                }
+                break;
+            }
+        }
+
+        if (paramsOpenSSL[0].data_type != paramsWolfProvider[0].data_type) {
+            PRINT_MSG("EVP_PKEY_get_params returned different types for "
+                "OpenSSL (%d) and WolfProvider (%d) for key '%s' and mode '%s'",
+                    paramsOpenSSL[0].data_type, 
+                    paramsWolfProvider[0].data_type, key, mode);
+            err = 1;
+        }
+    }
+
+    return err;
+}
+
 int test_dh_get_params(void *data) 
 {
     (void)data;
@@ -358,6 +484,33 @@ int test_dh_get_params(void *data)
     EVP_PKEY *keyParamsWolfProvider = NULL;
     EVP_PKEY *keyOpenSSL = NULL;
     EVP_PKEY *keyWolfProvider = NULL;
+
+    /* List of params to test */
+    /* From wp_dh_supported_gettable_params */
+    static const char* gettableParamNames[] = {
+        OSSL_PKEY_PARAM_BITS,
+        OSSL_PKEY_PARAM_SECURITY_BITS,
+        OSSL_PKEY_PARAM_MAX_SIZE,
+        OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY,
+        OSSL_PKEY_PARAM_PUB_KEY,
+        OSSL_PKEY_PARAM_PRIV_KEY,
+        OSSL_PKEY_PARAM_FFC_P,
+        OSSL_PKEY_PARAM_FFC_G,
+        OSSL_PKEY_PARAM_FFC_Q,
+        OSSL_PKEY_PARAM_GROUP_NAME,
+    };
+
+    /* List of types to test */
+    static const int paramDataTypes[] = {
+        0, /* Invalid type */
+        OSSL_PARAM_INTEGER,
+        OSSL_PARAM_UNSIGNED_INTEGER,
+        OSSL_PARAM_REAL,
+        OSSL_PARAM_UTF8_STRING,
+        OSSL_PARAM_OCTET_STRING,
+        OSSL_PARAM_UTF8_PTR,
+        OSSL_PARAM_OCTET_PTR,
+    };
 
     if (err == 0) {
         ctxOpenSSL = EVP_PKEY_CTX_new_from_name(osslLibCtx, "DH", NULL);
@@ -409,54 +562,42 @@ int test_dh_get_params(void *data)
         err = EVP_PKEY_keygen(ctxWolfProvider, &keyWolfProvider) != 1;
     }
 
-    static const OSSL_PARAM gettableParams[] = {
-        OSSL_PARAM_int(OSSL_PKEY_PARAM_BITS, NULL),
-        OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
-        OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0),
-        /* Note that OpenSSL treats the keys as BIGNUMs, not strings. */
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
-        OSSL_PARAM_BN(OSSL_PKEY_PARAM_FFC_P, NULL, 0),
-        OSSL_PARAM_BN(OSSL_PKEY_PARAM_FFC_G, NULL, 0),
-        OSSL_PARAM_BN(OSSL_PKEY_PARAM_FFC_Q, NULL, 0),
-        OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
-        OSSL_PARAM_END
-    };
-    // const size_t paramsSize = sizeof(gettableParams);
-
     if (err == 0) {
-        int retWolfProvider;
-        unsigned char bufWolfProvider[256];
-        const char* mode;
+        static const size_t maxBufSize = 1024;
+        unsigned char *bufOpenSSL;
+        unsigned char *bufWolfProvider;
+        char mode[64];
+    
+        for (int i = 0; i < (int)ARRAY_SIZE(gettableParamNames); i++) {
+            for (int j = 0; j < (int)ARRAY_SIZE(paramDataTypes); j++) {
+                PRINT_MSG("Testing key '%s', type %d", 
+                    gettableParamNames[i], paramDataTypes[j]);
 
-        OSSL_PARAM paramsWolfProvider[2] = { OSSL_PARAM_END, OSSL_PARAM_END };
+                /* Special case: test NULL pointer with non-zero size */
+                err |= test_dh_get_params_int(
+                keyOpenSSL, keyWolfProvider, 
+                NULL, NULL, maxBufSize, 
+                paramDataTypes[j], gettableParamNames[i], "Null data");
 
-        for (int i = 0; i < (int)(sizeof(gettableParams)/sizeof(gettableParams[0])) - 1; i++) {
-            memset(bufWolfProvider, 0, sizeof(bufWolfProvider));
-            for (int j = 0; j < 2; j++) {
-                if (j == 0) {
-                    mode = "Null data";
-                }
-                else {
-                    mode = "Buffer data";
-                    paramsWolfProvider[0] = gettableParams[i];
-                    paramsWolfProvider[0].data = bufWolfProvider;
-                    paramsWolfProvider[0].data_size = sizeof(bufWolfProvider);
-                }
-
-                retWolfProvider = EVP_PKEY_get_params(keyWolfProvider, paramsWolfProvider);
-                if (retWolfProvider != 1) {
-                    PRINT_MSG("EVP_PKEY_get_params failed for param %s in mode %s (WolfProvider (%d))",
-                            gettableParams[i].key, mode, retWolfProvider);
-                    err = 1;
-                }
-                if (err == 0 && paramsWolfProvider[0].data) {
-                    if (paramsWolfProvider[0].return_size == 0) {
-                        PRINT_MSG("EVP_PKEY_get_params did not set return_size for param %s in mode %s (WolfProvider (%d))",
-                                gettableParams[i].key, mode, retWolfProvider);
+                /* Test all sizes */
+                for (size_t k = 0; k < maxBufSize; k++) {
+                    snprintf(mode, sizeof(mode), "data_size == %zu", k);
+                    /* Use exact sized buffers for better ASAN */
+                    bufOpenSSL = calloc(1, k);
+                    bufWolfProvider = calloc(1, k);
+                    if (bufOpenSSL == NULL || bufWolfProvider == NULL) {
+                        PRINT_MSG("Failed to allocate memory for data_size == %zu", k);
                         err = 1;
                     }
+                    else {
+                        err |= test_dh_get_params_int(
+                            keyOpenSSL, keyWolfProvider, 
+                            bufOpenSSL, bufWolfProvider, k, 
+                            paramDataTypes[j], gettableParamNames[i], 
+                            mode);
+                    }
+                    free(bufOpenSSL);
+                    free(bufWolfProvider);
                 }
             }
         }
