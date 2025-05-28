@@ -143,6 +143,6 @@ jobs:
 
           # Run tests and save output to test.log
           mkdir -p tests
-          make -j$(nproc) test-ci 2>&1 | tee tests/test.log || true
+          make -j$(nproc) test-ci 2>&1 | tee tests/test.log
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl

@@ -148,6 +148,6 @@ jobs:
 
           # Run tests and capture output
           mkdir -p $GITHUB_WORKSPACE/tests
-          make check 2>&1 | tee $GITHUB_WORKSPACE/tests/stunnel-test.log || true
+          make check 2>&1 | tee $GITHUB_WORKSPACE/tests/stunnel-test.log
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} stunnel

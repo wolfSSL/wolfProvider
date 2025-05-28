@@ -134,6 +134,6 @@ jobs:
           export ${{ matrix.force_fail }}
 
           # Run tests and save result
-          make check 2>&1 | tee openvpn-test.log || true
+          make check 2>&1 | tee openvpn-test.log
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openvpn
