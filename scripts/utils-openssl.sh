@@ -116,8 +116,9 @@ init_openssl() {
 
     OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
     OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
+    OPENSSL_LIB_DIRS="${OPENSSL_INSTALL_DIR}/lib:${OPENSSL_INSTALL_DIR}/lib64"
 
-    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_INSTALL_DIR}/lib64 $OPENSSL_BIN version | tail -n1`
+    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS} $OPENSSL_BIN version | tail -n1`
     case $OSSL_VER in
         OpenSSL\ 3.*) ;;
         *)
@@ -128,9 +129,9 @@ init_openssl() {
     esac
 
     if [ -z $LD_LIBRARY_PATH ]; then
-      export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64
+      export LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS}
     else
-      export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64:$LD_LIBRARY_PATH
+      export LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS}:$LD_LIBRARY_PATH
     fi
 }
 
