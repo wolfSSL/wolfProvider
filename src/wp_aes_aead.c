@@ -1337,8 +1337,6 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
  * @param [in, out] ctx      AEAD context object.
  * @param [out]     out      Buffer to hold decrypted/encrypted data.
  * @param [out]     outLen   Length of data in output buffer.
- * @param [in]      in       Data to be encrypted/decrypted.
- * @param [in]      inLen    Length of data to be encrypted/decrypted.
  * @param [in]      offset   Offset into the spooled data buffer.
  * @param [in]      done     This is a final operation.
  *
