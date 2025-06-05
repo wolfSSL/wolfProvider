@@ -20,7 +20,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        openssl_ref: [ 'openssl-3.5.0' ]
         include:
           - CC: gcc-9
             CXX: g++-9
@@ -92,7 +91,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: ossl-depends-${{ matrix.wolfssl_ref }}-${{ matrix.CC }}-${{ github.sha }}
           lookup-only: true
 
       # If not yet built this version, build it now
@@ -102,7 +101,7 @@ jobs:
           CC: ${{ matrix.CC }}
           CXX: ${{ matrix.CXX }}
         run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} OPENSSL_TAG=${{ matrix.openssl_ref }} ./scripts/build-wolfprovider.sh
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Print errors
         if: ${{ failure() }}
