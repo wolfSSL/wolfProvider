@@ -242,15 +242,6 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "Error: openssh-test.log not found"
             exit 1
         fi
-    else
-        if [ $TEST_RESULT -eq 0 ]; then
-            echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"
-            exit 1 # failure was not seen when expected
-        else
-            echo "$TEST_SUITE tests failed as expected with force fail enabled"
-            exit 0 # expected failure occurred
-        fi
-    fi
     # ----- LIBOAUTH2 -----
     elif [ "$TEST_SUITE" = "liboauth2" ]; then
         if [ -f "liboauth2-test.log" ]; then
@@ -265,6 +256,14 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
         else
             echo "Error: liboauth2-test.log not found"
             exit 1
+        fi
+    else
+        if [ $TEST_RESULT -eq 0 ]; then
+            echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"
+            exit 1 # failure was not seen when expected
+        else
+            echo "$TEST_SUITE tests failed as expected with force fail enabled"
+            exit 0 # expected failure occurred
         fi
     fi
 elif [ $TEST_RESULT -ne 0 ]; then
