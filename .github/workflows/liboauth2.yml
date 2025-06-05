@@ -68,6 +68,12 @@ jobs:
             libcjose-dev pkg-config build-essential apache2-dev libhiredis-dev \
             libmemcached-dev autotools-dev autoconf automake libtool
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+
       - name: Build liboauth2
         run: |
           git clone https://github.com/OpenIDC/liboauth2.git
