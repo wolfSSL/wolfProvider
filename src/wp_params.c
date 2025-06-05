@@ -639,8 +639,10 @@ int wp_params_set_octet_string_be(OSSL_PARAM params[], const char* key,
     OSSL_PARAM* p;
 
     p = OSSL_PARAM_locate(params, key);
-    if ((p != NULL) && (p->data_size < len)) {
-        ok = 0;
+    if (p != NULL) {
+        if ((p->data == NULL) || (p->data_size < len)) {
+            ok = 0;
+        }
     }
     if ((p != NULL) && ok) {
 #ifdef LITTLE_ENDIAN_ORDER
