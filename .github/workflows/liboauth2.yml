@@ -1,0 +1,98 @@
+name: liboauth2 Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_liboauth2:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        liboauth2_ref: [ 'v1.4.5.4' ] # No master with patch
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install liboauth2 dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev libcurl4-openssl-dev libjansson-dev \
+            libcjose-dev pkg-config build-essential apache2-dev libhiredis-dev \
+            libmemcached-dev autotools-dev autoconf automake libtool
+
+      - name: Build liboauth2
+        run: |
+          git clone https://github.com/wolfssl/liboauth2.git
+          cd liboauth2
+          git checkout ${{ matrix.liboauth2_ref }}
+
+          if [ ${{ matrix.force_fail }} != '' ]; then
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/liboauth2/liboauth2-${{ matrix.liboauth2_ref }}-wolfprov.patch
+          fi
+
+          autoreconf -fiv
+          ./configure
+          make -j$(nproc)
+
+      - name: Run liboauth2 tests
+        working-directory: liboauth2
+        run: |
+          # Set environment variables
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
+          export ${{ matrix.force_fail }}
+
+          # Build and run tests
+          make check 2>&1 | tee liboauth2-test.log
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} liboauth2

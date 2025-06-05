@@ -251,6 +251,22 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             exit 0 # expected failure occurred
         fi
     fi
+    # ----- LIBOAUTH2 -----
+    elif [ "$TEST_SUITE" = "liboauth2" ]; then
+        if [ -f "liboauth2-test.log" ]; then
+            # Check for expected error patterns
+            if grep -q "FAIL: check_liboauth2" "liboauth2-test.log"; then
+                echo "PASS: liboauth2 tests failed as expected with force fail enabled"
+                exit 0
+            else
+                echo "FAIL: liboauth2 tests unexpectedly succeeded with force fail enabled"
+                exit 1
+            fi
+        else
+            echo "Error: liboauth2-test.log not found"
+            exit 1
+        fi
+    fi
 elif [ $TEST_RESULT -ne 0 ]; then
     echo "Tests failed unexpectedly"
     exit 1
