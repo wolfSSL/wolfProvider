@@ -455,16 +455,15 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
 {
     int ok = 1;
 
-    if ((ctx == NULL) || (rsa == NULL)) {
+    if ((ctx == NULL) || (ctx->rsa == NULL && rsa == NULL)) {
         ok = 0;
     }
-    if (ok && (ctx->rsa != rsa)) {
-        wp_rsa_free(ctx->rsa);
-        ctx->rsa = NULL;
+    if (ok && (rsa != NULL)) {
         if (!wp_rsa_up_ref(rsa)) {
             ok = 0;
         }
-        else {
+        if (ok) {
+            wp_rsa_free(ctx->rsa);
             ctx->rsa = rsa;
         }
     }

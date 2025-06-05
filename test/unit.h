@@ -248,6 +248,7 @@ int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);
 int test_rsa_fromdata(void* data);
 int test_rsa_decode(void* data);
+int test_rsa_null_init(void* data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH
@@ -375,6 +376,7 @@ int test_ec_load_cert(void* data);
 
 int test_ec_decode(void* data);
 int test_ec_import(void* data);
+int test_ec_null_init(void* data);
 
 #endif /* WP_HAVE_ECC */
 
@@ -387,6 +389,7 @@ int test_ecx_sign_verify(void *data);
 int test_ecx_sign_verify_raw_priv(void *data);
 int test_ecx_sign_verify_raw_pub(void *data);
 int test_ecx_misc(void *data);
+int test_ecx_null_init(void *data);
 #endif
 
 #endif /* UNIT_H */
