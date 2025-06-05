@@ -626,4 +626,53 @@ int test_ecx_misc(void *data)
     return err;
 }
 
+static int test_ecx_null_sign_init_ex(OSSL_LIB_CTX *libCtx)
+{
+    int err = 0;
+    EVP_MD_CTX *ctx = NULL;
+    EVP_MD *md = NULL;
+    EVP_PKEY *pkey = NULL;
+#ifdef WP_HAVE_ED25519
+    const unsigned char *p = ed25519_key_der;
+#endif
+
+#ifndef WP_HAVE_ED25519
+    (void)libCtx;
+    (void)provider_name;
+    PRINT_MSG("Skipping test - WP_HAVE_ED25519 not defined");
+    return 0;
+#endif
+
+    err = (ctx = EVP_MD_CTX_new()) == NULL;
+    if (err == 0) {
+        pkey = d2i_PrivateKey(EVP_PKEY_ED25519, NULL, &p, sizeof(ed25519_key_der));
+        err = pkey == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(ctx, NULL, NULL, libCtx, NULL, pkey, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(ctx, NULL, NULL, libCtx, NULL, NULL, NULL) != 1;
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_MD_free(md);
+    EVP_MD_CTX_free(ctx);
+
+    return err;
+}
+
+int test_ecx_null_init(void* data)
+{
+    int err = 0;
+    (void)data;
+
+    err = test_ecx_null_sign_init_ex(osslLibCtx);
+    if (err == 0) {
+        err = test_ecx_null_sign_init_ex(wpLibCtx);
+    }
+
+    return err;
+}
+
 #endif /* defined(WP_HAVE_ED25519) || defined(WP_HAVE_ECD444) */

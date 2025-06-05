@@ -188,14 +188,19 @@ static int wp_ecx_digest_signverify_init(wp_EcxSigCtx *ctx,
         ok = 0;
     }
 
-    if (ok && (ctx->ecx != ecx)) {
-        wp_ecx_free(ctx->ecx);
+    if (ok && (ctx == NULL || (ctx->ecx == NULL && ecx == NULL))) {
+        ok = 0;
+    }
+    else if (ok && ecx != NULL) {
         if (!wp_ecx_up_ref(ecx)) {
             ok = 0;
         }
+        if (ok) {
+            wp_ecx_free(ctx->ecx);
+            ctx->ecx = ecx;
+        }
     }
     if (ok) {
-        ctx->ecx = ecx;
         ctx->op = op;
     }
 

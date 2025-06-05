@@ -2005,5 +2005,54 @@ int test_ec_import(void* data)
     return err;
 }
 
+static int test_ec_null_sign_init_ex(OSSL_LIB_CTX *libCtx)
+{
+#ifndef WP_HAVE_EC_P256
+    (void)libCtx;
+    PRINT_MSG("Skipping test - WP_HAVE_EC_P256 not defined");
+    return 0;
+#else
+    int err = 0;
+    EVP_MD_CTX *ctx = NULL;
+    EVP_MD *md = NULL;
+    EVP_PKEY *pkey = NULL;
+    const unsigned char *p = ecc_key_der_256;
+
+    err = (ctx = EVP_MD_CTX_new()) == NULL;
+    if (err == 0) {
+        md = EVP_MD_fetch(libCtx, "SHA256", NULL);
+        err = md == NULL;
+    }
+    if (err == 0) {
+        pkey = d2i_PrivateKey(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256));
+        err = pkey == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(ctx, NULL, "SHA256", libCtx, NULL, pkey, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(ctx, NULL, "SHA256", libCtx, NULL, NULL, NULL) != 1;
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_MD_free(md);
+    EVP_MD_CTX_free(ctx);
+
+    return err;
+#endif
+}
+
+int test_ec_null_init(void* data)
+{
+    int err = 0;
+    (void)data;
+
+    err = test_ec_null_sign_init_ex(osslLibCtx);
+    if (err == 0) {
+        err = test_ec_null_sign_init_ex(wpLibCtx);
+    }
+
+    return err;
+}
 
 #endif /* WP_HAVE_ECC */
