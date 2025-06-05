@@ -2007,20 +2007,16 @@ int test_ec_import(void* data)
 
 static int test_ec_null_sign_init_ex(OSSL_LIB_CTX *libCtx)
 {
+#ifndef WP_HAVE_EC_P256
+    (void)libCtx;
+    PRINT_MSG("Skipping test - WP_HAVE_EC_P256 not defined");
+    return 0;
+#else
     int err = 0;
     EVP_MD_CTX *ctx = NULL;
     EVP_MD *md = NULL;
     EVP_PKEY *pkey = NULL;
-#ifdef WP_HAVE_EC_P256
     const unsigned char *p = ecc_key_der_256;
-#endif
-
-#ifndef WP_HAVE_EC_P256
-    (void)libCtx;
-    (void)provider_name;
-    PRINT_MSG("Skipping test - WP_HAVE_EC_P256 not defined");
-    return 0;
-#endif
 
     err = (ctx = EVP_MD_CTX_new()) == NULL;
     if (err == 0) {
@@ -2043,6 +2039,7 @@ static int test_ec_null_sign_init_ex(OSSL_LIB_CTX *libCtx)
     EVP_MD_CTX_free(ctx);
 
     return err;
+#endif
 }
 
 int test_ec_null_init(void* data)

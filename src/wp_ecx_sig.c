@@ -188,11 +188,10 @@ static int wp_ecx_digest_signverify_init(wp_EcxSigCtx *ctx,
         ok = 0;
     }
 
-    if (ctx->ecx == NULL && ecx == NULL) {
+    if (ok && (ctx == NULL || (ctx->ecx == NULL && ecx == NULL))) {
         ok = 0;
     }
-
-    if (ok && (ecx != NULL)) {
+    else if (ok && ecx != NULL) {
         if (!wp_ecx_up_ref(ecx)) {
             ok = 0;
         }

@@ -458,7 +458,7 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
     if ((ctx == NULL) || (ctx->rsa == NULL && rsa == NULL)) {
         ok = 0;
     }
-    if (ok && (rsa != NULL)) {
+    else if (rsa != NULL) {
         if (!wp_rsa_up_ref(rsa)) {
             ok = 0;
         }
