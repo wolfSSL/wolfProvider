@@ -70,7 +70,7 @@ jobs:
 
       - name: Build liboauth2
         run: |
-          git clone https://github.com/wolfssl/liboauth2.git
+          git clone https://github.com/OpenIDC/liboauth2.git
           cd liboauth2
           git checkout ${{ matrix.liboauth2_ref }}
 
