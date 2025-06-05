@@ -32,7 +32,7 @@ jobs:
           - CC: gcc-10
             CXX: g++-10
             OS: ubuntu-latest
-            wolfssl_ref: v5.7.4-stable
+            wolfssl_ref: v5.8.0-stable
           - CC: gcc-11
             CXX: g++-11
             OS: ubuntu-latest

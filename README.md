@@ -59,7 +59,7 @@ The quickest method is to use the `scripts/build-wolfprovider.sh` script as foll
 It will retrieve the dependencies and compile them as necessary. To use other than the default (such as different releases) you can set various environment variables prior to calling the script:
 
 ```
-OPENSSL_TAG=openssl-3.2.0 WOLFSSL_TAG=v5.7.2-stable WOLFPROV_DEBUG=1 scripts/build-wolfprovider.sh
+OPENSSL_TAG=openssl-3.5.0 WOLFSSL_TAG=v5.8.0-stable WOLFPROV_DEBUG=1 scripts/build-wolfprovider.sh
 ```
 
 Alternatively, you can manually compile each component using the following guide.
