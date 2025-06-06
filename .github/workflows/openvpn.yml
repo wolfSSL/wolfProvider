@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        openvpn_ref: [ 'master', 'v2.6.7' ]
+        openvpn_ref: [ 'master', 'v2.6.12' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
