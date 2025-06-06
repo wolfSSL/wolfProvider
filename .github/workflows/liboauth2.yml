@@ -66,7 +66,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libssl-dev libcurl4-openssl-dev libjansson-dev \
             libcjose-dev pkg-config build-essential apache2-dev libhiredis-dev \
-            libmemcached-dev autotools-dev autoconf automake libtool
+            libmemcached-dev autotools-dev autoconf automake libtool check
 
       - name: Checkout OSP
         uses: actions/checkout@v4
@@ -79,10 +79,7 @@ jobs:
           git clone https://github.com/OpenIDC/liboauth2.git
           cd liboauth2
           git checkout ${{ matrix.liboauth2_ref }}
-
-          if [ ${{ matrix.force_fail }} != '' ]; then
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/liboauth2/liboauth2-${{ matrix.liboauth2_ref }}-wolfprov.patch
-          fi
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/liboauth2/liboauth2-${{ matrix.liboauth2_ref }}-wolfprov.patch
 
           autoreconf -fiv
           ./configure
