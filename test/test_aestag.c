@@ -101,20 +101,16 @@ static int test_aes_tag_enc(const EVP_CIPHER *cipher,
     if (err == 0 && len > 0) {
         /* Update with msg, if len > 0 (not GMAC) */
         err = EVP_EncryptUpdate(ctx, enc, &encLen, msg, len) != 1;
-    #ifdef WOLFSSL_AESGCM_STREAM
         if (encLen != len) {
             err = 1;
         }
-    #endif
     }
     if (err == 0) {
         err = EVP_EncryptFinal_ex(ctx, enc + encLen, &encLen) != 1;
-    #ifdef WOLFSSL_AESGCM_STREAM
         if (encLen != 0) {
             /* should be no more data left */
             err = 1;
         }
-    #endif
     }
     if (err == 0) {
         err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tagLen, tag) != 1;
@@ -200,6 +196,63 @@ static int test_aes_tag_dec(const EVP_CIPHER *cipher,
     return err;
 }
 
+static int test_aes_tag_dec_multi(const EVP_CIPHER *cipher,
+                            unsigned char *key, unsigned char *iv, int ivLen,
+                            unsigned char *aad, unsigned char *msg, int len,
+                            unsigned char *enc, unsigned char *tag,
+                            unsigned char *dec)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int decLen;
+    unsigned int tagLen = 16;
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, ivLen,
+                                  NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, tagLen,
+                                  (void *)tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &decLen, aad,
+                                (int)strlen((char *)aad)) != 1;
+        if (err == 0 && (decLen != (int)strlen((char *)aad))) {
+            PRINT_MSG("EVP_DecryptUpdate did not return correct size of AAD");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, dec, &decLen, enc, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, dec + 1, &decLen, enc + 1, len - 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, dec + 1 + decLen, &decLen) != 1;
+    }
+
+    if (err == 0 && dec != NULL && msg != NULL) {
+        PRINT_BUFFER("Decrypted", dec, len);
+
+        if (memcmp(dec, msg, len) != 0) {
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return err;
+}
+
 static int test_aes_tag(void *data, const char *cipher,
                         int keyLen, int ivLen, int ccm, int ccmL)
 {
@@ -238,7 +291,6 @@ static int test_aes_tag(void *data, const char *cipher,
         err = test_aes_tag_dec(wcipher, key, iv, ivLen, aad, msg, sizeof(msg),
                                enc, tag, dec, ccm, ccmL);
     }
-
     if (err == 0) {
         PRINT_MSG("Encrypt with wolfprovider");
         err = test_aes_tag_enc(wcipher, key, iv, ivLen, aad, msg, sizeof(msg),
@@ -291,7 +343,6 @@ static int test_aes_gcm_gmac(void* data, const char* cipher,
         err = test_aes_tag_dec(wcipher, key, iv, ivLen, aad, NULL, 0,
                                NULL, tag, NULL, 0, 0);
     }
-
     if (err == 0) {
         PRINT_MSG("Encrypt with wolfprovider");
         err = test_aes_tag_enc(wcipher, key, iv, ivLen, aad, NULL, 0,
@@ -363,6 +414,57 @@ static int test_aes_tag_fixed_enc(const EVP_CIPHER *cipher,
     return err;
 }
 
+static int test_aes_tag_fixed_enc_multi(const EVP_CIPHER *cipher,
+    unsigned char *key, unsigned char *iv, int ivFixedLen, int ivLen,
+    unsigned char *aad, unsigned char *msg, int len, unsigned char *enc,
+    unsigned char *tag)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int encLen = len;
+    unsigned int tagLen = 16;
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_EncryptInit(ctx, cipher, key, NULL) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED, ivFixedLen,
+                                 iv) != 1;
+    }
+    if (err == 0) {
+       memcpy(iv, EVP_CIPHER_CTX_iv(ctx), ivLen);
+       err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_IV_GEN, ivLen, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &encLen, aad,
+                                (int)strlen((char *)aad)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, enc, &encLen, msg, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, enc + 1, &encLen, msg + 1, len - 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, enc + 1 + encLen, &encLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tagLen, tag) != 1;
+    }
+    if (err == 0) {
+    }
+
+    if (err == 0) {
+        PRINT_BUFFER("Encrypted", enc, len);
+        PRINT_BUFFER("Tag", tag, 16);
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return err;
+}
+
 static int test_aes_tag_enc_ossh(const EVP_CIPHER *cipher,
     unsigned char *key, unsigned char *iv,
     unsigned char *aad, unsigned char *msg, int len, unsigned char *enc,
@@ -390,10 +492,61 @@ static int test_aes_tag_enc_ossh(const EVP_CIPHER *cipher,
                                  lastiv) != 1;
     }
     if (err == 0) {
-       err = EVP_Cipher(encCtx, NULL, aad, (int)strlen((char *)aad)) < 0;
+       err = EVP_Cipher(encCtx, NULL, aad, (int)strlen((char *)aad)) <= 0;
     }
     if (err == 0) {
-       err = EVP_Cipher(encCtx, enc, msg, len) < 0;
+       err = EVP_Cipher(encCtx, enc, msg, len) <= 0;
+    }
+    if (err == 0) {
+       err = EVP_Cipher(encCtx, NULL, NULL, 0) < 0;
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(encCtx, EVP_CTRL_GCM_GET_TAG, tagLen,
+                                 tag) != 1;
+    }
+    if (err == 0) {
+        PRINT_BUFFER("Encrypted", enc, len);
+        PRINT_BUFFER("Tag", tag, 16);
+    }
+
+    EVP_CIPHER_CTX_free(encCtx);
+    return err;
+}
+
+static int test_aes_tag_enc_ossh_multi(const EVP_CIPHER *cipher,
+    unsigned char *key, unsigned char *iv,
+    unsigned char *aad, unsigned char *msg, int len, unsigned char *enc,
+    unsigned char *tag)
+{
+    int err;
+    EVP_CIPHER_CTX *encCtx;
+    unsigned int tagLen = 16;
+    char lastiv[1];
+
+    /* Test encryption flow used by openSSH */
+    err = (encCtx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_CipherInit(encCtx, cipher, NULL, iv, 1) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(encCtx, EVP_CTRL_GCM_SET_IV_FIXED, -1,
+                                 iv) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CipherInit(encCtx, NULL, key, NULL, -1) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(encCtx, EVP_CTRL_GCM_IV_GEN, 1,
+                                 lastiv) != 1;
+    }
+    if (err == 0) {
+       err = EVP_Cipher(encCtx, NULL, aad, (int)strlen((char *)aad)) <= 0;
+    }
+    if (err == 0) {
+       err = EVP_Cipher(encCtx, enc, msg, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(encCtx, enc + 1, msg + 1, len - 1) != (len - 1);
     }
     if (err == 0) {
        err = EVP_Cipher(encCtx, NULL, NULL, 0) < 0;
@@ -442,10 +595,64 @@ static int test_aes_tag_dec_ossh(const EVP_CIPHER *cipher,
                                  tag) != 1;
     }
     if (err == 0) {
-       err = EVP_Cipher(decCtx, NULL, aad, (int)strlen((char *)aad)) < 0;
+        err = EVP_Cipher(decCtx, NULL, aad, (int)strlen((char *)aad)) <= 0;
     }
     if (err == 0) {
-       err = EVP_Cipher(decCtx, dec, enc, len) < 0;
+       err = EVP_Cipher(decCtx, dec, enc, len) != len;
+    }
+    if (err == 0) {
+       err = EVP_Cipher(decCtx, NULL, NULL, 0) < 0;
+    }
+    if (err == 0 && dec != NULL && msg != NULL) {
+        PRINT_BUFFER("Decrypted", dec, len);
+
+        if (memcmp(dec, msg, len) != 0) {
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(decCtx);
+    return err;
+}
+
+static int test_aes_tag_dec_ossh_multi(const EVP_CIPHER *cipher,
+    unsigned char *key, unsigned char *iv,
+    unsigned char *aad, unsigned char *msg, int len, unsigned char *enc,
+    unsigned char *tag, unsigned char *dec)
+{
+    int err;
+    EVP_CIPHER_CTX *decCtx;
+    unsigned int tagLen = 16;
+    char lastiv[1];
+
+    /* Test decryption flow used by openSSH */
+    err = (decCtx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_CipherInit(decCtx, cipher, NULL, iv, 0) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_GCM_SET_IV_FIXED, -1,
+                                 iv) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CipherInit(decCtx, NULL, key, NULL, -1) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_GCM_IV_GEN, 1,
+                                 lastiv) != 1;
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_GCM_SET_TAG, tagLen,
+                                 tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(decCtx, NULL, aad, (int)strlen((char *)aad)) <= 0;
+    }
+    if (err == 0) {
+       err = EVP_Cipher(decCtx, dec, enc, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(decCtx, dec + 1, enc + 1, len - 1) != (len - 1);
     }
     if (err == 0) {
        err = EVP_Cipher(decCtx, NULL, NULL, 0) < 0;
@@ -506,7 +713,6 @@ static int test_aes_tag_fixed(void *data, const char *cipher,
         err = test_aes_tag_dec(wcipher, key, iv, ivLen, aad, msg, sizeof(msg),
                                enc, tag, dec, 0, 0);
     }
-
     if (err == 0) {
         PRINT_MSG("Encrypt with wolfprovider");
         err = test_aes_tag_fixed_enc(wcipher, key, iv, ivFixedLen, ivLen, aad,
@@ -518,23 +724,63 @@ static int test_aes_tag_fixed(void *data, const char *cipher,
                                sizeof(msg), enc, tag, dec, 0, 0);
     }
     if (err == 0) {
+        PRINT_MSG("Encrypt with OpenSSL (multiple updates)");
+        err = test_aes_tag_fixed_enc_multi(ocipher, key, iv, ivFixedLen, ivLen,
+                                     aad, msg, sizeof(msg), enc, tag);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with wolfprovider (multiple updates)");
+        err = test_aes_tag_dec_multi(wcipher, key, iv, ivLen, aad, msg, sizeof(msg),
+                               enc, tag, dec);
+    }
+    if (err == 0) {
+        PRINT_MSG("Encrypt with wolfprovider (multiple updates)");
+        err = test_aes_tag_fixed_enc_multi(wcipher, key, iv, ivFixedLen, ivLen, aad,
+                                     msg, sizeof(msg), enc, tag);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with OpenSSL (multiple updates)");
+        err = test_aes_tag_dec_multi(ocipher, key, iv, ivLen, aad, msg,
+                               sizeof(msg), enc, tag, dec);
+    }
+    if (err == 0) {
         PRINT_MSG("Encrypt with wolfprovider");
-        test_aes_tag_enc_ossh(wcipher, key, iv,
+        err = test_aes_tag_enc_ossh(wcipher, key, iv,
                               aad, msg, sizeof(msg), enc, tag);
     }
     if (err == 0) {
         PRINT_MSG("Decrypt with OpenSSL");
-        test_aes_tag_dec_ossh(ocipher, key, iv,
+        err = test_aes_tag_dec_ossh(ocipher, key, iv,
                               aad, msg, sizeof(msg), enc, tag, dec);
     }
     if (err == 0) {
         PRINT_MSG("Encrypt with OpenSSL");
-        test_aes_tag_enc_ossh(ocipher, key, iv,
+        err = test_aes_tag_enc_ossh(ocipher, key, iv,
                               aad, msg, sizeof(msg), enc, tag);
     }
     if (err == 0) {
         PRINT_MSG("Decrypt with wolfprovider");
-        test_aes_tag_dec_ossh(wcipher, key, iv,
+        err = test_aes_tag_dec_ossh(wcipher, key, iv,
+                              aad, msg, sizeof(msg), enc, tag, dec);
+    }
+    if (err == 0) {
+        PRINT_MSG("Encrypt with wolfprovider (multiple updates)");
+        err = test_aes_tag_enc_ossh_multi(wcipher, key, iv,
+                              aad, msg, sizeof(msg), enc, tag);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with OpenSSL (multiple updates)");
+        err = test_aes_tag_dec_ossh_multi(ocipher, key, iv,
+                              aad, msg, sizeof(msg), enc, tag, dec);
+    }
+    if (err == 0) {
+        PRINT_MSG("Encrypt with OpenSSL (multiple updates)");
+        err = test_aes_tag_enc_ossh_multi(ocipher, key, iv,
+                              aad, msg, sizeof(msg), enc, tag);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with wolfprovider (multiple updates)");
+        err = test_aes_tag_dec_ossh_multi(wcipher, key, iv,
                               aad, msg, sizeof(msg), enc, tag, dec);
     }
 
