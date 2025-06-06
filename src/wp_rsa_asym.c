@@ -312,6 +312,11 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 ctx->oaepHashType = WC_HASH_TYPE_SHA;
                 ctx->mgf = WC_MGF1SHA1;
             }
+            /* OpenSSL ignores the 'outSize' parameter and allows 0. 
+             * See rsa_encrypt() in providers/implementations/asymciphers/rsa_enc.c.
+             * Meanwhile, wolfSSL does not allow this. As a workaround, assume 
+             * the 'out' buffer is properly sized for the given RSA key size. */
+            outSize = wp_rsa_get_bits(ctx->rsa) / 8;
             rc = wc_RsaPublicEncrypt_ex(in, (word32)inLen, out, (word32)outSize,
                 wp_rsa_get_key(ctx->rsa), &ctx->rng, WC_RSA_OAEP_PAD,
                 ctx->oaepHashType, ctx->mgf, ctx->label, (word32)ctx->labelLen);
