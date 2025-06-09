@@ -1,0 +1,100 @@
+name: libwebsockets Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_libwebsockets:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        libwebsockets_ref: [ 'main', 'v4.3.3' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - libwebsockets_ref: 'main'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      # Checkout the source so we can run the check-workflow-result script
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+              .github
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            scripts
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            openssl-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install libwebsockets dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6 libcap2 zlib1g cmake build-essential
+      - name: Download libwebsockets
+        uses: actions/checkout@v4
+        with:
+          repository: warmcat/libwebsockets
+          ref: ${{ matrix.libwebsockets_ref }}
+          path: libwebsockets
+
+      - name: Build libwebsockets
+        working-directory: libwebsockets
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          make -j$(nproc)
+          sudo make install
+      - name: Run libwebsockets tests
+        working-directory: libwebsockets
+        run: |
+          echo "Setting environment variables..."
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          ./build/bin/libwebsockets-test-server --port=11111 --ssl > server.log 2>&1 & SERVER_PID=$!
+          sleep 5
+          timeout 10 ./build/bin/libwebsockets-test-client 127.0.0.1 --port=11111 --ssl > client.log 2>&1 || echo "Client exited with error $?"
+          ldd ./build/bin/libwebsockets-test-server | grep wolfProvider
+          ldd ./build/bin/libwebsockets-test-client | grep wolfProvider
+          kill $SERVER_PID || echo "Server already exited"
+          cat server.log || echo "Missing server.log"
+          cat client.log || echo "Missing client.log"
+          cat server.log client.log > libwebsockets-test.log
+          if grep -q "error:03080006" libwebsockets-test.log || grep -q "Failed to create default vhost" libwebsockets-test.log; then
+            TEST_RESULT=1
+          else
+            TEST_RESULT=0
+          fi
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libwebsockets
