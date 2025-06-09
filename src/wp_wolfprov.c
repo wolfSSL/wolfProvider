@@ -1193,14 +1193,14 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 #ifdef WOLFPROV_DEBUG
     ok = (wolfProv_Debugging_ON() == 0);
     if (ok) {
-      if (wolfSSL_Debugging_ON() != 0) {
-        WOLFPROV_MSG(WP_LOG_PROVIDER,
-          "WARNING: wolfProvider built with debug but underlying wolfSSL is not!"
-          "Building wolfSSl with debug is highly recommended, proceeding...");
-      }
-      else {
-        wolfSSL_SetLoggingPrefix("wolfSSL");
-      }
+        if (wolfSSL_Debugging_ON() != 0) {
+            WOLFPROV_MSG(WP_LOG_PROVIDER,
+              "WARNING: wolfProvider built with debug but underlying wolfSSL is not!"
+              "Building wolfSSl with debug is highly recommended, proceeding...");
+        }
+        else {
+            wolfSSL_SetLoggingPrefix("wolfSSL");
+        }
     }
 #endif
 
@@ -1213,8 +1213,8 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 #if defined(XGETENV) && !defined(NO_GETENV)
     forceFailEnv = XGETENV("WOLFPROV_FORCE_FAIL");
     if (forceFailEnv != NULL && XATOI(forceFailEnv) == 1) {
-      WOLFPROV_MSG(WP_LOG_PROVIDER, "WOLFPROV_FORCE_FAIL=1, Forcing failure\n");
-      forceFail = 1;
+        WOLFPROV_MSG(WP_LOG_PROVIDER, "WOLFPROV_FORCE_FAIL=1, Forcing failure\n");
+        forceFail = 1;
     }
 #else
 #error "Force failure check enabled but impossible to perform without XGETENV, use -DWP_NO_FORCE_FAIL"
