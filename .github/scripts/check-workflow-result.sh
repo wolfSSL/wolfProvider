@@ -255,6 +255,23 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             fi
         else
             echo "Error: liboauth2-test.log not found"
+        fi
+    # ----- IPERF -----
+    elif [ "$TEST_SUITE" = "iperf" ]; then
+        IPERF_TEST_LOG="iperf-test.log"
+        if [ -f $IPERF_TEST_LOG ]; then
+              read sender_gb receiver_gb < <(awk '/sender/ {s=$4} /receiver/ {r=$4} END{print s, r}' )
+
+            if [[ -z "$sender_gb" && -z "$receiver_gb" ]]; then
+                echo "PASS: No data sent or received, as expected with force fail enabled"
+                exit 0
+            else
+                echo "FAIL: Iperf tests unexpectedly succeeded with data sent or received"
+                echo "  Sent: $sender_gb GB, Received: $receiver_gb GB"
+                exit 1
+            fi
+        else 
+            echo "Error: $IPERF_TEST_LOG not found"
             exit 1
         fi
     else

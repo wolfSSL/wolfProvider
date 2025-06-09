@@ -1,0 +1,144 @@
+name: iperf Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_iperf:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        iperf_ref: [ 'master', '3.12' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install build-essential autoconf libtool pkg-config clang libc++-dev
+
+      - name: Checkout iperf
+        uses: actions/checkout@v4
+        with:
+          repository: esnet/iperf
+          ref: ${{ matrix.iperf_ref }}
+          path: iperf
+
+      - name: Build iperf
+        working-directory: iperf
+        run: |
+          # Configure with OpenSSL
+          ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
+
+          # Build iperf
+          make -j
+
+      - name: Generate RSA keys
+        run: |
+          export KEY_DIR=$GITHUB_WORKSPACE/test-keys
+          mkdir -p $KEY_DIR
+          cd $KEY_DIR
+          # Generate RSA keys for iperf tests
+          openssl genrsa -out rsa_private_unprotected.pem 2048
+          openssl rsa -in rsa_private_unprotected.pem -out rsa_private.pem -aes256 -passout 'pass:password'
+          openssl rsa -in rsa_private.pem -pubout -out rsa_public.pem -passin 'pass:password'
+          # Create a credentials file for iperf
+          # Username: mario, Password: rossi 
+          echo "mario,bf7a49a846d44b454a5d11e7acfaf13d138bbe0b7483aa3e050879700572709b" > credentials.csv
+
+      - name: Run tests
+        working-directory: iperf
+        run: |
+          # Set up the environment for wolfProvider
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export ${{ matrix.force_fail }}
+          export SHELL=/bin/bash
+
+          # Test variables for iperf
+          export IPERF3_EXECUTABLE=$GITHUB_WORKSPACE/iperf/src/iperf3
+          export IPERF3_TEST_INTERVAL=0.1
+          export IPERF3_TEST_DURATION=10
+          export IPERF3_TEST_LOG=iperf-test.log
+          export IPERF3_USER=mario
+          export IPERF3_PASSWORD=rossi
+          export KEY_DIR=$GITHUB_WORKSPACE/test-keys
+
+
+          # Verify IERF3_EXECUTABLE exists
+          if [ -f "$IPERF3_EXECUTABLE" ]; then
+            echo "iperf3 executable found: $IPERF3_EXECUTABLE"
+          else
+            echo "iperf3 executable not found: $IPERF3_EXECUTABLE"
+            echo "PWD: $PWD"
+            tree -L 2
+          fi
+
+          # Verify OpenSSL loads wolfProvider to confirm configuration above
+          # $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | grep libwolfprov
+
+          # Verify iperf loads OpenSSL containing wolfProvider
+          # ldd $IPERF3_EXECUTABLE | grep wolfProvider
+
+          # Launch the iperf server in the background
+          $IPERF3_EXECUTABLE -s \
+            --rsa-private-key-path $KEY_DIR/rsa_private_unprotected.pem \
+            --authorized-users-path $KEY_DIR/credentials.csv &
+
+          # Run the client
+          $IPERF3_EXECUTABLE -c localhost -i $IPERF3_TEST_INTERVAL -t $IPERF3_TEST_DURATION \
+            --rsa-public-key-path $KEY_DIR/rsa_public.pem \
+            --user $IPERF3_USER | tee $IPERF3_TEST_LOG \
+
+
