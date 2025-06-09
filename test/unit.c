@@ -174,6 +174,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_load_cert, NULL),
     TEST_DECL(test_rsa_fromdata, NULL),
     TEST_DECL(test_rsa_decode, NULL),
+    TEST_DECL(test_rsa_null_init, NULL),
 #endif /* WP_HAVE_RSA */
 #ifdef WP_HAVE_EC_P192
     #ifdef WP_HAVE_ECKEYGEN
@@ -221,6 +222,7 @@ TEST_CASE test_case[] = {
     #endif
     TEST_DECL(test_ec_decode, NULL),
     TEST_DECL(test_ec_import, NULL),
+    TEST_DECL(test_ec_null_init, NULL),
 #endif
 #ifdef WP_HAVE_EC_P384
     #ifdef WP_HAVE_ECKEYGEN
@@ -290,6 +292,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_sign_verify_raw_priv, NULL),
     TEST_DECL(test_ecx_sign_verify_raw_pub, NULL),
     TEST_DECL(test_ecx_misc, NULL),
+    TEST_DECL(test_ecx_null_init, NULL),
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
