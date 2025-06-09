@@ -152,7 +152,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),
     TEST_DECL(test_dh_decode, NULL),
+#ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
+#endif
 #endif /* WP_HAVE_DH */
 #ifdef WP_HAVE_RSA
     TEST_DECL(test_rsa_sign_sha1, NULL),
@@ -165,7 +167,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_enc_dec_nopad, NULL),
     TEST_DECL(test_rsa_pkey_keygen, NULL),
     TEST_DECL(test_rsa_pkey_invalid_key_size, NULL),
+#ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_rsa_get_params, NULL),
+#endif
     TEST_DECL(test_rsa_load_key, NULL),
     TEST_DECL(test_rsa_load_cert, NULL),
     TEST_DECL(test_rsa_fromdata, NULL),
