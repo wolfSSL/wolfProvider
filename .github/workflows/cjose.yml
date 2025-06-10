@@ -35,35 +35,23 @@ jobs:
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
     steps:
-      # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
-          sparse-checkout: |
-              .github
+          fetch-depth: 1
 
-      - name: Retrieving OpenSSL from cache
+      - name: Retrieving wolfProvider from cache
         uses: actions/cache/restore@v4
-        id: openssl-cache
-        with:
-          path: |
-            openssl-source
-            openssl-install
-
-          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
-          fail-on-cache-miss: true
-
-      - name: Retrieving wolfSSL/wolfProvider from cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+        id: wolfprov-cache-restore
         with:
           path: |
             wolfssl-source
             wolfssl-install
             wolfprov-install
+            openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install cjose dependencies
@@ -78,12 +66,13 @@ jobs:
           repository: OpenIDC/cjose
           ref: ${{ matrix.cjose_ref }}
           path: cjose
+          fetch-depth: 1
 
       - name: Build cjose
         working-directory: cjose
         run: |
           # Configure with OpenSSL
-          ./configure  CFLAGS="-Wno-error=deprecated-declarations" --with-openssl=/git/wolfProvider/openssl-install
+          ./configure CFLAGS="-Wno-error=deprecated-declarations" --with-openssl=/git/wolfProvider/openssl-install
 
           # Build cjose
           make

@@ -37,9 +37,10 @@ jobs:
             wolfssl-source
             wolfssl-install
             wolfprov-install
+            openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           lookup-only: true
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
