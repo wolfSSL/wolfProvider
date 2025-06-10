@@ -9,55 +9,86 @@ on:
       openssl_ref:
         required: true
         type: string
-    outputs:
-      cache_key:
-        description: "Cache key for the build artifacts"
-        value: ${{ jobs.build_wolfprovider.outputs.cache_key }}
 
 jobs:
-  build_wolfprovider:
+  bwp:
     name: Build wolfProvider
     runs-on: ubuntu-22.04
     timeout-minutes: 20
-    outputs:
-      cache_key: wolfprov-${{ inputs.wolfssl_ref }}-${{ github.sha }}
     steps:
+      # Must come first so that the directory is present
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
+        with: 
+          fetch-depth: 1
+
+      # Enable ccache to speed up builds
+      # # Must be after the checkout step
+      # - name: ccache
+      #   if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+      #   uses: hendrikmuhs/ccache-action@v1.2
+      #   with:
+      #     create-symlink: true
 
       # Check if this version of wolfssl/wolfprovider has already been built,
       # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-source
-            wolfssl-install
-            wolfprov-install
-            provider.conf
+      # - name: Checking wolfSSL/wolfProvider in cache
+      #   uses: actions/cache/restore@v4
+      #   id: wolfprov-cache
+      #   with:
+      #     path: |
+      #       wolfssl-source
+      #       wolfssl-install
+      #       wolfprov-install
+      #       provider.conf
 
-          key: wolfprov-${{ inputs.wolfssl_ref }}-${{ github.sha }}
-          lookup-only: true
+      #     key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+      #     # no need to restore from cache here since it will be restored 
+      #     # in the main workflows
+      #     lookup-only: true
 
       # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        # if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
         id: openssl-cache
         with:
           path: |
             openssl-source
             openssl-install
 
-          key: ossl-depends-${{ inputs.openssl_ref }}-${{ github.sha }}
-          lookup-only: true
+          key: ossl-depends-${{ inputs.openssl_ref }}
+          lookup-only: false
+
+      # If wolfssl/wolfprovider have not yet been built, pull wolfssl from cache
+      - name: Checking WolfSSL in cache
+        # if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        id: wolfssl-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+
+          key: wolfssl-depends-${{ inputs.wolfssl_ref }}
+          lookup-only: false
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        # if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Save wolfProvider into cache
+        # if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with: 
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
 
       - name: Print errors
         if: ${{ failure() }}
