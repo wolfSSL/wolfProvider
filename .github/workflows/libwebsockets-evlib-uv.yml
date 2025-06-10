@@ -1,0 +1,119 @@
+name: libwebsockets-evlib-uv Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_libwebsockets:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        libwebsockets_ref: [ 'main', 'v4.3.3' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - libwebsockets_ref: 'main'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      # Checkout the source so we can run the check-workflow-result script
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+              .github
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install libwebsockets-evlib-uv dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6 libcap2 libssl-dev zlib1g libuv1-dev pkg-config cmake build-essential
+
+      - name: Download libwebsockets-evlib-uv
+        uses: actions/checkout@v4
+        with:
+          repository: warmcat/libwebsockets
+          ref: ${{ matrix.libwebsockets_ref }}
+          path: libwebsockets
+
+      - name: Build libwebsockets
+        working-directory: libwebsockets
+        run: |
+          mkdir build
+          cd build
+          cmake .. \
+            -DLWS_WITH_SSL=ON \
+            -DLWS_WITH_LIBUV=ON \
+            -DLWS_WITH_EVENT_LIBS=ON \
+            -DLWS_WITH_MINIMAL_EXAMPLES=ON \
+            -DLWS_WITH_EVLIB_PLUGINS=ON \
+            -DLWS_WITH_SHARED=ON
+
+          make
+          sudo make install
+
+      - name: Run libwebsockets-evlib-uv tests
+        working-directory: libwebsockets
+        run: |
+          set -e
+          set -x
+          echo "Searching for evlib_uv plugin:"
+          find $GITHUB_WORKSPACE -name 'libwebsockets-evlib_uv.so'
+          ldd /home/runner/work/wolfProvider/wolfProvider/libwebsockets/build/lib/libwebsockets-evlib_uv.so
+
+          echo "Setting environment variables..."
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/libwebsockets/build/lib:$LD_LIBRARY_PATH
+          export LWS_PLUGIN_PATH=$GITHUB_WORKSPACE/libwebsockets/build/lib
+          ldd ./build/bin/lws-minimal-http-server-eventlib
+
+          echo "running server"
+          timeout 10 ./build/bin/lws-minimal-http-server-eventlib --ssl --uv -d 1023 >server.log 2>&1 || {
+            echo "Server Log:"
+            cat server.log
+          }
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | grep libwolfprov
