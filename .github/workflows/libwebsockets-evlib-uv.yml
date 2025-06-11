@@ -1,3 +1,4 @@
+# NOTE: Tests do not work properly using any SSL as of now (6/11/25)
 name: libwebsockets-evlib-uv Tests
 
 # START OF COMMON SECTION
