@@ -22,6 +22,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
+source ${SCRIPT_DIR}/utils-openssl.sh
 
 CERT_DIR=$SCRIPT_DIR/../certs
 LOG_FILE=$SCRIPT_DIR/test-wp-cs.log
@@ -224,6 +225,20 @@ CURVES=prime256v1
 #CURVES=X25519
 OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
 OPENSSL_PORT=$(generate_port)
+
+# ensure we are doing a clean build
+printf "Cleaning up previous builds"
+rm -rf ${SCRIPT_DIR}/../*-install
+if [ -d ${OPENSSL_SOURCE_DIR} ]; then
+    pushd ${OPENSSL_SOURCE_DIR} > /dev/null
+    git clean -xdf > /dev/null 2>&1
+    popd > /dev/null
+fi
+if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
+    pushd ${WOLFSSL_SOURCE_DIR} > /dev/null
+    git clean -xdf > /dev/null 2>&1
+    popd > /dev/null
+fi
 
 init_wolfprov
 
