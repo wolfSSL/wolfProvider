@@ -106,6 +106,10 @@ jobs:
           export ${{ matrix.force_fail }}
           export SHELL=/bin/bash
 
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
           # Test variables for iperf
           export IPERF3_EXECUTABLE=$GITHUB_WORKSPACE/iperf/src/iperf3
           export IPERF3_TEST_INTERVAL=0.1
@@ -115,7 +119,6 @@ jobs:
           export IPERF3_PASSWORD=rossi
           export KEY_DIR=$GITHUB_WORKSPACE/test-keys
 
-
           # Verify IERF3_EXECUTABLE exists
           if [ -f "$IPERF3_EXECUTABLE" ]; then
             echo "iperf3 executable found: $IPERF3_EXECUTABLE"
@@ -124,10 +127,6 @@ jobs:
             echo "PWD: $PWD"
             tree -L 2
           fi
-
-          echo "Checking OpenSSL providers:"
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
-          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Verify iperf loads OpenSSL containing wolfProvider
           ldd $IPERF3_EXECUTABLE | grep wolfProvider
@@ -141,5 +140,3 @@ jobs:
           $IPERF3_EXECUTABLE -c localhost -i $IPERF3_TEST_INTERVAL -t $IPERF3_TEST_DURATION \
             --rsa-public-key-path $KEY_DIR/rsa_public.pem \
             --user $IPERF3_USER | tee $IPERF3_TEST_LOG \
-
-

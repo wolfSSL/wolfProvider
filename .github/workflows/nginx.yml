@@ -79,10 +79,7 @@ jobs:
       - name: Build nginx
         working-directory: nginx
         run: |
-          ./auto/configure --with-http_ssl_module --with-stream \
-          --with-stream_ssl_module --with-stream_ssl_preread_module \
-          --with-http_v2_module --with-mail --with-mail_ssl_module \
-          --with-openssl=$GITHUB_WORKSPACE/openssl-install
+          ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
           make -j
 
       - name: Checkout nginx-tests
