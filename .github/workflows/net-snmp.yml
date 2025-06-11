@@ -92,7 +92,7 @@ jobs:
 
           echo "Checking OpenSSL providers:"
           $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
-          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
           mkdir -p tests

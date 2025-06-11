@@ -86,7 +86,7 @@ jobs:
 
           echo "Checking OpenSSL providers:"
           $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
-          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Verify ipmitool was built and linked correctly with OpenSSL
           ldd src/ipmitool | grep -E '(libssl|libcrypto)'
