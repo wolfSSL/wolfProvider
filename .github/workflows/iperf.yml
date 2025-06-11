@@ -93,7 +93,7 @@ jobs:
           openssl rsa -in rsa_private_unprotected.pem -out rsa_private.pem -aes256 -passout 'pass:password'
           openssl rsa -in rsa_private.pem -pubout -out rsa_public.pem -passin 'pass:password'
           # Create a credentials file for iperf
-          # Username: mario, Password: rossi 
+          # Username: mario, Password: rossi
           echo "mario,bf7a49a846d44b454a5d11e7acfaf13d138bbe0b7483aa3e050879700572709b" > credentials.csv
 
       - name: Run tests
@@ -125,11 +125,12 @@ jobs:
             tree -L 2
           fi
 
-          # Verify OpenSSL loads wolfProvider to confirm configuration above
-          # $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | grep libwolfprov
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Verify iperf loads OpenSSL containing wolfProvider
-          # ldd $IPERF3_EXECUTABLE | grep wolfProvider
+          ldd $IPERF3_EXECUTABLE | grep wolfProvider
 
           # Launch the iperf server in the background
           $IPERF3_EXECUTABLE -s \

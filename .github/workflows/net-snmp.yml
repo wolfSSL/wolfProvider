@@ -89,6 +89,11 @@ jobs:
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
           export ${{ matrix.force_fail }}
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
           autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
           mkdir -p tests
           make -j test TESTOPTS="-e agentxperl" | tee tests/test.log

@@ -106,6 +106,10 @@ jobs:
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
           export ${{ matrix.force_fail }}
 
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
           # Run tests and save result
           make check 2>&1 | tee sssd-test.log
           TEST_RESULT=$?

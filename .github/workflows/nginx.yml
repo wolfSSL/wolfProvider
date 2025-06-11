@@ -79,7 +79,10 @@ jobs:
       - name: Build nginx
         working-directory: nginx
         run: |
-          ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
+          ./auto/configure --with-http_ssl_module --with-stream \
+          --with-stream_ssl_module --with-stream_ssl_preread_module \
+          --with-http_v2_module --with-mail --with-mail_ssl_module \
+          --with-openssl=$GITHUB_WORKSPACE/openssl-install
           make -j
 
       - name: Checkout nginx-tests
@@ -97,6 +100,10 @@ jobs:
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
           export ${{ matrix.force_fail }}
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Run tests and save result
           TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v . 2>&1 | tee nginx-test.log

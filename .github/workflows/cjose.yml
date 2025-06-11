@@ -2,7 +2,7 @@ name: cjose Tests
 
 # START OF COMMON SECTION
 on:
-  push: 
+  push:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
@@ -98,8 +98,9 @@ jobs:
           export ${{ matrix.force_fail }}
           export SHELL=/bin/bash
 
-          # Verify OpenSSL loads wolfProvider
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | grep libwolfprov
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Run tests
           make test || true

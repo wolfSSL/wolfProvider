@@ -86,6 +86,10 @@ jobs:
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
 
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
           # Apply the patch for the correct version of OpenSSH
           if [ "${{ matrix.openssh_ref }}" != "master" ]; then
             patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-${{ matrix.openssh_ref }}-wolfprov.patch
