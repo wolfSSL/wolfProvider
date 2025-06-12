@@ -44,7 +44,6 @@ jobs:
         id: wolfprov-cache
         with:
           path: |
-            scripts
             wolfssl-source
             wolfssl-install
             wolfprov-install
