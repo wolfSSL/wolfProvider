@@ -23,15 +23,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sssd_ref: [ 2.9.1 ]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        sssd_ref: [ 'master', '2.9.1' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - sssd_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
 
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Checking OpenSSL in cache
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          lookup-only: true
+
+      # If not yet built this version, build it now
       - name: Build wolfProvider
+        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
         run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Install dependencies
         run: |
@@ -39,7 +74,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y build-essential autoconf libldb-dev \
-          libldb2 python3-ldb bc
+          libldb2 python3-ldb bc libcap-dev libutf8proc-dev
 
       - name: Setup env
         run: |
@@ -49,13 +84,33 @@ jobs:
           ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
           ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
 
-      - name: Build sssd with wolfProvider
-        uses: wolfSSL/actions-build-autotools-project@v1
-        with:
-          repository: SSSD/sssd
-          ref: ${{ matrix.sssd_ref }}
-          path: sssd
-          configure: >-
-            --without-samba --disable-cifs-idmap-plugin
-            --without-nfsv4-idmapd-plugin --with-oidc-child=no
-          check: true
+      - name: Build and test sssd with wolfProvider
+        run: |
+          # Clone SSSD
+          git clone https://github.com/SSSD/sssd.git
+          cd sssd
+          git checkout ${{ matrix.sssd_ref }}
+
+          # Configure and build SSSD with wolfProvider
+          autoreconf -ivf
+          ./configure --without-samba --disable-cifs-idmap-plugin \
+          --without-nfsv4-idmapd-plugin --with-oidc-child=no
+          make -j
+
+      - name: Run tests
+        working-directory: sssd
+        run: |
+          # Set environment variables
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export ${{ matrix.force_fail }}
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
+          # Run tests and save result
+          make check 2>&1 | tee sssd-test.log
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} sssd

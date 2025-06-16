@@ -14,56 +14,14 @@ concurrency:
 
 jobs:
   build_wolfprovider:
-    name: Build wolfProvider
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-    steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-source
-            wolfssl-install
-            wolfprov-install
-            provider.conf
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
-          lookup-only: true
-
-      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
-      - name: Checking OpenSSL in cache
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
-        id: openssl-cache
-        with:
-          path: |
-            openssl-source
-            openssl-install
-
-          key: ossl-depends
-          fail-on-cache-miss: false
-
-      # If not yet built this version, build it now
-      - name: Build wolfProvider
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
-        run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
-
-      - name: Print errors
-        if: ${{ failure() }}
-        run: |
-          if [ -f test-suite.log ] ; then
-            cat test-suite.log
-          fi
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
 
   test_grpc:
     runs-on: ubuntu-22.04
@@ -74,19 +32,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ref: v1.60.0
+          - grpc_ref: v1.60.0 # TODO: Add master
             tests: >-
               bad_ssl_alpn_test bad_ssl_cert_test client_ssl_test
               crl_ssl_transport_security_test server_ssl_test
               ssl_transport_security_test ssl_transport_security_utils_test
               test_core_security_ssl_credentials_test test_cpp_end2end_ssl_credentials_test
               h2_ssl_cert_test h2_ssl_session_reuse_test
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
     steps:
-      - name: Confirm IPv4 and IPv6 support
-        run: |
-          ip addr list lo | grep 'inet '
-          ip addr list lo | grep 'inet6 '
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
 
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
@@ -96,8 +53,8 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
-          fail-on-cache-miss: false
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
@@ -111,6 +68,11 @@ jobs:
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
+
+      - name: Confirm IPv4 and IPv6 support
+        run: |
+          ip addr list lo | grep 'inet '
+          ip addr list lo | grep 'inet6 '
 
       - name: Install prerequisites
         run: |
@@ -127,7 +89,7 @@ jobs:
         with:
           repository: grpc/grpc
           path: grpc
-          ref: ${{ matrix.ref }}
+          ref: ${{ matrix.grpc_ref }}
 
       - name: Build grpc with wolfProvider
         working-directory: ./grpc
@@ -136,6 +98,10 @@ jobs:
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Initialize submodules
           git submodule update --init

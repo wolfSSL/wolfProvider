@@ -19,6 +19,7 @@
  */
 
 #include "unit.h"
+#include <openssl/core_names.h>
 
 #ifdef WP_HAVE_DH
 
@@ -346,5 +347,130 @@ int test_dh_decode(void *data)
 
     return err;
 }
+
+int test_dh_get_params(void *data) 
+{
+    (void)data;
+    int err = 0;
+    EVP_PKEY_CTX *ctxOpenSSL = NULL;
+    EVP_PKEY_CTX *ctxWolfProvider = NULL;
+    EVP_PKEY *keyParamsOpenSSL = NULL;
+    EVP_PKEY *keyParamsWolfProvider = NULL;
+    EVP_PKEY *keyOpenSSL = NULL;
+    EVP_PKEY *keyWolfProvider = NULL;
+
+    if (err == 0) {
+        ctxOpenSSL = EVP_PKEY_CTX_new_from_name(osslLibCtx, "DH", NULL);
+        err = ctxOpenSSL == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctxOpenSSL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctxOpenSSL, 2048) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen(ctxOpenSSL, &keyParamsOpenSSL) != 1;
+    }
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctxOpenSSL);
+        ctxOpenSSL = EVP_PKEY_CTX_new_from_pkey(osslLibCtx, keyParamsOpenSSL, NULL);
+        err = ctxOpenSSL == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctxOpenSSL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(ctxOpenSSL, &keyOpenSSL) != 1;
+    }
+
+    if (err == 0) {
+        ctxWolfProvider = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = ctxWolfProvider == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctxWolfProvider) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctxWolfProvider, 2048) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen(ctxWolfProvider, &keyParamsWolfProvider) != 1;
+    }
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctxWolfProvider);
+        ctxWolfProvider = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, keyParamsWolfProvider, NULL);
+        err = ctxWolfProvider == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctxWolfProvider) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(ctxWolfProvider, &keyWolfProvider) != 1;
+    }
+
+    static const OSSL_PARAM gettableParams[] = {
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0),
+        /* Note that OpenSSL treats the keys as BIGNUMs, not strings. */
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_FFC_P, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_FFC_G, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_FFC_Q, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
+        OSSL_PARAM_END
+    };
+    // const size_t paramsSize = sizeof(gettableParams);
+
+    if (err == 0) {
+        int retWolfProvider;
+        unsigned char bufWolfProvider[256];
+        const char* mode;
+
+        OSSL_PARAM paramsWolfProvider[2] = { OSSL_PARAM_END, OSSL_PARAM_END };
+
+        for (int i = 0; i < (int)(sizeof(gettableParams)/sizeof(gettableParams[0])) - 1; i++) {
+            memset(bufWolfProvider, 0, sizeof(bufWolfProvider));
+            for (int j = 0; j < 2; j++) {
+                if (j == 0) {
+                    mode = "Null data";
+                }
+                else {
+                    mode = "Buffer data";
+                    paramsWolfProvider[0] = gettableParams[i];
+                    paramsWolfProvider[0].data = bufWolfProvider;
+                    paramsWolfProvider[0].data_size = sizeof(bufWolfProvider);
+                }
+
+                retWolfProvider = EVP_PKEY_get_params(keyWolfProvider, paramsWolfProvider);
+                if (retWolfProvider != 1) {
+                    PRINT_MSG("EVP_PKEY_get_params failed for param %s in mode %s (WolfProvider (%d))",
+                            gettableParams[i].key, mode, retWolfProvider);
+                    err = 1;
+                }
+                if (err == 0 && paramsWolfProvider[0].data) {
+                    if (paramsWolfProvider[0].return_size == 0) {
+                        PRINT_MSG("EVP_PKEY_get_params did not set return_size for param %s in mode %s (WolfProvider (%d))",
+                                gettableParams[i].key, mode, retWolfProvider);
+                        err = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    EVP_PKEY_CTX_free(ctxOpenSSL);
+    EVP_PKEY_CTX_free(ctxWolfProvider);
+    EVP_PKEY_free(keyOpenSSL);
+    EVP_PKEY_free(keyWolfProvider);
+    EVP_PKEY_free(keyParamsOpenSSL);
+    EVP_PKEY_free(keyParamsWolfProvider);
+
+    return err;
+}
+
 
 #endif /* WP_HAVE_DH */

@@ -129,6 +129,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes192_cfb_stream, NULL),
     TEST_DECL(test_aes256_cfb_stream, NULL),
 #endif
+    TEST_DECL(test_cipher_null_zero, NULL),
 #ifdef WP_HAVE_AESGCM
     TEST_DECL(test_aes128_gcm, NULL),
     TEST_DECL(test_aes192_gcm, NULL),
@@ -154,6 +155,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),
     TEST_DECL(test_dh_decode, NULL),
+#ifndef WOLFPROV_QUICKTEST
+    TEST_DECL(test_dh_get_params, NULL),
+#endif
 #endif /* WP_HAVE_DH */
 #ifdef WP_HAVE_RSA
     TEST_DECL(test_rsa_sign_sha1, NULL),
@@ -166,11 +170,14 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_enc_dec_nopad, NULL),
     TEST_DECL(test_rsa_pkey_keygen, NULL),
     TEST_DECL(test_rsa_pkey_invalid_key_size, NULL),
+#ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_rsa_get_params, NULL),
+#endif
     TEST_DECL(test_rsa_load_key, NULL),
     TEST_DECL(test_rsa_load_cert, NULL),
     TEST_DECL(test_rsa_fromdata, NULL),
     TEST_DECL(test_rsa_decode, NULL),
+    TEST_DECL(test_rsa_null_init, NULL),
 #endif /* WP_HAVE_RSA */
 #ifdef WP_HAVE_EC_P192
     #ifdef WP_HAVE_ECKEYGEN
@@ -218,6 +225,7 @@ TEST_CASE test_case[] = {
     #endif
     TEST_DECL(test_ec_decode, NULL),
     TEST_DECL(test_ec_import, NULL),
+    TEST_DECL(test_ec_null_init, NULL),
 #endif
 #ifdef WP_HAVE_EC_P384
     #ifdef WP_HAVE_ECKEYGEN
@@ -286,6 +294,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_sign_verify, NULL),
     TEST_DECL(test_ecx_sign_verify_raw_priv, NULL),
     TEST_DECL(test_ecx_sign_verify_raw_pub, NULL),
+    TEST_DECL(test_ecx_misc, NULL),
+    TEST_DECL(test_ecx_null_init, NULL),
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))

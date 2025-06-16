@@ -97,7 +97,7 @@ typedef int (*WP_ECX_CHECK_KEY)(void* key);
 typedef struct wp_EcxData {
     /** Type of key. */
     int keyType;
-    /** Number of bits in curve. */
+    /** Cryptographic length in bits. */
     int bits;
     /** Length of curve in bytes. */
     int len;
@@ -193,6 +193,7 @@ typedef struct wp_EcxGenCtx {
 
 /* Prototype for ECX generation initialization. */
 static int wp_ecx_gen_set_params(wp_EcxGenCtx* ctx, const OSSL_PARAM params[]);
+static size_t wp_ecx_export_keypair_alloc_size(wp_Ecx* ecx, int priv);
 
 /*
  * ECX key
@@ -455,10 +456,10 @@ static int wp_ecx_get_security_bits(wp_Ecx* ecx)
 {
     int bits = 0;
 
-    if (ecx->data->bits >= 448) {
-        bits = 192;
+    if (ecx->data->bits >= 456) {
+        bits = 224;
     }
-    else if (ecx->data->bits >= 255) {
+    else if (ecx->data->bits >= 256) {
         bits = 128;
     }
 
@@ -548,8 +549,10 @@ static int wp_ecx_get_params(wp_Ecx* ecx, OSSL_PARAM params[])
     OSSL_PARAM* p;
 
     p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_MAX_SIZE);
-    if ((p != NULL) && !OSSL_PARAM_set_int(p, ecx->data->len)) {
-        ok = 0;
+    if (p != NULL) {
+        if (!OSSL_PARAM_set_int(p, (int)wp_ecx_export_keypair_alloc_size(ecx, 1))) {
+            ok = 0;
+        }
     }
     if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_BITS);
@@ -1540,7 +1543,7 @@ static int wp_ed25519_import_private(const byte* in, word32 inLen,
 /** Ed25519 data and wolfSSL functions. */
 static const wp_EcxData ed25519Data = {
     WP_KEY_TYPE_ED25519,
-    255,
+    ED25519_KEY_SIZE * 8,
     ED25519_KEY_SIZE,
 
     (WP_ECX_INIT)&wc_ed25519_init,
@@ -1674,7 +1677,7 @@ static int wp_ed448_import_private(const byte* in, word32 inLen,
 /** Ed448 data and wolfSSL functions. */
 static const wp_EcxData ed448Data = {
     WP_KEY_TYPE_ED448,
-    448,
+    ED448_KEY_SIZE * 8,
     ED448_KEY_SIZE,
 
     (WP_ECX_INIT)&wc_ed448_init,

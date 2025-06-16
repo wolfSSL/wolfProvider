@@ -14,55 +14,14 @@ concurrency:
 
 jobs:
   build_wolfprovider:
-    name: Build wolfProvider
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
-    steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-source
-            wolfssl-install
-            wolfprov-install
-            provider.conf
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
-          lookup-only: true
-
-      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
-      - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
-        uses: actions/cache@v4
-        id: openssl-cache
-        with:
-          path: |
-            openssl-source
-            openssl-install
-
-          key: ossl-depends
-
-      # If not yet built this version, build it now
-      - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
-        run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
-
-      - name: Print errors
-        if: ${{ failure() }}
-        run: |
-          if [ -f test-suite.log ] ; then
-            cat test-suite.log
-          fi
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
 
   test_stunnel:
     runs-on: ubuntu-22.04
@@ -71,9 +30,17 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        stunnel_ref: [ 5.67 ]
-        wolfssl_ref: [ 'master', 'v5.7.4-stable' ]
+        stunnel_ref: [ 'master', 'stunnel-5.67' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - stunnel_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
       - name: Retrieving OpenSSL from cache
         uses: actions/cache/restore@v4
         id: openssl-cache
@@ -82,7 +49,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
@@ -105,23 +72,43 @@ jobs:
           libtool pkg-config libwrap0-dev autoconf-archive \
           autotools-dev m4
 
-      - name: Build stunnel
-        uses: wolfSSL/actions-build-autotools-project@v1
+      - name: Checkout OSP
+        uses: actions/checkout@v4
         with:
-          repository: mtrojnar/stunnel
-          ref: stunnel-${{ matrix.stunnel_ref }}
-          path: stunnel
-          configure: --with-ssl=$GITHUB_WORKSPACE/openssl-install/
-          check: true
+          repository: wolfssl/osp
+          path: osp
+
+      - name: Build Stunnel
+        run: |
+          git clone https://github.com/mtrojnar/stunnel.git
+          cd stunnel
+          git checkout ${{ matrix.stunnel_ref }}
+          if [ ${{ matrix.force_fail }} != '' ]; then
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/stunnel/stunnel-WPFF-5.67-wolfprov.patch
+          fi
+          autoreconf -ivf
+          ./configure --with-ssl=$GITHUB_WORKSPACE/openssl-install/
+          make -j
 
       - name: Verify stunnel with wolfProvider
         working-directory: ./stunnel
         run: |
-          # Setup environment for wolfProvider
+          # Setup environment variables
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export ${{ matrix.force_fail }}
 
           # Verify stunnel
           ldd src/stunnel | grep -E '(libssl|libcrypto)'
           ./src/stunnel -version
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
+          # Run tests and capture output
+          mkdir -p $GITHUB_WORKSPACE/tests
+          make check 2>&1 | tee $GITHUB_WORKSPACE/tests/stunnel-test.log
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} stunnel

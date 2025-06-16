@@ -1,4 +1,4 @@
-name: Nginx Tests
+name: Net-SNMP Tests
 
 # START OF COMMON SECTION
 on:
@@ -23,20 +23,18 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
 
-  test_nginx:
+  test_net_snmp:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        nginx_ref: [ 'master', 'release-1.27.4' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '']
-        exclude:
-          - nginx_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        net_snmp_ref: ['v5.9.3']
+        wolfssl_ref: ['master', 'v5.8.0-stable']
+        openssl_ref: ['openssl-3.5.0']
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -67,32 +65,26 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo cpan -iT Proc::Find Net::SSLeay IO::Socket::SSL
+          sudo apt-get update
+          sudo apt-get install -y libperl-dev
 
-      - name: Checkout nginx
-        uses: actions/checkout@v4
+      - name: Build net-snmp with wolfProvider
+        uses: wolfSSL/actions-build-autotools-project@v1
         with:
-          repository: nginx/nginx
-          path: nginx
-          ref: ${{ matrix.nginx_ref }}
+          repository: net-snmp/net-snmp
+          ref: ${{ matrix.net_snmp_ref }}
+          path: net-snmp
+          configure: >-
+            --disable-shared --with-openssl=$GITHUB_WORKSPACE/openssl-install
+            --with-default-snmp-version="3" --with-sys-contact="@@no.where"
+            --with-sys-location="Unknown" --with-logfile="/var/log/snmpd.log"
+            --with-persistent-directory="/var/net-snmp" LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lcrypto -lssl"
+            CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" LIBS="-lcrypto -lssl"
+          check: false
 
-      - name: Build nginx
-        working-directory: nginx
+      - name: Run tests
+        working-directory: net-snmp
         run: |
-          ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
-          make -j
-
-      - name: Checkout nginx-tests
-        uses: actions/checkout@v4
-        with:
-          repository: nginx/nginx-tests
-          path: nginx-tests
-          ref: master
-
-      - name: Run nginx-tests with wolfProvider
-        working-directory: nginx-tests
-        run: |
-          # Set environment variables
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
@@ -102,7 +94,8 @@ jobs:
           $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
           grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
-          # Run tests and save result
-          TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v . 2>&1 | tee nginx-test.log
+          autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
+          mkdir -p tests
+          make -j test TESTOPTS="-e agentxperl" | tee tests/test.log
           TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} nginx
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} net-snmp

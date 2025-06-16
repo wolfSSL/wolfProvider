@@ -32,7 +32,7 @@ jobs:
           - CC: gcc-10
             CXX: g++-10
             OS: ubuntu-latest
-            wolfssl_ref: v5.7.4-stable
+            wolfssl_ref: v5.8.0-stable
           - CC: gcc-11
             CXX: g++-11
             OS: ubuntu-latest
@@ -91,7 +91,8 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-${{ matrix.CC }}-depends
+          key: ossl-depends-${{ matrix.wolfssl_ref }}-${{ matrix.CC }}-${{ github.sha }}
+          lookup-only: true
 
       # If not yet built this version, build it now
       - name: Build wolfProvider
@@ -111,4 +112,3 @@ jobs:
           if [ -f config.log ]; then
             cat config.log
           fi
-

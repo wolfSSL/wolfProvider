@@ -19,16 +19,19 @@
 #
 
 #
-# OpenSSL 3.0.0
+# OpenSSL 3.5.0
 #
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-general.sh
 
-OPENSSL_GIT="https://github.com/openssl/openssl.git"
-OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.2.0"}
+OPENSSL_GIT_URL="https://github.com/openssl/openssl.git"
+OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.5.0"}
 OPENSSL_SOURCE_DIR=${SCRIPT_DIR}/../openssl-source
 OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
+OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
+OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
+OPENSSL_LIB_DIRS="${OPENSSL_INSTALL_DIR}/lib:${OPENSSL_INSTALL_DIR}/lib64"
 
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
@@ -45,15 +48,17 @@ clone_openssl() {
     fi
 
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
+        printf "\tOpenSSL source directory not found: ${OPENSSL_SOURCE_DIR}\n"
+        printf "\tParent directory:\n"
+        tree -L 2 $(dirname ${OPENSSL_SOURCE_DIR}/..) || true
         CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
         CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
-
-        printf "\tClone OpenSSL ${CLONE_TAG} ... "
 
         DEPTH_ARG=${WOLFPROV_DEBUG:+""}
         DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
-        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+        printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
+        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR}
         RET=$?
 
         if [ $RET != 0 ]; then
@@ -62,10 +67,23 @@ clone_openssl() {
             exit 1
         fi
         printf "Done.\n"
+
+        printf "\tOpenSSL source cloned to: ${OPENSSL_SOURCE_DIR}\n"
+        if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
+            printf "ERROR: OpenSSL source directory not found after clone: ${OPENSSL_SOURCE_DIR}\n"
+        fi
+    else
+        printf "\tOpenSSL source directory exists: ${OPENSSL_SOURCE_DIR}\n"
+        if [ ! -d ${OPENSSL_SOURCE_DIR}/.git ]; then
+            printf "ERROR: OpenSSL source directory is not a git repository: ${OPENSSL_SOURCE_DIR}\n"
+            do_cleanup
+            exit 1
+        fi
     fi
 }
 
 install_openssl() {
+    printf "\nInstalling OpenSSL ${OPENSSL_TAG} ..."
     clone_openssl
     cd ${OPENSSL_SOURCE_DIR}
 
@@ -114,10 +132,7 @@ init_openssl() {
     install_openssl
     printf "\tOpenSSL ${OPENSSL_TAG} installed in: ${OPENSSL_INSTALL_DIR}\n"
 
-    OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
-    OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
-
-    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_INSTALL_DIR}/lib64 $OPENSSL_BIN version | tail -n1`
+    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS} $OPENSSL_BIN version | tail -n1`
     case $OSSL_VER in
         OpenSSL\ 3.*) ;;
         *)
@@ -128,9 +143,9 @@ init_openssl() {
     esac
 
     if [ -z $LD_LIBRARY_PATH ]; then
-      export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64
+      export LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS}
     else
-      export LD_LIBRARY_PATH=$OPENSSL_INSTALL_DIR/lib64:$LD_LIBRARY_PATH
+      export LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS}:$LD_LIBRARY_PATH
     fi
 }
 

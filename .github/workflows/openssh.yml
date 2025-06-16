@@ -1,4 +1,4 @@
-name: Nginx Tests
+name: openssh Tests
 
 # START OF COMMON SECTION
 on:
@@ -23,19 +23,19 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
 
-  test_nginx:
+  test_openssh:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        nginx_ref: [ 'master', 'release-1.27.4' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '']
+        openssh_ref: [ 'master', 'V_10_0_P2', 'V_9_9_P1' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
-          - nginx_ref: 'master'
+          - openssh_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
@@ -65,44 +65,47 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install dependencies
-        run: |
-          sudo cpan -iT Proc::Find Net::SSLeay IO::Socket::SSL
-
-      - name: Checkout nginx
+      - name: Checkout OSP
         uses: actions/checkout@v4
         with:
-          repository: nginx/nginx
-          path: nginx
-          ref: ${{ matrix.nginx_ref }}
+          repository: wolfssl/osp
+          path: osp
 
-      - name: Build nginx
-        working-directory: nginx
-        run: |
-          ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
-          make -j
-
-      - name: Checkout nginx-tests
+      - name: Checkout openssh
         uses: actions/checkout@v4
         with:
-          repository: nginx/nginx-tests
-          path: nginx-tests
-          ref: master
+          repository: openssh/openssh-portable
+          path: openssh-portable
+          ref: ${{ matrix.openssh_ref }}
 
-      - name: Run nginx-tests with wolfProvider
-        working-directory: nginx-tests
+      - name: Build and Test openssh-portable
+        working-directory: openssh-portable
         run: |
           # Set environment variables
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-          export ${{ matrix.force_fail }}
 
           echo "Checking OpenSSL providers:"
           $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
           grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
-          # Run tests and save result
-          TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v . 2>&1 | tee nginx-test.log
+          # Apply the patch for the correct version of OpenSSH
+          if [ "${{ matrix.openssh_ref }}" != "master" ]; then
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-${{ matrix.openssh_ref }}-wolfprov.patch
+          else
+            # for master we need to supply the latest release version
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-V_10_0_P2-wolfprov.patch
+          fi
+
+          autoreconf -ivf
+          ./configure --with-ssl-dir=$GITHUB_WORKSPACE/openssl-install \
+                     --with-rpath=-Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64 \
+                     --with-prngd-socket=/tmp/prngd
+          make -j
+
+          # Run all the tests except (t-exec) as it takes too long
+          export ${{ matrix.force_fail }}
+          make file-tests interop-tests extra-tests unit 2>&1 | tee openssh-test.log
           TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} nginx
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openssh

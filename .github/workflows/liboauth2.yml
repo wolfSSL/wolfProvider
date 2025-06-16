@@ -1,4 +1,4 @@
-name: Nginx Tests
+name: liboauth2 Tests
 
 # START OF COMMON SECTION
 on:
@@ -23,20 +23,16 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
 
-  test_nginx:
+  test_liboauth2:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        nginx_ref: [ 'master', 'release-1.27.4' ]
+        liboauth2_ref: [ 'v1.4.5.4' ] # No master with patch
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '']
-        exclude:
-          - nginx_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -65,44 +61,45 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install dependencies
+      - name: Install liboauth2 dependencies
         run: |
-          sudo cpan -iT Proc::Find Net::SSLeay IO::Socket::SSL
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev libcurl4-openssl-dev libjansson-dev \
+            libcjose-dev pkg-config build-essential apache2-dev libhiredis-dev \
+            libmemcached-dev autotools-dev autoconf automake libtool check
 
-      - name: Checkout nginx
+      - name: Checkout OSP
         uses: actions/checkout@v4
         with:
-          repository: nginx/nginx
-          path: nginx
-          ref: ${{ matrix.nginx_ref }}
+          repository: wolfssl/osp
+          path: osp
 
-      - name: Build nginx
-        working-directory: nginx
+      - name: Build liboauth2
         run: |
-          ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
-          make -j
+          git clone https://github.com/OpenIDC/liboauth2.git
+          cd liboauth2
+          git checkout ${{ matrix.liboauth2_ref }}
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/liboauth2/liboauth2-${{ matrix.liboauth2_ref }}-wolfprov.patch
 
-      - name: Checkout nginx-tests
-        uses: actions/checkout@v4
-        with:
-          repository: nginx/nginx-tests
-          path: nginx-tests
-          ref: master
+          autoreconf -fiv
+          ./configure
+          make -j$(nproc)
 
-      - name: Run nginx-tests with wolfProvider
-        working-directory: nginx-tests
+      - name: Run liboauth2 tests
+        working-directory: liboauth2
         run: |
           # Set environment variables
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
           export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
           export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
           export ${{ matrix.force_fail }}
 
           echo "Checking OpenSSL providers:"
           $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
           grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
-          # Run tests and save result
-          TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v . 2>&1 | tee nginx-test.log
+          # Build and run tests
+          make check 2>&1 | tee liboauth2-test.log
           TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} nginx
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} liboauth2
