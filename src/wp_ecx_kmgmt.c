@@ -244,6 +244,76 @@ void* wp_ecx_get_key(wp_Ecx* ecx)
 }
 
 /**
+ * Lock the ECX key mutex.
+ *
+ * This function locks the mutex associated with the ECX key object.
+ * Use wp_ecx_unlock() to unlock after operations are complete.
+ *
+ * @param [in] ecx  ECX key object.
+ * @return  1 on success.
+ * @return  0 on failure or when single-threaded build.
+ */
+int wp_ecx_lock(wp_Ecx* ecx)
+{
+#ifndef WP_SINGLE_THREADED
+    int ok = 1;
+    int rc;
+
+    if (ecx == NULL) {
+        ok = 0;
+    }
+    else {
+        rc = wc_LockMutex(&ecx->mutex);
+        if (rc < 0) {
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+#else
+    (void)ecx;
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    return 1;
+#endif
+}
+
+/**
+ * Unlock the ECX key mutex.
+ *
+ * This function unlocks the mutex associated with the ECX key object.
+ * Should only be called after a successful wp_ecx_lock() call.
+ *
+ * @param [in] ecx  ECX key object.
+ * @return  1 on success.
+ * @return  0 on failure or when single-threaded build.
+ */
+int wp_ecx_unlock(wp_Ecx* ecx)
+{
+#ifndef WP_SINGLE_THREADED
+    int ok = 1;
+    int rc;
+
+    if (ecx == NULL) {
+        ok = 0;
+    }
+    else {
+        rc = wc_UnLockMutex(&ecx->mutex);
+        if (rc < 0) {
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+#else
+    (void)ecx;
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    return 1;
+#endif
+}
+
+/**
  * Create a new ECX key object. Base function.
  *
  * @param [in] provCtx   Provider context.

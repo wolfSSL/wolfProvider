@@ -609,12 +609,18 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
     }
     if (ok) {
-        PRIVATE_KEY_UNLOCK();
-        rc = wc_RsaSSL_Sign(tbs, (word32)tbsLen, sig, (word32)sigSize,
-            wp_rsa_get_key(ctx->rsa), &ctx->rng);
-        PRIVATE_KEY_LOCK();
-        if (rc <= 0) {
+        if (wp_rsa_lock(ctx->rsa) != 1) {
             ok = 0;
+        }
+        if (ok) {
+            PRIVATE_KEY_UNLOCK();
+            rc = wc_RsaSSL_Sign(tbs, (word32)tbsLen, sig, (word32)sigSize,
+                wp_rsa_get_key(ctx->rsa), &ctx->rng);
+            PRIVATE_KEY_LOCK();
+            wp_rsa_unlock(ctx->rsa);
+            if (rc <= 0) {
+                ok = 0;
+            }
         }
     }
     if (ok) {
@@ -655,21 +661,29 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
 #endif
         wp_rsa_get_key(ctx->rsa), EVP_PKEY_OP_SIGN);
 
-    PRIVATE_KEY_UNLOCK();
-    rc = wc_RsaPSS_Sign_ex(tbs, (word32)tbsLen, sig, (word32)sigSize,
-#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
-        ctx->hash.type,
-#else
-        ctx->hashType,
-#endif
-        ctx->mgf, saltLen, wp_rsa_get_key(ctx->rsa),
-        &ctx->rng);
-    PRIVATE_KEY_LOCK();
-    if (rc < 0) {
-        ok = 0;
-    }
-    else {
-        *sigLen = rc;
+    if (ok) {
+        if (wp_rsa_lock(ctx->rsa) != 1) {
+            ok = 0;
+        }
+        if (ok) {
+            PRIVATE_KEY_UNLOCK();
+            rc = wc_RsaPSS_Sign_ex(tbs, (word32)tbsLen, sig, (word32)sigSize,
+        #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+                ctx->hash.type,
+        #else
+                ctx->hashType,
+        #endif
+                ctx->mgf, saltLen, wp_rsa_get_key(ctx->rsa),
+                &ctx->rng);
+            PRIVATE_KEY_LOCK();
+            wp_rsa_unlock(ctx->rsa);
+            if (rc < 0) {
+                ok = 0;
+            }
+            else {
+                *sigLen = rc;
+            }
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -749,16 +763,21 @@ static int wp_rsa_sign_no_pad(wp_RsaSigCtx* ctx, unsigned char* sig,
     if (ok) {
         word32 len = (word32)sigSize;
         int rc;
-
-        PRIVATE_KEY_UNLOCK();
-        rc = wc_RsaDirect((byte*)tbs, (word32)tbsLen, sig, &len,
-            wp_rsa_get_key(ctx->rsa), RSA_PRIVATE_ENCRYPT, &ctx->rng);
-        PRIVATE_KEY_LOCK();
-        if (rc < 0) {
+        if (wp_rsa_lock(ctx->rsa) != 1) {
             ok = 0;
         }
-        else {
-            *sigLen = rc;
+        if (ok) {
+            PRIVATE_KEY_UNLOCK();
+            rc = wc_RsaDirect((byte*)tbs, (word32)tbsLen, sig, &len,
+                wp_rsa_get_key(ctx->rsa), RSA_PRIVATE_ENCRYPT, &ctx->rng);
+            PRIVATE_KEY_LOCK();
+            wp_rsa_unlock(ctx->rsa);
+            if (rc < 0) {
+                ok = 0;
+            }
+            else {
+                *sigLen = rc;
+            }
         }
     }
 
@@ -841,16 +860,21 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
     }
     if (ok) {
         word32 len = (word32)sigSize;
-
-        PRIVATE_KEY_UNLOCK();
-        rc = wc_RsaDirect(padded, paddedSz, sig, &len,
-            wp_rsa_get_key(ctx->rsa), RSA_PRIVATE_ENCRYPT, &ctx->rng);
-        PRIVATE_KEY_LOCK();
-        if (rc < 0) {
+        if (wp_rsa_lock(ctx->rsa) != 1) {
             ok = 0;
         }
-        else {
-            *sigLen = rc;
+        if (ok) {
+            PRIVATE_KEY_UNLOCK();
+            rc = wc_RsaDirect(padded, paddedSz, sig, &len,
+                wp_rsa_get_key(ctx->rsa), RSA_PRIVATE_ENCRYPT, &ctx->rng);
+            PRIVATE_KEY_LOCK();
+            wp_rsa_unlock(ctx->rsa);
+            if (rc < 0) {
+                ok = 0;
+            }
+            else {
+                *sigLen = rc;
+            }
         }
     }
     if (padded != NULL) {
@@ -913,6 +937,8 @@ static int wp_rsa_sign(wp_RsaSigCtx* ctx, unsigned char* sig, size_t* sigLen,
     size_t sigSize, const unsigned char* tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_PK, "wp_rsa_sign");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -1310,6 +1336,8 @@ static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
     size_t sigLen, const unsigned char* tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_PK, "wp_rsa_verify");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
