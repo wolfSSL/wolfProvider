@@ -175,6 +175,9 @@ typedef void (*DFUNC)(void);
 int wolfssl_prov_is_running(void);
 WC_RNG* wolfssl_prov_get_rng(WOLFPROV_CTX* provctx);
 
+int wp_lock(wolfSSL_Mutex* mutex);
+int wp_unlock(wolfSSL_Mutex* mutex);
+
 /* Internal RSA types and functions. */
 typedef struct wp_Rsa wp_Rsa;
 
@@ -182,8 +185,7 @@ int wp_rsa_up_ref(wp_Rsa* rsa);
 void wp_rsa_free(wp_Rsa* rsa);
 int wp_rsa_get_type(wp_Rsa* rsa);
 int wp_rsa_get_bits(wp_Rsa* rsa);
-int wp_rsa_lock(wp_Rsa* rsa);
-int wp_rsa_unlock(wp_Rsa* rsa);
+wolfSSL_Mutex* wp_rsa_get_mutex(wp_Rsa* rsa);
 RsaKey* wp_rsa_get_key(wp_Rsa* rsa);
 void wp_rsa_get_pss_mds(wp_Rsa* rsa, char** mdName, char** mgfMdName);
 int wp_rsa_get_pss_salt_len(wp_Rsa* rsa);
@@ -201,8 +203,7 @@ ecc_key* wp_ecc_get_key(wp_Ecc* ecc);
 WC_RNG* wp_ecc_get_rng(wp_Ecc* ecc);
 int wp_ecc_get_size(wp_Ecc* ecc);
 int wp_ecc_check_usage(wp_Ecc* ecc);
-int wp_ecc_lock(wp_Ecc* ecc);
-int wp_ecc_unlock(wp_Ecc* ecc);
+wolfSSL_Mutex* wp_ecc_get_mutex(wp_Ecc* ecc);
 
 /* Internal ECX types and functions. */
 typedef struct wp_Ecx wp_Ecx;
@@ -210,8 +211,7 @@ typedef struct wp_Ecx wp_Ecx;
 int wp_ecx_up_ref(wp_Ecx* ecx);
 void wp_ecx_free(wp_Ecx* ecx);
 void* wp_ecx_get_key(wp_Ecx* ecx);
-int wp_ecx_lock(wp_Ecx* ecx);
-int wp_ecx_unlock(wp_Ecx* ecx);
+wolfSSL_Mutex* wp_ecx_get_mutex(wp_Ecx* ecx);
 
 /* Internal DH types and functions. */
 typedef struct wp_Dh wp_Dh;

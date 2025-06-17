@@ -331,73 +331,14 @@ int wp_rsa_get_bits(wp_Rsa* rsa)
 }
 
 /**
- * Lock the RSA key mutex.
- *
- * This function locks the mutex associated with the RSA key object to ensure
- * thread-safe access to the key data.
+ * Get the mutex object from the RSA key object.
  *
  * @param [in] rsa  RSA key object.
- * @return  1 on success.
- * @return  0 on failure or when single-threaded build.
+ * @return  Pointer to wolfSSL mutex object.
  */
-int wp_rsa_lock(wp_Rsa* rsa)
+wolfSSL_Mutex* wp_rsa_get_mutex(wp_Rsa* rsa)
 {
-#ifndef WP_SINGLE_THREADED
-    int ok = 1;
-    int rc;
-
-    if (rsa == NULL) {
-        ok = 0;
-    }
-    else {
-        rc = wc_LockMutex(&rsa->mutex);
-        if (rc < 0) {
-            ok = 0;
-        }
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-#else
-    (void)rsa;
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
-#endif
-}
-
-/**
- * Unlock the RSA key mutex.
- *
- * This function unlocks the mutex associated with the RSA key object.
- * Should only be called after a successful wp_rsa_lock() call.
- *
- * @param [in] rsa  RSA key object.
- * @return  1 on success.
- * @return  0 on failure or when single-threaded build.
- */
-int wp_rsa_unlock(wp_Rsa* rsa)
-{
-#ifndef WP_SINGLE_THREADED
-    int ok = 1;
-    int rc;
-
-    if (rsa == NULL) {
-        ok = 0;
-    }
-    else {
-        rc = wc_UnLockMutex(&rsa->mutex);
-        if (rc < 0) {
-            ok = 0;
-        }
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-#else
-    (void)rsa;
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
-#endif
+    return &rsa->mutex;
 }
 
 /**

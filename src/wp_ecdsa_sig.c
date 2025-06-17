@@ -280,7 +280,7 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
                 sigSize = *sigLen;
             }
             len = (word32)sigSize;
-            if (wp_ecc_lock(ctx->ecc) != 1) {
+            if (wp_lock(wp_ecc_get_mutex(ctx->ecc)) != 1) {
                 ok = 0;
             }
             if (ok) {
@@ -288,7 +288,7 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
                 rc = wc_ecc_sign_hash(tbs, (word32)tbsLen, sig, &len,
                     wp_ecc_get_rng(ctx->ecc), wp_ecc_get_key(ctx->ecc));
                 PRIVATE_KEY_LOCK();
-                wp_ecc_unlock(ctx->ecc);
+                wp_unlock(wp_ecc_get_mutex(ctx->ecc));
                 if (rc != 0) {
                     ok = 0;
                 }

@@ -300,73 +300,14 @@ int wp_ecc_get_size(wp_Ecc* ecc)
 }
 
 /**
- * Lock the ECC key mutex.
- *
- * This function locks the mutex associated with the ECC key object.
- * Use wp_ecc_unlock() to unlock after operations are complete.
+ * Get the mutex object from the ECC key object.
  *
  * @param [in] ecc  ECC key object.
- * @return  1 on success.
- * @return  0 on failure or when single-threaded build.
+ * @return  Pointer to wolfSSL mutex object.
  */
-int wp_ecc_lock(wp_Ecc* ecc)
+wolfSSL_Mutex* wp_ecc_get_mutex(wp_Ecc* ecc)
 {
-#ifndef WP_SINGLE_THREADED
-    int ok = 1;
-    int rc;
-
-    if (ecc == NULL) {
-        ok = 0;
-    }
-    else {
-        rc = wc_LockMutex(&ecc->mutex);
-        if (rc < 0) {
-            ok = 0;
-        }
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-#else
-    (void)ecc;
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
-#endif
-}
-
-/**
- * Unlock the ECC key mutex.
- *
- * This function unlocks the mutex associated with the ECC key object.
- * Should only be called after a successful wp_ecc_lock() call.
- *
- * @param [in] ecc  ECC key object.
- * @return  1 on success.
- * @return  0 on failure or when single-threaded build.
- */
-int wp_ecc_unlock(wp_Ecc* ecc)
-{
-#ifndef WP_SINGLE_THREADED
-    int ok = 1;
-    int rc;
-
-    if (ecc == NULL) {
-        ok = 0;
-    }
-    else {
-        rc = wc_UnLockMutex(&ecc->mutex);
-        if (rc < 0) {
-            ok = 0;
-        }
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-#else
-    (void)ecc;
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
-#endif
+    return &ecc->mutex;
 }
 
 /**
