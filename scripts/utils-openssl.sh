@@ -94,6 +94,7 @@ install_openssl() {
             RET=$?
         else
             ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+            RET=$?
         fi
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
