@@ -45,6 +45,7 @@ jobs:
         id: wolfprov-cache
         with:
           path: |
+            scripts
             wolfssl-source
             wolfssl-install
             wolfprov-install
@@ -92,11 +93,8 @@ jobs:
         working-directory: iperf
         run: |
           # Set up the environment for wolfProvider
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
-          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
-          export SHELL=/bin/bash
 
           # Test variables for iperf
           export IPERF3_EXECUTABLE=$GITHUB_WORKSPACE/iperf/src/iperf3
@@ -107,11 +105,6 @@ jobs:
           export IPERF3_USER=mario
           export IPERF3_PASSWORD=rossi
           export KEY_DIR=$GITHUB_WORKSPACE/test-keys
-
-          # Verify OpenSSL loads wolfProvider to confirm configuration above
-          echo "Checking OpenSSL providers:"
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
-          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Verify iperf loads OpenSSL containing wolfProvider
           ldd $IPERF3_LIB | grep -q wolfProvider

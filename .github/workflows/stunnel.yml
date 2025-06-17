@@ -48,6 +48,7 @@ jobs:
         id: wolfprov-cache
         with:
           path: |
+            scripts
             wolfssl-source
             wolfssl-install
             wolfprov-install
@@ -85,19 +86,13 @@ jobs:
       - name: Verify stunnel with wolfProvider
         working-directory: ./stunnel
         run: |
-          # Setup environment variables
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
-          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
           # Verify stunnel
           ldd src/stunnel | grep -E '(libssl|libcrypto)'
           ./src/stunnel -version
-
-          echo "Checking OpenSSL providers:"
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
-          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Run tests and capture output
           mkdir -p $GITHUB_WORKSPACE/tests

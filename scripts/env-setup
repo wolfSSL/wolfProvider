@@ -1,0 +1,59 @@
+# This file helps to set the environment variables to enable wolfProvider.
+# It can be used on the command line, or by workflows.
+# 'source' this file, don't run it directly
+# To disable wolfProvider, run 'unset OPENSSL_CONF'
+
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+    [[ $ZSH_EVAL_CONTEXT =~ :file$ ]] && is_sourced=1 || is_sourced=0
+else # bash
+    [ "$0" = "$BASH_SOURCE" ] && is_sourced=0 || is_sourced=1
+fi
+if [ $is_sourced -eq 0 ]; then
+    echo "Error: This script must be sourced, not executed."
+    exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P)"
+pushd $SCRIPT_DIR
+REPO_ROOT="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
+popd
+
+echo "SCRIPT_DIR: $SCRIPT_DIR"
+echo "REPO_ROOT: $REPO_ROOT"
+echo "PWD: $PWD"
+
+# Detect the openssl library path based on aarch64
+if [ "$(uname -m)" = "aarch64" ]; then
+    OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib
+else
+    OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib64
+fi
+
+# Set variables with default values if not already set
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:=$REPO_ROOT/wolfssl-install/lib:$OPENSSL_LIB_PATH}"
+export OPENSSL_CONF="${OPENSSL_CONF:=$REPO_ROOT/provider.conf}"
+export OPENSSL_MODULES="${OPENSSL_MODULES:=$REPO_ROOT/wolfprov-install/lib}"
+export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
+
+# If openssl-install does not exist, exit with failure status to terminate 
+# any workflows which depend on the result.
+# For normal interactive command line usage, this result is fine to ignore.
+if [ ! -d "$REPO_ROOT/openssl-install" ]; then
+  echo "Warning: openssl-install directory does not exist in $REPO_ROOT, cannot confirm providers"
+  if command -v tree >/dev/null 2>&1; then
+    tree -L 3 $REPO_ROOT
+  fi
+  return 1
+fi
+
+echo "Checking OpenSSL providers:"
+PROVIDER_LIST=$(mktemp -t provider-list.XXXXXX)
+$REPO_ROOT/openssl-install/bin/openssl list -providers | tee $PROVIDER_LIST
+if grep -q libwolfprov $PROVIDER_LIST; then
+  echo "libwolfprov found in OpenSSL providers"
+else
+  echo "ERROR: libwolfprov not found in OpenSSL providers"
+  return 1
+fi 
+
+echo "Done!\n"

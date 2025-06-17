@@ -45,6 +45,7 @@ jobs:
         id: wolfprov-cache
         with:
           path: |
+            scripts
             wolfssl-source
             wolfssl-install
             wolfprov-install
@@ -69,14 +70,9 @@ jobs:
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap
         run: |
-          # Setup environment for wolfProvider
-          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
-          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
-          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
-
-          echo "Checking OpenSSL providers:"
-          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
-          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
 
           # Generate configure script
           rm -f aclocal.m4
