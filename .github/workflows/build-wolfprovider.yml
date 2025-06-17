@@ -19,11 +19,15 @@ jobs:
     name: Build wolfProvider
     strategy:
       matrix:
-        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
+        include:
+          - os: ubuntu-22.04
+            arch: x64
+          - os: ubuntu-24.04-arm
+            arch: arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     outputs:
-      cache_key: wolfprov-${{ matrix.os }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+      cache_key: wolfprov-${{ matrix.os }}-${{ matrix.arch }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
     steps:
       # Check if this version of wolfssl/wolfprovider has already been built,
       # mark to cache these items on post if we do end up building
@@ -42,7 +46,7 @@ jobs:
             openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.os }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.os }}-${{ matrix.arch }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
           lookup-only: true
 
       # if cache hit, exit the workflow
@@ -132,7 +136,7 @@ jobs:
             wolfprov-install
             openssl-install
             provider.conf
-          key: wolfprov-${{ matrix.os }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.os }}-${{ matrix.arch }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
 
       # If openssl cache miss, save it to the cache
       - name: Save OpenSSL into cache
