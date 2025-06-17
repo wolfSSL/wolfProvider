@@ -3,6 +3,9 @@ name: Build wolfProvider
 on:
   workflow_call:
     inputs:
+      os_ref:
+        required: true
+        type: string
       wolfssl_ref:
         required: true
         type: string
@@ -17,17 +20,10 @@ on:
 jobs:
   build_wolfprovider_common:
     name: Build wolfProvider
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            arch: x64
-          - os: ubuntu-24.04-arm
-            arch: arm64
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ inputs.os_ref }}
     timeout-minutes: 20
     outputs:
-      cache_key: wolfprov-${{ matrix.os }}-${{ matrix.arch }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+      cache_key: wolfprov-${{ inputs.os_ref }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
     steps:
       # Check if this version of wolfssl/wolfprovider has already been built,
       # mark to cache these items on post if we do end up building
@@ -46,7 +42,7 @@ jobs:
             openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.os }}-${{ matrix.arch }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ inputs.os_ref }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
           lookup-only: true
 
       # if cache hit, exit the workflow
@@ -117,7 +113,7 @@ jobs:
       - name: Build wolfProvider
         if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
-          if [ "${{ matrix.os }}" = "ubuntu-24.04-arm" ]; then
+          if [ "${{ inputs.os_ref }}" = "ubuntu-24.04-arm" ]; then
             export OPENSSL_ARCH="linux-aarch64"
           fi
           OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} WOLFPROV_DEBUG=1 ./scripts/build-wolfprovider.sh
@@ -136,7 +132,7 @@ jobs:
             wolfprov-install
             openssl-install
             provider.conf
-          key: wolfprov-${{ matrix.os }}-${{ matrix.arch }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ inputs.os_ref }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
 
       # If openssl cache miss, save it to the cache
       - name: Save OpenSSL into cache

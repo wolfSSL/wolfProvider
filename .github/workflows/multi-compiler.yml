@@ -15,12 +15,12 @@ concurrency:
 jobs:
   build_wolfprovider:
     name: Build with ${{ matrix.CC }}
-    runs-on: ${{ matrix.OS }}
+    runs-on: ${{ matrix.os_ref }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-22.04, ubuntu-24.04-arm]
+        os_ref: [ubuntu-latest, ubuntu-22.04, ubuntu-24.04-arm]
         openssl_ref: [ 'master', 'openssl-3.5.0' ]
         include:
           - CC: gcc-9
@@ -73,7 +73,7 @@ jobs:
             openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.os }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.os_ref }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       # If not yet built this version, build it now

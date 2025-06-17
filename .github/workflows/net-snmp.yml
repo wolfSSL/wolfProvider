@@ -16,10 +16,12 @@ jobs:
   build_wolfprovider:
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
+      os_ref: ${{ matrix.os_ref }}
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
     strategy:
       matrix:
+        os_ref: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
 
@@ -30,12 +32,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
+        os_ref: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
         net_snmp_ref: ['v5.9.3']
         wolfssl_ref: ['master', 'v5.8.0-stable']
         openssl_ref: ['openssl-3.5.0']
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os_ref }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -54,7 +56,7 @@ jobs:
             openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.os }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.os_ref }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install dependencies
