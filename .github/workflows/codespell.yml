@@ -15,11 +15,16 @@ concurrency:
 jobs:
   codespell:
     name: Check for spelling errors
-    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 5
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Create exclude file if needed
         run: |

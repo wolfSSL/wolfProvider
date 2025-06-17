@@ -24,16 +24,17 @@ jobs:
         openssl_ref: [ 'openssl-3.5.0' ]
 
   test_ipmitool:
-    runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm]
         ipmitool_ref: [ 'master', 'IPMITOOL_1_8_19' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -52,7 +53,7 @@ jobs:
             openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.os }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install dependencies
@@ -74,7 +75,6 @@ jobs:
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
-          export ${{ matrix.force_fail }}
 
           # Verify ipmitool was built and linked correctly with OpenSSL
           ldd src/ipmitool | grep -E '(libssl|libcrypto)'

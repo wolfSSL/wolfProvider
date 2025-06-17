@@ -24,21 +24,22 @@ jobs:
         openssl_ref: [ 'openssl-3.5.0' ]
 
   test_liboauth2:
-    runs-on: ubuntu-22.04
     needs: build_wolfprovider
     timeout-minutes: 20
     strategy:
       matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm]
         liboauth2_ref: [ 'v1.4.5.4' ] # No master with patch
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          
+
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
@@ -51,7 +52,7 @@ jobs:
             openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.os }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install liboauth2 dependencies
