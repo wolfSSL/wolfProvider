@@ -27,7 +27,7 @@ WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
 WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
 WOLFSSL_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'}
-WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DRSA_MIN_SIZE=1024 -DWOLFSSL_OLD_OID_SUM -DWOLFSSL_BIND -DWOLFSSL_AESGCM_STREAM "}
+WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DRSA_MIN_SIZE=1024 -DWOLFSSL_OLD_OID_SUM -DWOLFSSL_BIND "}
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 USE_CUR_TAG=${USE_CUR_TAG:-0}
@@ -119,11 +119,6 @@ install_wolfssl() {
             cd XXX-fips-test
         fi
 
-        # Debug: Print the configure command
-        echo ""
-        echo "=== wolfSSL configure command ==="
-        echo "./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS=\"${WOLFSSL_CONFIG_CFLAGS}\""
-        
         ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR running ./configure\n"
@@ -140,25 +135,6 @@ install_wolfssl() {
             rm -rf ${WOLFSSL_INSTALL_DIR}
             do_cleanup
             exit 1
-        fi
-        printf "Done.\n"
-
-        # Print wolfSSL configuration for debugging
-        printf "\tChecking wolfSSL configuration ... "
-        if [ -f "./config.status" ]; then
-            echo ""
-            echo "=== wolfSSL config.status output ==="
-            ./config.status --c
-        fi
-        if [ -f "./wolfssl/options.h" ]; then
-            echo ""
-            echo "=== WOLFSSL_AESGCM_STREAM definition ==="
-            AESGCM_STREAM_STATUS=$(grep -n "WOLFSSL_AESGCM_STREAM" ./wolfssl/options.h || echo "not found")
-            echo "$AESGCM_STREAM_STATUS"
-            
-            echo ""
-            echo "=== AES-GCM related definitions ==="
-            grep -n "GCM\|AESGCM" ./wolfssl/options.h || echo "No AES-GCM definitions found"
         fi
         printf "Done.\n"
 
@@ -186,27 +162,6 @@ install_wolfssl() {
 init_wolfssl() {
     install_wolfssl
     printf "\twolfSSL ${WOLFSSL_TAG} installed in: ${WOLFSSL_INSTALL_DIR}\n"
-
-    # Check wolfSSL configuration (even if already built)
-    cd ${WOLFSSL_SOURCE_DIR}
-    printf "\tChecking wolfSSL configuration ... "
-    if [ -f "./config.status" ]; then
-        echo ""
-        echo "=== wolfSSL config.status output ==="
-        ./config.status --c
-    fi
-    if [ -f "./wolfssl/options.h" ]; then
-        echo ""
-        echo "=== WOLFSSL_AESGCM_STREAM definition ==="
-        AESGCM_STREAM_STATUS=$(grep -n "WOLFSSL_AESGCM_STREAM" ./wolfssl/options.h || echo "not found")
-        echo "$AESGCM_STREAM_STATUS"
-        
-        echo ""
-        echo "=== AES-GCM related definitions ==="
-        grep -n "GCM\|AESGCM" ./wolfssl/options.h || echo "No AES-GCM definitions found"
-    fi
-    printf "Done.\n"
-    cd ..
 
     if [ -z $LD_LIBRARY_PATH ]; then
       export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib"
