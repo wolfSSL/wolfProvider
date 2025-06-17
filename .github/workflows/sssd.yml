@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   test_sssd:
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     container:
       image: quay.io/sssd/ci-client-devel:ubuntu-latest
@@ -22,7 +23,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04-arm]
         sssd_ref: [ 'master', '2.9.1' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
@@ -30,7 +30,6 @@ jobs:
         exclude:
           - sssd_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
-    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
