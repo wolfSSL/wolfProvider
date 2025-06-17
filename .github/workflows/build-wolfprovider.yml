@@ -116,7 +116,7 @@ jobs:
           if [ "${{ matrix.os }}" = "ubuntu-24.04-arm" ]; then
             export OPENSSL_ARCH="linux-aarch64"
           fi
-          OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} WOLFPROV_DEBUG=1 ./scripts/build-wolfprovider.sh
 
       # This is potentially chewing up a lot of cache space.
       # Could investigate reducing the size of this cache.
