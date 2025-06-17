@@ -40,22 +40,29 @@ jobs:
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
+
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
         with:
-          fetch-depth: 1
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
 
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            scripts
             wolfssl-source
             wolfssl-install
             wolfprov-install
-            openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Checkout OSP
@@ -74,9 +81,14 @@ jobs:
       - name: Build and Test openssh-portable
         working-directory: openssh-portable
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
-          export ${{ matrix.force_fail }}
+          # Set environment variables
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Apply the patch for the correct version of OpenSSH
           if [ "${{ matrix.openssh_ref }}" != "master" ]; then

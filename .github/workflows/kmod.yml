@@ -1,0 +1,145 @@
+name: kmod Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ '*' ] #  'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_kmod:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        kmod_ref: [ 'master' ] #, 'v33' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+    steps:
+      # Checkout the source so we can run the check-workflow-result script
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+              .github
+
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install kmod dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            libtool \
+            meson \
+            pkg-config \
+            libzstd-dev \
+            liblzma-dev \
+            scdoc \
+            zlib1g-dev \
+            libtool \
+            dwarves
+
+          sudo apt install -y linux-image-$(uname -r)
+          # make sure openssl is not installed
+          # sudo apt remove openssl libssl-dev
+          sudo apt remove libssl-dev
+
+      - name: Download kmod
+        uses: actions/checkout@v4
+        with:
+          repository: kmod-project/kmod
+          ref: ${{ matrix.kmod_ref }}
+          path: kmod
+
+      - name: Setup package config file
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
+          printf "%s\n" \
+            "prefix=$GITHUB_WORKSPACE/openssl-install" \
+            "exec_prefix=\${prefix}" \
+            "libdir=\${exec_prefix}/lib64" \
+            "includedir=\${prefix}/include" \
+            "" \
+            "Name: OpenSSL-libcrypto" \
+            "Description: OpenSSL cryptography library" \
+            "Version: 3.5.0" \
+            "Libs: -L\${libdir} -lcrypto" \
+            "Cflags: -I\${includedir}" \
+            > "$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig/libcrypto.pc"
+
+      - name: Build kmod
+        working-directory: kmod
+        run: |
+          echo "expect lcrypto to be in $GITHUB_WORKSPACE/openssl-install/lib64:"
+          ls -l $GITHUB_WORKSPACE/openssl-install/lib64
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export PKG_CONFIG_PATH=$PWD/build/meson-private:$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
+          meson setup build -Dbuild-tests=true
+          meson compile -C build
+
+      - name: Run kmod tests
+        working-directory: kmod
+        run: |
+          # Set up the environment for wolfProvider
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export PKG_CONFIG_PATH=$PWD/build/meson-private:$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig
+          export ${{ matrix.force_fail }}
+          export SHELL=/bin/bash
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
+          # Run tests
+          meson compile -C build
+
+          # Logs written to build/meson-logs/testlog.txt
+
+          # Capture result
+          # TEST_RESULT=$(tail -1 ./test/check_cjose.log | grep PASS; echo $?)
+          # $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} cjose
