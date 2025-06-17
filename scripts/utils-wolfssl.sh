@@ -119,6 +119,12 @@ install_wolfssl() {
             cd XXX-fips-test
         fi
 
+        # Disable assembly for ARM builds to avoid compatibility issues
+        if [ "$OPENSSL_ARCH" = "linux-aarch64" ]; then
+            printf "ARM build detected, disabling assembly optimizations ... "
+            CONF_ARGS+=" --disable-asm"
+        fi
+
         ./configure ${CONF_ARGS} ${WOLFSSL_CONFIG_OPTS} CFLAGS="${WOLFSSL_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR running ./configure\n"
