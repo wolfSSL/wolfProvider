@@ -2184,6 +2184,8 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     return ok;
 }
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
+
 /** PBKDF2 OPID. */
 unsigned char pbkdf2_oid[] = {
     42, 134, 72, 134, 247, 13, 1, 5, 12
@@ -2260,6 +2262,8 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
 
     return ok;
 }
+
+#endif
 
 /**
  * Construct parameters from RSA key and pass off to callback.
