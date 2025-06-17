@@ -17,7 +17,7 @@ jobs:
     name: Check for spelling errors
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04-arm]
+        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
     steps:

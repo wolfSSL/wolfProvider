@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04-arm]
+        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
         liboauth2_ref: [ 'v1.4.5.4' ] # No master with patch
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]

@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04-arm]
+        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
         cjose_ref: [ 'master', 'v0.6.2.1' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]

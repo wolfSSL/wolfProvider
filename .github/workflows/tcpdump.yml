@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04-arm]
+        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         tcpdump_ref: [ 'master', 'tcpdump-4.99.3' ]

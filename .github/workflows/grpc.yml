@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04-arm]
+        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
         include:
           - grpc_ref: v1.60.0 # TODO: Add master
             tests: >-

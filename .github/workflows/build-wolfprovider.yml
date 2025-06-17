@@ -19,7 +19,7 @@ jobs:
     name: Build wolfProvider
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04-arm]
+        os: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     outputs:
