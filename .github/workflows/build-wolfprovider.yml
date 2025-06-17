@@ -81,7 +81,7 @@ jobs:
             openssl-source
             openssl-install
 
-          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
+          key: ossl-depends-${{ matrix.os }}-${{ steps.openssl-ref.outputs.ref }}
           lookup-only: false
 
       # Convert WolfSSL branch name to commit hash if needed
@@ -107,7 +107,7 @@ jobs:
             wolfssl-source
             wolfssl-install
 
-          key: wolfssl-depends-${{ steps.wolfssl-ref.outputs.ref }}
+          key: wolfssl-depends-${{ matrix.os }}-${{ steps.wolfssl-ref.outputs.ref }}
           lookup-only: false
 
       - name: Build wolfProvider
@@ -142,7 +142,7 @@ jobs:
           path: |
             openssl-source
             openssl-install
-          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
+          key: ossl-depends-${{ matrix.os }}-${{ steps.openssl-ref.outputs.ref }}
 
       - name: Save WolfSSL into cache
         if: steps.wolfssl-cache.outputs.cache-hit != 'true'
@@ -151,7 +151,7 @@ jobs:
           path: |
             wolfssl-source
             wolfssl-install
-          key: wolfssl-depends-${{ steps.wolfssl-ref.outputs.ref }}
+          key: wolfssl-depends-${{ matrix.os }}-${{ steps.wolfssl-ref.outputs.ref }}
 
       - name: Print errors
         if: ${{ failure() }}
