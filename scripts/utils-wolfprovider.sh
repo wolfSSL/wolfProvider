@@ -62,13 +62,6 @@ install_wolfprov() {
             WOLFPROV_CONFIG_OPTS+=" --enable-debug"
         fi
 
-        # Add ARM-specific configuration
-        if [ "$OPENSSL_ARCH" = "linux-aarch64" ]; then
-            printf "ARM build detected for wolfProvider ... "
-            # Ensure consistent behavior across architectures
-            WOLFPROV_CONFIG_CFLAGS+=" -DWOLFSSL_AARCH64_BUILD"
-        fi
-
         ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
         RET=$?
 
