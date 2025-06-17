@@ -90,10 +90,18 @@ install_openssl() {
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            ./config shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
+            if [ "$OPENSSL_ARCH" = "linux-aarch64" ]; then
+                ./Configure linux-aarch64 shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
+            else
+                ./config shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
+            fi
             RET=$?
         else
-            ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+            if [ "$OPENSSL_ARCH" = "linux-aarch64" ]; then
+                ./Configure linux-aarch64 shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+            else
+                ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+            fi
             RET=$?
         fi
         if [ $RET != 0 ]; then
