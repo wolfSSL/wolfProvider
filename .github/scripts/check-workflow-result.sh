@@ -271,6 +271,21 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "Error: tcpdump-test.log not found"
             exit 1
         fi
+    # ----- TNFTP -----
+    elif [ "$TEST_SUITE" = "tnftp" ]; then
+        if [ -f "tnftp-test.log" ]; then
+            # Check for expected 7 failed tests (ESP/crypto segfaults)
+            if grep -q "SSL context creation failed" tnftp-test.log; then
+                echo "PASS: tnftp tests failed as expected with force fail enabled"
+                exit 0
+            else
+                echo "FAIL: tnftp tests did not fail as expected"
+                exit 1
+            fi
+        else
+            echo "Error: tnftp-test.log not found"
+            exit 1
+        fi
     # ----- IPERF -----
     elif [ "$TEST_SUITE" = "iperf" ]; then
         IPERF_TEST_LOG="iperf-test.log"

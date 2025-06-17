@@ -26,14 +26,13 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
+        tcpdump_ref: [ 'master', 'tcpdump-4.99.3' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
-        tcpdump_ref: [ 'master', 'tcpdump-4.99.3' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - tcpdump_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
-
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -99,14 +98,14 @@ jobs:
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
-          
+
           # Run tests
           make check 2>&1 | tee tcpdump-test.log
           TEST_RESULT=$?
-          
+
           if [ $TEST_RESULT -ne 0 ]; then
             grep -A2 -B2 "exit code\|failed\|FAILED" tcpdump-test.log || true
           fi
-          
+
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tcpdump
 
