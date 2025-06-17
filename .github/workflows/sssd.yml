@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os_ref: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
+        os: [ubuntu-22.04, ubuntu-24.04-arm]
         sssd_ref: [ 'master', '2.9.1' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
@@ -30,27 +30,28 @@ jobs:
         exclude:
           - sssd_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
-    runs-on: ${{ matrix.os_ref }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
-        uses: actions/cache/restore@v4
+      # Check if this version of wolfssl/wolfprovider has already been built,
+      # mark to cache these items on post if we do end up building
+      - name: Checking wolfSSL/wolfProvider in cache
+        uses: actions/cache@v4
         id: wolfprov-cache
         with:
           path: |
-            scripts
             wolfssl-source
             wolfssl-install
             wolfprov-install
             openssl-install
             provider.conf
 
-          key: wolfprov-${{ matrix.os_ref }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          fail-on-cache-miss: true
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          lookup-only: true
 
       # If not yet built this version, build it now
       - name: Build wolfProvider

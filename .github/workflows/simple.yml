@@ -13,6 +13,18 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
+  build-wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      os_ref: ${{ matrix.os_ref }}
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        os_ref: [ 'ubuntu-22.04', 'ubuntu-24.04-arm' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'master', 'openssl-3.5.0' ]
+
   simple_test:
     name: Simple Test
     timeout-minutes: 20
@@ -43,12 +55,6 @@ jobs:
 
           key: wolfprov-${{ matrix.os_ref }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
-
-      # If not yet built this version, build it now
-      - name: Build wolfProvider
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
-        run: |
-          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Run simple tests
         run: |

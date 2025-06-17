@@ -90,21 +90,10 @@ install_openssl() {
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            if [ "$OPENSSL_ARCH" = "linux-aarch64" ]; then
-                echo "Configuring OpenSSL for ARM64"
-                ./Configure linux-aarch64 shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug no-asm >>$LOG_FILE 2>&1
-            else
-                ./config shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
-            fi
+            ./config shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
             RET=$?
         else
-            if [ "$OPENSSL_ARCH" = "linux-aarch64" ]; then
-                echo "Configuring OpenSSL for ARM64"
-                ./Configure linux-aarch64 shared --prefix=${OPENSSL_INSTALL_DIR} no-asm >>$LOG_FILE 2>&1
-            else
-                ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-            fi
-            RET=$?
+            ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
         fi
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
