@@ -44,12 +44,11 @@ jobs:
         id: wolfprov-cache
         with:
           path: |
-            scripts
-            wolfssl-source
             wolfssl-install
             wolfprov-install
-            openssl-install
-            provider.conf
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true

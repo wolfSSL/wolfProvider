@@ -34,27 +34,13 @@ jobs:
         id: wolfprov-cache
         with:
           path: |
-            scripts
-            wolfssl-source
             wolfssl-install
             wolfprov-install
-            openssl-install
-            provider.conf
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          lookup-only: true
-
-      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
-      - name: Checking OpenSSL in cache
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
-        uses: actions/cache@v4
-        id: openssl-cache
-        with:
-          path: |
-            openssl-source
-            openssl-install
-
-          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
           lookup-only: true
 
       # If not yet built this version, build it now
