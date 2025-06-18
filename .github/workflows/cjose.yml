@@ -45,21 +45,18 @@ jobs:
         id: wolfprov-cache-restore
         with:
           path: |
-            scripts
-            wolfssl-source
             wolfssl-install
             wolfprov-install
-            openssl-install
-            provider.conf
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install cjose dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install build-essential autoconf libtool pkg-config clang libc++-dev
-          sudo apt-get install libjansson-dev check
+          sudo apt-get install -y libjansson-dev check
 
       - name: Download cjose
         uses: actions/checkout@v4

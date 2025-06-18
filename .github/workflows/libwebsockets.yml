@@ -42,19 +42,18 @@ jobs:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
-          sparse-checkout: |
-              .github
+          fetch-depth: 1
+
       - name: Retrieving wolfProvider from cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache-restore
         with:
           path: |
-            scripts
-            wolfssl-source
             wolfssl-install
             wolfprov-install
-            openssl-install
-            provider.conf
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
@@ -77,6 +76,7 @@ jobs:
           cmake ..
           make -j$(nproc)
           sudo make install
+
       - name: Run libwebsockets tests
         working-directory: libwebsockets
         run: |
