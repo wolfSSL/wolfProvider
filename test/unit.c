@@ -137,6 +137,10 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_gcm_fixed, NULL),
     TEST_DECL(test_aes128_gcm_tls, NULL),
 #endif
+#ifdef WP_HAVE_CHACHAPOLY
+    TEST_DECL(test_chacha20_poly1305, NULL),
+#endif
+
 #ifdef WP_HAVE_AESCCM
     TEST_DECL(test_aes128_ccm, NULL),
     TEST_DECL(test_aes192_ccm, NULL),
