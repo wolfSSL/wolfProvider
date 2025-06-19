@@ -938,7 +938,7 @@ static int wp_rsa_sign(wp_RsaSigCtx* ctx, unsigned char* sig, size_t* sigLen,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_PK, "wp_rsa_sign");
+    WOLFPROV_ENTER(WP_LOG_PK, __FUNCTION__);
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -1337,7 +1337,7 @@ static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_PK, "wp_rsa_verify");
+    WOLFPROV_ENTER(WP_LOG_PK, __FUNCTION__);
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
