@@ -12,52 +12,140 @@ on:
     outputs:
       cache_key:
         description: "Cache key for the build artifacts"
-        value: ${{ jobs.build_wolfprovider.outputs.cache_key }}
+        value: ${{ jobs.build_wolfprovider_common.outputs.cache_key }}
 
 jobs:
-  build_wolfprovider:
+  build_wolfprovider_common:
     name: Build wolfProvider
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     outputs:
-      cache_key: wolfprov-${{ inputs.wolfssl_ref }}-${{ github.sha }}
+      cache_key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
       # Check if this version of wolfssl/wolfprovider has already been built,
       # mark to cache these items on post if we do end up building
+      # On a push, the first workflow(s) will complete the build and cache it 
+      # and any delayed workflow will be able to utilize it.
+      # This is not designed to cache builds across commits.
       - name: Checking wolfSSL/wolfProvider in cache
         uses: actions/cache@v4
         id: wolfprov-cache
         with:
           path: |
+            scripts
             wolfssl-source
             wolfssl-install
             wolfprov-install
+            openssl-install
             provider.conf
 
-          key: wolfprov-${{ inputs.wolfssl_ref }}-${{ github.sha }}
+          key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
           lookup-only: true
 
-      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      # if cache hit, exit the workflow
+      - name: Exit workflow if cache hit
+        if: steps.wolfprov-cache.outputs.cache-hit == 'true'
+        run: |
+          echo "Found cached build, exiting workflow"
+          exit 0
+
+      - name: Checkout wolfProvider
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Convert OpenSSL branch name to commit hash if needed
+      - name: Get OpenSSL commit hash
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        id: openssl-ref
+        run: |
+          if [[ "${{ inputs.openssl_ref }}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ref=${{ inputs.openssl_ref }}" >> $GITHUB_OUTPUT
+          else
+            sha=$(curl -s "https://api.github.com/repos/openssl/openssl/commits/${{ inputs.openssl_ref }}" | jq -r '.sha')
+            echo "ref=$sha" >> $GITHUB_OUTPUT
+            echo "OpenSSL ref ${{ inputs.openssl_ref }} is commit $sha"
+          fi
+
+      # Look for a cached version of OpenSSL
       - name: Checking OpenSSL in cache
         if: steps.wolfprov-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         id: openssl-cache
         with:
           path: |
             openssl-source
             openssl-install
 
-          key: ossl-depends-${{ inputs.openssl_ref }}-${{ github.sha }}
-          lookup-only: true
+          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
+          lookup-only: false
 
-      # If not yet built this version, build it now
+      # Convert WolfSSL branch name to commit hash if needed
+      - name: Get WolfSSL commit hash
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        id: wolfssl-ref
+        run: |
+          if [[ "${{ inputs.wolfssl_ref }}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ref=${{ inputs.wolfssl_ref }}" >> $GITHUB_OUTPUT
+          else
+            sha=$(curl -s "https://api.github.com/repos/wolfssl/wolfssl/commits/${{ inputs.wolfssl_ref }}" | jq -r '.sha')
+            echo "ref=$sha" >> $GITHUB_OUTPUT
+            echo "WolfSSL ref ${{ inputs.wolfssl_ref }} is commit $sha"
+          fi
+
+      # Look for a cached version of WolfSSL
+      - name: Checking WolfSSL in cache
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        id: wolfssl-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+
+          key: wolfssl-depends-${{ steps.wolfssl-ref.outputs.ref }}
+          lookup-only: false
+
       - name: Build wolfProvider
         if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      # This is potentially chewing up a lot of cache space. 
+      # Could investigate reducing the size of this cache.
+      # Note that we use actions/cache/save and actions/cache/restore instead of 
+      # actions/cache to reduce the chance of a cache lock issue.
+      - name: Save wolfProvider into cache
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with: 
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            openssl-install
+            provider.conf
+          key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+
+      # If openssl cache miss, save it to the cache
+      - name: Save OpenSSL into cache
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with: 
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
+
+      - name: Save WolfSSL into cache
+        if: steps.wolfssl-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with: 
+          path: |
+            wolfssl-source
+            wolfssl-install
+          key: wolfssl-depends-${{ steps.wolfssl-ref.outputs.ref }}
 
       - name: Print errors
         if: ${{ failure() }}

@@ -1,17 +1,12 @@
-name: liboauth2 Tests
-
-# START OF COMMON SECTION
+name: libfido2 Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-# END OF COMMON SECTION
-
 jobs:
   build_wolfprovider:
     uses: ./.github/workflows/build-wolfprovider.yml
@@ -22,23 +17,24 @@ jobs:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
-
-  test_liboauth2:
+  test_libfido2:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    timeout-minutes: 20
+    timeout-minutes: 15
     strategy:
       matrix:
-        liboauth2_ref: [ 'v1.4.5.4' ] # No master with patch
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        libfido2_ref: [ 'main', '1.15.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - libfido2_ref: 'main'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
@@ -50,42 +46,45 @@ jobs:
             wolfprov-install
             openssl-install
             provider.conf
-
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
-
-      - name: Install liboauth2 dependencies
+      - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libssl-dev libcurl4-openssl-dev libjansson-dev \
-            libcjose-dev pkg-config build-essential apache2-dev libhiredis-dev \
-            libmemcached-dev autotools-dev autoconf automake libtool check
-
-      - name: Checkout OSP
+          sudo apt-get install -y build-essential cmake pkg-config libssl-dev libudev-dev zlib1g-dev libcbor-dev libpcsclite-dev pcscd
+      - name: Checkout libfido2
         uses: actions/checkout@v4
         with:
-          repository: wolfssl/osp
-          path: osp
-
-      - name: Build liboauth2
+          repository: Yubico/libfido2
+          path: libfido2_repo
+          ref: ${{ matrix.libfido2_ref }}
+          fetch-depth: 1
+      - name: Build and install libfido2
+        working-directory: libfido2_repo
         run: |
-          git clone https://github.com/OpenIDC/liboauth2.git
-          cd liboauth2
-          git checkout ${{ matrix.liboauth2_ref }}
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/liboauth2/liboauth2-${{ matrix.liboauth2_ref }}-wolfprov.patch
-
-          autoreconf -fiv
-          ./configure
+          mkdir build
+          cd build
+          cmake -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/libfido2-install ..
           make -j$(nproc)
-
-      - name: Run liboauth2 tests
-        working-directory: liboauth2
+          make install
+      - name: Run libfido2 tests
+        working-directory: libfido2_repo/build
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
-          # Build and run tests
-          make check 2>&1 | tee liboauth2-test.log
-          TEST_RESULT=$?
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} liboauth2
+          # Run tests, excluding regress_dev which requires hardware/fails in CI
+          ctest --exclude-regex "regress_dev" 2>&1 | tee libfido2-test.log
+
+          # Check test results directly in YAML
+          if grep -q "100% tests passed" libfido2-test.log; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libfido2
+
+
+

@@ -262,6 +262,32 @@ static int wp_ecx_digest_verify_init(wp_EcxSigCtx *ctx, const char *mdName,
     return ok;
 }
 
+/** Parameters that we support getting from the ECX signature context. */
+static const OSSL_PARAM wp_supported_gettable_ctx_params[] = {
+    OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_ALGORITHM_ID, NULL, 0),
+    OSSL_PARAM_END
+};
+/**
+ * Returns an array of ECX signature context parameters that can be retrieved.
+ *
+ * @param [in] ctx      ECX signature context object. Unused.
+ * @param [in] provCtx  wolfProvider context object. Unused.
+ * @return  Array of parameters.
+ */
+static const OSSL_PARAM *wp_ecx_gettable_ctx_params(wp_EcxSigCtx *ctx,
+    WOLFPROV_CTX *provCtx)
+{
+    (void)ctx;
+    (void)provCtx;
+    return wp_supported_gettable_ctx_params;
+}
+
+#ifdef WP_HAVE_ED25519
+
+/*
+ * Ed25519
+ */
+
 /**
  * Put DER encoding of the Ed25519 signature algorithm in the parameter object.
  *
@@ -309,80 +335,6 @@ static int wp_ed25519_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
     WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
-
-/**
- * Put DER encoding of the Ed448 signature algorithm in the parameter object.
- *
- * @param [in] ctx  ECX signature context object.
- * @param [in] p    Parameter object.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ed448_get_alg_id(wp_EcxSigCtx *ctx, OSSL_PARAM *p)
-{
-    /* Ed448 Algorithm Id: SEQ OBJ 2b 65 71 */
-    static const byte ed448AlgId[] = {
-        0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x71,
-    };
-
-    (void)ctx;
-
-    return OSSL_PARAM_set_octet_string(p, ed448AlgId, sizeof(ed448AlgId));
-}
-
-/**
- * Put data from Ed448 signture context object into parameter objects.
- *
- * @param [in] ctx     ECX signature context object.
- * @param [in] params  Array of parameter objects.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ed448_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
-{
-    int ok = 1;
-    OSSL_PARAM *p;
-
-    if (ctx == NULL) {
-        ok = 0;
-    }
-
-    if (ok) {
-        p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
-        if (p != NULL) {
-            ok = wp_ed448_get_alg_id(ctx, p);
-        }
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/** Parameters that we support getting from the ECX signature context. */
-static const OSSL_PARAM wp_supported_gettable_ctx_params[] = {
-    OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_ALGORITHM_ID, NULL, 0),
-    OSSL_PARAM_END
-};
-/**
- * Returns an array of ECX signature context parameters that can be retrieved.
- *
- * @param [in] ctx      ECX signature context object. Unused.
- * @param [in] provCtx  wolfProvider context object. Unused.
- * @return  Array of parameters.
- */
-static const OSSL_PARAM *wp_ecx_gettable_ctx_params(wp_EcxSigCtx *ctx,
-    WOLFPROV_CTX *provCtx)
-{
-    (void)ctx;
-    (void)provCtx;
-    return wp_supported_gettable_ctx_params;
-}
-
-#ifdef WP_HAVE_ED25519
-
-/*
- * Ed25519
- */
 
 /**
  * Sign the data using an Ed25519 key.
@@ -528,6 +480,54 @@ const OSSL_DISPATCH wp_ed25519_signature_functions[] = {
 /*
  * Ed448
  */
+
+/**
+ * Put DER encoding of the Ed448 signature algorithm in the parameter object.
+ *
+ * @param [in] ctx  ECX signature context object.
+ * @param [in] p    Parameter object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed448_get_alg_id(wp_EcxSigCtx *ctx, OSSL_PARAM *p)
+{
+    /* Ed448 Algorithm Id: SEQ OBJ 2b 65 71 */
+    static const byte ed448AlgId[] = {
+        0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x71,
+    };
+
+    (void)ctx;
+
+    return OSSL_PARAM_set_octet_string(p, ed448AlgId, sizeof(ed448AlgId));
+}
+
+/**
+ * Put data from Ed448 signture context object into parameter objects.
+ *
+ * @param [in] ctx     ECX signature context object.
+ * @param [in] params  Array of parameter objects.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed448_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
+{
+    int ok = 1;
+    OSSL_PARAM *p;
+
+    if (ctx == NULL) {
+        ok = 0;
+    }
+
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
+        if (p != NULL) {
+            ok = wp_ed448_get_alg_id(ctx, p);
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
 
 /**
  * Sign the data using an Ed448 key.

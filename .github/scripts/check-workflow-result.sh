@@ -255,6 +255,7 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             fi
         else
             echo "Error: liboauth2-test.log not found"
+            exit 1
         fi
     # ----- TCPDUMP -----
     elif [ "$TEST_SUITE" = "tcpdump" ]; then
@@ -285,7 +286,7 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
                 echo "  Sent: $sender_gb GB, Received: $receiver_gb GB"
                 exit 1
             fi
-        else 
+        else
             echo "Error: $IPERF_TEST_LOG not found"
             exit 1
         fi

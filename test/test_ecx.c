@@ -202,8 +202,16 @@ int test_ecx_sign_verify_raw_priv(void *data)
 
     EVP_PKEY *pkey_ossl = NULL;
     EVP_PKEY *pkey_wolf = NULL;
+    #if defined(WP_HAVE_ED25519) && defined(WP_HAVE_ED448)
     unsigned char readback_ossl[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
     unsigned char readback_wolf[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
+    #elif defined(WP_HAVE_ED25519)
+    unsigned char readback_ossl[ED25519_KEY_SIZE];
+    unsigned char readback_wolf[ED25519_KEY_SIZE];
+    #elif defined(WP_HAVE_ED448)
+    unsigned char readback_ossl[ED448_KEY_SIZE];
+    unsigned char readback_wolf[ED448_KEY_SIZE];
+    #endif
 
     #ifdef WP_HAVE_ED25519
     unsigned char sig_ed25519[ED25519_SIG_SIZE];
@@ -335,8 +343,16 @@ int test_ecx_sign_verify_raw_pub(void *data)
     const unsigned char *p = NULL;
     unsigned char buf[128];
     size_t bufLen = 0;
+    #if defined(WP_HAVE_ED25519) && defined(WP_HAVE_ED448)
     unsigned char readback_ossl[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
     unsigned char readback_wolf[MAX(ED25519_KEY_SIZE, ED448_KEY_SIZE)];
+    #elif defined(WP_HAVE_ED25519)
+    unsigned char readback_ossl[ED25519_KEY_SIZE];
+    unsigned char readback_wolf[ED25519_KEY_SIZE];
+    #elif defined(WP_HAVE_ED448)
+    unsigned char readback_ossl[ED448_KEY_SIZE];
+    unsigned char readback_wolf[ED448_KEY_SIZE];
+    #endif
 
     #ifdef WP_HAVE_ED25519
     unsigned char sig_ed25519[ED25519_SIG_SIZE];
