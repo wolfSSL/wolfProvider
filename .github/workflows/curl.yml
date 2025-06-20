@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        curl_ref: [ 'master', 'curl-8_4_0' ]
+        curl_ref: [ 'master', 'curl-8_4_0', 'curl-7_88_1' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
@@ -48,12 +48,11 @@ jobs:
         id: wolfprov-cache
         with:
           path: |
-            scripts
-            wolfssl-source
             wolfssl-install
             wolfprov-install
-            openssl-install
-            provider.conf
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
