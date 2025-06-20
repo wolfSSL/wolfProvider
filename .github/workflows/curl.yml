@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          
+
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
@@ -89,7 +89,6 @@ jobs:
           export CURL_REF=${{ matrix.curl_ref }}
 
           # Run tests and save output to test.log
-          mkdir -p tests
-          make -j$(nproc) test-ci 2>&1 | tee tests/test.log
+          make -j$(nproc) test-ci 2>&1 | tee curl-test.log
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl
