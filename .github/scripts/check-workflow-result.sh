@@ -41,11 +41,11 @@ fi
 if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
     # ----- CURL -----
     if [ "$TEST_SUITE" = "curl" ]; then
-        if [ -f "tests/curl-test.log" ]; then
+        if [ -f "curl-test.log" ]; then
             # Extract and clean the failed test list from the log
-            ACTUAL_FAILS=$(grep -a '^TESTFAIL: These test cases failed:' tests/curl-test.log | sed 's/.*failed: //')
+            ACTUAL_FAILS=$(grep -a '^TESTFAIL: These test cases failed:' curl-test.log | sed 's/.*failed: //')
         else
-            echo "Error: tests/curl-test.log not found"
+            echo "Error: curl-test.log not found"
             exit 1
         fi
 
@@ -184,9 +184,9 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
         fi
     # ----- NET-SNMP -----
     elif [ "$TEST_SUITE" = "net-snmp" ]; then
-        if [ -f "tests/net-snmp-test.log" ]; then
+        if [ -f "net-snmp-test.log" ]; then
             # Check if we have exactly 29 failed tests and a FAIL result
-            if grep -q "We failed these 29 tests:" tests/net-snmp-test.log && grep -q "Result: FAIL" tests/net-snmp-test.log; then
+            if grep -q "We failed these 29 tests:" net-snmp-test.log && grep -q "Result: FAIL" net-snmp-test.log; then
                 echo "PASS: net-snmp tests failed as expected with force fail enabled"
                 exit 0
             else
@@ -214,9 +214,9 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
         fi
     # ----- STUNNEL -----
     elif [ "$TEST_SUITE" = "stunnel" ]; then
-        if [ -f "$GITHUB_WORKSPACE/tests/stunnel-test.log" ]; then
+        if [ -f "stunnel-test.log" ]; then
             # Check for expected error patterns
-            if grep -q "failed: 41" "$GITHUB_WORKSPACE/tests/stunnel-test.log"; then
+            if grep -q "failed: 41" "stunnel-test.log"; then
                 echo "PASS: stunnel tests failed as expected with force fail enabled"
                 exit 0
             else
