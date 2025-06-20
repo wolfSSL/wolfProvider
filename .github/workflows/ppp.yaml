@@ -1,0 +1,105 @@
+name: PPP Tests
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_ppp:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        ppp_ref: [ 'master', 'ppp-2.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+      exclude:
+        - ppp_ref: 'master'
+          force_fail: 'WOLFPROV_FORCE_FAIL=1'
+
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Retrieve OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieve wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential flex bison autoconf libtool
+
+      - name: Checkout PPP
+        uses: actions/checkout@v4
+        with:
+          repository: ppp-project/ppp
+          path: ppp_repo
+          ref: ${{ matrix.ppp_ref }}
+
+      - name: Build and install PPP
+        working-directory: ppp_repo
+        run: |
+          if [ -f ./autogen.sh ]; then
+            ./autogen.sh
+          elif [ ! -f ./configure ]; then
+            autoreconf -fiv
+          fi
+          ./configure --prefix=$GITHUB_WORKSPACE/ppp-install
+          make -j$(nproc)
+          make install
+
+      - name: Run PPP tests
+        working-directory: ppp_repo
+        run: |
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64:$LD_LIBRARY_PATH"
+          export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
+          export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
+          
+          export ${{ matrix.force_fail }}
+          
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          
+          # Run tests
+          make check 2>&1 | tee ppp-test.log
+          TEST_RESULT=$?
+          
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} ppp
