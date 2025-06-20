@@ -1395,17 +1395,32 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
             }
         }
         else {
-            /* Only the most recent auth err matters */
-            ctx->authErr = 0;
-            rc = wc_AesGcmDecrypt(&ctx->aes, tmp, ctx->in, (word32)ctx->inLen,
-                iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
-                ctx->aad, (word32)ctx->aadLen);
-            if (rc == AES_GCM_AUTH_E) {
-                ctx->authErr = 1;
-                rc = 0;
+            if (done) {
+                /* Only the most recent auth err matters */
+                ctx->authErr = 0;
+                rc = wc_AesGcmDecrypt(&ctx->aes, tmp, ctx->in, (word32)ctx->inLen,
+                    iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+                    ctx->aad, (word32)ctx->aadLen);
+                if (rc == AES_GCM_AUTH_E) {
+                    ctx->authErr = 1;
+                    rc = 0;
+                }
+                if (rc != 0) {
+                    ok = 0;
+                }
             }
-            if (rc != 0) {
-                ok = 0;
+            else {
+                byte tmpTag[16];
+
+                /* wc_AesGcmDecrypt does not yield plaintext on auth tag error.
+                 * For all calls except final we use encrypt instead to yield
+                 * the proper plaintext */
+                rc = wc_AesGcmEncrypt_ex(&ctx->aes, tmp, ctx->in,
+                    (word32)ctx->inLen, iv, (word32)ctx->ivLen, (byte*)tmpTag,
+                    (word32)ctx->tagLen, ctx->aad, (word32)ctx->aadLen);
+                if (rc != 0) {
+                    ok = 0;
+                }
             }
         }
         /* Copy out relevant portion of output */
@@ -1424,6 +1439,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
         ctx->aadLen = 0;
         ctx->aadSet = 0;
         OPENSSL_free(ctx->in);
+        ctx->bufSize = 0;
         ctx->in = NULL;
         ctx->inLen = 0;
     }
