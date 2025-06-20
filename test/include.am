@@ -13,6 +13,7 @@ DISTCLEANFILES += test/.libs/unit.test
 test_unit_test_CPPFLAGS  = -DCERTS_DIR='"$(abs_top_srcdir)/certs"'
 test_unit_test_SOURCES = \
 	test/test_aestag.c \
+	test/test_chachapoly.c \
 	test/test_cipher.c \
 	test/test_cmac.c \
 	test/test_dh.c \

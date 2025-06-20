@@ -497,6 +497,9 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
      "" },
 #endif
 
+    { WP_NAMES_CHACHA20_POLY1305, WOLFPROV_PROPERTIES, wp_chacha20_poly1305_functions,
+    "" },
+
     { NULL, NULL, NULL, NULL }
 };
 

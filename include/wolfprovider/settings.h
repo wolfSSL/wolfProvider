@@ -161,6 +161,9 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
+#if defined(HAVE_CHACHA) && defined(HAVE_POLY1305)
+    #define WP_HAVE_CHACHAPOLY
+#endif
 #ifndef WP_NO_FORCE_FAIL
     #define WP_CHECK_FORCE_FAIL
 #endif
