@@ -25,6 +25,7 @@
 #include <wolfprovider/internal.h>
 #include <wolfprovider/wp_wolfprov.h>
 #include <wolfprovider/wp_logging.h>
+#include <wolfprovider/alg_funcs.h>
 
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
@@ -72,6 +73,76 @@ void wp_provctx_unlock_rng(WOLFPROV_CTX* provCtx)
     wc_UnLockMutex(&provCtx->rng_mutex);
 }
 #endif
+
+/**
+ * Lock the mutex.
+ *
+ * This function locks the mutex and translates the return value.
+ * Use wp_unlock() to unlock after operations are complete.
+ *
+ * @param [in] mutex  Mutex object.
+ * @return  1 on success.
+ * @return  0 on failure or when single-threaded build.
+ */
+int wp_lock(wolfSSL_Mutex *mutex)
+{
+#ifndef WP_SINGLE_THREADED
+    int ok = 1;
+    int rc;
+
+    if (mutex == NULL) {
+        ok = 0;
+    }
+    else {
+        rc = wc_LockMutex(mutex);
+        if (rc < 0) {
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+#else
+    (void)mutex;
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    return 1;
+#endif
+}
+
+/**
+ * Unlock the mutex.
+ *
+ * This function unlocks the mutex and translates the return value.
+ * Should only be called after a successful wp_lock() call.
+ *
+ * @param [in] mutex  Mutex object.
+ * @return  1 on success.
+ * @return  0 on failure or when single-threaded build.
+ */
+int wp_unlock(wolfSSL_Mutex* mutex)
+{
+#ifndef WP_SINGLE_THREADED
+    int ok = 1;
+    int rc;
+
+    if (mutex == NULL) {
+        ok = 0;
+    }
+    else {
+        rc = wc_UnLockMutex(mutex);
+        if (rc < 0) {
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+#else
+    (void)mutex;
+    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    return 1;
+#endif
+}
 
 
 /**

@@ -331,6 +331,17 @@ int wp_rsa_get_bits(wp_Rsa* rsa)
 }
 
 /**
+ * Get the mutex object from the RSA key object.
+ *
+ * @param [in] rsa  RSA key object.
+ * @return  Pointer to wolfSSL mutex object.
+ */
+wolfSSL_Mutex* wp_rsa_get_mutex(wp_Rsa* rsa)
+{
+    return &rsa->mutex;
+}
+
+/**
  * Check the RSA key size is valid.
  *
  * @param [in] keySize    RSA key size in bits.
