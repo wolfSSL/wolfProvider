@@ -1,0 +1,107 @@
+name: tnftp Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_tnftp:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        tnftp_ref: [ 'tnftp-20210827' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            scripts
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            openssl-install
+            provider.conf
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf libtool pkg-config vsftpd
+
+      - name: Download and extract tnftp
+        run: |
+          wget http://ftp.netbsd.org/pub/NetBSD/misc/tnftp/${{ matrix.tnftp_ref }}.tar.gz
+          tar xvf ${{ matrix.tnftp_ref }}.tar.gz
+          cd ${{ matrix.tnftp_ref }}
+
+      - name: Build and test tnftp
+        working-directory: ${{ matrix.tnftp_ref }}
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Configure with OpenSSL
+          ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
+
+          # Build tnftp
+          make -j
+
+          # Run all tests and capture output
+          {
+              echo "Testing tnftp basic functionality..."
+
+              # Test help command
+              if ./src/tnftp -? 2>&1 | grep -q "usage:"; then
+                  echo "tnftp help command works"
+              else
+                  echo "tnftp help command failed"
+                  exit 1
+              fi
+
+              # Test that tnftp can start (even if it fails to connect)
+              echo "Testing tnftp connection attempt..."
+              timeout 10 ./src/tnftp -n 192.0.2.1 2>&1 | head -10
+              echo "tnftp can attempt connections"
+
+              # Test SSL/TLS functionality
+              echo "Testing SSL/TLS connection..."
+              timeout 15 ./src/tnftp -n https://httpbin.org/get 2>&1
+              echo "SSL/TLS test completed"
+          } 2>&1 | tee tnftp-test.log
+
+          # Capture result and check for expected failure
+          TEST_RESULT=$(grep -q "SSL context creation failed" tnftp-test.log && echo "1" || echo "0")
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tnftp

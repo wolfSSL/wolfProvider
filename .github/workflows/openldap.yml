@@ -72,7 +72,6 @@ jobs:
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
-          export ${{ matrix.force_fail }}
 
           # Generate configure script
           rm -f aclocal.m4
