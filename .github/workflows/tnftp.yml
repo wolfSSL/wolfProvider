@@ -103,5 +103,5 @@ jobs:
           } 2>&1 | tee tnftp-test.log
 
           # Capture result and check for expected failure
-          grep -q "SSL context creation failed" tnftp-test.log; TEST_RESULT=$((!$?))
+          TEST_RESULT=$(grep -q "SSL context creation failed" tnftp-test.log && echo "1" || echo "0")
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tnftp

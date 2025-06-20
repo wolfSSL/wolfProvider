@@ -41,11 +41,11 @@ fi
 if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
     # ----- CURL -----
     if [ "$TEST_SUITE" = "curl" ]; then
-        if [ -f "tests/test.log" ]; then
+        if [ -f "tests/curl-test.log" ]; then
             # Extract and clean the failed test list from the log
-            ACTUAL_FAILS=$(grep -a '^TESTFAIL: These test cases failed:' tests/test.log | sed 's/.*failed: //')
+            ACTUAL_FAILS=$(grep -a '^TESTFAIL: These test cases failed:' tests/curl-test.log | sed 's/.*failed: //')
         else
-            echo "Error: tests/test.log not found"
+            echo "Error: tests/curl-test.log not found"
             exit 1
         fi
 
@@ -184,9 +184,9 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
         fi
     # ----- NET-SNMP -----
     elif [ "$TEST_SUITE" = "net-snmp" ]; then
-        if [ -f "tests/test.log" ]; then
+        if [ -f "tests/net-snmp-test.log" ]; then
             # Check if we have exactly 29 failed tests and a FAIL result
-            if grep -q "We failed these 29 tests:" tests/test.log && grep -q "Result: FAIL" tests/test.log; then
+            if grep -q "We failed these 29 tests:" tests/net-snmp-test.log && grep -q "Result: FAIL" tests/net-snmp-test.log; then
                 echo "PASS: net-snmp tests failed as expected with force fail enabled"
                 exit 0
             else
@@ -194,7 +194,7 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
                 exit 1
             fi
         else
-            echo "Error: tests/test.log not found"
+            echo "Error: tests/net-snmp-test.log not found"
             exit 1
         fi
     # ----- NGINX -----
