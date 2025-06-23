@@ -596,6 +596,7 @@ static int test_dh_krb5_keygen_ex(OSSL_LIB_CTX *libCtx)
     }
     if (err == 0) {
         spki = der;
+        der = NULL;
         spki_len = der_len;
     }
     /* We were previously producing an empty subject public key info which was
@@ -608,7 +609,12 @@ static int test_dh_krb5_keygen_ex(OSSL_LIB_CTX *libCtx)
         err = 1;
     }
 
-    OPENSSL_free(spki);
+    if (der) {
+        OPENSSL_free(spki);
+    }
+    if (spki) {
+        OPENSSL_free(spki);
+    }
     EVP_PKEY_free(key);
     EVP_PKEY_free(params);
     EVP_PKEY_CTX_free(ctx);
