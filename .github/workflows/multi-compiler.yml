@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build_wolfprovider:
-    name: Build with ${{ matrix.CC }}
+    name: Build with compiler ${{ matrix.CC }}, wolfssl ${{ matrix.wolfssl_ref }}, OpenSSL ${{ matrix.openssl_ref }}
     runs-on: ${{ matrix.OS }}
     timeout-minutes: 20
     strategy:
@@ -25,84 +25,112 @@ jobs:
             CXX: g++-9
             OS: ubuntu-latest
             wolfssl_ref: master
+            openssl_ref: master
           - CC: gcc-10
             CXX: g++-10
             OS: ubuntu-latest
             wolfssl_ref: master
+            openssl_ref: master
           - CC: gcc-10
             CXX: g++-10
             OS: ubuntu-latest
             wolfssl_ref: v5.8.0-stable
+            openssl_ref: master
           - CC: gcc-11
             CXX: g++-11
             OS: ubuntu-latest
             wolfssl_ref: master
+            openssl_ref: master
           - CC: gcc-12
             CXX: g++-12
             OS: ubuntu-latest
             wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-13
+            CXX: g++-13
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-14
+            CXX: g++-14
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
           - CC: clang-12
             CXX: clang++-12
             OS: ubuntu-22.04
             wolfssl_ref: master
+            openssl_ref: master
           - CC: clang-13
             CXX: clang++-13
             OS: ubuntu-22.04
             wolfssl_ref: master
+            openssl_ref: master
           - CC: clang-14
             CXX: clang++-14
             OS: ubuntu-latest
             wolfssl_ref: master
+            openssl_ref: master
           - CC: clang-15
             CXX: clang++-15
             OS: ubuntu-latest
             wolfssl_ref: master
+            openssl_ref: master
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }} automake libtool
 
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
         with:
-          path: |
-            scripts
-            wolfssl-source
-            wolfssl-install
-            wolfprov-install
-            provider.conf
+          fetch-depth: 1
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.CC }}-${{ github.sha }}
-          lookup-only: true
+      - name: Get OpenSSL commit hash
+        id: openssl-ref
+        run: |
+          sha=$(./scripts/resolve-ref.sh "${{ matrix.openssl_ref }}" "openssl/openssl")
+          echo "ref=$sha" >> "$GITHUB_OUTPUT"
+        env:
+          # Used token to bypass rate limits
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # If wolfssl/wolfprovider have not yet been built, pull ossl from cache
+      - name: Get WolfSSL commit hash
+        id: wolfssl-ref
+        run: |
+          sha=$(./scripts/resolve-ref.sh "${{ matrix.wolfssl_ref }}" "wolfssl/wolfssl")
+          echo "ref=$sha" >> "$GITHUB_OUTPUT"
+        env:
+          # Used token to bypass rate limits
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Look for a cached version of OpenSSL -- with this compiler version
       - name: Checking OpenSSL in cache
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         id: openssl-cache
         with:
           path: |
-            openssl-source
             openssl-install
+          key: openssl-depends-${{ matrix.CC }}-${{ steps.openssl-ref.outputs.ref }}
+          lookup-only: false
 
-          key: ossl-depends-${{ matrix.wolfssl_ref }}-${{ matrix.CC }}-${{ github.sha }}
-          lookup-only: true
+      # Look for a cached version of WolfSSL -- with this compiler version
+      - name: Checking WolfSSL in cache
+        uses: actions/cache@v4
+        id: wolfssl-cache
+        with:
+          path: |
+            wolfssl-install
+          key: wolfssl-depends-${{ matrix.CC }}-${{ steps.wolfssl-ref.outputs.ref }}
+          lookup-only: false
 
-      # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         env:
           CC: ${{ matrix.CC }}
           CXX: ${{ matrix.CXX }}
         run: |
-          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Print errors
         if: ${{ failure() }}
