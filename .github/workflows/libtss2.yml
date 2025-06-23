@@ -1,0 +1,109 @@
+name: tpm2-tss Tests
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_tpm2_tss:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        tpm2_tss_ref: [ 'master', '4.1.3']
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - tpm2_tss_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      # Replace system openssl with our version
+      - name: Setup OpenSSL
+        run: |
+          OPENSSL_SYSTEM=$(which openssl)
+          sudo rm ${OPENSSL_SYSTEM}
+          sudo ln -s $GITHUB_WORKSPACE/openssl-install/bin/openssl ${OPENSSL_SYSTEM}
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libcunit1-dev autoconf-archive \
+            gettext libcmocka-dev build-essential autoconf automake libtool \
+            libjson-c-dev libcurl4-openssl-dev acl libusb-1.0-0-dev
+      # ensure libssl-dev is not installed
+      - name: Ensure libssl-dev is not installed
+        run: |
+          if dpkg -l | grep -q libssl-dev; then
+            echo "libssl-dev is installed, removing it to avoid conflicts"
+            sudo apt-get remove -y libssl-dev
+          else
+            echo "libssl-dev is not installed, no action needed"
+          fi
+      - name: Checkout tpm2-tss
+        uses: actions/checkout@v4
+        with:
+          repository: tpm2-software/tpm2-tss
+          path: tpm2_tss_repo
+          ref: ${{ matrix.tpm2_tss_ref }}
+          fetch-depth: 1
+
+      # Apply patch to fix missing stdint.h includes in test files
+      - name: Apply patch for test source files
+        working-directory: tpm2_tss_repo
+        if: ${{ matrix.tpm2_tss_ref }} == '4.1.3'
+        run: |
+          perl -pi -e 's|(#include <cmocka\.h>)|#include <stdint.h>\n$1|' ./test/unit/*.c
+      - name: Build and install tpm2-tss
+        working-directory: tpm2_tss_repo
+        run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          ./bootstrap
+          ./configure --prefix=$PWD/tpm2-tss-install --with-crypto=ossl \
+            --enable-unit --includedir=$GITHUB_WORKSPACE/openssl-install/include
+          make -j$(nproc)
+          make install
+      - name: Run tpm2-tss tests
+        working-directory: tpm2_tss_repo
+        run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          make check 2>&1 || true
+          if $(grep -q "FAIL: test/unit" test-suite.log); then
+            TEST_RESULT=1
+            echo "Expected zero failures"
+          else
+            TEST_RESULT=0
+          fi
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tpm2-tss
