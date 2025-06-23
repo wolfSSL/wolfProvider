@@ -977,6 +977,16 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
     { WP_NAMES_DH, WP_DECODER_PROPERTIES(type-specific),
       wp_dh_type_specific_decoder_functions,
       "" },
+    /* Add the same decoders for name "DHX" */
+    { WP_NAMES_DHX, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
+      wp_dh_spki_decoder_functions,
+      "" },
+    { WP_NAMES_DHX, WP_DECODER_PROPERTIES(PrivateKeyInfo),
+      wp_dh_pki_decoder_functions,
+      "" },
+    { WP_NAMES_DHX, WP_DECODER_PROPERTIES(type-specific),
+      wp_dh_type_specific_decoder_functions,
+      "" },
 #endif
 
 #ifdef WP_HAVE_ECC

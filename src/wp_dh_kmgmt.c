@@ -2315,6 +2315,16 @@ static int wp_dh_encode_spki_size(const wp_Dh *dh, size_t* keyLen)
     int ret;
     word32 len;
 
+    /* If we have a generated public key that is not set in the inner key,
+     * set it now */
+    if (mp_bitsused(&dh->key.pub) == 0 && dh->pub != NULL && dh->pubSz > 0) {
+        ret = wc_DhImportKeyPair((DhKey*)&dh->key, NULL, 0,
+            dh->pub, dh->pubSz);
+        if (ret != 0) {
+            ok = 0;
+        }
+    }
+
     ret = wc_DhPubKeyToDer((DhKey*)&dh->key, NULL, &len);
     if (ret != LENGTH_ONLY_E) {
         ok = 0;
@@ -2373,6 +2383,16 @@ static int wp_dh_encode_pki_size(const wp_Dh *dh, size_t* keyLen)
     int ok = 1;
     int ret;
     word32 len;
+
+    /* If we have a generated private key that is not set in the inner key,
+     * set it now */
+    if (mp_bitsused(&dh->key.priv) == 0 && dh->priv != NULL && dh->privSz > 0) {
+        ret = wc_DhImportKeyPair((DhKey*)&dh->key, dh->priv, dh->privSz,
+            dh->pub, dh->pubSz);
+        if (ret != 0) {
+            ok = 0;
+        }
+    }
 
     ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &len);
     if (ret != LENGTH_ONLY_E) {
