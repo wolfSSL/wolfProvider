@@ -33,9 +33,10 @@ TEST_SUITE="${3:-}"
 # Ensure TEST_RESULT is treated as a number
 TEST_RESULT=$((TEST_RESULT + 0))
 
-# If force fail is empty treat second arg as test suite
-if [ -z "$WOLFPROV_FORCE_FAIL" ]; then
-    TEST_SUITE="${2:-}"
+# If test suite is empty treat second arg as test suite
+if [ -z "$TEST_SUITE" ]; then
+    TEST_SUITE=$WOLFPROV_FORCE_FAIL
+    WOLFPROV_FORCE_FAIL=""
 fi
 
 if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
