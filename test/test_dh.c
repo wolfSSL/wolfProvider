@@ -553,7 +553,7 @@ static int test_dh_krb5_keygen_ex(OSSL_LIB_CTX *libCtx)
     const unsigned char *inptr = dh_2048;
     size_t inlen = sizeof(dh_2048);
     unsigned char *spki = NULL;
-    size_t spki_len;
+    size_t spki_len = 0;
     unsigned char *der = NULL;
     size_t der_len;
 
@@ -600,10 +600,10 @@ static int test_dh_krb5_keygen_ex(OSSL_LIB_CTX *libCtx)
     }
     /* We were previously producing an empty subject public key info which was
      * too short. We are still producing a dhKeyAgreement SPKI instead of a
-     * PKCS3 key, which should be fine for now but means we cant directly
+     * PKCS3 key, which should be fine for now but means we can't directly
      * compare outputs with openssl. For now lets just make sure the SPKI
      * encoding length is reasonable, about 260 for an empty SPKI */
-    if (spki_len < 300) {
+    if (err == 0 && spki_len < 300) {
         PRINT_MSG("SPKI is too short");
         err = 1;
     }
