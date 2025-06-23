@@ -2319,7 +2319,7 @@ static int wp_dh_encode_spki_size(const wp_Dh *dh, size_t* keyLen)
      * set it now */
     if (mp_bitsused(&dh->key.pub) == 0 && dh->pub != NULL && dh->pubSz > 0) {
         ret = wc_DhImportKeyPair((DhKey*)&dh->key, NULL, 0,
-            dh->pub, dh->pubSz);
+            dh->pub, (word32)dh->pubSz);
         if (ret != 0) {
             ok = 0;
         }
@@ -2387,8 +2387,8 @@ static int wp_dh_encode_pki_size(const wp_Dh *dh, size_t* keyLen)
     /* If we have a generated private key that is not set in the inner key,
      * set it now */
     if (mp_bitsused(&dh->key.priv) == 0 && dh->priv != NULL && dh->privSz > 0) {
-        ret = wc_DhImportKeyPair((DhKey*)&dh->key, dh->priv, dh->privSz,
-            dh->pub, dh->pubSz);
+        ret = wc_DhImportKeyPair((DhKey*)&dh->key, dh->priv, (word32)dh->privSz,
+            dh->pub, (word32)dh->pubSz);
         if (ret != 0) {
             ok = 0;
         }
