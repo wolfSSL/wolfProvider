@@ -29,7 +29,7 @@
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
-#if defined(WP_HAVE_AESCTR) || defined(WP_HAVE_AESCFB)
+#if defined(WP_HAVE_AESCTR) || defined(WP_HAVE_AESCFB) || defined(WP_HAVE_AESCTS)
 
 /**
  * Data structure for AES ciphers that are streaming.
@@ -38,7 +38,7 @@ typedef struct wp_AesStreamCtx {
     /** wolfSSL AES object.  */
     Aes aes;
 
-    /** Cipher mode - CTR. */
+    /** Cipher mode - CTR, CFB or CTS. */
     int mode;
 
     /** Length of key in bytes. */
@@ -53,6 +53,11 @@ typedef struct wp_AesStreamCtx {
     unsigned char iv[AES_BLOCK_SIZE];
     /** Original IV. */
     unsigned char oiv[AES_BLOCK_SIZE];
+
+#if defined(WP_HAVE_AESCTS)
+    /* Only single shot allowed */
+    unsigned int updated:1;
+#endif
 } wp_AesStreamCtx;
 
 
@@ -194,6 +199,9 @@ static const OSSL_PARAM* wp_cipher_gettable_ctx_params(wp_AesStreamCtx* ctx,
         OSSL_PARAM_uint(OSSL_CIPHER_PARAM_NUM, NULL),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_IV, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_UPDATED_IV, NULL, 0),
+#ifdef WP_HAVE_AESCTS
+        OSSL_PARAM_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, NULL, 0),
+#endif
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -217,6 +225,9 @@ static const OSSL_PARAM* wp_cipher_settable_ctx_params(wp_AesStreamCtx* ctx,
     static const OSSL_PARAM wp_cipher_supported_settable_ctx_params[] = {
         OSSL_PARAM_uint(OSSL_CIPHER_PARAM_NUM, NULL),
         OSSL_PARAM_uint(OSSL_CIPHER_PARAM_USE_BITS, NULL),
+#ifdef WP_HAVE_AESCTS
+        OSSL_PARAM_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, NULL, 0),
+#endif
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -270,6 +281,7 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
     const OSSL_PARAM params[], int enc)
 {
     int ok = 1;
+    int dir = AES_ENCRYPTION;
 
     ctx->enc = enc;
 
@@ -286,9 +298,14 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
             ok = 0;
         }
         if (ok) {
+#if defined(WP_HAVE_AESCTS)
             /* Decryption is the same as encryption with CTR mode. */
+            if (ctx->mode == EVP_CIPH_CBC_MODE && !enc) {
+                dir = AES_DECRYPTION;
+            }
+#endif
             int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
-                AES_ENCRYPTION);
+                dir);
             if (rc != 0) {
                 ok = 0;
             }
@@ -302,6 +319,9 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
     }
 
     if (ok) {
+#if defined(WP_HAVE_AESCTS)
+        ctx->updated = 0;
+#endif
         ok = wp_aes_stream_set_ctx_params(ctx, params);
     }
 
@@ -347,8 +367,113 @@ static int wp_aes_stream_dinit(wp_AesStreamCtx *ctx, const unsigned char *key,
     return wp_aes_stream_init(ctx, key, keyLen, iv, ivLen, params, 0);
 }
 
+#ifdef WP_HAVE_AESCTS
+
+static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
+    const unsigned char *in, size_t inLen)
+{
+    int ok = 1;
+    int rc;
+    int blocks;
+    byte ctsBlock[AES_BLOCK_SIZE * 2];
+
+    blocks = (inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE;
+    blocks -= 2;
+    XMEMSET(ctsBlock, 0, AES_BLOCK_SIZE * 2);
+    if (ok && blocks > 0) {
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        rc = wc_AesCbcEncrypt(&ctx->aes, out, in, blocks * AES_BLOCK_SIZE);
+        if (rc != 0) {
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+            in += blocks * AES_BLOCK_SIZE;
+            out += blocks * AES_BLOCK_SIZE;
+            inLen -= blocks * AES_BLOCK_SIZE;
+        }
+    }
+    if (ok) {
+        XMEMCPY(ctsBlock, in, inLen);
+        rc = wc_AesCbcEncrypt(&ctx->aes, ctsBlock, ctsBlock,
+            AES_BLOCK_SIZE * 2);
+        if (rc != 0) {
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        }
+    }
+    if (ok) {
+        XMEMCPY(out, ctsBlock + AES_BLOCK_SIZE, AES_BLOCK_SIZE);
+        XMEMCPY(out + AES_BLOCK_SIZE, ctsBlock, AES_BLOCK_SIZE);
+    }
+
+    return ok;
+}
+
+static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
+    const unsigned char *in, size_t inLen)
+{
+    int ok = 1;
+    int rc;
+    int blocks;
+    byte ctsBlock[AES_BLOCK_SIZE * 2];
+    byte tmp[AES_BLOCK_SIZE];
+    word32 partialSz;
+    word32 padSz;
+
+    partialSz = inLen % AES_BLOCK_SIZE;
+    if (partialSz == 0) {
+        partialSz = AES_BLOCK_SIZE;
+    }
+    padSz = AES_BLOCK_SIZE - partialSz;
+
+    blocks = (inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE;
+    blocks -= 2;
+    XMEMSET(ctsBlock, 0, AES_BLOCK_SIZE * 2);
+    if (ok && blocks > 0) {
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        rc = wc_AesCbcDecrypt(&ctx->aes, out, in, blocks * AES_BLOCK_SIZE);
+        if (rc != 0) {
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+            in += blocks * AES_BLOCK_SIZE;
+            out += blocks * AES_BLOCK_SIZE;
+            inLen -= blocks * AES_BLOCK_SIZE;
+        }
+    }
+    if (ok) {
+        XMEMCPY(ctsBlock, in, inLen);
+        XMEMCPY(&ctx->aes.reg, ctsBlock + AES_BLOCK_SIZE, AES_BLOCK_SIZE);
+        rc = wc_AesCbcDecrypt(&ctx->aes, tmp, ctsBlock, AES_BLOCK_SIZE);
+        if (rc != 0) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        XMEMCPY(out + AES_BLOCK_SIZE, tmp, partialSz);
+        XMEMCPY(ctsBlock + inLen, tmp + partialSz, padSz);
+        XMEMCPY(&ctx->aes.reg, ctx->iv, AES_BLOCK_SIZE);
+        rc = wc_AesCbcDecrypt(&ctx->aes, out, ctsBlock + AES_BLOCK_SIZE,
+            AES_BLOCK_SIZE);
+        if (rc != 0) {
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        }
+    }
+
+    return ok;
+}
+
+#endif /* ifdef WP_HAVE_AESCTS */
+
 /**
- * Encrypt/decrypt using AES-CTR or AES-CFB with wolfSSL.
+ * Encrypt/decrypt using AES-CTR, AES-CFB or AES-CTS with wolfSSL.
  *
  * Assumes out has inLen bytes available.
  * Assumes whole blocks only.
@@ -363,7 +488,7 @@ static int wp_aes_stream_dinit(wp_AesStreamCtx *ctx, const unsigned char *key,
 static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
     const unsigned char *in, size_t inLen)
 {
-    int ok = 0;
+    int ok = 1;
 
 #ifdef WP_HAVE_AESCTR
     if (ctx->mode == EVP_CIPH_CTR_MODE) {
@@ -371,9 +496,11 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
 
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         rc = wc_AesCtrEncrypt(&ctx->aes, out, in, (word32)inLen);
-        if (rc == 0) {
+        if (rc != 0) {
+            ok = 0;
+        }
+        if (ok) {
             XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
-            ok = 1;
         }
     }
     else
@@ -388,9 +515,33 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
         }else {
             rc = wc_AesCfbDecrypt(&ctx->aes, out, in, (word32)inLen);
         }
-        if (rc == 0) {
+        if (rc != 0) {
+            ok = 0;
+        }
+        if (ok) {
             XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
-            ok = 1;
+        }
+    }
+    else
+#endif
+#ifdef WP_HAVE_AESCTS
+    if (ctx->mode == EVP_CIPH_CBC_MODE) {
+        if (ctx->updated) {
+            ok = 0;
+        }
+        if (inLen < AES_BLOCK_SIZE) {
+            ok = 0;
+        }
+        if (ok) {
+            if (ctx->enc) {
+                ok = wp_aes_cts_encrypt(ctx, out, in, inLen);
+            }
+            else {
+                ok = wp_aes_cts_decrypt(ctx, out, in, inLen);
+            }
+        }
+        if (ok) {
+            ctx->updated = 1;
         }
     }
     else
@@ -534,6 +685,14 @@ static int wp_aes_stream_get_ctx_params(wp_AesStreamCtx* ctx,
             ok = 0;
         }
     }
+#ifdef WP_HAVE_AESCTS
+    if (ok && ctx->mode == EVP_CIPH_CBC_MODE) {
+        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_CTS_MODE);
+        if ((p != NULL) && (!OSSL_PARAM_set_utf8_string(p, "CS3"))) {
+            ok = 0;
+        }
+    }
+#endif
 
     WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -568,6 +727,25 @@ static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
             ok = 0;
         }
         (void)val;
+#ifdef WP_HAVE_AESCTS
+        if (ok && ctx->mode == EVP_CIPH_CBC_MODE) {
+            char cts_mode[4];
+            char *pcts = cts_mode;
+            const OSSL_PARAM* p = NULL;
+            XMEMSET(cts_mode, 0, sizeof(cts_mode));
+
+            p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_CTS_MODE);
+            if (p != NULL) {
+                if (!OSSL_PARAM_get_utf8_string(p, &pcts,
+                        sizeof(cts_mode))) {
+                    ok = 0;
+                }
+                if (ok && (XSTRCMP(cts_mode, "CS3") != 0)) {
+                    ok = 0; /* Only CS3 supported */
+                }
+            }
+        }
+#endif
     }
 
     WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -580,7 +758,7 @@ static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
  * @param [in, out] ctx      AES stream context object.
  * @param [in]      kBits    Number of bits in a valid key.
  * @param [in]      ivBits   Number of bits in a valid IV. 0 indicates no IV.
- * @param [in]      mode     AES stream mode: CTR.
+ * @param [in]      mode     AES stream mode: CTR, CFB or CTS.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -685,5 +863,20 @@ IMPLEMENT_AES_STREAM(cfb, CFB, 192, 128)
 IMPLEMENT_AES_STREAM(cfb, CFB, 128, 128)
 #endif /* WP_HAVE_AESCFB */
 
-#endif /* WP_HAVE_AESCTR || WP_HAVE_AESCFB */
+/*
+ * AES CTS
+ *
+ * Even though AES-CTS is a block cipher, since we will only be supporting a
+ * single-shot mode it actually behaves more like a stream cipher.
+ */
+#ifdef WP_HAVE_AESCTS
+/** wp_aes256cts_functions */
+IMPLEMENT_AES_STREAM(cts, CBC, 256, 128)
+/** wp_aes192cts_functions */
+IMPLEMENT_AES_STREAM(cts, CBC, 192, 128)
+/** wp_aes128cts_functions */
+IMPLEMENT_AES_STREAM(cts, CBC, 128, 128)
+#endif /* WP_HAVE_AESCTS */
+
+#endif /* WP_HAVE_AESCTR || WP_HAVE_AESCFB || WP_HAVE_AESCTS */
 

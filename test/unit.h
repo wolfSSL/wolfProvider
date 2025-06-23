@@ -39,6 +39,7 @@
 #include <openssl/aes.h>
 #include <openssl/rand.h>
 #include <openssl/kdf.h>
+#include <openssl/core_names.h>
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/wp_logging.h>
@@ -194,6 +195,13 @@ int test_aes256_ccm(void *data);
 int test_aes128_ccm_tls(void *data);
 
 #endif /* WP_HAVE_AESCCM */
+
+#ifdef WP_HAVE_AESCTS
+
+int test_aes128_cts(void *data);
+int test_aes256_cts(void *data);
+
+#endif
 
 #ifdef WP_HAVE_RANDOM
 

@@ -83,8 +83,8 @@ install_wolfprov() {
         fi
         printf "Done.\n"
 
-        printf "\tTest wolfProvider ... "
-        make test >>$LOG_FILE 2>&1
+        printf "\tInstall wolfProvider ... "
+        make install >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "\n\n...\n"
             tail -n 40 $LOG_FILE
@@ -93,8 +93,8 @@ install_wolfprov() {
         fi
         printf "Done.\n"
 
-        printf "\tInstall wolfProvider ... "
-        make install >>$LOG_FILE 2>&1
+        printf "\tTest wolfProvider ... "
+        make test >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "\n\n...\n"
             tail -n 40 $LOG_FILE

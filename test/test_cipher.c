@@ -22,7 +22,7 @@
 
 #if defined(WP_HAVE_DES3CBC) || defined(WP_HAVE_AESCBC) || \
     defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR) || \
-    defined(WP_HAVE_AESCFB)
+    defined(WP_HAVE_AESCFB) || defined(WP_HAVE_AESCTS)
 
 static int test_cipher_enc(const EVP_CIPHER *cipher,
                            unsigned char *key, unsigned char *iv,
@@ -181,7 +181,7 @@ static int test_cipher_enc_dec(void *data, const char *cipher, int keyLen,
 
 #if defined(WP_HAVE_DES3CBC) || defined(WP_HAVE_AESCBC) || \
     defined(WP_HAVE_AESECB) || defined(WP_HAVE_AESCTR) || \
-    defined(WP_HAVE_AESCFB)
+    defined(WP_HAVE_AESCFB) || defined(WP_HAVE_AESCTS)
 
 
 /******************************************************************************/
@@ -670,4 +670,505 @@ int test_aes256_cfb_stream(void *data)
 }
 
 #endif /* WP_HAVE_AESCFB */
+
+#ifdef WP_HAVE_AESCTS
+
+static int test_cipher_cts_enc_err_cases(const EVP_CIPHER *cipher,
+                           unsigned char *key, unsigned char *iv,
+                           unsigned char *msg, int len, unsigned char *enc)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int encLen;
+    int ret;
+
+    (void)len; /* Length from caller not used in error cases */
+
+    /* Test case 1: Input less than block length - should fail */
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_EncryptInit(ctx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    if (err == 0) {
+        /* Try to encrypt 5 bytes - should fail */
+        ret = EVP_EncryptUpdate(ctx, enc, &encLen, msg, 5);
+        if (ret == 1) {
+            PRINT_MSG("ERROR: Encryption succeeded with short message when it should fail");
+            err = 1;
+        }
+        else {
+            PRINT_MSG("SUCCESS: Encryption correctly failed with short message");
+        }
+    }
+    EVP_CIPHER_CTX_free(ctx);
+
+    /* Test case 2: Double update not allowed */
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+       err = EVP_EncryptInit(ctx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    /* First update should succeed */
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, enc, &encLen, msg, 17) != 1;
+        PRINT_MSG("First update of 17 bytes succeeded as expected");
+    }
+    /* Second update should fail */
+    if (err == 0) {
+        ret = EVP_EncryptUpdate(ctx, enc + encLen, &encLen, msg + 17, 17);
+        if (ret == 1) {
+            PRINT_MSG("ERROR: Second update succeeded when it should fail");
+            err = 1;
+        }
+        else {
+            PRINT_MSG("SUCCESS: Second update correctly failed");
+        }
+    }
+    EVP_CIPHER_CTX_free(ctx);
+
+    return err;
+}
+
+static int test_cipher_cts_krb_enc(const EVP_CIPHER *cipher,
+                           unsigned char *key, unsigned char *iv,
+                           unsigned char *msg, int len, unsigned char *enc)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int outlen, total_len = 0;
+    unsigned char iv_cts[16];
+    OSSL_PARAM params[2];
+
+    memset(iv_cts, 0, sizeof(iv_cts));
+    if (iv != NULL) {
+        memcpy(iv_cts, iv, sizeof(iv_cts));
+    }
+
+    /* First encryption run */
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+        /* Set up parameters for CS3 mode */
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE,
+                                                    (char *)"CS3", 0);
+        params[1] = OSSL_PARAM_construct_end();
+
+        /* Initialize with cipher and key only first */
+        err = EVP_CipherInit_ex2(ctx, cipher, key, NULL, 1, params) != 1;
+    }
+    if (err == 0) {
+        /* Set IV and get updated IV */
+        err = EVP_CipherUpdate(ctx, enc, &outlen, msg, len) != 1;
+        total_len = outlen;
+    }
+    if (err == 0) {
+        err = EVP_CipherFinal_ex(ctx, enc + total_len, &outlen) != 1;
+        total_len += outlen;
+    }
+    if (err == 0) {
+        /* Get the updated IV */
+        err = EVP_CIPHER_CTX_get_updated_iv(ctx, iv_cts, sizeof(iv_cts)) != 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    if (err == 0) {
+        PRINT_BUFFER("KRB CTS Encrypted", enc, total_len);
+        if (iv != NULL) {
+            PRINT_BUFFER("Updated IV", iv_cts, sizeof(iv_cts));
+        }
+    }
+
+    return err;
+}
+
+static int test_cipher_cts_krb_dec(const EVP_CIPHER *cipher,
+                           unsigned char *key, unsigned char *iv,
+                           unsigned char *msg, int len, unsigned char *enc,
+                           int encLen, unsigned char *dec)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int outlen, total_len = 0;
+    unsigned char iv_cts[16];
+    OSSL_PARAM params[2];
+
+    memset(iv_cts, 0, sizeof(iv_cts));
+    if (iv != NULL) {
+        memcpy(iv_cts, iv, sizeof(iv_cts));
+    }
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+        /* Set up parameters for CS3 mode */
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE,
+                                                    (char *)"CS3", 0);
+        params[1] = OSSL_PARAM_construct_end();
+
+        /* Initialize with cipher and key only first */
+        err = EVP_CipherInit_ex2(ctx, cipher, key, NULL, 0, params) != 1;
+    }
+    if (err == 0) {
+        /* Set IV and decrypt */
+        err = EVP_CipherUpdate(ctx, dec, &outlen, enc, encLen) != 1;
+        total_len = outlen;
+    }
+    if (err == 0) {
+        err = EVP_CipherFinal_ex(ctx, dec + total_len, &outlen) != 1;
+        total_len += outlen;
+    }
+    if (err == 0) {
+        /* Get the updated IV if needed */
+        err = EVP_CIPHER_CTX_get_updated_iv(ctx, iv_cts, sizeof(iv_cts)) != 1;
+    }
+
+    if (err == 0) {
+        PRINT_BUFFER("KRB CTS Decrypted", dec, total_len);
+        if (iv != NULL) {
+            PRINT_BUFFER("Updated IV", iv_cts, sizeof(iv_cts));
+        }
+
+        if (total_len != len || memcmp(dec, msg, len) != 0) {
+            PRINT_MSG("KRB CTS Decryption mismatch");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return err;
+}
+
+static int test_cipher_cts_kat(const EVP_CIPHER* cipher, unsigned char* key)
+{
+    int err = 0;
+    /* Test vectors taken from RFC3962 Appendix B */
+    const struct {
+        const char* input;
+        const char* output;
+        size_t inLen;
+        size_t outLen;
+    } vects[] = {
+        {
+            "\x49\x20\x77\x6f\x75\x6c\x64\x20\x6c\x69\x6b\x65\x20\x74\x68\x65"
+            "\x20",
+            "\xc6\x35\x35\x68\xf2\xbf\x8c\xb4\xd8\xa5\x80\x36\x2d\xa7\xff\x7f"
+            "\x97",
+            17, 17
+        },
+        {
+            "\x49\x20\x77\x6f\x75\x6c\x64\x20\x6c\x69\x6b\x65\x20\x74\x68\x65"
+            "\x20\x47\x65\x6e\x65\x72\x61\x6c\x20\x47\x61\x75\x27\x73\x20",
+            "\xfc\x00\x78\x3e\x0e\xfd\xb2\xc1\xd4\x45\xd4\xc8\xef\xf7\xed\x22"
+            "\x97\x68\x72\x68\xd6\xec\xcc\xc0\xc0\x7b\x25\xe2\x5e\xcf\xe5",
+            31, 31
+        },
+        {
+            "\x49\x20\x77\x6f\x75\x6c\x64\x20\x6c\x69\x6b\x65\x20\x74\x68\x65"
+            "\x20\x47\x65\x6e\x65\x72\x61\x6c\x20\x47\x61\x75\x27\x73\x20\x43",
+            "\x39\x31\x25\x23\xa7\x86\x62\xd5\xbe\x7f\xcb\xcc\x98\xeb\xf5\xa8"
+            "\x97\x68\x72\x68\xd6\xec\xcc\xc0\xc0\x7b\x25\xe2\x5e\xcf\xe5\x84",
+            32, 32
+        },
+        {
+            "\x49\x20\x77\x6f\x75\x6c\x64\x20\x6c\x69\x6b\x65\x20\x74\x68\x65"
+            "\x20\x47\x65\x6e\x65\x72\x61\x6c\x20\x47\x61\x75\x27\x73\x20\x43"
+            "\x68\x69\x63\x6b\x65\x6e\x2c\x20\x70\x6c\x65\x61\x73\x65\x2c",
+            "\x97\x68\x72\x68\xd6\xec\xcc\xc0\xc0\x7b\x25\xe2\x5e\xcf\xe5\x84"
+            "\xb3\xff\xfd\x94\x0c\x16\xa1\x8c\x1b\x55\x49\xd2\xf8\x38\x02\x9e"
+            "\x39\x31\x25\x23\xa7\x86\x62\xd5\xbe\x7f\xcb\xcc\x98\xeb\xf5",
+            47, 47
+        },
+        {
+            "\x49\x20\x77\x6f\x75\x6c\x64\x20\x6c\x69\x6b\x65\x20\x74\x68\x65"
+            "\x20\x47\x65\x6e\x65\x72\x61\x6c\x20\x47\x61\x75\x27\x73\x20\x43"
+            "\x68\x69\x63\x6b\x65\x6e\x2c\x20\x70\x6c\x65\x61\x73\x65\x2c\x20",
+            "\x97\x68\x72\x68\xd6\xec\xcc\xc0\xc0\x7b\x25\xe2\x5e\xcf\xe5\x84"
+            "\x9d\xad\x8b\xbb\x96\xc4\xcd\xc0\x3b\xc1\x03\xe1\xa1\x94\xbb\xd8"
+            "\x39\x31\x25\x23\xa7\x86\x62\xd5\xbe\x7f\xcb\xcc\x98\xeb\xf5\xa8",
+            48, 48
+        },
+        {
+            "\x49\x20\x77\x6f\x75\x6c\x64\x20\x6c\x69\x6b\x65\x20\x74\x68\x65"
+            "\x20\x47\x65\x6e\x65\x72\x61\x6c\x20\x47\x61\x75\x27\x73\x20\x43"
+            "\x68\x69\x63\x6b\x65\x6e\x2c\x20\x70\x6c\x65\x61\x73\x65\x2c\x20"
+            "\x61\x6e\x64\x20\x77\x6f\x6e\x74\x6f\x6e\x20\x73\x6f\x75\x70\x2e",
+            "\x97\x68\x72\x68\xd6\xec\xcc\xc0\xc0\x7b\x25\xe2\x5e\xcf\xe5\x84"
+            "\x39\x31\x25\x23\xa7\x86\x62\xd5\xbe\x7f\xcb\xcc\x98\xeb\xf5\xa8"
+            "\x48\x07\xef\xe8\x36\xee\x89\xa5\x26\x73\x0d\xbc\x2f\x7b\xc8\x40"
+            "\x9d\xad\x8b\xbb\x96\xc4\xcd\xc0\x3b\xc1\x03\xe1\xa1\x94\xbb\xd8",
+            64, 64
+        }
+    };
+    unsigned char iv[16] = {0};
+    unsigned char iv2[16] = {0};
+    unsigned char enc[64];  /* Large enough for biggest test vector */
+    unsigned char dec[64];  /* Large enough for biggest test vector */
+    int outlen, total_len = 0;
+    EVP_CIPHER_CTX *ctx;
+    OSSL_PARAM params[2];
+    unsigned char iv_cts[16] = {0};
+    size_t i;
+
+    PRINT_MSG("Running CTS Known Answer Tests");
+
+    /* Run through all test vectors */
+    for (i = 0; i < sizeof(vects)/sizeof(vects[0]); i++) {
+        PRINT_MSG("\nTest Vector %zu", i + 1);
+        PRINT_BUFFER("Input", (unsigned char*)vects[i].input, vects[i].inLen);
+
+        /* Reset IVs for each test */
+        memset(iv, 0, sizeof(iv));
+        memset(iv2, 0, sizeof(iv2));
+        memset(iv_cts, 0, sizeof(iv_cts));
+
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        if (err == 0) {
+            /* Set up parameters for CS3 mode */
+            params[0] = OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE,
+                                                        (char *)"CS3", 0);
+            params[1] = OSSL_PARAM_construct_end();
+
+            /* Initialize with cipher and key only first */
+            err = EVP_CipherInit_ex2(ctx, cipher, key, iv, 1, params) != 1;
+        }
+        if (err == 0) {
+            /* Set IV and encrypt */
+            err = EVP_CipherUpdate(ctx, enc, &outlen,
+                                 (unsigned char*)vects[i].input,
+                                 vects[i].inLen) != 1;
+            total_len = outlen;
+        }
+        if (err == 0) {
+            err = EVP_CipherFinal_ex(ctx, enc + total_len, &outlen) != 1;
+            total_len += outlen;
+        }
+
+        if (err == 0) {
+            PRINT_BUFFER("Output", enc, total_len);
+            PRINT_BUFFER("Expected", (unsigned char*)vects[i].output, vects[i].outLen);
+
+            /* Compare results */
+            if (total_len != (int)vects[i].outLen ||
+                memcmp(enc, vects[i].output, vects[i].outLen) != 0) {
+                PRINT_MSG("KAT Encryption output mismatch for vector %zu", i + 1);
+                err = 1;
+                break;
+            }
+        }
+
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+
+        /* Now test decryption */
+        if (err == 0) {
+            err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        }
+        if (err == 0) {
+            params[0] = OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE,
+                                                        (char *)"CS3", 0);
+            params[1] = OSSL_PARAM_construct_end();
+            err = EVP_CipherInit_ex2(ctx, cipher, key, iv2, 0, params) != 1;
+        }
+        if (err == 0) {
+            err = EVP_CipherUpdate(ctx, dec, &outlen,
+                                 (unsigned char*)vects[i].output,
+                                 vects[i].outLen) != 1;
+            total_len = outlen;
+        }
+        if (err == 0) {
+            err = EVP_CipherFinal_ex(ctx, dec + total_len, &outlen) != 1;
+            total_len += outlen;
+        }
+
+        if (err == 0) {
+            PRINT_BUFFER("Decrypted", dec, total_len);
+
+            /* Compare decryption results */
+            if (total_len != (int)vects[i].inLen ||
+                memcmp(dec, vects[i].input, vects[i].inLen) != 0) {
+                PRINT_MSG("KAT Decryption mismatch for vector %zu", i + 1);
+                err = 1;
+                break;
+            }
+        }
+
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+
+        if (err != 0) break;
+    }
+
+    return err;
+}
+
+static int test_cipher_cts(void *data, const char *cipher, int keyLen)
+{
+    int err = 0;
+    /* Test messages of different sizes:
+     * 1. Known Answer Test
+     * 2. One block plus one byte (17 bytes)
+     * 3. More than two blocks with partial last block (37 bytes)
+     * 4. Exactly four blocks (64 bytes)
+     * 5. Error cases
+     */
+    unsigned char msg1[17];  /* One block plus one byte */
+    unsigned char msg2[37];  /* More than two blocks with partial last block */
+    unsigned char msg3[64];  /* Exactly four blocks */
+    unsigned char key[32];
+    unsigned char iv[16];
+    /* Buffer large enough for largest message */
+    unsigned char enc[sizeof(msg3)];
+    unsigned char dec[sizeof(msg3)];
+    EVP_CIPHER* ocipher;
+    EVP_CIPHER* wcipher;
+
+    (void)data;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, cipher, "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, cipher, "");
+
+    /* Set up KAT key */
+    unsigned char kat_key[] = {
+        0x63, 0x68, 0x69, 0x63, 0x6b, 0x65, 0x6e, 0x20,
+        0x74, 0x65, 0x72, 0x69, 0x79, 0x61, 0x6b, 0x69
+    };
+
+    /* Generate random key, IV and messages */
+    if (RAND_bytes(key, keyLen) != 1) {
+        err = 1;
+    }
+    if (err == 0) {
+        if (RAND_bytes(iv, sizeof(iv)) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (RAND_bytes(msg1, sizeof(msg1)) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (RAND_bytes(msg2, sizeof(msg2)) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (RAND_bytes(msg3, sizeof(msg3)) != 1) {
+            err = 1;
+        }
+    }
+
+    if (err == 0) {
+        PRINT_BUFFER("Key", key, keyLen);
+        PRINT_BUFFER("IV", iv, sizeof(iv));
+        PRINT_BUFFER("Message 1", msg1, sizeof(msg1));
+        PRINT_BUFFER("Message 2", msg2, sizeof(msg2));
+        PRINT_BUFFER("Message 3", msg3, sizeof(msg3));
+    }
+
+    /* Run Known Answer Test first */
+    if (keyLen == 16) {
+        if (err == 0) {
+            PRINT_MSG("Running Known Answer Test with OpenSSL");
+            err = test_cipher_cts_kat(ocipher, kat_key);
+        }
+        if (err == 0) {
+            PRINT_MSG("Running Known Answer Test with wolfProvider");
+            err = test_cipher_cts_kat(wcipher, kat_key);
+        }
+    }
+
+    /* Interop cipher testing with different lengths */
+    if (err == 0) {
+        PRINT_MSG("CTS Encrypt with OpenSSL (KRB-style)");
+        err = test_cipher_cts_krb_enc(ocipher, key, iv, msg1, sizeof(msg1), enc);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Decrypt with wolfProvider (KRB-style)");
+        err = test_cipher_cts_krb_dec(wcipher, key, iv, msg1, sizeof(msg1), enc,
+                              sizeof(msg1), dec);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Encrypt with wolfProvider (KRB-style)");
+        err = test_cipher_cts_krb_enc(wcipher, key, iv, msg1, sizeof(msg1), enc);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Decrypt with OpenSSL (KRB-style)");
+        err = test_cipher_cts_krb_dec(ocipher, key, iv, msg1, sizeof(msg1), enc,
+                              sizeof(msg1), dec);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("CTS Encrypt with OpenSSL (KRB-style)");
+        err = test_cipher_cts_krb_enc(ocipher, key, iv, msg2, sizeof(msg2), enc);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Decrypt with wolfProvider (KRB-style)");
+        err = test_cipher_cts_krb_dec(wcipher, key, iv, msg2, sizeof(msg2), enc,
+                              sizeof(msg2), dec);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Encrypt with wolfProvider (KRB-style)");
+        err = test_cipher_cts_krb_enc(wcipher, key, iv, msg2, sizeof(msg2), enc);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Decrypt with OpenSSL (KRB-style)");
+        err = test_cipher_cts_krb_dec(ocipher, key, iv, msg2, sizeof(msg2), enc,
+                              sizeof(msg2), dec);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("CTS Encrypt with OpenSSL (KRB-style)");
+        err = test_cipher_cts_krb_enc(ocipher, key, iv, msg3, sizeof(msg3), enc);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Decrypt with wolfProvider (KRB-style)");
+        err = test_cipher_cts_krb_dec(wcipher, key, iv, msg3, sizeof(msg3), enc,
+                              sizeof(msg3), dec);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Encrypt with wolfProvider (KRB-style)");
+        err = test_cipher_cts_krb_enc(wcipher, key, iv, msg3, sizeof(msg3), enc);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Decrypt with OpenSSL (KRB-style)");
+        err = test_cipher_cts_krb_dec(ocipher, key, iv, msg3, sizeof(msg3), enc,
+                              sizeof(msg3), dec);
+    }
+
+    /* Error cases */
+    if (err == 0) {
+        PRINT_MSG("CTS Error cases with OpenSSL");
+        err = test_cipher_cts_enc_err_cases(ocipher, key, iv, msg2, sizeof(msg2), enc);
+    }
+    if (err == 0) {
+        PRINT_MSG("CTS Error cases with wolfProvider");
+        err = test_cipher_cts_enc_err_cases(wcipher, key, iv, msg2, sizeof(msg2), enc);
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+int test_aes128_cts(void *data)
+{
+    return test_cipher_cts(data, "AES-128-CBC-CTS", 16);
+}
+
+int test_aes256_cts(void *data)
+{
+    return test_cipher_cts(data, "AES-256-CBC-CTS", 32);
+}
+
+#endif /* WP_HAVE_AESCTS */
 
