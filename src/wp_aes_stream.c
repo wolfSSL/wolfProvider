@@ -377,7 +377,7 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     int blocks;
     byte ctsBlock[AES_BLOCK_SIZE * 2];
 
-    blocks = (inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE;
+    blocks = (int)((inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE);
     blocks -= 2;
     XMEMSET(ctsBlock, 0, AES_BLOCK_SIZE * 2);
     if (ok && blocks > 0) {
@@ -429,7 +429,7 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     }
     padSz = AES_BLOCK_SIZE - partialSz;
 
-    blocks = (inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE;
+    blocks = (int)((inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE);
     blocks -= 2;
     XMEMSET(ctsBlock, 0, AES_BLOCK_SIZE * 2);
     if (ok && blocks > 0) {

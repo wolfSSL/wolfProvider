@@ -943,7 +943,7 @@ static int test_cipher_cts_kat(const EVP_CIPHER* cipher, unsigned char* key)
             /* Set IV and encrypt */
             err = EVP_CipherUpdate(ctx, enc, &outlen,
                                  (unsigned char*)vects[i].input,
-                                 vects[i].inLen) != 1;
+                                 (int)vects[i].inLen) != 1;
             total_len = outlen;
         }
         if (err == 0) {
@@ -980,7 +980,7 @@ static int test_cipher_cts_kat(const EVP_CIPHER* cipher, unsigned char* key)
         if (err == 0) {
             err = EVP_CipherUpdate(ctx, dec, &outlen,
                                  (unsigned char*)vects[i].output,
-                                 vects[i].outLen) != 1;
+                                 (int)vects[i].outLen) != 1;
             total_len = outlen;
         }
         if (err == 0) {
