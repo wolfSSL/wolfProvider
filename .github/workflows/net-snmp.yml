@@ -82,7 +82,6 @@ jobs:
           export ${{ matrix.force_fail }}
 
           autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
-          mkdir -p tests
-          make -j test TESTOPTS="-e agentxperl" | tee tests/test.log
+          make -j test TESTOPTS="-e agentxperl" | tee net-snmp-test.log
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} net-snmp
