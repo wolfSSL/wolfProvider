@@ -52,6 +52,18 @@ if test "x$have_wolfssl" = "xyes"; then
     LDFLAGS="$LDFLAGS $WOLFSSL_LDFLAGS"
 fi
 
+# Check for required headers
+AC_CHECK_HEADERS([stdlib.h])
+AC_CHECK_HEADERS([unistd.h])
+AC_CHECK_HEADERS([ctype.h])
+
+# Check for getpid function and add HAVE_GETPID to AM_CFLAGS for inclusion in options.h
+AC_CHECK_FUNC([getpid])
+if test "$ac_cv_func_getpid" = "yes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DHAVE_GETPID=1"
+fi
+
 # DEBUG
 DEBUG_CFLAGS="-g -O0 -DWOLFPROV_DEBUG"
 
