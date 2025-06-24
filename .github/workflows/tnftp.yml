@@ -40,18 +40,16 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Retrieve wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            scripts
-            wolfssl-source
             wolfssl-install
             wolfprov-install
-            openssl-install
-            provider.conf
-
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
