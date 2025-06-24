@@ -152,6 +152,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),
     TEST_DECL(test_dh_decode, NULL),
+    TEST_DECL(test_dh_krb5_keygen, NULL),
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif
