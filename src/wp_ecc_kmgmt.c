@@ -300,6 +300,17 @@ int wp_ecc_get_size(wp_Ecc* ecc)
 }
 
 /**
+ * Get the mutex object from the ECC key object.
+ *
+ * @param [in] ecc  ECC key object.
+ * @return  Pointer to wolfSSL mutex object.
+ */
+wolfSSL_Mutex* wp_ecc_get_mutex(wp_Ecc* ecc)
+{
+    return &ecc->mutex;
+}
+
+/**
  * Create a new ECC key object.
  *
  * @param [in] provCtx  Provider context.
@@ -2377,7 +2388,9 @@ static int wp_ecc_encode_pki_size(const wp_Ecc *ecc, size_t* keyLen)
     int rc;
     word32 len;
 
+    PRIVATE_KEY_UNLOCK();
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, NULL, &len);
+    PRIVATE_KEY_LOCK();
     if (rc != LENGTH_ONLY_E) {
         ok = 0;
     }
@@ -2407,7 +2420,9 @@ static int wp_ecc_encode_pki(const wp_Ecc *ecc, unsigned char* keyData,
     word32 len = (word32)*keyLen;
 
     /* TODO: for older versions, curve is always included! */
+    PRIVATE_KEY_UNLOCK();
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, keyData, &len);
+    PRIVATE_KEY_LOCK();
     if (rc <= 0) {
         ok = 0;
     }
@@ -2434,7 +2449,9 @@ static int wp_ecc_encode_epki_size(const wp_Ecc *ecc, size_t* keyLen)
     int rc;
     word32 len;
 
+    PRIVATE_KEY_UNLOCK();
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, NULL, &len);
+    PRIVATE_KEY_LOCK();
     if (rc != LENGTH_ONLY_E) {
         ok = 0;
     }
@@ -2469,7 +2486,9 @@ static int wp_ecc_encode_epki(const wp_EccEncDecCtx* ctx, const wp_Ecc *ecc,
     word32 len = (word32)*keyLen;
 
     /* Encode key. */
+    PRIVATE_KEY_UNLOCK();
     rc = wc_EccKeyToPKCS8((ecc_key*)&ecc->key, keyData, &len);
+    PRIVATE_KEY_LOCK();
     if (rc <= 0) {
         ok = 0;
     }

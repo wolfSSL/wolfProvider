@@ -22,7 +22,6 @@ jobs:
         openssl_ref: [ 'master', 'openssl-3.5.0' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
-
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
