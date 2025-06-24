@@ -300,6 +300,17 @@ int wp_ecc_get_size(wp_Ecc* ecc)
 }
 
 /**
+ * Get the mutex object from the ECC key object.
+ *
+ * @param [in] ecc  ECC key object.
+ * @return  Pointer to wolfSSL mutex object.
+ */
+wolfSSL_Mutex* wp_ecc_get_mutex(wp_Ecc* ecc)
+{
+    return &ecc->mutex;
+}
+
+/**
  * Create a new ECC key object.
  *
  * @param [in] provCtx  Provider context.

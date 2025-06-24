@@ -244,6 +244,17 @@ void* wp_ecx_get_key(wp_Ecx* ecx)
 }
 
 /**
+ * Get the mutex object from the ECX key object.
+ *
+ * @param [in] ecx  ECX key object.
+ * @return  Pointer to wolfSSL mutex object.
+ */
+wolfSSL_Mutex* wp_ecx_get_mutex(wp_Ecx* ecx)
+{
+    return &ecx->mutex;
+}
+
+/**
  * Create a new ECX key object. Base function.
  *
  * @param [in] provCtx   Provider context.
