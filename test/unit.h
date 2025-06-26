@@ -156,6 +156,7 @@ int test_aes256_cbc(void *data);
 int test_aes128_cbc_stream(void *data);
 int test_aes192_cbc_stream(void *data);
 int test_aes256_cbc_stream(void *data);
+int test_aes256_cbc_multiple(void *data);
 
 #endif
 
