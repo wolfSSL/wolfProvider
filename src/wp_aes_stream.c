@@ -281,6 +281,7 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
     const OSSL_PARAM params[], int enc)
 {
     int ok = 1;
+    /* Decryption is the same as encryption with CTR mode. */
     int dir = AES_ENCRYPTION;
 
     ctx->enc = enc;
@@ -299,7 +300,6 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
         }
         if (ok) {
 #if defined(WP_HAVE_AESCTS)
-            /* Decryption is the same as encryption with CTR mode. */
             if (ctx->mode == EVP_CIPH_CBC_MODE && !enc) {
                 dir = AES_DECRYPTION;
             }
@@ -320,6 +320,7 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
 
     if (ok) {
 #if defined(WP_HAVE_AESCTS)
+        /* We only allow one shot, always reset on init */
         ctx->updated = 0;
 #endif
         ok = wp_aes_stream_set_ctx_params(ctx, params);
@@ -377,6 +378,10 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     int blocks;
     byte ctsBlock[AES_BLOCK_SIZE * 2];
 
+    /* Since AES-CTS is not a FIPS approved algo, we will never be able to call
+     * the existing wolfSSL AES_CTS APIs with FIPS, so the implementation is
+     * effectively copied here from wolfSSL internals. */
+
     blocks = (int)((inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE);
     blocks -= 2;
     XMEMSET(ctsBlock, 0, AES_BLOCK_SIZE * 2);
@@ -422,6 +427,10 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     byte tmp[AES_BLOCK_SIZE];
     word32 partialSz;
     word32 padSz;
+
+    /* Since AES-CTS is not a FIPS approved algo, we will never be able to call
+     * the existing wolfSSL AES_CTS APIs with FIPS, so the implementation is
+     * effectively copied here from wolfSSL internals. */
 
     partialSz = inLen % AES_BLOCK_SIZE;
     if (partialSz == 0) {
