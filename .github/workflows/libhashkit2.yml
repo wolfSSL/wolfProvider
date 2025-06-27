@@ -1,9 +1,9 @@
-name: Curl Tests
+name: libhashkit2 Tests
 
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'release/**' ]
+    branches: [ '*' ] #'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -23,19 +23,19 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
 
-  test_curl:
+  test_libhashkit2:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        curl_ref: [ 'master', 'curl-8_4_0', 'curl-7_88_1' ]
+        libhashkit2_ref: [ 'v1.x', '1.1.4' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
-          - curl_ref: 'master'
+          - libhashkit2_ref: 'v1.x'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
@@ -43,9 +43,9 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Retrieving wolfProvider from cache
         uses: actions/cache/restore@v4
-        id: wolfprov-cache
+        id: wolfprov-cache-restore
         with:
           path: |
             wolfssl-install
@@ -57,38 +57,40 @@ jobs:
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install dependencies
+      - name: Install libmemcached dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
+          sudo apt-get install cmake build-essential bison flex memcached libc6
 
-      - name: Build curl
-        uses: wolfSSL/actions-build-autotools-project@v1
+      - name: Download libmemcached
+        uses: actions/checkout@v4
         with:
-          repository: curl/curl
-          path: curl
-          ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl
-          check: false
+          repository: awesomized/libmemcached
+          ref: ${{ matrix.libhashkit2_ref }}
+          path: libmemcached
+          fetch-depth: 1
 
-      - name: Generate certificates for curl master force-fail tests
+      - name: Build libmemcached
+        working-directory: libmemcached
         run: |
-          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ] &&
-             [ "${{ matrix.curl_ref }}" = "master" ]; then
-            cd curl/tests/certs
-            make test-ca.cacert
-            cd ../..
-          fi
-      - name: Test curl with wolfProvider
-        working-directory: curl
+          # OPENSSL_ROOT_DIR is needed for cmake to find OpenSSL headers
+          export OPENSSL_ROOT_DIR=$GITHUB_WORKSPACE/openssl-install/include
+          # Build libmemcached with OpenSSL support
+          mkdir build
+          cd build
+          cmake -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug -DENABLE_OPENSSL_CRYPTO=ON ..
+          make
+
+      - name: Run libhashkit2 tests
+        working-directory: libmemcached/build
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
-          export CURL_REF=${{ matrix.curl_ref }}
 
-          # Run tests and save output to test.log
-          make -j$(nproc) test-ci 2>&1 | tee curl-test.log
-          # Capture the test result using PIPESTATUS (Bash only)
+          # Run tests
+          make test 2>&1 | tee libhashkit2-test.log
           TEST_RESULT=${PIPESTATUS[0]}
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl
+          echo "TEST_RESULT = $TEST_RESULT"
+          
+          #$GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libp11

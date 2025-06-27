@@ -110,6 +110,7 @@ static const OSSL_PARAM cipher_supported_gettable_params[] = {
     OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_BLOCK_SIZE, NULL),
     OSSL_PARAM_int(OSSL_CIPHER_PARAM_CUSTOM_IV, NULL),
     OSSL_PARAM_int(OSSL_CIPHER_PARAM_HAS_RAND_KEY, NULL),
+    OSSL_PARAM_int(OSSL_CIPHER_PARAM_CTS, NULL),
     OSSL_PARAM_END
 };
 /**
@@ -136,7 +137,7 @@ static const OSSL_PARAM *wp_cipher_gettable_params(
  * @return 0 on failure.
  */
 static int wp_aes_stream_get_params(OSSL_PARAM params[], unsigned int mode,
-    size_t kBits, size_t ivBits)
+    unsigned int flags, size_t kBits, size_t ivBits)
 {
     int ok = 1;
     OSSL_PARAM *p;
@@ -175,6 +176,14 @@ static int wp_aes_stream_get_params(OSSL_PARAM params[], unsigned int mode,
             ok = 0;
         }
     }
+#ifdef WP_HAVE_AESCTS
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_CTS);
+        if ((p != NULL) && (!OSSL_PARAM_set_int(p, flags & EVP_CIPH_FLAG_CTS))) {
+            ok = 0;
+        }
+    }
+#endif /* WP_HAVE_AESCTS */
 
     WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -783,9 +792,9 @@ static void wp_aes_stream_init_ctx(wp_AesStreamCtx* ctx, size_t kBits,
 
 
 /** Implements the get parameters API for a stream cipher. */
-#define IMPLEMENT_AES_STREAM_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)         \
+#define IMPLEMENT_AES_STREAM_GET_PARAMS(lcmode, UCMODE, flags, kBits, ivBits)  \
 /**                                                                            \
- * Get the values from the AES stream context for the parameters.               \
+ * Get the values from the AES stream context for the parameters.              \
  *                                                                             \
  * @param [in, out] params  Array of parameters to retrieve.                   \
  * @return 1 on success.                                                       \
@@ -793,8 +802,8 @@ static void wp_aes_stream_init_ctx(wp_AesStreamCtx* ctx, size_t kBits,
  */                                                                            \
 static int wp_aes_##kBits##_##lcmode##_get_params(OSSL_PARAM params[])         \
 {                                                                              \
-    return wp_aes_stream_get_params(params, EVP_CIPH_##UCMODE##_MODE, kBits,   \
-        ivBits);                                                               \
+    return wp_aes_stream_get_params(params, EVP_CIPH_##UCMODE##_MODE, flags,   \
+        kBits, ivBits);                                                        \
 }
 
 /** Implements the new context API for a stream cipher. */
@@ -845,8 +854,8 @@ const OSSL_DISPATCH wp_aes##kBits##mode##_functions[] = {                      \
 };
 
 /** Implements the functions calling base functions for a stream cipher. */
-#define IMPLEMENT_AES_STREAM(lcmode, UCMODE, kBits, ivBits)                    \
-IMPLEMENT_AES_STREAM_GET_PARAMS(lcmode, UCMODE, kBits, ivBits)                 \
+#define IMPLEMENT_AES_STREAM(lcmode, UCMODE, flags, kBits, ivBits)             \
+IMPLEMENT_AES_STREAM_GET_PARAMS(lcmode, UCMODE, flags, kBits, ivBits)          \
 IMPLEMENT_AES_STREAM_NEWCTX(lcmode, UCMODE, kBits, ivBits)                     \
 IMPLEMENT_AES_STREAM_DISPATCH(lcmode, kBits, ivBits)
 
@@ -855,11 +864,11 @@ IMPLEMENT_AES_STREAM_DISPATCH(lcmode, kBits, ivBits)
  */
 #ifdef WP_HAVE_AESCTR
 /** wp_aes256ctr_functions */
-IMPLEMENT_AES_STREAM(ctr, CTR, 256, 128)
+IMPLEMENT_AES_STREAM(ctr, CTR, 0, 256, 128)
 /** wp_aes192ctr_functions */
-IMPLEMENT_AES_STREAM(ctr, CTR, 192, 128)
+IMPLEMENT_AES_STREAM(ctr, CTR, 0, 192, 128)
 /** wp_aes128ctr_functions */
-IMPLEMENT_AES_STREAM(ctr, CTR, 128, 128)
+IMPLEMENT_AES_STREAM(ctr, CTR, 0, 128, 128)
 #endif /* WP_HAVE_AESCTR */
 
 /*
@@ -867,11 +876,11 @@ IMPLEMENT_AES_STREAM(ctr, CTR, 128, 128)
  */
 #ifdef WP_HAVE_AESCFB
 /** wp_aes256cfb_functions */
-IMPLEMENT_AES_STREAM(cfb, CFB, 256, 128)
+IMPLEMENT_AES_STREAM(cfb, CFB, 0, 256, 128)
 /** wp_aes192cfb_functions */
-IMPLEMENT_AES_STREAM(cfb, CFB, 192, 128)
+IMPLEMENT_AES_STREAM(cfb, CFB, 0, 192, 128)
 /** wp_aes128cfb_functions */
-IMPLEMENT_AES_STREAM(cfb, CFB, 128, 128)
+IMPLEMENT_AES_STREAM(cfb, CFB, 0, 128, 128)
 #endif /* WP_HAVE_AESCFB */
 
 /*
@@ -882,11 +891,11 @@ IMPLEMENT_AES_STREAM(cfb, CFB, 128, 128)
  */
 #ifdef WP_HAVE_AESCTS
 /** wp_aes256cts_functions */
-IMPLEMENT_AES_STREAM(cts, CBC, 256, 128)
+IMPLEMENT_AES_STREAM(cts, CBC, EVP_CIPH_FLAG_CTS, 256, 128)
 /** wp_aes192cts_functions */
-IMPLEMENT_AES_STREAM(cts, CBC, 192, 128)
+IMPLEMENT_AES_STREAM(cts, CBC, EVP_CIPH_FLAG_CTS, 192, 128)
 /** wp_aes128cts_functions */
-IMPLEMENT_AES_STREAM(cts, CBC, 128, 128)
+IMPLEMENT_AES_STREAM(cts, CBC, EVP_CIPH_FLAG_CTS, 128, 128)
 #endif /* WP_HAVE_AESCTS */
 
 #endif /* WP_HAVE_AESCTR || WP_HAVE_AESCFB || WP_HAVE_AESCTS */

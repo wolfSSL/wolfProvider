@@ -100,11 +100,8 @@ jobs:
 
           # Run tests
           make check 2>&1 | tee tcpdump-test.log
-          TEST_RESULT=$?
-
-          if [ $TEST_RESULT -ne 0 ]; then
-            grep -A2 -B2 "exit code\|failed\|FAILED" tcpdump-test.log || true
-          fi
+          # Capture the test result using PIPESTATUS (Bash only)
+          TEST_RESULT=${PIPESTATUS[0]}
 
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tcpdump
 

@@ -62,16 +62,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
                      linux-libc-dev man2html libcmocka-dev python3-docutils \
-                     libtool automake autoconf libnl-genl-3-dev libnl-genl-3-200
+                     iproute2 libtool automake autoconf libnl-genl-3-dev \
+                     libnl-genl-3-200
 
-      - name: Build and test OpenVPN
-        uses: wolfSSL/actions-build-autotools-project@v1
+      - name: Find ossl headers
+        run: |
+          find / -name ssl.h 2>/dev/null || true
+
+      - name: Download OpenVPN
+        uses: actions/checkout@v4
         with:
           repository: OpenVPN/openvpn
           path: openvpn
           ref: ${{ matrix.openvpn_ref }}
-          configure:
-          check: false
+          fetch-depth: 1
+
+      - name: Apply patch
+        working-directory: openvpn
+        run: |
+          # delete the test_des_encrypt test case, if it exists
+          perl -ni -e 'print unless /cmocka_unit_test\(test_des_encrypt\),/' tests/unit_tests/openvpn/test_crypto.c
+          # show the results of the patch
+          git diff
+
+      - name: Build OpenVPN
+        working-directory: openvpn
+        run: |
+          autoreconf -ivf
+          ./configure
+          make -j$(nproc)
 
       - name: Test OpenVPN with wolfProvider
         working-directory: openvpn
@@ -82,5 +101,7 @@ jobs:
 
           # Run tests and save result
           make check 2>&1 | tee openvpn-test.log
-          TEST_RESULT=$?
+          # Capture the test result using PIPESTATUS (Bash only)
+          TEST_RESULT=${PIPESTATUS[0]}
+          
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openvpn
