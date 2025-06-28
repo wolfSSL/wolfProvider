@@ -756,8 +756,8 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
                 ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.g, 1);
             }
             /* When buffer is non-NULL, type must be int or uint */
-            else 
-            if (p->data_type == OSSL_PARAM_INTEGER || 
+            else
+            if (p->data_type == OSSL_PARAM_INTEGER ||
                      p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
                     ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.p, 1);
             }
@@ -774,7 +774,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
                 ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g, 1);
             }
             /* When buffer is non-NULL, type must be int or uint */
-            else if (p->data_type == OSSL_PARAM_INTEGER || 
+            else if (p->data_type == OSSL_PARAM_INTEGER ||
                      p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
                     ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g, 1);
             }
@@ -796,7 +796,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
             if (p->data == NULL) {
                 p->return_size = dh->pubSz;
             }
-            else { 
+            else {
                 /* return_size is set within this function */
                 ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PUB_KEY,
                     dh->pub, dh->pubSz);
@@ -819,7 +819,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
                     p->return_size = dh->privSz;
                 }
             }
-            else { 
+            else {
                 /* return_size is set within this function */
                 ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
                     dh->priv, dh->privSz);
@@ -2523,9 +2523,10 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg)
 {
     int ok = 1;
+    BIO* out = NULL;
 #if (LIBWOLFSSL_VERSION_HEX >= 0x05000000 && defined(WOLFSSL_DH_EXTRA))
     int rc;
-    BIO* out = wp_corebio_get_bio(ctx->provCtx, cBio);
+    out = wp_corebio_get_bio(ctx->provCtx, cBio);
     unsigned char* keyData = NULL;
     size_t keyLen;
     unsigned char* derData = NULL;
@@ -2659,7 +2660,9 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     (void)pwCbArg;
 #endif
 
-    BIO_free(out);
+    if (out != NULL) {
+        BIO_free(out);
+    }
     WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

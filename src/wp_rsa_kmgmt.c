@@ -1098,7 +1098,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
 
     /* N and E params are the only ones required by OSSL, so match that.
      * See ossl_rsa_fromdata() and RSA_set0_key() in OpenSSL. */
-    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N) == NULL || 
+    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N) == NULL ||
         OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E) == NULL) {
         WOLFPROV_MSG(WP_LOG_PK, "Param N or E is missing");
         ok = 0;
@@ -1114,13 +1114,13 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             index = -1;
             for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
                 if (XSTRNCMP(p->key, wp_rsa_param_key[j], p->data_size) == 0) {
-                    index = j; 
+                    index = j;
                     break;
                 }
             }
             if (index < 0) {
                 /* Follow OSSL implementation and ignore irrelevant fields. */
-                WOLFPROV_MSG(WP_LOG_PK, "Unexpected param %s, skipping.", 
+                WOLFPROV_MSG(WP_LOG_PK, "Unexpected param %s, skipping.",
                     p->key);
                 continue;
             }
@@ -2163,22 +2163,17 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     int rc;
     word32 idx = 0;
 
-    rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
-    if (rc != 0) {
-        ok = 0;
-    }
-#if LIBWOLFSSL_VERSION_HEX < 0x05000000
-    if (!ok) {
-        idx = 0;
-        rc = wc_GetPkcs8TraditionalOffset(data, &idx, len);
-        if (rc >= 0) {
-            rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
-            if (rc == 0) {
-                 ok = 1;
-            }
+    if (ok) {
+    #ifdef HAVE_PKCS8
+        /* skip PKCS8 header */
+        (void)wc_GetPkcs8TraditionalOffset((byte*)data, &idx, len);
+    #endif
+        rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
+        if (rc == 0) {
+            ok = 1;
         }
     }
-#endif
+
     if (ok && !wp_rsa_determine_type(rsa, data, len)) {
         ok = 0;
     }
