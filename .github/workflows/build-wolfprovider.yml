@@ -86,6 +86,9 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
+            provider.conf
+            provider-fips.conf
+            scripts
           key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
 
       # If openssl cache miss, save it to the cache
