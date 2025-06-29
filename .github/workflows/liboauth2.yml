@@ -56,7 +56,7 @@ jobs:
       - name: Install liboauth2 dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libssl-dev libcurl4-openssl-dev libjansson-dev \
+          sudo apt-get install -y libcurl4-openssl-dev libjansson-dev \
             libcjose-dev pkg-config build-essential apache2-dev libhiredis-dev \
             libmemcached-dev autotools-dev autoconf automake libtool check
 
@@ -65,12 +65,23 @@ jobs:
         with:
           repository: wolfssl/osp
           path: osp
+          fetch-depth: 1
+
+      - name: Checkout liboauth2
+        uses: actions/checkout@v4
+        with:
+          repository: OpenIDC/liboauth2
+          ref: ${{ matrix.liboauth2_ref }}
+          path: liboauth2
+          fetch-depth: 1
 
       - name: Build liboauth2
+        working-directory: liboauth2
         run: |
-          git clone https://github.com/OpenIDC/liboauth2.git
-          cd liboauth2
-          git checkout ${{ matrix.liboauth2_ref }}
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+
+          # Apply patch from OSP repo
           patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/liboauth2/liboauth2-${{ matrix.liboauth2_ref }}-wolfprov.patch
 
           autoreconf -fiv

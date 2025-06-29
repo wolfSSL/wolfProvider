@@ -7,6 +7,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   build_wolfprovider:
     uses: ./.github/workflows/build-wolfprovider.yml
@@ -17,6 +18,7 @@ jobs:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+
   test_libfido2:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
@@ -35,6 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Retrieving wolfSSL/wolfProvider from cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
@@ -47,10 +50,13 @@ jobs:
             openssl-install/bin
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
+
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config libssl-dev libudev-dev zlib1g-dev libcbor-dev libpcsclite-dev pcscd
+          sudo apt-get install -y build-essential cmake pkg-config libudev-dev \
+            zlib1g-dev libcbor-dev libpcsclite-dev pcscd
+
       - name: Checkout libfido2
         uses: actions/checkout@v4
         with:
@@ -58,14 +64,18 @@ jobs:
           path: libfido2_repo
           ref: ${{ matrix.libfido2_ref }}
           fetch-depth: 1
+
       - name: Build and install libfido2
         working-directory: libfido2_repo
         run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
           mkdir build
           cd build
           cmake -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/libfido2-install ..
           make -j$(nproc)
           make install
+
       - name: Run libfido2 tests
         working-directory: libfido2_repo/build
         run: |

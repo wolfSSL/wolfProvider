@@ -70,7 +70,7 @@ jobs:
         working-directory: cjose
         run: |
           # Configure with OpenSSL
-          ./configure CFLAGS="-Wno-error=deprecated-declarations" --with-openssl=/git/wolfProvider/openssl-install
+          ./configure CFLAGS="-Wno-error=deprecated-declarations" --with-openssl=$GITHUB_WORKSPACE/openssl-install
 
           # Build cjose
           make
