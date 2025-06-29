@@ -308,7 +308,9 @@ static int wp_aes_block_init(wp_AesBlockCtx *ctx, const unsigned char *key,
 #endif
 #ifdef WP_HAVE_AESCBC
     if (ok && (iv == NULL) && ctx->ivSet && (ctx->mode == EVP_CIPH_CBC_MODE)) {
-        XMEMCPY(ctx->iv, ctx->oiv, ctx->ivLen);
+        if (!wp_aes_init_iv(ctx, ctx->oiv, ctx->ivLen)) {
+            ok = 0;
+        }
     }
 #else
     (void)ivLen;
