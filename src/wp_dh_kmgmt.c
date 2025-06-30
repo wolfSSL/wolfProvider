@@ -2208,6 +2208,12 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
                 decoded = 0;
             }
         }
+        else if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+            if (!wp_dh_decode_spki(dh, data, len)) {
+                ok = 0;
+                decoded = 0;
+            }
+        }
         else {
             if (!wp_dh_decode_params(dh, data, len)) {
                 ok = 0;
