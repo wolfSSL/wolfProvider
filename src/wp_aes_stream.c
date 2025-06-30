@@ -411,7 +411,7 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     }
     if (ok) {
         XMEMCPY(out, ctsBlock + AES_BLOCK_SIZE, AES_BLOCK_SIZE);
-        XMEMCPY(out + AES_BLOCK_SIZE, ctsBlock, AES_BLOCK_SIZE);
+        XMEMCPY(out + AES_BLOCK_SIZE, ctsBlock, inLen - AES_BLOCK_SIZE);
     }
 
     return ok;
@@ -465,6 +465,7 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     if (ok) {
         XMEMCPY(out + AES_BLOCK_SIZE, tmp, partialSz);
         XMEMCPY(ctsBlock + inLen, tmp + partialSz, padSz);
+        XMEMCPY(tmp, &ctx->aes.reg, AES_BLOCK_SIZE);
         XMEMCPY(&ctx->aes.reg, ctx->iv, AES_BLOCK_SIZE);
         rc = wc_AesCbcDecrypt(&ctx->aes, out, ctsBlock + AES_BLOCK_SIZE,
             AES_BLOCK_SIZE);
@@ -472,7 +473,8 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
             ok = 0;
         }
         if (ok) {
-            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+            /* Restore the proper IV */
+            XMEMCPY(ctx->iv, tmp, ctx->ivLen);
         }
     }
 
