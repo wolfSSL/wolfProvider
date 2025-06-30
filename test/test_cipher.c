@@ -1172,3 +1172,158 @@ int test_aes256_cts(void *data)
 
 #endif /* WP_HAVE_AESCTS */
 
+#ifdef WP_HAVE_AESCBC
+
+int test_aes256_cbc_multiple(void *data)
+{
+    /* Test vector from libmemcached/libhashkit */
+    static const unsigned char key_data[] = {
+        0x5f, 0x5f, 0x5f, 0x5f, 0x43, 0x5f, 0x41, 0x5f,
+        0x54, 0x5f, 0x43, 0x5f, 0x48, 0x5f, 0x5f, 0x5f,
+        0x5f, 0x54, 0x5f, 0x45, 0x5f, 0x53, 0x5f, 0x54,
+        0x5f, 0x5f, 0x5f, 0x5f, 0x30, 0x00, 0x00, 0x00
+    };
+
+    static const unsigned char plain_text[] = {
+        0x72, 0x65, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x64,
+        0x20, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2c, 0x20,
+        0x74, 0x68, 0x69, 0x63, 0x68, 0x20, 0x69, 0x73,
+        0x20, 0x6c, 0x6f, 0x6e, 0x67, 0x65, 0x72, 0x20,
+        0x74, 0x68, 0x61, 0x6e, 0x20, 0x41, 0x45, 0x53,
+        0x5f, 0x42, 0x4c, 0x4f, 0x43, 0x4b, 0x5f, 0x53,
+        0x49, 0x5a, 0x45
+    };
+    static const int plain_text_len = sizeof(plain_text);
+
+    static const unsigned char aes_iv[] = {
+        0x44, 0x63, 0xff, 0xd3, 0x79, 0xcf, 0x04, 0x74,
+        0x9e, 0x75, 0xa2, 0x71, 0xa4, 0x2c, 0xc7, 0x0a
+    };
+
+    static const unsigned char ciphertext_exp[] = {
+        0x75, 0xdd, 0x24, 0xf5, 0xc1, 0x5c, 0x34, 0x65,
+        0xaf, 0xd3, 0xa9, 0x82, 0x74, 0xe2, 0xf3, 0xa1,
+        0x35, 0x95, 0x5a, 0x89, 0x6f, 0x59, 0xb9, 0xa2,
+        0x84, 0xec, 0xa8, 0x54, 0x9f, 0xcc, 0x6d, 0xe3,
+        0x99, 0xfc, 0xf0, 0xa3, 0xc4, 0x03, 0xc3, 0x56,
+        0xec, 0x6d, 0x1c, 0xcd, 0xe1, 0xc2, 0x17, 0xa0,
+        0x51, 0x0b, 0x00, 0x87, 0xde, 0x43, 0x8a, 0xf6,
+        0x1b, 0x03, 0x2c, 0x7f, 0x68, 0x67, 0x11, 0x72
+    };
+
+    (void)data;
+    int err = 0;
+
+    EVP_CIPHER_CTX *ctx_enc = NULL;
+    EVP_CIPHER_CTX *ctx_dec = NULL;
+
+    if (err == 0) {
+        ctx_enc = EVP_CIPHER_CTX_new();
+        ctx_dec = EVP_CIPHER_CTX_new();
+        if (ctx_dec == NULL || ctx_enc == NULL) {
+            PRINT_MSG("EVP_CIPHER_CTX_new failed");
+            err = 1;
+        }
+        else {
+            PRINT_MSG("CTXs created");
+        }
+    }
+
+    if (err == 0) {
+        if (EVP_EncryptInit_ex(ctx_enc, EVP_aes_256_cbc(), NULL, key_data, aes_iv) != 1
+            || EVP_DecryptInit_ex(ctx_dec, EVP_aes_256_cbc(), NULL, key_data, aes_iv) != 1) {
+            PRINT_MSG("EVP_EncryptInit_ex or EVP_DecryptInit_ex failed");
+            err = 1;
+        }
+        else {
+            PRINT_MSG("EVP_EncryptInit_ex and EVP_DecryptInit_ex succeeded");
+        }
+    }
+
+    /* Test that we can encrypt and decrypt multiple times without creating 
+     * a new context. We should get the same result each time: same ciphertext
+     * when encrypting and same plaintext when decrypting. */
+    for (int i = 0; i < 8; i++) {
+        int cipher_text_len = plain_text_len + EVP_CIPHER_CTX_block_size(ctx_enc);
+        int decrypted_text_len = 0;
+        int final_len = 0;
+        unsigned char* cipher_text = malloc(cipher_text_len);
+        unsigned char* decrypted_text = malloc(plain_text_len);
+
+        PRINT_MSG("Test iteration: %d", i);
+
+        if (cipher_text == NULL || decrypted_text == NULL) {
+            PRINT_MSG("Memory allocation failed");
+            err = 1;
+        }
+
+        if (err == 0) {
+            if (EVP_EncryptInit_ex(ctx_enc, NULL, NULL, NULL, NULL) != 1
+                || EVP_EncryptUpdate(ctx_enc, cipher_text, &cipher_text_len, plain_text, plain_text_len) != 1
+                || EVP_EncryptFinal_ex(ctx_enc, cipher_text + cipher_text_len, &final_len) != 1) {
+                PRINT_MSG("Encrypt failed");
+                err = 1;
+            }
+            else {
+                cipher_text_len += final_len;
+                PRINT_BUFFER("Plain text    ", plain_text, plain_text_len);
+                PRINT_BUFFER("Cipher text   ", cipher_text, cipher_text_len);
+            }
+        }
+
+        if (err == 0) {
+            if (cipher_text_len != sizeof(ciphertext_exp)) {
+                PRINT_MSG("Cipher text length does not match expected value");
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            if (memcmp(cipher_text, ciphertext_exp, sizeof(ciphertext_exp)) != 0) {
+                PRINT_MSG("Cipher text does not match expected value");
+                err = 1;
+            } else {
+                PRINT_MSG("Cipher text matches expected value");
+            }
+        }
+
+        if (err == 0) {
+            if (EVP_DecryptInit_ex(ctx_dec, NULL, NULL, NULL, NULL) != 1
+                || EVP_DecryptUpdate(ctx_dec, decrypted_text, &decrypted_text_len, cipher_text, cipher_text_len) != 1
+                || EVP_DecryptFinal_ex(ctx_dec, decrypted_text + decrypted_text_len, &final_len) != 1) {
+                PRINT_MSG("Decrypt failed");
+                err = 1;
+            }
+            else {
+                decrypted_text_len += final_len;
+                PRINT_BUFFER("Decrypted text", decrypted_text, decrypted_text_len);
+            }
+        }
+
+        if (err == 0) {
+            if (plain_text_len != decrypted_text_len) {
+                PRINT_MSG("Decrypted text length does not match original");
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            int res = memcmp(plain_text, decrypted_text, plain_text_len);
+            if (res != 0) {
+                PRINT_MSG("Decrypted text does not match original");
+                err = 1;
+            } else {
+                PRINT_MSG("Cipher test passed successfully");
+            }
+        }
+
+        free(cipher_text);
+        free(decrypted_text);
+    }
+
+    EVP_CIPHER_CTX_free(ctx_enc);
+    EVP_CIPHER_CTX_free(ctx_dec);
+
+    return err;
+}
+#endif /* WP_HAVE_AESCBC */
