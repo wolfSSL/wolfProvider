@@ -1559,12 +1559,13 @@ static int wp_aesgcm_cipher(wp_AeadCtx *ctx, unsigned char *out,
     size_t *outLen, size_t outSize, const unsigned char *in, size_t inLen)
 {
     int ok = 1;
-    size_t finalLen;
+    size_t finalLen = 0;
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
     if (ok) {
+        *outLen = 0;
         if (in != NULL) {
             ok = wp_aesgcm_stream_update(ctx, out, outLen, outSize, in, inLen);
         }
