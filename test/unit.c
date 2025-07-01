@@ -300,6 +300,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_misc, NULL),
     TEST_DECL(test_ecx_null_init, NULL),
 #endif
+
+    TEST_DECL(test_pkcs7_x509_sign_verify, NULL),
+    TEST_DECL(test_x509_cert, NULL),
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
 

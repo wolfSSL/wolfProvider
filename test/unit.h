@@ -402,4 +402,7 @@ int test_ecx_misc(void *data);
 int test_ecx_null_init(void *data);
 #endif
 
+int test_pkcs7_x509_sign_verify(void *data);
+int test_x509_cert(void *data);
+
 #endif /* UNIT_H */
