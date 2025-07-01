@@ -62,6 +62,7 @@ jobs:
         with:
           repository: wolfssl/osp
           path: osp
+          fetch-depth: 1
 
       - name: Checkout openssh
         uses: actions/checkout@v4
@@ -69,6 +70,7 @@ jobs:
           repository: openssh/openssh-portable
           path: openssh-portable
           ref: ${{ matrix.openssh_ref }}
+          fetch-depth: 1
 
       - name: Build and Test openssh-portable
         working-directory: openssh-portable
