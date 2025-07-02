@@ -294,6 +294,22 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "Error: $IPERF_TEST_LOG not found"
             exit 1
         fi
+    # ----- SYSTEMD -----
+    elif [ $TEST_SUITE = "systemd" ]; then
+        TEST_LOG="systemd-test.log"
+        if [ -f $TEST_LOG ]; then
+            if [ $TEST_RESULT -eq 1 ]; then
+                echo "PASS: $TEST_SUITE tests failed as expected with force fail enabled"
+                exit 0
+            else
+                echo "FAIL: $TEST_SUITE tests succeeded with force fail enabled"
+                exit 1
+            fi
+        else
+            echo "Error: $TEST_LOG not found"
+            exit 1
+        fi
+    # ----- OTHERWISE -----
     else
         if [ $TEST_RESULT -eq 0 ]; then
             echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"
