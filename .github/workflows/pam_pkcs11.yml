@@ -35,8 +35,8 @@ jobs:
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
-            - curl_ref: 'master'
-              force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - pam_pkcs11_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
