@@ -1,0 +1,106 @@
+name: PPP Tests
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_ppp:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        #Switched to v2.5.2 due to significant limitations with v2.4.9, specifically the lack of a test suite, necessary configure options, and compatibility with newer versions of openssl
+        ppp_ref: [ 'master', 'v2.5.2' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - ppp_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+
+    steps:
+      # Checkout the source so we can run the check-workflow-result script
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout PPP
+        uses: actions/checkout@v4
+        with:
+          repository: ppp-project/ppp
+          path: ppp_repo
+          ref: ${{ matrix.ppp_ref }}
+          fetch-depth: 1
+
+      - name: Apply PPP compatibility fixes for OpenSSL 3.x
+        working-directory: ppp_repo
+        run: |
+          # Disable testing of legacy algorithms
+          for fn in PPP_crypto_init PPP_crypto_deinit test_md4 test_des_encrypt test_des_decrypt; do
+            perl -0777 -pi -e '
+              s/\bint\s+'$fn'\s*\([^)]*\)/int '$fn'() { return 1; }\nint __attribute__((unused)) __replaced_'$fn'()/g
+            ' pppd/crypto.c
+          done
+
+      - name: Build and install PPP
+        working-directory: ppp_repo
+        run: |
+          if [ -f ./autogen.sh ]; then
+            ./autogen.sh
+          elif [ ! -f ./configure ]; then
+            autoreconf -fiv
+          fi
+          CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" ./configure --prefix=$GITHUB_WORKSPACE/ppp-install --with-openssl=$GITHUB_WORKSPACE/openssl-install --disable-microsoft-extensions
+          make -j$(nproc)
+          make install
+
+      - name: Run PPP tests
+        working-directory: ppp_repo
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Run tests
+          make check 2>&1 | tee ppp-test.log
+
+          # Check test results directly in YAML
+          if grep -q "# FAIL:  0" pppd/test-suite.log; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} ppp
