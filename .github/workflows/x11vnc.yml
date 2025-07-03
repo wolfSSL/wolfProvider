@@ -91,4 +91,4 @@ jobs:
           source $GITHUB_WORKSPACE/scripts/env-setup
           export WOLFPROV_FORCE_FAIL_STR="${{ matrix.force_fail }}"
 
-          $GITHUB_WORKSPACE/.github/scripts/test_x11vnc.sh
+          $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh
