@@ -3925,15 +3925,15 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
     }
     else {
         if ((printAmt = XSNPRINTF(textData + dPos, textLen - dPos,
-                "%s:\n    ", label)) <= 0){
+                "%s:\n    ", label)) <= 0) {
             ok = 0;
         }
         dPos += printAmt;
 
         /* OSSL adds a leading 00 if MSB is set */
-        if (ok && *binData > 127){
+        if (ok && *binData > 127) {
             if ((printAmt = XSNPRINTF(textData + dPos, textLen - dPos,
-                    "00:")) <= 0){
+                    "00:")) <= 0) {
                 ok = 0;
             }
             dPos += printAmt;
@@ -3943,17 +3943,17 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
         /* OSSL does a newline + indent every 15 bytes */
         if (ok) {
             for (i = 0; i < (int)binLen - 1; i++) {
-                if (bytes >= 14){
+                if (bytes >= 14) {
                     if ((printAmt = XSNPRINTF(textData + dPos,
-                            textLen - dPos, "%02x:\n    ", binData[i])) <= 0){
+                            textLen - dPos, "%02x:\n    ", binData[i])) <= 0) {
                         ok = 0;
                         break;
                     }
                     bytes = 0;
                 }
-                else{
+                else {
                     if ((printAmt = XSNPRINTF(textData + dPos,
-                            textLen - dPos, "%02x:", binData[i])) <= 0){
+                            textLen - dPos, "%02x:", binData[i])) <= 0) {
                         ok = 0;
                         break;
                     }
@@ -3962,7 +3962,7 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
                 dPos += printAmt;
             }
             if (ok && (printAmt = XSNPRINTF(textData + dPos,
-                    textLen - dPos, "%02x\n", binData[i])) <= 0){
+                    textLen - dPos, "%02x\n", binData[i])) <= 0) {
                 ok = 0;
             }
             dPos += printAmt;
@@ -3972,7 +3972,10 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
         binData = NULL;
     }
 
-    *pos = dPos;
+    if (ok) {
+        *pos = dPos;
+    }
+
     return ok;
 }
 
@@ -4014,11 +4017,20 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 
     /* Calculate total size needed for text output */
     if (ok) {
+        /* 128 bytes provides space for labels: 'modulus:', 'prime1:', etc. */
         textLen = 128;
         if (hasPriv) {
+            /* displaying modulus and private exponent requires roughly 3 bytes
+             * per byte in key.
+             * prime1, prime2, exponent1, exponent2, and coefficient requires
+             * roughly 1.5 bytes per byte inkey.
+             * This is then 13.5 bytes per bytes in key + indents, which should
+             * be less than bits * 2.*/
             textLen += key->bits << 1;
         }
         else if (hasPub) {
+            /* displaying modulus requires roughly 3 bytes per byte in key + a
+             * small amount for indents. This should be less than bits / 2 */
             textLen += key->bits >> 1;
         }
 
@@ -4031,27 +4043,28 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         /* OSSL uses nested macros to determine the number of primes, not sure
          * when there wouldn't be two primes */
         if (hasPriv && (printAmt = XSNPRINTF(textData + pos, textLen - pos,
-                "Private-Key: (%d bit, 2 primes)\n", key->bits)) <= 0){
+                "Private-Key: (%d bit, 2 primes)\n", key->bits)) <= 0) {
             ok = 0;
-        } else if (hasPub && (printAmt = XSNPRINTF(textData + pos,
-                textLen - pos, "Public-Key: (%d bit)\n", key->bits)) <= 0){
+        }
+        else if (hasPub && (printAmt = XSNPRINTF(textData + pos,
+                textLen - pos, "Public-Key: (%d bit)\n", key->bits)) <= 0) {
             ok = 0;
         }
         pos += printAmt;
     }
 
     /* OSSL uses 'modulus' and 'Modulus' */
-    if (hasPriv){
+    if (hasPriv) {
         ok = wp_rsa_encode_text_format_hex(&key->key.n, textData, textLen, &pos,
             "modulus");
     }
-    else if (hasPub){
+    else if (hasPub) {
         ok = wp_rsa_encode_text_format_hex(&key->key.n, textData, textLen, &pos,
             "Modulus");
     }
 
     /* OSSL uses 'publicExponent' and 'Exponent' */
-    if (ok){
+    if (ok) {
         if (mp_radix_size(&key->key.e, MP_RADIX_DEC, &expLen) != MP_OKAY
                 || ((expStr = OPENSSL_malloc(expLen)) == NULL)) {
             ok = 0;
@@ -4077,7 +4090,7 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         }
     }
 
-    if (ok){
+    if (ok) {
         if (mp_radix_size(&key->key.e, MP_RADIX_HEX, &expLen) != MP_OKAY
                 || ((expStr = OPENSSL_malloc(expLen)) == NULL)) {
             ok = 0;
@@ -4087,7 +4100,7 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             OPENSSL_free(expStr);
             expStr = NULL;
         }
-        else{
+        else {
             /* OSSL does not print a leading zero for the hex part */
             if ((printAmt = XSNPRINTF(textData + pos,
                     textLen - pos, "(0x%s)\n",

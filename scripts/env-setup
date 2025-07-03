@@ -13,6 +13,7 @@ if [ $is_sourced -eq 0 ]; then
     exit 1
 fi
 
+
 if [ -n "$BASH_SOURCE" ]; then
     SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 elif [ -n "$ZSH_VERSION" ]; then
@@ -22,6 +23,7 @@ else
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P)"
 pushd $SCRIPT_DIR
 REPO_ROOT="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
 popd
@@ -64,4 +66,4 @@ else
   return 1
 fi 
 
-echo "Done!\n"
+echo "Done!"

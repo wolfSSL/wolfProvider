@@ -1,0 +1,32 @@
+#!/bin/expect
+
+set timeout 1
+
+spawn x11vnc -sslGenCA ca-dir
+
+sleep 1
+
+# provide password and verify
+expect {
+    "PEM"   { send "wolfprov\r" }
+    eof     { exit 1 }
+}
+expect "PEM"            { send "wolfprov\r" }
+
+# provide CA information
+expect "Country Name"   { send "US\r" }
+expect "State"          { send "montana\r" }
+expect "Locality"       { send "bozeman\r" }
+expect "Organization"   { send "wolfssl\r" }
+expect "Organizational" { send "wolfssl\r" }
+expect "Common"         { send "wolfserver\r" }
+expect "Email"          { send "wolf@server.com\r" }
+
+# if CA creation has succeeded then the enter key will be expected
+expect {
+    "Enter" { send "\r" }
+    eof     { exit 1 }
+}
+
+expect eof
+exit 0
