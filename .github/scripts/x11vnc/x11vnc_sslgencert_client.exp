@@ -1,0 +1,39 @@
+#!/bin/expect
+
+set timeout 1
+
+# generate a cert for the client
+spawn x11vnc -ssldir ca-dir -sslGenCert client wolf
+
+sleep 1
+
+# provide CA information
+expect {
+    "Country Name"  { send "US\r" }
+    eof             { exit 1 }
+}
+expect "State"          { send "montana\r" }
+expect "Locality"       { send "bozeman\r" }
+expect "Organization"   { send "wolfssl\r" }
+expect "Organizational" { send "wolfssl\r" }
+expect "Common"         { send "wolfclient\r" }
+expect "Email"          { send "wolf@client.com\r" }
+
+# challenge password and company name
+expect "challenge"      { send "wolfprov\r" }
+expect "company"        { send "wolfssl\r" }
+
+# create the cert
+expect "passphrase"     { send "n\r" }
+expect "pass phrase"    { send "wolfprov\r" }
+expect "Sign"           { send "y\r" }
+expect "commit"         { send "y\r" }
+
+# if cert creation has succeeded then the enter key will be expected
+expect {
+    "Enter" { send "\r" }
+    eof     { exit 1 }
+}
+
+expect eof
+exit 0

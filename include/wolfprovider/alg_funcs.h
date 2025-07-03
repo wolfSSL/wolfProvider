@@ -380,6 +380,7 @@ extern const OSSL_DISPATCH wp_rsa_epki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsa_epki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsa_kp_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsa_kp_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_rsa_text_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsapss_spki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsapss_spki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_rsapss_pki_der_encoder_functions[];
