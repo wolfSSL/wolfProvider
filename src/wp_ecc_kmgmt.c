@@ -980,8 +980,8 @@ static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
 static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
 {
     int ok = 1;
-    int privDone = 0;
     int rc;
+    int origType;
 
     /* Only named curves supported. */
     if (((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) &&
@@ -1004,8 +1004,17 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
        (void)checkType;
     #endif
         {
-            privDone = 1;
+            /* We may have a private key that does not correspond to the public
+             * key, which is fine as we are only being asked to check the
+             * public at this time. wc_ecc_check_key() always checks both if it
+             * has a private key, so we will fool it into only checking public
+             * key by manually setting the type */
+            origType = ecc->key.type;
+            if (ecc->key.type != ECC_PUBLICKEY) {
+                ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
+            }
             rc = wc_ecc_check_key((ecc_key*)&ecc->key);
+            ((wp_Ecc*)ecc)->key.type = origType;
             if (rc != 0) {
                 ok = 0;
             }
@@ -1015,7 +1024,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
         (!ecc->hasPriv)) {
         ok = 0;
     }
-    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) && (!privDone)) {
+    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         rc = wc_ecc_check_key((ecc_key*)&ecc->key);
         if (rc != 0) {
             ok = 0;
