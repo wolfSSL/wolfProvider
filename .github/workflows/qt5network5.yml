@@ -1,0 +1,108 @@
+name: qtbase Network Tests
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+  test_qtbase_network:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        qt_ref: [ 'dev', '5.15.8' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - qt_ref: 'dev'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+      - name: Install Qt dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config ninja-build \
+            python3 perl
+      - name: Checkout Qt
+        uses: actions/checkout@v4
+        with:
+          repository: qt/qt5
+          path: qt5_repo
+          ref: ${{ matrix.qt_ref }}
+          fetch-depth: 1
+      - name: Initialize Qt repository
+        working-directory: qt5_repo
+        run: |
+          # Initialize only essential modules
+          ./init-repository --module-subset=essential
+      - name: Configure and build Qt
+        working-directory: qt5_repo/qtbase
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          
+          # Configure Qt with minimal build and OpenSSL support
+          ./configure -opensource -confirm-license -nomake examples -nomake tests \
+            -no-gui -no-widgets -no-dbus \
+            -openssl-linked -I $GITHUB_WORKSPACE/openssl-install/include \
+            -L $GITHUB_WORKSPACE/openssl-install/lib64 \
+            -prefix $GITHUB_WORKSPACE/qt-install
+          
+          # Build Qt core and network modules only
+          cmake --build . --parallel $(nproc) --target qtbase
+      - name: Build QSslServer test
+        working-directory: qt5_repo/qtbase
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          
+          # Build the specific test
+          cmake --build . --target tst_qsslserver
+      - name: Run QSslServer test
+        working-directory: qt5_repo/qtbase
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          
+          # Run the test and capture output
+          # Only testing qsslserver since the rest of the network tests require a lot of other modules and configuring a test server
+          ./tests/auto/network/ssl/qsslserver/tst_qsslserver 2>&1 | tee qsslserver-test.log
+          
+          # Check test results - look for "0 failed" in the output
+          if grep -q "0 failed" qsslserver-test.log; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+          
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} qtbase-qsslserver
