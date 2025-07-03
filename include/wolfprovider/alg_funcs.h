@@ -146,6 +146,7 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_PKCS12KDF      "PKCS12KDF"
 #define WP_NAMES_TLS1_3_KDF     "TLS13-KDF"
 #define WP_NAMES_TLS1_PRF       "TLS1-PRF"
+#define WP_NAMES_KBKDF          "KBKDF"
 
 /* Signature names. */
 #define WP_NAMES_RSA            "RSA:rsaEncryption:1.2.840.113549.1.1.1"
@@ -309,6 +310,7 @@ extern const OSSL_DISPATCH wp_kdf_pbkdf2_functions[];
 extern const OSSL_DISPATCH wp_kdf_pkcs12_functions[];
 extern const OSSL_DISPATCH wp_kdf_tls1_3_kdf_functions[];
 extern const OSSL_DISPATCH wp_kdf_tls1_prf_functions[];
+extern const OSSL_DISPATCH wp_kdf_kbkdf_functions[];
 
 /* Signature implementations. */
 extern const OSSL_DISPATCH wp_rsa_signature_functions[];
