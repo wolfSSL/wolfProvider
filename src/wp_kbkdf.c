@@ -442,7 +442,7 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
         }
     }
     if (ok) {
-        h = EVP_MAC_CTX_get_mac_size(macCtxOrig);
+        h = (int)EVP_MAC_CTX_get_mac_size(macCtxOrig);
         if (h <= 0 || h > WP_MAX_MAC_SIZE) {
             ok = 0;
         }
