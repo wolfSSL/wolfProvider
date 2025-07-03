@@ -82,6 +82,7 @@
 #ifndef NO_AES_CBC
     #define WP_HAVE_AESCBC
     #define WP_HAVE_AESCTS
+    #define WP_HAVE_KRB5KDF
 #endif
 #ifndef NO_DES3
     #define WP_HAVE_DES3CBC

@@ -132,6 +132,10 @@ int test_tls1_prf(void *data);
 int test_hkdf(void *data);
 #endif
 
+#ifdef WP_HAVE_KRB5KDF
+int test_krb5kdf(void *data);
+#endif
+
 #ifdef WP_HAVE_DES3CBC
 int test_des3_cbc(void *data);
 int test_des3_cbc_stream(void *data);
