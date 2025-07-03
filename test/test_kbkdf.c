@@ -226,7 +226,6 @@ static int test_kbkdf_feedback(void)
         /* Test with 256-bit key */
         err = test_kbkdf_feedback_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256));
     }
-
     if (err == 0) {
         /* Test HMAC mode with SHA256 */
         err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key128, sizeof(key128), "SHA256");
@@ -235,7 +234,6 @@ static int test_kbkdf_feedback(void)
             err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256), "SHA256");
         }
     }
-
     if (err == 0) {
         /* Test HMAC mode with SHA384 */
         err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key128, sizeof(key128), "SHA384");
