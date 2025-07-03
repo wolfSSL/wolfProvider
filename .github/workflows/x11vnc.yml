@@ -89,6 +89,7 @@ jobs:
       - name: Run x11vnc tests
         run: |
           source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
           export WOLFPROV_FORCE_FAIL_STR="${{ matrix.force_fail }}"
 
           $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh
