@@ -573,6 +573,7 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
 }
 
 #ifndef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_MD5
 /*
  * wolfProvider version of EncryptedInfo.
  */
@@ -695,6 +696,7 @@ static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
 
     return ret;
 }
+#endif /* WP_HAVE_MD5 */
 #endif /* WOLFSSL_ENCRYPTED_KEYS */
 
 /**
