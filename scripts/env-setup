@@ -13,7 +13,6 @@ if [ $is_sourced -eq 0 ]; then
     exit 1
 fi
 
-
 if [ -n "$BASH_SOURCE" ]; then
     SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 elif [ -n "$ZSH_VERSION" ]; then
@@ -23,7 +22,6 @@ else
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P)"
 pushd $SCRIPT_DIR
 REPO_ROOT="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
 popd
@@ -32,11 +30,24 @@ echo "SCRIPT_DIR: $SCRIPT_DIR"
 echo "REPO_ROOT: $REPO_ROOT"
 echo "PWD: $PWD"
 
-# Detect the openssl library path based on aarch64
-if [ "$(uname -m)" = "aarch64" ]; then
+# Detect the openssl library path
+if [ -d $REPO_ROOT/openssl-install/lib ]; then
     OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib
-else
+elif [ -d $REPO_ROOT/openssl-install/lib64 ]; then
     OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib64
+else
+    echo "Error: Could not find OpenSSL lib directory in $REPO_ROOT/openssl-install"
+    exit 1
+fi
+
+echo "OPENSSL_LIB_PATH: $OPENSSL_LIB_PATH"
+#  print contents of OPENSSL_LIB_PATH
+if command -v tree >/dev/null 2>&1; then
+    echo "Contents of OPENSSL_LIB_PATH:"
+    tree -L 2 $OPENSSL_LIB_PATH
+else
+    echo "Contents of OPENSSL_LIB_PATH:"
+    ls -l $OPENSSL_LIB_PATH
 fi
 
 # Set variables with default values if not already set
@@ -44,6 +55,11 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:=$REPO_ROOT/wolfssl-install/lib:$OPENS
 export OPENSSL_CONF="${OPENSSL_CONF:=$REPO_ROOT/provider.conf}"
 export OPENSSL_MODULES="${OPENSSL_MODULES:=$REPO_ROOT/wolfprov-install/lib}"
 export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
+
+echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+echo "OPENSSL_CONF: $OPENSSL_CONF"
+echo "OPENSSL_MODULES: $OPENSSL_MODULES"
+echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
 
 # If openssl-install does not exist, exit with failure status to terminate 
 # any workflows which depend on the result.
@@ -59,6 +75,7 @@ fi
 echo "Checking OpenSSL providers:"
 PROVIDER_LIST=$(mktemp -t provider-list.XXXXXX)
 $REPO_ROOT/openssl-install/bin/openssl list -providers | tee $PROVIDER_LIST
+cat $PROVIDER_LIST
 if grep -q libwolfprov $PROVIDER_LIST; then
   echo "libwolfprov found in OpenSSL providers"
 else
