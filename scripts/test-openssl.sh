@@ -16,15 +16,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
-#
-
-# Execute this script from: wolfProvider
-#set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
+
+if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+    echo "FIPS mode enabled for openssl tests"
+fi
 
 do_cleanup() {
     echo "Cleanup"
@@ -93,32 +93,57 @@ trap do_trap INT TERM
 
 evp_test_run() {
     printf "\tTesting with evp_test:\n"
-    EVP_TESTS=(
-        evpciph_aes_ccm_cavs.txt
-        evpciph_aes_common.txt
-        evpciph_aes_wrap.txt
-        evpencod.txt
-        evpkdf_hkdf.txt
-        evpkdf_pbkdf2.txt
-        evpkdf_tls11_prf.txt
-        evpkdf_tls12_prf.txt
-        evpkdf_tls13_kdf.txt
-        evpmac_common.txt
-        evpmd_md.txt
-        evpmd_sha.txt
-        evppbe_pbkdf2.txt
-        evppbe_pkcs12.txt
-        evppkey_dh.txt
-        evppkey_ecc.txt
-        evppkey_ecdh.txt
-        evppkey_ecdsa.txt
-        evppkey_ecx.txt
-        evppkey_ffdhe.txt
-        evppkey_kas.txt
-        evppkey_kdf_hkdf.txt
-        evppkey_kdf_tls1_prf.txt
-        evppkey_mismatch.txt
-    )
+    
+    # FIPS-approved evp tests - exclude non-FIPS algorithms in FIPS mode
+    if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+        echo "FIPS mode enabled - using FIPS-approved evp tests only"
+        EVP_TESTS=(
+            evpciph_aes_ccm_cavs.txt
+            evpciph_aes_common.txt
+            evpkdf_hkdf.txt
+            evpkdf_pbkdf2.txt
+            evpkdf_tls12_prf.txt
+            evpkdf_tls13_kdf.txt
+            evpmac_common.txt
+            evpmd_sha.txt
+            evppbe_pbkdf2.txt
+            evppkey_ecc.txt
+            evppkey_ecdh.txt
+            evppkey_ecdsa.txt
+            evppkey_ffdhe.txt
+            evppkey_kas.txt
+            evppkey_kdf_hkdf.txt
+            evppkey_kdf_tls1_prf.txt
+        )
+    else
+        echo "Normal mode - using all evp tests"
+        EVP_TESTS=(
+            evpciph_aes_ccm_cavs.txt
+            evpciph_aes_common.txt
+            evpciph_aes_wrap.txt
+            evpencod.txt
+            evpkdf_hkdf.txt
+            evpkdf_pbkdf2.txt
+            evpkdf_tls11_prf.txt
+            evpkdf_tls12_prf.txt
+            evpkdf_tls13_kdf.txt
+            evpmac_common.txt
+            evpmd_md.txt
+            evpmd_sha.txt
+            evppbe_pbkdf2.txt
+            evppbe_pkcs12.txt
+            evppkey_dh.txt
+            evppkey_ecc.txt
+            evppkey_ecdh.txt
+            evppkey_ecdsa.txt
+            evppkey_ecx.txt
+            evppkey_ffdhe.txt
+            evppkey_kas.txt
+            evppkey_kdf_hkdf.txt
+            evppkey_kdf_tls1_prf.txt
+            evppkey_mismatch.txt
+        )
+    fi
 
     for T in ${EVP_TESTS[@]}
     do
