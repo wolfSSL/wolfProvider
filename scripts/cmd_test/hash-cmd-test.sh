@@ -33,19 +33,29 @@ source "${UTILS_DIR}/utils-openssl.sh"
 source "${UTILS_DIR}/utils-wolfssl.sh"
 source "${UTILS_DIR}/utils-wolfprovider.sh"
 
-# Initialize the environment
-init_wolfprov
+# Initialize wolfProvider without WPFF set
+if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+    unset WOLFPROV_FORCE_FAIL
+    init_wolfprov
+    export WOLFPROV_FORCE_FAIL=1
+else 
+    init_wolfprov
+fi
 
 # Fail flags
 FAIL=0
 FORCE_FAIL=0
 FORCE_FAIL_PASSED=0
+FIPS=0
 
-# Check for force fail parameter
-if [ "$1" = "WOLFPROV_FORCE_FAIL=1" ]; then
-    export WOLFPROV_FORCE_FAIL=1
+# Get the force fail parameter
+if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+    echo "Force fail mode enabled for Hash tests"
     FORCE_FAIL=1
-    echo -e "\nForce fail mode enabled for hash tests"
+fi
+if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+    echo "FIPS mode enabled for Hash tests"
+    FIPS=1
 fi
 
 # Verify wolfProvider is properly loaded
