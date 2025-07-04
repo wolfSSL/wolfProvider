@@ -27,10 +27,12 @@ WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
 WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
 WOLFSSL_FIPS_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-opensslcoexist '}
-WOLFSSL_FIPS_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include"}
+WOLFSSL_FIPS_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWOLFSSL_OLD_OID_SUM"}
 WOLFSSL_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'}
 WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DRSA_MIN_SIZE=1024 -DWOLFSSL_OLD_OID_SUM "}
 
+WOLFSSL_DEBUG_ASN_TEMPLATE=${DWOLFSSL_DEBUG_ASN_TEMPLATE:-0}
+WOLFPROV_DISABLE_ERR_TRACE=${WOLFPROV_DISABLE_ERR_TRACE:-0}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 USE_CUR_TAG=${USE_CUR_TAG:-0}
 
@@ -84,11 +86,16 @@ install_wolfssl() {
 
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
             CONF_ARGS+=" --enable-debug --enable-keylog-export"
-            if [[ "$OSTYPE" != "darwin"* ]]; then
+            if [[ "$OSTYPE" != "darwin"* ]] && [ "$WOLFPROV_DISABLE_ERR_TRACE" != "1" ]; then
                 # macOS doesn't support backtrace
                 CONF_ARGS+=" --enable-debug-trace-errcodes=backtrace"
             fi
             WOLFSSL_CONFIG_CFLAGS+=" -DWOLFSSL_LOGGINGENABLED_DEFAULT=1"
+        fi
+        if [ "$WOLFSSL_DEBUG_ASN_TEMPLATE" = "1" ] && ( [ "$WOLFSSL_ISFIPS" != "1" ] || [ -z "$WOLFSSL_FIPS_BUNDLE" ] ); then
+            WOLFSSL_CONFIG_CFLAGS+=" -DWOLFSSL_DEBUG_ASN_TEMPLATE"
+        elif [ "$WOLFSSL_DEBUG_ASN_TEMPLATE" = "1" ] && ( [ "$WOLFSSL_ISFIPS" = "1" ] || [ -n "$WOLFSSL_FIPS_BUNDLE" ] ); then
+            WOLFSSL_FIPS_CONFIG_CFLAGS+=" -DWOLFSSL_DEBUG_ASN_TEMPLATE"
         fi
         if [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
             if [ ! -n "$WOLFSSL_FIPS_VERSION" ]; then
