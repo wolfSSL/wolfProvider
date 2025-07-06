@@ -106,7 +106,14 @@ install_wolfprov() {
 }
 
 init_wolfprov() {
-    install_wolfprov
+    # Unset WPFF so we dont fail unit test when building
+    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+        unset WOLFPROV_FORCE_FAIL
+        install_wolfprov
+        export WOLFPROV_FORCE_FAIL=1
+    else
+        install_wolfprov
+    fi
     printf "\twolfProvider installed in: ${WOLFPROV_INSTALL_DIR}\n"
 
     export OPENSSL_MODULES=$WOLFPROV_PATH

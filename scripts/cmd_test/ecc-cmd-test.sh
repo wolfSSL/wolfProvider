@@ -33,14 +33,8 @@ source "${UTILS_DIR}/utils-openssl.sh"
 source "${UTILS_DIR}/utils-wolfssl.sh"
 source "${UTILS_DIR}/utils-wolfprovider.sh"
 
-# Initialize wolfProvider without WPFF set
-if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-    unset WOLFPROV_FORCE_FAIL
-    init_wolfprov
-    export WOLFPROV_FORCE_FAIL=1
-else 
-    init_wolfprov
-fi
+# Initialize wolfProvider
+init_wolfprov
 
 # Fail flags
 FAIL=0
