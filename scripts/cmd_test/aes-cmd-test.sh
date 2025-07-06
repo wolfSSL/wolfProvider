@@ -44,18 +44,14 @@ fi
 
 # Fail flags
 FAIL=0
-FORCE_FAIL=0
 FORCE_FAIL_PASSED=0
-FIPS=0
 
-# Get the force fail parameter
+# Check environment variables directly
 if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
     echo "Force fail mode enabled for AES tests"
-    FORCE_FAIL=1
 fi
 if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
     echo "FIPS mode enabled for AES tests"
-    FIPS=1
 fi
 
 # Verify wolfProvider is properly loaded
@@ -81,7 +77,7 @@ echo "This is test data for AES encryption testing." > test.txt
 
 # Helper function to handle force fail checks
 check_force_fail() {
-    if [ $FORCE_FAIL -eq 1 ]; then
+    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
         echo "[PASS] Test passed when force fail was enabled"
         FORCE_FAIL_PASSED=1
     fi
@@ -90,7 +86,7 @@ check_force_fail() {
 # Arrays for test configurations
 KEY_SIZES=("128" "192" "256")
 # Only include modes supported by wolfProvider
-if [ $FIPS -eq 1 ]; then
+if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
     MODES=("ecb" "cbc" "ctr")
     echo "FIPS mode detected - excluding CFB mode"
 else
@@ -178,7 +174,7 @@ for key_size in "${KEY_SIZES[@]}"; do
     done
 done
 
-if [ $FORCE_FAIL -eq 1 ]; then
+if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
     if [ $FORCE_FAIL_PASSED -eq 1 ]; then
         echo -e "\n=== AES Tests Failed With Force Fail Enabled ==="
         echo "ERROR: Some tests passed when they should have failed"

@@ -20,17 +20,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
-FORCE_FAIL=0
-FIPS=0
-
 # Get the force fail parameter
 if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
     echo "Force fail mode enabled for all tests"
-    FORCE_FAIL=1
 fi
 if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
     echo "FIPS mode enabled for all tests"
-    FIPS=1
 fi
 
 # Get the directory where this script is located
@@ -85,10 +80,10 @@ ECC_RESULT=$?
 # Check results
 if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ] && [ $ECC_RESULT -eq 0 ]; then
     echo -e "\n=== All Command-Line Tests Passed ==="
-    if [ $FORCE_FAIL -eq 1 ]; then
+    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
         echo "Force fail mode was enabled"
     fi
-    if [ $FIPS -eq 1 ]; then
+    if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
         echo "FIPS mode was enabled"
     fi
     echo "Hash Test Result: $HASH_RESULT (0=success)"
@@ -98,10 +93,10 @@ if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ] && [
     exit 0
 else
     echo -e "\n=== Command-Line Tests Failed ==="
-    if [ $FORCE_FAIL -eq 1 ]; then
+    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
         echo "Force fail mode was enabled"
     fi
-    if [ $FIPS -eq 1 ]; then
+    if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
         echo "FIPS mode was enabled"
     fi
     echo "Hash Test Result: $HASH_RESULT (0=success)"
