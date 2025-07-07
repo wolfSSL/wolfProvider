@@ -52,6 +52,14 @@ typedef struct wp_KbkdfCtx {
     /** wolfSSL provider context. */
     WOLFPROV_CTX* provCtx;
 
+#ifdef WP_HAVE_HMAC
+    Hmac hmacCtx;
+    enum wc_HashType hashType;
+#endif
+#ifdef WP_HAVE_CMAC
+    Cmac cmacCtx;
+#endif
+
     /** Key for KDF. */
     unsigned char* key;
     /** Size of key in bytes. */
@@ -163,11 +171,12 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_MODE);
             if ((p != NULL) && (p->data != NULL)) {
-                const char* mode = NULL;
-                if (!OSSL_PARAM_get_utf8_string_ptr(p, &mode)) {
+                char mode[16];
+                char* modePtr = mode;
+                if (!OSSL_PARAM_get_utf8_string(p, &modePtr, sizeof(mode))) {
                     ok = 0;
                 }
-                if (ok && (mode != NULL)) {
+                if (ok) {
                     if (XSTRCMP(mode, "FEEDBACK") == 0) {
                         ctx->mode = WP_KDF_MODE_FEEDBACK;
                     }
@@ -181,16 +190,14 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_DIGEST);
             if ((p != NULL) && (p->data != NULL)) {
-                const char* digest = NULL;
-                if (!OSSL_PARAM_get_utf8_string_ptr(p, &digest)) {
+                char digest[16];
+                char* digestPtr = digest;
+                if (!OSSL_PARAM_get_utf8_string(p, &digestPtr, sizeof(digest))) {
                     ok = 0;
                 }
-                if (ok && digest != NULL) {
+                if (ok) {
                     XMEMSET(ctx->digest, 0, sizeof(ctx->digest));
                     XSTRNCPY(ctx->digest, digest, sizeof(ctx->digest)-1);
-                }
-                else {
-                    ok = 0;
                 }
             }
         }
@@ -198,16 +205,14 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_CIPHER);
             if ((p != NULL) && (p->data != NULL)) {
-                const char* cipher = NULL;
-                if (!OSSL_PARAM_get_utf8_string_ptr(p, &cipher)) {
+                char cipher[16];
+                char* cipherPtr = cipher;
+                if (!OSSL_PARAM_get_utf8_string(p, &cipherPtr, sizeof(cipher))) {
                     ok = 0;
                 }
-                if (ok && cipher != NULL) {
+                if (ok) {
                     XMEMSET(ctx->cipher, 0, sizeof(ctx->cipher));
                     XSTRNCPY(ctx->cipher, cipher, sizeof(ctx->cipher)-1);
-                }
-                else {
-                    ok = 0;
                 }
             }
         }
@@ -353,12 +358,186 @@ static void wp_c32toa(word32 wc_u32, byte* c) {
     c[0] = (byte)((wc_u32 >> 24) & 0xff);
     c[1] = (byte)((wc_u32 >> 16) & 0xff);
     c[2] = (byte)((wc_u32 >>  8) & 0xff);
-    c[3] =  (byte)(wc_u32        & 0xff);
+    c[3] = (byte) (wc_u32 &        0xff);
 #elif defined(LITTLE_ENDIAN_ORDER)
     *(word32*)c = ByteReverseWord32(wc_u32);
 #else
     *(word32*)c = wc_u32;
 #endif
+}
+
+#ifdef WP_HAVE_HMAC
+#define WP_MAX_HASH_BLOCK_SIZE 128
+
+static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
+    size_t keyLen)
+{
+    int ok = 1;
+    int rc = 0;
+    unsigned char localKey[WP_MAX_HASH_BLOCK_SIZE];
+    word32 localKeyLen = 0;
+    word32 blockSize = wc_HashGetBlockSize(ctx->hashType);
+
+    if (keyLen < blockSize) {
+        /* wolfSSL FIPS needs a key that is at least block size in length with
+         * the unused parts zeroed out.
+         */
+        XMEMSET(localKey + keyLen, 0, blockSize - keyLen);
+        localKeyLen = blockSize;
+    }
+    else {
+        localKeyLen = keyLen;
+    }
+
+    if (ok) {
+        XMEMCPY(localKey, key, keyLen);
+        rc = wc_HmacSetKey(&ctx->hmacCtx, ctx->hashType, localKey,
+            localKeyLen);
+        if (rc != 0) {
+            ok = 0;
+        }
+    }
+
+    /* Use rc style return */
+    return (ok == 1) ? 0 : -1;
+}
+#endif /* ifdef WP_HAVE_HMAC */
+
+static int wp_kbkdf_init_mac(wp_KbkdfCtx* ctx, unsigned char* key,
+    size_t keyLen)
+{
+    int ok = 1;
+    int rc = 0;
+
+    switch(ctx->mac) {
+#ifdef WP_HAVE_HMAC
+        case WP_MAC_TYPE_HMAC:
+            rc = wp_kbkdf_init_hmac(ctx, key, keyLen);
+            break;
+#endif
+#ifdef WP_HAVE_CMAC
+        case WP_MAC_TYPE_CMAC:
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+            rc = wc_InitCmac_ex(&ctx->cmacCtx, key, keyLen, WC_CMAC_AES, NULL,
+                NULL, INVALID_DEVID);
+    #else
+            rc = wc_InitCmac_ex(&ctx->cmacCtx, key, keyLen, WC_CMAC_AES, NULL);
+    #endif
+            break;
+#endif
+        default:
+            rc = -1;
+            (void)key;
+            (void)keyLen;
+    }
+
+    if (rc != 0) {
+        ok = 0;
+    }
+
+    return ok;
+}
+
+static int wp_kbkdf_get_mac_size(wp_KbkdfCtx* ctx)
+{
+    switch(ctx->mac) {
+#ifdef WP_HAVE_HMAC
+        case WP_MAC_TYPE_HMAC:
+            ctx->hashType =
+                    wp_name_to_wc_hash_type(ctx->provCtx->libCtx,
+                        ctx->digest, NULL);
+            return wc_HmacSizeByType(ctx->hashType);
+#endif
+#ifdef WP_HAVE_CMAC
+        case WP_MAC_TYPE_CMAC:
+            return AES_BLOCK_SIZE;
+#endif
+        default:
+            return -1;
+    }
+}
+
+static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
+    size_t dataLen)
+{
+    int ok = 1;
+    int rc = 0;
+
+    switch(ctx->mac) {
+#ifdef WP_HAVE_HMAC
+        case WP_MAC_TYPE_HMAC:
+            rc = wc_HmacUpdate(&ctx->hmacCtx, data, dataLen);
+            break;
+#endif
+#ifdef WP_HAVE_CMAC
+        case WP_MAC_TYPE_CMAC:
+            rc = wc_CmacUpdate(&ctx->cmacCtx, data, dataLen);
+            break;
+#endif
+        default:
+            rc = -1;
+    }
+
+    if (rc != 0) {
+        ok = 0;
+    }
+
+    return ok;
+}
+
+static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
+{
+    switch(ctx->mac) {
+#ifdef WP_HAVE_HMAC
+        case WP_MAC_TYPE_HMAC:
+            wc_HmacFree(&ctx->hmacCtx);
+            break;
+#endif
+#ifdef WP_HAVE_CMAC
+        case WP_MAC_TYPE_CMAC:
+            int ret = wc_CmacFree(&ctx->cmacCtx);
+            (void)ret;
+            break;
+#endif
+        default:
+    }
+}
+
+static int wp_kbkdf_mac_final(wp_KbkdfCtx* ctx, unsigned char *out,
+    size_t *outLen, size_t outSize)
+{
+    int ok = 1;
+    int rc = 0;
+
+    switch(ctx->mac) {
+#ifdef WP_HAVE_HMAC
+        case WP_MAC_TYPE_HMAC:
+            rc = wc_HmacFinal(&ctx->hmacCtx, out);
+            if (rc != 0) {
+                ok = 0;
+            }
+            if (ok) {
+                *outLen = wc_HmacSizeByType(ctx->hashType);
+            }
+            break;
+#endif
+#ifdef WP_HAVE_CMAC
+        case WP_MAC_TYPE_CMAC:
+            word32 outSz = (word32)outSize;
+            rc = wc_CmacFinal(&ctx->cmacCtx, out, &outSz);
+            if (rc != 0) {
+                ok = 0;
+            }
+            if (ok) {
+                *outLen = outSz;
+            }
+            break;
+#endif
+        default:
+            ok = 0;
+    }
+
+    return ok;
 }
 
 /**
@@ -377,16 +556,13 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
     int ok = 1;
     int i = 0;
     int h = 0;
+    int toWrite = 0;
     word32 bei = 0;
     word32 beL = 0;
     size_t k_i_len = 0;
     size_t written = 0;
-    EVP_MAC *mac = NULL;
-    EVP_MAC_CTX *macCtx = NULL;
-    EVP_MAC_CTX *macCtxOrig = NULL;
     unsigned char k_i[WP_MAX_MAC_SIZE];
     unsigned char zero = 0;
-    OSSL_PARAM macParams[2];
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -400,56 +576,16 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
     if (ok && (keyLen == 0)) {
         ok = 0;
     }
-
-    /* KDF feedback mode as defined in SP 800-108 5.2 */
+    /* KDF as defined in SP 800-108 */
     if (ok) {
-        if (ctx->mac == WP_MAC_TYPE_CMAC) {
-            mac = EVP_MAC_fetch(ctx->provCtx->libCtx, "CMAC", NULL);
-        }
-        else if (ctx->mac == WP_MAC_TYPE_HMAC) {
-            mac = EVP_MAC_fetch(ctx->provCtx->libCtx, "HMAC", NULL);
-        }
-        else {
-            ok = 0;
-        }
-        if (mac == NULL) {
-            ok = 0;
-        }
-    }
-    if (ok) {
-        macCtxOrig = EVP_MAC_CTX_new(mac);
-        if (macCtxOrig == NULL) {
-            ok = 0;
-        }
-    }
-    /* Load keying material Ki */
-    if (ok) {
-        if (ctx->mac == WP_MAC_TYPE_CMAC) {
-            macParams[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_CIPHER,
-                ctx->cipher, XSTRLEN(ctx->cipher));
-            macParams[1] = OSSL_PARAM_construct_end();
-        }
-        else if (ctx->mac == WP_MAC_TYPE_HMAC) {
-            macParams[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
-                ctx->digest, XSTRLEN(ctx->digest));
-            macParams[1] = OSSL_PARAM_construct_end();
-        }
-        if (ok && EVP_MAC_CTX_set_params(macCtxOrig, macParams) <= 0) {
-            ok = 0;
-        }
-        if (ok && EVP_MAC_init(macCtxOrig, ctx->key, ctx->keySz, NULL) <= 0) {
-            ok = 0;
-        }
-    }
-    if (ok) {
-        h = (int)EVP_MAC_CTX_get_mac_size(macCtxOrig);
+        h = (int)wp_kbkdf_get_mac_size(ctx);
         if (h <= 0 || h > WP_MAX_MAC_SIZE) {
             ok = 0;
         }
     }
     if (ok) {
         /* 3. K(0) := IV */
-        if (ctx->ivLen > WP_MAX_MAC_SIZE) {
+        if (ctx->ivLen > sizeof(k_i)) {
             ok = 0;
         }
         else {
@@ -467,72 +603,56 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
     for (i = 1; ok && written < keyLen; i++) {
         /* Prep [i]2 */
         wp_c32toa((word32)i, (byte *)&bei);
-        macCtx = EVP_MAC_CTX_dup(macCtxOrig);
-        if (macCtx == NULL) {
-            ok = 0;
+        ok = wp_kbkdf_init_mac(ctx, ctx->key, ctx->keySz);
+        if (!ok) {
             break;
         }
         if (ctx->mode == WP_KDF_MODE_FEEDBACK) {
             /* Process K(i-1) */
-            if (EVP_MAC_update(macCtx, k_i, k_i_len) <= 0) {
-                ok = 0;
+            ok = wp_kbkdf_mac_update(ctx, k_i, k_i_len);
+            if (!ok) {
                 break;
             }
         }
         /* Process [i]2 */
-        if (EVP_MAC_update(macCtx, (const unsigned char *)&bei, sizeof(bei)) <= 0) {
-            ok = 0;
+        ok = wp_kbkdf_mac_update(ctx, (const unsigned char *)&bei, sizeof(bei));
+        if (!ok) {
             break;
         }
         /* Process Label */
-        if (EVP_MAC_update(macCtx, ctx->label, ctx->labelLen) <= 0) {
-            ok = 0;
+        ok = wp_kbkdf_mac_update(ctx, ctx->label, ctx->labelLen);
+        if (!ok) {
             break;
         }
         /* Process 0x00 */
-        if (EVP_MAC_update(macCtx, (const unsigned char *)&zero, 1) <= 0) {
-            ok = 0;
+        ok = wp_kbkdf_mac_update(ctx, (const unsigned char *)&zero, 1);
+        if (!ok) {
             break;
         }
         /* Process Context */
-        if (EVP_MAC_update(macCtx, ctx->context, ctx->contextLen) <= 0) {
-            ok = 0;
+        ok = wp_kbkdf_mac_update(ctx, ctx->context, ctx->contextLen);
+        if (!ok) {
             break;
         }
         /* Process [L]2 */
-        if (EVP_MAC_update(macCtx, (const unsigned char *)&beL, sizeof(beL)) <= 0) {
-            ok = 0;
+        ok = wp_kbkdf_mac_update(ctx, (const unsigned char *)&beL, sizeof(beL));
+        if (!ok) {
             break;
         }
         /* Finalize MAC to yield Ki */
         k_i_len = (size_t)h;
-        if (EVP_MAC_final(macCtx, k_i, &k_i_len, k_i_len) <= 0) {
-            ok = 0;
+        ok = wp_kbkdf_mac_final(ctx, k_i, &k_i_len, k_i_len);
+        if (!ok) {
             break;
         }
         /* result(i) := result(i-1) || K(i)
          * KO := the leftmost L bits of result(n) */
-        if ((keyLen - written) < k_i_len) {
-            XMEMCPY(key + written, k_i, (keyLen - written));
-            written += (keyLen - written);
-        }
-        else {
-            XMEMCPY(key + written, k_i, k_i_len);
-            written += k_i_len;
-        }
-        EVP_MAC_CTX_free(macCtx);
-        macCtx = NULL;
+        toWrite = MIN(keyLen - written, k_i_len);
+        XMEMCPY(key + written, k_i, toWrite);
+        written += toWrite;
+        wp_kbkdf_mac_free(ctx);
     }
 
-    if (macCtxOrig != NULL) {
-        EVP_MAC_CTX_free(macCtxOrig);
-    }
-    if (macCtx != NULL) {
-        EVP_MAC_CTX_free(macCtx);
-    }
-    if (mac != NULL) {
-        EVP_MAC_free(mac);
-    }
     return ok;
 }
 

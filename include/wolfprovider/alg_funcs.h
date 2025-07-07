@@ -50,6 +50,7 @@
     #include <wolfssl/wolfcrypt/kdf.h>
 #endif
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
 #include <wolfprovider/wp_logging.h>
 
