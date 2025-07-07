@@ -745,6 +745,10 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
       wp_rsapss_pki_pem_encoder_functions,
       "" },
+    /*{ WP_NAMES_RSA, WOLFPROV_PROPERTIES ",output=text", \*/
+    { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(type-specific, text), \
+      wp_rsa_text_encoder_functions,
+      "" }, 
 #endif
 #endif /* WP_HAVE_RSA */
 

@@ -1,0 +1,23 @@
+#!/bin/expect
+
+set timeout 1
+
+spawn x11vnc -sslEncKey ca-dir/server-wolf.pem
+
+sleep 1
+
+# verify encryption is desired
+expect {
+    "Protect key with a passphrase?"    { send "y\r" }
+    eof                                 { exit 1 }
+}
+
+# supply password
+expect {
+    "Enter pass phrase:"    { send "wolfprov\r" }
+    eof                     { exit 1 }
+}
+expect "Verifying"  { send "wolfprov\r" }
+
+expect eof
+exit 0
