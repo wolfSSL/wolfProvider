@@ -274,103 +274,6 @@ static int wp_kdf_krb5kdf_expected_key_size(wp_Krb5kdfCtx* ctx)
     }
 }
 
-/* Calculate the greatest common divisor using Euclidean algorithm */
-static unsigned int gcd(unsigned int a, unsigned int b)
-{
-    while (b != 0) {
-        unsigned int temp = b;
-        b = a % b;
-        a = temp;
-    }
-    return a;
-}
-
-/* Calculate the least common multiple */
-static unsigned int lcm(unsigned int a, unsigned int b)
-{
-    unsigned int g = gcd(a, b);
-    if (g == 0) {
-        return 0;
-    }
-    /* Check for potential overflow before multiplication */
-    if (a > 0xFFFFFFFFU / (b / g)) {
-        return 0;
-    }
-    return (a / g) * b;
-}
-
-/* Add two byte arrays using 1's complement addition (end-around carry) */
-static void ones_complement_add(unsigned char *result, const unsigned char *a,
-    const unsigned char *b, unsigned int len)
-{
-    unsigned int carry = 0;
-    int i;
-
-    /* Add from right to left (MSB at index 0) */
-    for (i = (int)len - 1; i >= 0; i--) {
-        unsigned int sum = (unsigned int)a[i] + (unsigned int)b[i] + carry;
-        result[i] = (unsigned char)(sum & 0xFF);
-        carry = (sum >> 8) & 1;
-    }
-
-    /* Handle end-around carry for 1's complement */
-    while (carry) {
-        unsigned int new_carry = 0;
-        for (i = (int)len - 1; i >= 0; i--) {
-            unsigned int sum = (unsigned int)result[i] + carry;
-            result[i] = (unsigned char)(sum & 0xFF);
-            new_carry = (sum >> 8) & 1;
-            carry = 0;
-        }
-        carry = new_carry;
-    }
-}
-
-/* Rotate a byte array to the right by specified number of bits */
-static void rotate_right(unsigned char *data, unsigned int data_len,
-    unsigned int bits)
-{
-    unsigned int total_bits = data_len * 8;
-    unsigned char *temp;
-    unsigned int i;
-
-    if (data_len == 0 || bits == 0) {
-        return;
-    }
-
-    bits = bits % total_bits;
-    if (bits == 0) {
-        return;
-    }
-
-    temp = (unsigned char*)OPENSSL_malloc(data_len);
-    if (temp == NULL) {
-        return;
-    }
-
-    XMEMSET(temp, 0, data_len);
-
-    /* Perform bit-level rotation */
-    for (i = 0; i < total_bits; i++) {
-        unsigned int src_byte = i / 8;
-        unsigned int src_bit = i % 8;
-        unsigned int dst_pos = (i + bits) % total_bits;
-        unsigned int dst_byte = dst_pos / 8;
-        unsigned int dst_bit = dst_pos % 8;
-
-        /* Extract source bit (MSB = bit 0) */
-        unsigned char bit = (data[src_byte] >> (7 - src_bit)) & 1;
-
-        /* Set destination bit (MSB = bit 0) */
-        if (bit) {
-            temp[dst_byte] |= (1U << (7 - dst_bit));
-        }
-    }
-
-    XMEMCPY(data, temp, data_len);
-    OPENSSL_clear_free(temp, data_len);
-}
-
 /* N-fold(K) where blocksize is N, and constant_len is K
  * Note: Here |= denotes concatenation
  *
@@ -393,87 +296,79 @@ static void rotate_right(unsigned char *data, unsigned int data_len,
 static void n_fold(unsigned char *block, unsigned int blocksize,
                    const unsigned char *constant, size_t constant_len)
 {
-    unsigned int input_bits = (unsigned int)(constant_len * 8);
-    unsigned int output_bits = blocksize * 8;
-    unsigned int expanded_bits;
-    unsigned int expanded_bytes;
-    unsigned int replications;
+    unsigned int cnt;
     unsigned int i;
-    unsigned char *expanded = NULL;
-    unsigned char *temp = NULL;
+    unsigned int a;
+    unsigned int b;
+    unsigned int carry;
+    unsigned int rot;
+    unsigned int bi;
+    unsigned int const_len = (unsigned int)constant_len;
 
-    /* Clear output block */
-    XMEMSET(block, 0, blocksize);
-
-    /* Handle edge cases */
-    if (blocksize == 0 || constant_len == 0) {
+    /* If equal size then only one unrotated copy of constant needed. */
+    if (blocksize == const_len) {
+        XMEMCPY(block, constant, constant_len);
         return;
     }
 
-    /* Calculate LCM of input and output bit lengths */
-    expanded_bits = lcm(input_bits, output_bits);
-    if (expanded_bits == 0) {
-        return;
+    /* Compute GCD of constant_len and blocksize. */
+    a = blocksize;
+    b = const_len;
+    while (b != 0) {
+        unsigned int t = b;
+        b = a % b;
+        a = t;
+    }
+    /* Calculate LCM of constant_len and blocksize. */
+    cnt = (const_len * blocksize) / a;
+
+    /* Start with constant un-rotated and then add to zero for the rest. */
+    XMEMCPY(block, constant, constant_len);
+    XMEMSET(block + constant_len, 0, blocksize - constant_len);
+
+    /* No initial carry. */
+    carry = 0;
+    /* First rotation is 13 bits. */
+    rot = 13;
+    /* Starting block index - constant_len <= blocksize. */
+    bi = const_len;
+    /* Do one constant at a time - cnt is a multiple of constant_len. */
+    for (i = const_len; i < cnt; i += const_len) {
+         unsigned int j;
+         /* Calculate first index into constant to rotate. */
+         unsigned int ci = ((const_len - (rot >> 3)) - 1) % const_len;
+         /* Calculate amount to rotate right and left. */
+         unsigned char rr = rot & 0x7;
+         unsigned char rl = 8 - rr;
+
+         /* Add in constant buffer to block. */
+         for (j = 0; j < const_len; j++) {
+             /* Rotated constant value. */
+             unsigned char rcv;
+
+             /* Get rotated constant buffer value. */
+             rcv  = (unsigned char)(constant[ci] << rl);
+             ci = (ci + 1) % const_len;
+             rcv |= (unsigned char)(constant[ci] >> rr);
+
+             /* Add block value and rotated constant value to previous carry. */
+             carry += block[bi] + rcv;
+             /* Store new block value. */
+             block[bi] = (unsigned char)(carry & 0xff);
+             /* Get carry. */
+             carry >>= 8;
+
+             /* Next block index. */
+             bi = (bi + 1) % blocksize;
+         }
+         rot += 13;
     }
 
-    expanded_bytes = (expanded_bits + 7) / 8;
-    expanded = (unsigned char*)OPENSSL_zalloc(expanded_bytes);
-    temp = (unsigned char*)OPENSSL_malloc(constant_len);
-    if (expanded == NULL || temp == NULL) {
-        goto cleanup;
-    }
-
-    /* Calculate number of replications */
-    replications = expanded_bits / input_bits;
-
-    /* Initialize temp with constant */
-    XMEMCPY(temp, constant, constant_len);
-
-    /* Replicate input data with rotation */
-    for (i = 0; i < replications; i++) {
-        unsigned int bit_offset = i * input_bits;
-        unsigned int bit;
-
-        /* Copy current input to expanded buffer at bit offset */
-        for (bit = 0; bit < input_bits; bit++) {
-            unsigned int src_byte = bit / 8;
-            unsigned int src_bit = bit % 8;
-            unsigned int dst_pos = bit_offset + bit;
-            unsigned int dst_byte = dst_pos / 8;
-            unsigned int dst_bit = dst_pos % 8;
-
-            if (dst_byte >= expanded_bytes) {
-                break;
-            }
-
-            /* Extract bit from source (MSB = bit 0) */
-            unsigned char bit_val = (temp[src_byte] >> (7 - src_bit)) & 1;
-
-            /* Set bit in destination (MSB = bit 0) */
-            if (bit_val) {
-                expanded[dst_byte] |= (1U << (7 - dst_bit));
-            }
-        }
-
-        /* Rotate input for next iteration */
-        if (i + 1 < replications) {
-            rotate_right(temp, (unsigned int)constant_len, 13);
-        }
-    }
-
-    /* Fold the expanded buffer into the output block */
-    for (i = 0; i < expanded_bytes; i += blocksize) {
-        ones_complement_add(block, block, expanded + i,
-            (i + blocksize <= expanded_bytes) ? blocksize :
-            (expanded_bytes - i));
-    }
-
-cleanup:
-    if (expanded != NULL) {
-        OPENSSL_clear_free(expanded, expanded_bytes);
-    }
-    if (temp != NULL) {
-        OPENSSL_clear_free(temp, constant_len);
+    /* Final carry pass. */
+    for (i = 0; (i < blocksize) && (carry > 0); i++) {
+        carry += block[i];
+        block[i] = (unsigned char)(carry & 0xff);
+        carry >>= 8;
     }
 }
 
