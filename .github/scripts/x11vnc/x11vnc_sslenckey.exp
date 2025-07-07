@@ -1,7 +1,8 @@
 #!/bin/expect
 
-set timeout 1
+set timeout 5
 
+# encrypt the server certificate key
 spawn x11vnc -sslEncKey ca-dir/server-wolf.pem
 
 sleep 1

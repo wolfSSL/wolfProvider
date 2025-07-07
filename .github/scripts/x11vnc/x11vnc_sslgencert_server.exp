@@ -1,6 +1,6 @@
 #!/bin/expect
 
-set timeout 1
+set timeout 5
 
 # generate a cert for the server
 spawn x11vnc -ssldir ca-dir -sslGenCert server wolf

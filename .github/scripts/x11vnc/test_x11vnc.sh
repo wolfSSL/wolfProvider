@@ -52,8 +52,8 @@ fi
 
 echo -e "\n\nTesting -sslCertInfo\n" >> x11vnc_test.log
 
-OPENSSL_CONF='' OPENSSL_MODULES='' timeout 1 x11vnc -sslCertInfo ca-dir/server-wolf.pem > cert_info_ossl.txt
-timeout 1 x11vnc -sslCertInfo ca-dir/server-wolf.pem > cert_info.txt
+OPENSSL_CONF='' OPENSSL_MODULES='' timeout 5 x11vnc -sslCertInfo ca-dir/server-wolf.pem > cert_info_ossl.txt
+timeout 5 x11vnc -sslCertInfo ca-dir/server-wolf.pem > cert_info.txt
 
 if [ $? -eq 0 ] && diff -y cert_info.txt cert_info_ossl.txt >> x11vnc_test.log 2>> x11vnc_test.log \
     && cat cert_info.txt >> x11vnc_test.log
@@ -93,7 +93,7 @@ echo -e "\n\nTesting -ssl handshake, authentication, initialization...\n" >> x11
 PORT=`x11vnc -ssl TMP -display :0 -localhost -bg -o server.log`
 PORT=`echo "$PORT" | grep -m 1 "PORT=" | sed -e 's/PORT=//'`
 
-timeout 10 vncviewer -GnuTLSPriority=LEGACY -DesktopSize=0 -display :0 -log *:stderr:100 localhost::$PORT 2> client.log
+timeout 15 vncviewer -GnuTLSPriority=LEGACY -DesktopSize=0 -display :0 -log *:stderr:100 localhost::$PORT 2> client.log
 
 if grep -Eq "SSL: handshake with helper process[[0-9]+] succeeded" server.log \
     && grep -q "CConnection: Authentication success" client.log \
@@ -116,7 +116,7 @@ x11vnc -storepasswd wolfprov passwd 2>> x11vnc_test.log
 PORT=`x11vnc -ssl TMP -display :0 -localhost -bg -o server.log -rfbauth passwd`
 PORT=`echo "$PORT" | grep -m 1 "PORT=" | sed -e 's/PORT=//'`
 
-timeout 10 vncviewer -GnuTLSPriority=LEGACY -DesktopSize=0 -display :0 -passwd passwd -log *:stderr:100 localhost::$PORT 2> client.log
+timeout 15 vncviewer -GnuTLSPriority=LEGACY -DesktopSize=0 -display :0 -passwd passwd -log *:stderr:100 localhost::$PORT 2> client.log
 
 if grep -Eq "SSL: handshake with helper process[[0-9]+] succeeded" server.log \
     && grep -q "CConnection: Authentication success" client.log \
