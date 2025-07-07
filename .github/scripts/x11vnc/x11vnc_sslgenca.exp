@@ -1,7 +1,8 @@
 #!/bin/expect
 
-set timeout 1
+set timeout 5
 
+# generate a certificate authority
 spawn x11vnc -sslGenCA ca-dir
 
 sleep 1
