@@ -50,7 +50,7 @@ jobs:
 
       - name: Run simple tests
         run: |
-          ./scripts/cmd_test/do-cmd-tests.sh ${{ matrix.force_fail }}
+          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
 
       - name: Print test logs
         if: always()

@@ -16,11 +16,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
-#
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+
+if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+    echo "FIPS mode enabled for wp-cs tests"
+fi
+
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
 source ${SCRIPT_DIR}/utils-openssl.sh
 
@@ -69,6 +73,11 @@ TLS13_CIPHERS=(
     TLS_AES_128_CCM_SHA256
 #    TLS_AES_128_CCM_8_SHA256
 )
+# FIPS-approved TLS 1.3 cipher suites
+TLS13_FIPS_CIPHERS=(
+    TLS_AES_256_GCM_SHA384
+    TLS_AES_128_GCM_SHA256
+)
 TLS12_CIPHERS=(
     ECDHE-ECDSA-AES256-GCM-SHA384
     ECDHE-RSA-AES256-GCM-SHA384
@@ -106,6 +115,31 @@ TLS12_CIPHERS=(
     AES128-SHA256
     AES256-SHA
     AES128-SHA
+)
+# FIPS-approved TLS 1.2 cipher suites
+TLS12_FIPS_CIPHERS=(
+    ECDHE-ECDSA-AES256-GCM-SHA384
+    ECDHE-RSA-AES256-GCM-SHA384
+    DHE-RSA-AES256-GCM-SHA384
+    ECDHE-ECDSA-AES128-GCM-SHA256
+    ECDHE-RSA-AES128-GCM-SHA256
+    DHE-RSA-AES128-GCM-SHA256
+    ECDHE-ECDSA-AES256-CCM
+    DHE-RSA-AES256-CCM
+    ECDHE-ECDSA-AES128-CCM
+    DHE-RSA-AES128-CCM
+    ECDHE-ECDSA-AES256-SHA384
+    ECDHE-RSA-AES256-SHA384
+    DHE-RSA-AES256-SHA256
+    ECDHE-ECDSA-AES128-SHA256
+    ECDHE-RSA-AES128-SHA256
+    DHE-RSA-AES128-SHA256
+    AES256-GCM-SHA384
+    AES128-GCM-SHA256
+    AES256-CCM
+    AES128-CCM
+    AES256-SHA256
+    AES128-SHA256
 )
 TLS1_CIPHERS=(
     ECDHE-RSA-AES256-SHA
@@ -206,15 +240,26 @@ do_client_test() { # usage: do_client_test [extraArgs]
 #        do_client "$1"
 #    done
 
+    # Select cipher suites based on FIPS mode
+    if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+        echo "FIPS mode enabled - using FIPS-approved cipher suites only" | tee -a $LOG_FILE
+        TLS12_TEST_CIPHERS=("${TLS12_FIPS_CIPHERS[@]}")
+        TLS13_TEST_CIPHERS=("${TLS13_FIPS_CIPHERS[@]}")
+    else
+        echo "Normal mode - using all cipher suites" | tee -a $LOG_FILE
+        TLS12_TEST_CIPHERS=("${TLS12_CIPHERS[@]}")
+        TLS13_TEST_CIPHERS=("${TLS13_CIPHERS[@]}")
+    fi
+
     TLS_VERSION=-tls1_2
     printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
-    for CIPHER in ${TLS12_CIPHERS[@]}; do
+    for CIPHER in ${TLS12_TEST_CIPHERS[@]}; do
         do_client "$1"
     done
 
     TLS_VERSION=-tls1_3
     printf "\t$TLS_VERSION\n" | tee -a $LOG_FILE
-    for CIPHER in ${TLS13_CIPHERS[@]}; do
+    for CIPHER in ${TLS13_TEST_CIPHERS[@]}; do
         do_client "$1"
     done
 }
@@ -227,7 +272,7 @@ OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
 OPENSSL_PORT=$(generate_port)
 
 # ensure we are doing a clean build
-printf "Cleaning up previous builds"
+printf "Cleaning up previous builds\n"
 rm -rf ${SCRIPT_DIR}/../*-install
 if [ -d ${OPENSSL_SOURCE_DIR} ]; then
     pushd ${OPENSSL_SOURCE_DIR} > /dev/null

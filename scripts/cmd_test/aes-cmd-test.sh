@@ -33,19 +33,19 @@ source "${UTILS_DIR}/utils-openssl.sh"
 source "${UTILS_DIR}/utils-wolfssl.sh"
 source "${UTILS_DIR}/utils-wolfprovider.sh"
 
-# Initialize the environment
+# Initialize wolfProvider
 init_wolfprov
 
 # Fail flags
 FAIL=0
-FORCE_FAIL=0
 FORCE_FAIL_PASSED=0
 
-# Check for force fail parameter
-if [ "$1" = "WOLFPROV_FORCE_FAIL=1" ]; then
-    export WOLFPROV_FORCE_FAIL=1
-    FORCE_FAIL=1
-    echo -e "\nForce fail mode enabled for AES tests"
+# Check environment variables directly
+if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+    echo "Force fail mode enabled for AES tests"
+fi
+if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+    echo "FIPS mode enabled for AES tests"
 fi
 
 # Verify wolfProvider is properly loaded
@@ -71,7 +71,7 @@ echo "This is test data for AES encryption testing." > test.txt
 
 # Helper function to handle force fail checks
 check_force_fail() {
-    if [ $FORCE_FAIL -eq 1 ]; then
+    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
         echo "[PASS] Test passed when force fail was enabled"
         FORCE_FAIL_PASSED=1
     fi
@@ -80,7 +80,12 @@ check_force_fail() {
 # Arrays for test configurations
 KEY_SIZES=("128" "192" "256")
 # Only include modes supported by wolfProvider
-MODES=("ecb" "cbc" "ctr" "cfb")
+if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+    MODES=("ecb" "cbc" "ctr")
+    echo "FIPS mode detected - excluding CFB mode"
+else
+    MODES=("ecb" "cbc" "ctr" "cfb")
+fi
 
 echo "=== Running AES Algorithm Comparisons ==="
 
@@ -90,11 +95,14 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo -e "\n=== Testing AES-${key_size}-${mode} ==="
         
         # Generate random key and IV
-        key=$($OPENSSL_BIN rand -hex $((key_size/8)))
+        key=$($OPENSSL_BIN rand -hex $((key_size/8)) 2>/dev/null | tail -n 1 | tr -d '\n')
         iv=""
         if [ "$mode" != "ecb" ]; then
-            iv="-iv $($OPENSSL_BIN rand -hex 16)"
+            iv_value=$($OPENSSL_BIN rand -hex 16 2>/dev/null | tail -n 1 | tr -d '\n')
+            iv="-iv $iv_value"
         fi
+        echo "DEBUG: Key='$key' (length: ${#key})"
+        echo "DEBUG: IV='$iv'"
         
         # Output files
         enc_file="aes_outputs/aes${key_size}_${mode}.enc"
@@ -104,14 +112,14 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Interop testing (encrypt with default, decrypt with wolfProvider):"
         
         # Encryption with OpenSSL default provider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider default \
             -in test.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt failed"
             FAIL=1
         fi
         
         # Decryption with wolfProvider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider-path "$WOLFPROV_PATH" -provider libwolfprov \
             -in "$enc_file" -out "$dec_file" -d -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider decrypt failed"
             FAIL=1
@@ -133,14 +141,14 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Interop testing (encrypt with wolfProvider, decrypt with default):"
         
         # Encryption with wolfProvider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider-path $WOLFPROV_PATH -provider libwolfprov \
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider-path "$WOLFPROV_PATH" -provider libwolfprov \
             -in test.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt failed"
             FAIL=1
         fi
         
         # Decryption with OpenSSL default provider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K $key $iv -provider default \
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider default \
             -in "$enc_file" -out "$dec_file" -d -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL decrypt failed"
             FAIL=1
@@ -160,7 +168,7 @@ for key_size in "${KEY_SIZES[@]}"; do
     done
 done
 
-if [ $FORCE_FAIL -eq 1 ]; then
+if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
     if [ $FORCE_FAIL_PASSED -eq 1 ]; then
         echo -e "\n=== AES Tests Failed With Force Fail Enabled ==="
         echo "ERROR: Some tests passed when they should have failed"
