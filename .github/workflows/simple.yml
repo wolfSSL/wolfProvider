@@ -22,6 +22,7 @@ jobs:
         openssl_ref: [ 'master', 'openssl-3.5.0' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        debug: ['WOLFPROV_DEBUG=1', '']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -50,7 +51,7 @@ jobs:
 
       - name: Run simple tests
         run: |
-          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
+          ${{ matrix.force_fail }} ${{ matrix.debug }} ./scripts/cmd_test/do-cmd-tests.sh
 
       - name: Print test logs
         if: always()
