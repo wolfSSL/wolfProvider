@@ -386,7 +386,7 @@ static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
         localKeyLen = blockSize;
     }
     else {
-        localKeyLen = keyLen;
+        localKeyLen = (word32)keyLen;
     }
 
     if (ok) {
@@ -418,10 +418,10 @@ static int wp_kbkdf_init_mac(wp_KbkdfCtx* ctx, unsigned char* key,
 #ifdef WP_HAVE_CMAC
         case WP_MAC_TYPE_CMAC:
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-            rc = wc_InitCmac_ex(&ctx->cmacCtx, key, keyLen, WC_CMAC_AES, NULL,
+            rc = wc_InitCmac_ex(&ctx->cmacCtx, key, (word32)keyLen, WC_CMAC_AES, NULL,
                 NULL, INVALID_DEVID);
     #else
-            rc = wc_InitCmac_ex(&ctx->cmacCtx, key, keyLen, WC_CMAC_AES, NULL);
+            rc = wc_InitCmac_ex(&ctx->cmacCtx, key, (word32)keyLen, WC_CMAC_AES, NULL);
     #endif
             break;
 #endif
@@ -466,12 +466,12 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
     switch(ctx->mac) {
 #ifdef WP_HAVE_HMAC
         case WP_MAC_TYPE_HMAC:
-            rc = wc_HmacUpdate(&ctx->hmacCtx, data, dataLen);
+            rc = wc_HmacUpdate(&ctx->hmacCtx, data, (word32)dataLen);
             break;
 #endif
 #ifdef WP_HAVE_CMAC
         case WP_MAC_TYPE_CMAC:
-            rc = wc_CmacUpdate(&ctx->cmacCtx, data, dataLen);
+            rc = wc_CmacUpdate(&ctx->cmacCtx, data, (word32)dataLen);
             break;
 #endif
         default:
@@ -487,6 +487,7 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
 
 static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
 {
+    int ret = 0;
     switch(ctx->mac) {
 #ifdef WP_HAVE_HMAC
         case WP_MAC_TYPE_HMAC:
@@ -495,12 +496,12 @@ static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
 #endif
 #ifdef WP_HAVE_CMAC
         case WP_MAC_TYPE_CMAC:
-            int ret = wc_CmacFree(&ctx->cmacCtx);
-            (void)ret;
+            ret = wc_CmacFree(&ctx->cmacCtx);
             break;
 #endif
-        default:
     }
+
+    (void)ret;
 }
 
 static int wp_kbkdf_mac_final(wp_KbkdfCtx* ctx, unsigned char *out,
@@ -508,6 +509,9 @@ static int wp_kbkdf_mac_final(wp_KbkdfCtx* ctx, unsigned char *out,
 {
     int ok = 1;
     int rc = 0;
+    word32 outSz;
+
+    (void)outSz;
 
     switch(ctx->mac) {
 #ifdef WP_HAVE_HMAC
@@ -523,7 +527,7 @@ static int wp_kbkdf_mac_final(wp_KbkdfCtx* ctx, unsigned char *out,
 #endif
 #ifdef WP_HAVE_CMAC
         case WP_MAC_TYPE_CMAC:
-            word32 outSz = (word32)outSize;
+            outSz = (word32)outSize;
             rc = wc_CmacFinal(&ctx->cmacCtx, out, &outSz);
             if (rc != 0) {
                 ok = 0;
@@ -647,7 +651,7 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
         }
         /* result(i) := result(i-1) || K(i)
          * KO := the leftmost L bits of result(n) */
-        toWrite = MIN(keyLen - written, k_i_len);
+        toWrite = MIN((int)(keyLen - written), (int)k_i_len);
         XMEMCPY(key + written, k_i, toWrite);
         written += toWrite;
         wp_kbkdf_mac_free(ctx);
