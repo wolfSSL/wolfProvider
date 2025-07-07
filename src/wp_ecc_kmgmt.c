@@ -991,7 +991,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
     if (((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && (!ecc->hasPub)) {
         ok = 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+    if (ok && (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         /* TODO: Quick check for older versions? */
         if (checkType == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
@@ -1010,9 +1010,6 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
              * has a private key, so we will fool it into only checking public
              * key by manually setting the type */
             origType = ecc->key.type;
-            if (ecc->key.type != ECC_PUBLICKEY) {
-                ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
-            }
             rc = wc_ecc_check_key((ecc_key*)&ecc->key);
             ((wp_Ecc*)ecc)->key.type = origType;
             if (rc != 0) {
@@ -1024,7 +1021,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
         (!ecc->hasPriv)) {
         ok = 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+    if (ok && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         rc = wc_ecc_check_key((ecc_key*)&ecc->key);
         if (rc != 0) {
             ok = 0;
