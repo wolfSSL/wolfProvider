@@ -1,0 +1,97 @@
+name: systemd Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: ['master', 'main', 'release/**']
+  pull_request:
+    branches: ['*']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: ['v5.8.0-stable', 'master']
+        openssl_ref: ['openssl-3.5.0']
+
+  test_systemd:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        systemd_ref: ['v254']
+        wolfssl_ref: ['v5.8.0-stable', 'master']
+        openssl_ref: ['openssl-3.5.0']
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential meson ninja-build \
+            libmount-dev gperf python3-pytest libuv1-dev libnghttp2-dev \
+            libcap-dev uuid-dev libdevmapper-dev libpopt-dev libjson-c-dev \
+            libssh-dev libargon2-dev libblkid-dev asciidoctor pkgconf \
+            zlib1g-dev
+
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout systemd
+        uses: actions/checkout@v4
+        with:
+          repository: systemd/systemd
+          path: systemd
+          fetch-depth: 1
+          ref: ${{ matrix.systemd_ref }}
+
+      - name: Build systemd
+        working-directory: systemd
+        run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          meson setup -Dnobody-group=nogroup build
+          ninja -C build
+
+      - name: Run systemd tests
+        working-directory: systemd
+        run: |
+          set +e
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          # The following test cases link directly to libcrypto.
+          TEST_CASES="fuzz-dns-packet fuzz-etc-hosts fuzz-resource-record \
+                      resolvectl systemd-resolved test-cryptolib \
+                      test-dns-packet test-dnssec test-resolve-tables \
+                      test-resolved-etc-hosts test-resolved-packet \
+                      test-resolved-stream"
+          if [ -n ${{ matrix.force_fail }} ]; then
+            export ${{ matrix.force_fail }}
+          fi
+          meson test -C build $TEST_CASES
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} systemd
