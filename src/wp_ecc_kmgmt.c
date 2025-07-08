@@ -1010,6 +1010,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
              * has a private key, so we will fool it into only checking public
              * key by manually setting the type */
             origType = ecc->key.type;
+            ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
             rc = wc_ecc_check_key((ecc_key*)&ecc->key);
             ((wp_Ecc*)ecc)->key.type = origType;
             if (rc != 0) {
