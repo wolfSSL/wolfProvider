@@ -546,6 +546,10 @@ static const OSSL_ALGORITHM wolfprov_kdfs[] = {
     { WP_NAMES_TLS1_PRF, WOLFPROV_PROPERTIES, wp_kdf_tls1_prf_functions,
       "" },
 #endif
+#ifdef WP_HAVE_KBKDF
+    { WP_NAMES_KBKDF, WOLFPROV_PROPERTIES, wp_kdf_kbkdf_functions,
+      "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };

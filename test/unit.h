@@ -132,6 +132,10 @@ int test_tls1_prf(void *data);
 int test_hkdf(void *data);
 #endif
 
+#ifdef WP_HAVE_KBKDF
+int test_kbkdf(void *data);
+#endif
+
 #ifdef WP_HAVE_DES3CBC
 int test_des3_cbc(void *data);
 int test_des3_cbc_stream(void *data);
@@ -325,7 +329,7 @@ int test_ecdh_p521_keygen(void *data);
 #endif /* WP_HAVE_EC_P521 */
 #ifdef WP_HAVE_X25519
 int test_ecdh_x25519_keygen(void *data);
-#endif /* WP_HAVE_X25510 */
+#endif /* WP_HAVE_X2559 */
 #ifdef WP_HAVE_X448
 int test_ecdh_x448_keygen(void *data);
 #endif /* WP_HAVE_X448 */
