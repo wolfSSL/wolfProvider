@@ -87,10 +87,14 @@ jobs:
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
-
           # Run tests
           make test 2>&1 | tee libhashkit2-test.log
-          TEST_RESULT=${PIPESTATUS[0]}
+          if grep -q "(Failed)" libhashkit2-test.log; then
+            TEST_RESULT=1
+          else
+            TEST_RESULT=0
+          fi
           echo "TEST_RESULT = $TEST_RESULT"
-          
-          #$GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libp11
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libhashkit2
+  

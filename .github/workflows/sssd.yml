@@ -81,6 +81,9 @@ jobs:
           cd sssd
           git checkout ${{ matrix.sssd_ref }}
 
+          # Apply patch for testing
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/sssd/sssd-${{ matrix.sssd_ref }}-wolfprov.patch
+
           # Configure and build SSSD with wolfProvider
           autoreconf -ivf
           ./configure --without-samba --disable-cifs-idmap-plugin \
@@ -103,9 +106,5 @@ jobs:
           # Run tests and save result
           make check 2>&1 | tee sssd-test.log
           TEST_RESULT=${PIPESTATUS[0]}
-
-          # TODO: investigate failing test cases
-          # src/tests/whitespace_test (in 2.9.1) and sss_certmap_test (on master)
-          # Capture the test result using PIPESTATUS (Bash only)
           
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} sssd
