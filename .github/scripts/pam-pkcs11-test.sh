@@ -63,6 +63,10 @@ fi
 
 echo "[*] Configuring pam_pkcs11..."
 
+# Temporarily unset WOLFPROV_FORCE_FAIL so we can test the failure case
+ORIG_WOLFPROV_FORCE_FAIL="$WOLFPROV_FORCE_FAIL"
+unset WOLFPROV_FORCE_FAIL
+
 # Generate dummy CA cert if missing
 if [ ! -f /test/certs/test-ca.crt ]; then
     echo "[*] Generating dummy test-ca.crt..."
@@ -98,6 +102,9 @@ echo "subject=$CERT_SUBJECT; uid=testuser" | tee /etc/pam_pkcs11/pkcs11_mapper.m
 cp /etc/pam.d/common-auth /etc/pam.d/common-auth.bak
 echo "auth sufficient pam_pkcs11.so debug" | tee /etc/pam.d/common-auth > /dev/null
 cat /etc/pam.d/common-auth.bak | tee -a /etc/pam.d/common-auth > /dev/null
+
+# Restore WOLFPROV_FORCE_FAIL
+export WOLFPROV_FORCE_FAIL="$ORIG_WOLFPROV_FORCE_FAIL"
 
 echo "[*] Initializing SoftHSM (simulated smartcard)..."
 mkdir -p /var/lib/softhsm/tokens

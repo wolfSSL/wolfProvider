@@ -1,4 +1,4 @@
-name: pam_pkcs11 Tests
+name: pam-pkcs11 Tests
 
 # START OF COMMON SECTION
 on:
