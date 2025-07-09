@@ -96,11 +96,12 @@ jobs:
           # Run all the tests except (t-exec) as it takes too long
           export ${{ matrix.force_fail }}
           make file-tests interop-tests extra-tests unit 2>&1 | tee openssh-test.log
+          TEST_RESULT=${PIPESTATUS[0]}
 
           # TODO: change this to use TEST_RESULT=${PIPESTATUS[0]}
           # It passes locally, but fails in CI with the following error:
           # Provider "/home/runner/work/wolfProvider/wolfProvider/openssh-portable/regress/misc/sk-dummy/sk-dummy.so" 
           # dlopen failed: /home/runner/work/wolfProvider/wolfProvider/openssh-portable/regress/misc/sk-dummy/sk-dummy.so: undefined symbol: sshlog
           # Possibly need to ensure sk-dummy is built with the local libssh.a
-          TEST_RESULT=$?
+
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openssh
