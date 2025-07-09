@@ -64,7 +64,7 @@ jobs:
           source $GITHUB_WORKSPACE/scripts/env-setup
 
           # Run tests
-          if timeout 300 ${{ matrix.force_fail }} sudo bash -c $GITHUB_WORKSPACE/.github/scripts/pam-pkcs11-test.sh; then
+          if timeout 300 sudo bash -c "${{ matrix.force_fail }} PAM_PKCS11_REF=${{ matrix.pam_pkcs11_ref }} $GITHUB_WORKSPACE/.github/scripts/pam-pkcs11-test.sh"; then
             TEST_RESULT=0
           else
             TEST_RESULT=1

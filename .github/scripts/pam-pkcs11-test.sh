@@ -42,7 +42,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 echo "[*] Cloning pam_pkcs11..."
 cd /opt
 if [[ ! -d "pam_pkcs11" ]]; then
-  git clone https://github.com/OpenSC/pam_pkcs11.git
+  git clone --branch=${PAM_PKCS11_REF} https://github.com/OpenSC/pam_pkcs11.git
 fi
 cd pam_pkcs11
 
