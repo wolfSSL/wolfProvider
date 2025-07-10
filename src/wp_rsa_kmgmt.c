@@ -2167,7 +2167,7 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     if (rc != 0) {
         ok = 0;
     }
-#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000 || defined(HAVE_FIPS)
     if (!ok) {
         idx = 0;
         rc = wc_GetPkcs8TraditionalOffset(data, &idx, len);
