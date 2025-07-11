@@ -1,0 +1,101 @@
+name: xmlsec Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_xmlsec:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        xmlsec_ref: [ 'master', 'xmlsec-1_2_37' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - xmlsec_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      # Checkout the source so we can run the check-workflow-result script
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install xmlsec dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y automake autoconf libtool libtool-bin libltdl-dev libltdl7 libxml2-dev
+      - name: Download xmlsec
+        uses: actions/checkout@v4
+        with:
+          repository: lsh123/xmlsec
+          ref: ${{ matrix.xmlsec_ref }}
+          path: xmlsec
+
+      - name: Build xmlsec
+        working-directory: xmlsec
+        run: |
+          ./autogen.sh --disable-openssl3-engines --without-nss --without-gnutls --without-gcrypt --disable-xmldsig --disable-crypto-dl --disable-apps-crypto-dl --disable-concatkdf --disable-pbkdf2 --disable-tmpl-tests
+          make
+          cat <<EOF > tests/openssl3.cnf
+          openssl_conf = openssl_init
+
+          [openssl_init]
+          providers = provider_sect
+
+          [provider_sect]
+          libwolfprov = libwolfprov_sect
+
+          [libwolfprov_sect]
+          activate = 1
+          EOF
+
+      - name: Run xmlsec tests
+        working-directory: xmlsec
+        run: |
+          echo "Setting environment variables..."
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          export OPENSSL_CONF=$PWD/tests/openssl3.cnf
+          make check-enc | tee xmlsec-enc.log
+          make check-keys | tee xmlsec-keys.log
+          cat xmlsec-enc.log
+          cat xmlsec-keys.log
+#$GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} xmlsec
+
