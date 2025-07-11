@@ -980,8 +980,8 @@ static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
 static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
 {
     int ok = 1;
-    int privDone = 0;
     int rc;
+    int origType;
 
     /* Only named curves supported. */
     if (((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) &&
@@ -991,7 +991,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
     if (((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && (!ecc->hasPub)) {
         ok = 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+    if (ok && (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         /* TODO: Quick check for older versions? */
         if (checkType == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
@@ -1004,8 +1004,15 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
        (void)checkType;
     #endif
         {
-            privDone = 1;
+            /* We may have a private key that does not correspond to the public
+             * key, which is fine as we are only being asked to check the
+             * public at this time. wc_ecc_check_key() always checks both if it
+             * has a private key, so we will fool it into only checking public
+             * key by manually setting the type */
+            origType = ecc->key.type;
+            ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
             rc = wc_ecc_check_key((ecc_key*)&ecc->key);
+            ((wp_Ecc*)ecc)->key.type = origType;
             if (rc != 0) {
                 ok = 0;
             }
@@ -1015,7 +1022,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
         (!ecc->hasPriv)) {
         ok = 0;
     }
-    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) && (!privDone)) {
+    if (ok && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         rc = wc_ecc_check_key((ecc_key*)&ecc->key);
         if (rc != 0) {
             ok = 0;
@@ -1995,28 +2002,6 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
     return ok;
 }
 
-static int wp_ecc_decode_x963_pub(wp_Ecc* ecc, unsigned char* data, word32 len)
-{
-    int ok = 1;
-    int rc;
-
-    rc = wc_ecc_import_x963((const byte *)data, len, &ecc->key);
-    if (rc != 0) {
-        ok = 0;
-    }
-    if (ok) {
-        ecc->curveId = ecc->key.dp->id;
-        ecc->hasPub = 1;
-        /* Needs curveId set. */
-        if (!wp_ecc_set_bits(ecc)) {
-            ok = 0;
-        }
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
 /**
  * Decode the SubjectPublicInfo DER encoded ECC key into the ECC key object.
  *
@@ -2182,12 +2167,6 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
                 decoded = 0;
             }
         }
-        else if (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) {
-            if (!wp_ecc_decode_x963_pub(ecc, data, len)) {
-                ok = 0;
-                decoded = 0;
-            }
-        }
         else {
             if (!wp_ecc_decode_params(ecc, data, len)) {
                 ok = 0;
@@ -2275,61 +2254,6 @@ static int wp_ecc_encode_params(const wp_Ecc *ecc, unsigned char* keyData,
         keyData[1] = len;
         XMEMCPY(keyData + 2, oid, len);
         *keyLen = len + 2;
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
- * Get the public key encoding size.
- *
- * @param [in]  ecc     ECC key object.
- * @param [out] keyLen  Length of encoding in bytes.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ecc_encode_pub_size(const wp_Ecc *ecc, size_t* keyLen)
-{
-    int ok = 1;
-    int rc;
-    word32 len;
-
-    rc = wc_ecc_export_x963_ex((ecc_key*)&ecc->key, NULL, &len, 0);
-    if (rc != LENGTH_ONLY_E) {
-        ok = 0;
-    }
-    if (ok) {
-        *keyLen = len;
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
- * Encode the ECC public key.
- *
- * @param [in]      ecc      ECC key object.
- * @param [out]     keyData  Buffer to hold encoded data.
- * @param [in, out] keyLen   On in, length of buffer in bytes.
- *                           On out, length of encoding in bytes.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ecc_encode_pub(const wp_Ecc *ecc, unsigned char* keyData,
-    size_t* keyLen)
-{
-    int ok = 1;
-    int rc;
-    word32 len = (word32)*keyLen;
-
-    rc = wc_ecc_export_x963_ex((ecc_key*)&ecc->key, keyData, &len, 0);
-    if (rc != 0) {
-        ok = 0;
-    }
-    if (ok) {
-        *keyLen = len;
     }
 
     WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -2631,11 +2555,6 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
                 ok = 0;
             }
         }
-        else if (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) {
-            if (!wp_ecc_encode_pub_size(key, &derLen)) {
-                ok = 0;
-            }
-        }
         else if (selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
             if (!wp_ecc_encode_params_size(key, &derLen)) {
                 ok = 0;
@@ -2676,12 +2595,6 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
             pemType = ECC_PRIVATEKEY_TYPE;
             private = 1;
             if (!wp_ecc_encode_priv(key, derData, &derLen)) {
-                ok = 0;
-            }
-        }
-        else if (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) {
-            pemType = PUBLICKEY_TYPE;
-            if (!wp_ecc_encode_pub(key, derData, &derLen)) {
                 ok = 0;
             }
         }
