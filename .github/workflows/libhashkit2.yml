@@ -1,9 +1,9 @@
-name: libwebsockets Tests
+name: libhashkit2 Tests
 
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'release/**' ]
+    branches: [ '*' ] #'master', 'main', 'release/**' ]
   # pull_request:
   #   branches: [ '*' ]
 
@@ -23,22 +23,21 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
 
-  test_libwebsockets:
+  test_libhashkit2:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        libwebsockets_ref: [ 'main', 'v4.3.3' ]
+        libhashkit2_ref: [ 'v1.x', '1.1.4' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
-          - libwebsockets_ref: 'main'
+          - libhashkit2_ref: 'v1.x'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
-      # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -54,47 +53,48 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
+
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Install libwebsockets dependencies
+      - name: Install libmemcached dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libc6 libcap2 zlib1g cmake build-essential
-      - name: Download libwebsockets
+          sudo apt-get install cmake build-essential bison flex memcached libc6
+
+      - name: Download libmemcached
         uses: actions/checkout@v4
         with:
-          repository: warmcat/libwebsockets
-          ref: ${{ matrix.libwebsockets_ref }}
-          path: libwebsockets
+          repository: awesomized/libmemcached
+          ref: ${{ matrix.libhashkit2_ref }}
+          path: libmemcached
+          fetch-depth: 1
 
-      - name: Build libwebsockets
-        working-directory: libwebsockets
+      - name: Build libmemcached
+        working-directory: libmemcached
         run: |
+          # OPENSSL_ROOT_DIR is needed for cmake to find OpenSSL headers
+          export OPENSSL_ROOT_DIR=$GITHUB_WORKSPACE/openssl-install/include
+          # Build libmemcached with OpenSSL support
           mkdir build
           cd build
-          cmake ..
-          make -j$(nproc)
-          sudo make install
+          cmake -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug -DENABLE_OPENSSL_CRYPTO=ON ..
+          make
 
-      - name: Run libwebsockets tests
-        working-directory: libwebsockets
+      - name: Run libhashkit2 tests
+        working-directory: libmemcached/build
         run: |
-          echo "Setting environment variables..."
+          # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
-          ./build/bin/libwebsockets-test-server --port=11111 --ssl > server.log 2>&1 & SERVER_PID=$!
-          sleep 5
-          timeout 10 ./build/bin/libwebsockets-test-client 127.0.0.1 --port=11111 --ssl > client.log 2>&1 || echo "Client exited with error $?"
-          ldd ./build/bin/libwebsockets-test-server | grep wolfProvider
-          ldd ./build/bin/libwebsockets-test-client | grep wolfProvider
-          kill $SERVER_PID || echo "Server already exited"
-          cat server.log || echo "Missing server.log"
-          cat client.log || echo "Missing client.log"
-          cat server.log client.log > libwebsockets-test.log
-          if grep -q "error:03080006" libwebsockets-test.log || grep -q "Failed to create default vhost" libwebsockets-test.log; then
+          # Run tests
+          make test 2>&1 | tee libhashkit2-test.log
+          if grep -q "(Failed)" libhashkit2-test.log; then
             TEST_RESULT=1
           else
             TEST_RESULT=0
           fi
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libwebsockets
+          echo "TEST_RESULT = $TEST_RESULT"
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libhashkit2
+  
