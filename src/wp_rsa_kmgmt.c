@@ -3929,7 +3929,7 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
             || (binData = OPENSSL_malloc(binLen)) == NULL) {
         ok = 0;
     }
-    else if (mp_to_unsigned_bin(num, binData) != MP_OKAY) {
+    else if (mp_to_unsigned_bin((mp_int*)num, binData) != MP_OKAY) {
         ok = 0;
         OPENSSL_free(binData);
         binData = NULL;
@@ -4076,11 +4076,11 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 
     /* OSSL uses 'publicExponent' and 'Exponent' */
     if (ok) {
-        if (mp_radix_size(&key->key.e, MP_RADIX_DEC, &expLen) != MP_OKAY
+        if (mp_radix_size((mp_int*)&key->key.e, MP_RADIX_DEC, &expLen) != MP_OKAY
                 || ((expStr = OPENSSL_malloc(expLen)) == NULL)) {
             ok = 0;
         }
-        else if (mp_todecimal(&key->key.e, expStr) != MP_OKAY) {
+        else if (mp_todecimal((mp_int*)&key->key.e, expStr) != MP_OKAY) {
             ok = 0;
             OPENSSL_free(expStr);
             expStr = NULL;
@@ -4102,11 +4102,11 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
 
     if (ok) {
-        if (mp_radix_size(&key->key.e, MP_RADIX_HEX, &expLen) != MP_OKAY
+        if (mp_radix_size((mp_int*)&key->key.e, MP_RADIX_HEX, &expLen) != MP_OKAY
                 || ((expStr = OPENSSL_malloc(expLen)) == NULL)) {
             ok = 0;
         }
-        else if (mp_tohex(&key->key.e, expStr) != MP_OKAY) {
+        else if (mp_tohex((mp_int*)&key->key.e, expStr) != MP_OKAY) {
             ok = 0;
             OPENSSL_free(expStr);
             expStr = NULL;
