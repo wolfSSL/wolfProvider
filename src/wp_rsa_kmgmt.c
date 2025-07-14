@@ -1435,6 +1435,10 @@ static wp_RsaGenCtx* wp_rsa_base_gen_init(WOLFPROV_CTX* provCtx,
     return ctx;
 }
 
+#ifndef WP_RSA_KEYGEN_MAX_RETRY_CNT
+#define WP_RSA_KEYGEN_MAX_RETRY_CNT 10
+#endif
+
 /**
  * Generate RSA key pair using wolfSSL.
  *
@@ -1447,6 +1451,8 @@ static wp_RsaGenCtx* wp_rsa_base_gen_init(WOLFPROV_CTX* provCtx,
 static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
 {
     wp_Rsa* rsa = NULL;
+    int rc = -1;
+    int i = 0;
 
     (void)cb;
     (void)cbArg;
@@ -1454,20 +1460,36 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
     if (wolfssl_prov_is_running() && wp_rsagen_check_key_size(ctx)) {
         rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
         if (rsa != NULL) {
-            int rc = wc_MakeRsaKey(&rsa->key, (int)ctx->bits, ctx->e,
-                &ctx->rng);
-            if (rc != 0) {
-                wp_rsa_free(rsa);
-                rsa = NULL;
-            }
-            else {
-                rsa->type      = ctx->type;
-                rsa->bits      = (int)ctx->bits;
-                rsa->hasPub    = 1;
-                rsa->hasPriv   = 1;
-                rsa->pssParams = ctx->pssParams;
+            /* wolfCrypt FIPS RSA keygen has a small chance it simply will not
+             * find RSA primes within the failCount. Account for this by
+             * retrying here. For simplicity we will always use this flow
+             * even for non-FIPS case. */
+            for (i = 0; i < WP_RSA_KEYGEN_MAX_RETRY_CNT; i++) {
+                rc = wc_MakeRsaKey(&rsa->key, (int)ctx->bits, ctx->e,
+                    &ctx->rng);
+                if (rc == PRIME_GEN_E) {
+                    /* retry */
+                }
+                else if (rc != 0) {
+                    wp_rsa_free(rsa);
+                    rsa = NULL;
+                    break;
+                }
+                else {
+                    rsa->type      = ctx->type;
+                    rsa->bits      = (int)ctx->bits;
+                    rsa->hasPub    = 1;
+                    rsa->hasPriv   = 1;
+                    rsa->pssParams = ctx->pssParams;
+                    break;
+                }
             }
         }
+    }
+
+    if (i == WP_RSA_KEYGEN_MAX_RETRY_CNT) {
+        wp_rsa_free(rsa);
+        rsa = NULL;
     }
 
     return rsa;
