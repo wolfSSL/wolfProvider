@@ -3,8 +3,8 @@ name: PPP Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  # pull_request:
-  #   branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,7 +29,9 @@ jobs:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
-        #Switched to v2.5.2 due to significant limitations with v2.4.9, specifically the lack of a test suite, necessary configure options, and compatibility with newer versions of openssl
+        # Switched to v2.5.2 due to significant limitations with v2.4.9,
+        # specifically the lack of a test suite, necessary configure options,
+        # and compatibility with newer versions of openssl
         ppp_ref: [ 'master', 'v2.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:

@@ -3,8 +3,8 @@ name: tcpdump Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  # pull_request:
-  #   branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
