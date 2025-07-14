@@ -2548,6 +2548,8 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     (void)params;
     (void)selection;
+    (void)pwCb;
+    (void)pwCbArg;
 
     if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         private = 1;
