@@ -99,6 +99,7 @@ jobs:
 
       - name: Run tests
         working-directory: sssd
+        shell: bash
         run: |
           # Set environment variables
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
