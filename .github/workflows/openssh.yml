@@ -97,5 +97,4 @@ jobs:
           export ${{ matrix.force_fail }}
           make file-tests interop-tests extra-tests unit 2>&1 | tee openssh-test.log
           TEST_RESULT=${PIPESTATUS[0]}
-
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openssh

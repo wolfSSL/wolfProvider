@@ -85,5 +85,4 @@ jobs:
           make -j test TESTOPTS="-e agentxperl" | tee net-snmp-test.log
           # Capture the test result using PIPESTATUS (Bash only)
           TEST_RESULT=${PIPESTATUS[0]}
-          
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} net-snmp
