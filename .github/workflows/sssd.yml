@@ -74,6 +74,13 @@ jobs:
           ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
           ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+
       - name: Build and test sssd with wolfProvider
         run: |
           # Clone SSSD
