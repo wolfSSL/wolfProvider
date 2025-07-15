@@ -72,11 +72,6 @@ jobs:
           ref: ${{ matrix.openssh_ref }}
           fetch-depth: 1
 
-      - name: Install additional packages for dynamic linking
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libc6-dev libssl-dev zlib1g-dev
-
       - name: Build and Test openssh-portable
         working-directory: openssh-portable
         run: |
@@ -99,16 +94,7 @@ jobs:
                      --with-ldflags=-Wl,--export-dynamic
           make -j
 
-          # Set environment variables to fix dynamic linker symbol resolution in Docker
-          # This fixes the "undefined symbol: sshlog" error when loading sk-dummy.so
-          export LD_BIND_NOW=0          # Use lazy binding instead of immediate
-          export LD_BIND_LAZY=1         # Explicitly enable lazy binding
           export LD_LIBRARY_PATH=".:openbsd-compat:$LD_LIBRARY_PATH"  # Include build dirs for symbol resolution
-          
-          # Additional fixes for Docker environment differences
-          export RTLD_LAZY=1            # Force lazy loading for dlopen calls
-          export LD_WARN=1              # Show warnings but continue loading
-          # export LD_DEBUG=symbols     # Uncomment for detailed debugging if needed
 
           # Run all the tests except (t-exec) as it takes too long
           export ${{ matrix.force_fail }}
