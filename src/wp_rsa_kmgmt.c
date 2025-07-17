@@ -1113,7 +1113,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             p = &params[i];
             index = -1;
             for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
-                if (XSTRNCMP(p->key, wp_rsa_param_key[j], p->data_size) == 0) {
+                if (XSTRNCMP(p->key, wp_rsa_param_key[j], XSTRLEN(p->key)) == 0) {
                     index = j; 
                     break;
                 }
