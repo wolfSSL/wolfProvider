@@ -2,6 +2,7 @@
 # It can be used on the command line, or by workflows.
 # 'source' this file, don't run it directly
 # To disable wolfProvider, run 'unset OPENSSL_CONF'
+# To enable FIPS mode, set WOLFSSL_ISFIPS=1 before sourcing this file
 
 if [[ -n "${ZSH_VERSION:-}" ]]; then
     [[ $ZSH_EVAL_CONTEXT =~ :file$ ]] && is_sourced=1 || is_sourced=0
@@ -42,7 +43,16 @@ fi
 
 # Set variables with default values if not already set
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:=$REPO_ROOT/wolfssl-install/lib:$OPENSSL_LIB_PATH}"
-export OPENSSL_CONF="${OPENSSL_CONF:=$REPO_ROOT/provider.conf}"
+
+# Auto-detect FIPS mode and use appropriate config
+if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
+    DEFAULT_PROVIDER_CONF="$REPO_ROOT/provider-fips.conf"
+    echo "FIPS mode detected, using provider-fips.conf"
+else
+    DEFAULT_PROVIDER_CONF="$REPO_ROOT/provider.conf"
+fi
+export OPENSSL_CONF="${OPENSSL_CONF:=$DEFAULT_PROVIDER_CONF}"
+
 export OPENSSL_MODULES="${OPENSSL_MODULES:=$REPO_ROOT/wolfprov-install/lib}"
 export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
 
