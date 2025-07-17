@@ -58,6 +58,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev python3-impacket
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+
       - name: Clone libssh2
         run: |
           git clone --depth=1 --branch ${{ matrix.libssh2_ref }} https://github.com/libssh2/libssh2.git libssh2
