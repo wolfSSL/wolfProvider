@@ -62,23 +62,26 @@ jobs:
         run: |
           git clone --depth=1 --branch ${{ matrix.libssh2_ref }} https://github.com/libssh2/libssh2.git libssh2
 
+      - name: Apply patch
+        working-directory: libssh2
+        run: |
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libssh2/${{ matrix.libssh2_ref }}-wolfprov.patch
+
       - name: Build libssh2
         working-directory: libssh2
         run: |
           autoreconf -fi
-          ./configure
+          ./configure --with-crypto=openssl --with-libssl-prefix="$GITHUB_WORKSPACE/openssl-install"
           make -j$(nproc)
 
       - name: Run libssh2 tests
         working-directory: libssh2
-        env:
-          WOLFPROV_FORCE_FAIL: ${{ matrix.force_fail }}
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
+          # Run the tests and capture the result
           make check 2>&1 | tee libssh2-test.log
-          TEST_RESULT=${PIPESTATUS[0]}
-
+          TEST_RESULT=$(grep -q "FAIL: ssh2.sh" libssh2-test.log && echo "1" || echo "0")
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libssh2
