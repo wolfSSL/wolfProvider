@@ -980,7 +980,7 @@ static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
 static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
 {
     int ok = 1;
-    int privDone = 0;
+    int origType;
     int rc;
 
     /* Only named curves supported. */
@@ -988,10 +988,10 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
         (ecc->curveId == 0)) {
         ok = 0;
     }
-    if (((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && (!ecc->hasPub)) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && (!ecc->hasPub)) {
         ok = 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+    if (ok && (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         /* TODO: Quick check for older versions? */
         if (checkType == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
@@ -1004,18 +1004,23 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
        (void)checkType;
     #endif
         {
-            privDone = 1;
+            /* We may have a private key inside that does not match the public
+             * key that has been set, which is OK. Override the internal type
+             * to force a public key only check */
+            origType = ecc->key.type;
+            ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
             rc = wc_ecc_check_key((ecc_key*)&ecc->key);
+            ((wp_Ecc*)ecc)->key.type = origType;
             if (rc != 0) {
                 ok = 0;
             }
         }
     }
-    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
         (!ecc->hasPriv)) {
         ok = 0;
     }
-    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) && (!privDone)) {
+    if ((ok && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         rc = wc_ecc_check_key((ecc_key*)&ecc->key);
         if (rc != 0) {
             ok = 0;
