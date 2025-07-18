@@ -1,0 +1,93 @@
+name: python3-ntp Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ '*' ] #'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_python3-ntp:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        python3-ntp_ref: [ 'master', 'NTPsec_1_2_2' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - python3-ntp_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install python3-ntp dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bison libcap-dev libseccomp-dev libavahi-compat-libdnssd-dev pps-tools python-dev-is-python3
+      - name: Download python3-ntp
+        uses: actions/checkout@v4
+        with:
+          repository: ntpsec/ntpsec
+          ref: ${{ matrix.python3-ntp_ref }}
+          path: ntpsec
+          fetch-depth: 1
+
+      - name: Build ntpsec
+        working-directory: ntpsec
+        run: |
+          ./waf configure
+          ./waf build
+
+      - name: Run python3-ntp tests
+        working-directory: ntpsec
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          # Run tests
+          ./waf check | tee python3-ntp-test.log
+          #skip test_ntpd because it uses AES-SIV which we do not support
+          if grep -q "tests that pass 8/9" python3-ntp-test.log; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+          cat python3-ntp-test.log
+          echo "TEST_RESULT = $TEST_RESULT"
+          #$GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} python3-ntp
