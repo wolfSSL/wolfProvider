@@ -39,7 +39,11 @@ USE_CUR_TAG=${USE_CUR_TAG:-0}
 
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ] && [ "$USE_CUR_TAG" != "1" ]; then
-        OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current))
+        if [[ "${OPENSSL_TAG}" == openssl-* ]]; then
+            OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current 2>/dev/null))
+        else
+            OPENSSL_TAG_CUR=$(cd ${OPENSSL_SOURCE_DIR} && (git branch --show-current 2>/dev/null || git describe --tags 2>/dev/null))
+        fi
         if [ "${OPENSSL_TAG_CUR}" != "${OPENSSL_TAG}" ]; then # force a rebuild
             printf "Version inconsistency. Please fix ${OPENSSL_SOURCE_DIR} (expected: ${OPENSSL_TAG}, got: ${OPENSSL_TAG_CUR})\n"
             do_cleanup
