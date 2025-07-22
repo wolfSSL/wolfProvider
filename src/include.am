@@ -21,6 +21,7 @@ libwolfprov_la_SOURCES += src/wp_tls1_prf.c
 libwolfprov_la_SOURCES += src/wp_kdf_kmgmt.c
 libwolfprov_la_SOURCES += src/wp_kdf_exch.c
 libwolfprov_la_SOURCES += src/wp_pbkdf2.c
+libwolfprov_la_SOURCES += src/wp_krb5kdf.c
 libwolfprov_la_SOURCES += src/wp_rsa_kmgmt.c
 libwolfprov_la_SOURCES += src/wp_rsa_sig.c
 libwolfprov_la_SOURCES += src/wp_rsa_asym.c
