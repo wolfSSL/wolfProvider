@@ -171,9 +171,8 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_MODE);
             if ((p != NULL) && (p->data != NULL)) {
-                char mode[16];
-                char* modePtr = mode;
-                if (!OSSL_PARAM_get_utf8_string(p, &modePtr, sizeof(mode))) {
+                const char* mode = NULL;
+                if (!OSSL_PARAM_get_utf8_string_ptr(p, &mode)) {
                     ok = 0;
                 }
                 if (ok) {
@@ -190,9 +189,8 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_DIGEST);
             if ((p != NULL) && (p->data != NULL)) {
-                char digest[16];
-                char* digestPtr = digest;
-                if (!OSSL_PARAM_get_utf8_string(p, &digestPtr, sizeof(digest))) {
+                const char* digest = NULL;
+                if (!OSSL_PARAM_get_utf8_string_ptr(p, &digest)) {
                     ok = 0;
                 }
                 if (ok) {
@@ -205,9 +203,8 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_CIPHER);
             if ((p != NULL) && (p->data != NULL)) {
-                char cipher[16];
-                char* cipherPtr = cipher;
-                if (!OSSL_PARAM_get_utf8_string(p, &cipherPtr, sizeof(cipher))) {
+                const char* cipher = NULL;
+                if (!OSSL_PARAM_get_utf8_string_ptr(p, &cipher)) {
                     ok = 0;
                 }
                 if (ok) {
