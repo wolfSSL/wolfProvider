@@ -44,16 +44,7 @@ clone_wolfssl() {
         cp -pr ${WOLFSSL_FIPS_BUNDLE}/* ${WOLFSSL_SOURCE_DIR}/
     else
         if [ -d ${WOLFSSL_SOURCE_DIR} ] && [ "$USE_CUR_TAG" != "1" ]; then
-            if [[ "${WOLFSSL_TAG}" == v* ]] || [[ "${WOLFSSL_TAG}" == *-stable ]]; then
-                WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && (git describe --tags 2>/dev/null || git branch --show-current 2>/dev/null))
-            else
-                WOLFSSL_TAG_CUR=$(cd ${WOLFSSL_SOURCE_DIR} && (git branch --show-current 2>/dev/null || git describe --tags 2>/dev/null))
-            fi
-            if [ "${WOLFSSL_TAG_CUR}" != "${WOLFSSL_TAG}" ]; then # force a rebuild
-                printf "Version inconsistency. Please fix ${WOLFSSL_SOURCE_DIR} (expected: ${WOLFSSL_TAG}, got: ${WOLFSSL_TAG_CUR})\n"
-                do_cleanup
-                exit 1
-            fi
+            check_git_match "${WOLFSSL_TAG}" "${WOLFSSL_SOURCE_DIR}"
         fi
 
         if [ ! -d ${WOLFSSL_SOURCE_DIR} ]; then
