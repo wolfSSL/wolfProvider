@@ -1403,7 +1403,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
                     ctx->aad, (word32)ctx->aadLen);
                 if (rc == AES_GCM_AUTH_E) {
                     ctx->authErr = 1;
-                    rc = 0;
+                    ok = 0;
                 }
                 if (rc != 0) {
                     ok = 0;
