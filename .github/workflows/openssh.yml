@@ -90,11 +90,14 @@ jobs:
           autoreconf -ivf
           ./configure --with-ssl-dir=$GITHUB_WORKSPACE/openssl-install \
                      --with-rpath=-Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64 \
-                     --with-prngd-socket=/tmp/prngd
+                     --with-prngd-socket=/tmp/prngd \
+                     --with-ldflags=-Wl,--export-dynamic
           make -j
+
+          export LD_LIBRARY_PATH=".:openbsd-compat:$LD_LIBRARY_PATH"  # Include build dirs for symbol resolution
 
           # Run all the tests except (t-exec) as it takes too long
           export ${{ matrix.force_fail }}
           make file-tests interop-tests extra-tests unit 2>&1 | tee openssh-test.log
-          TEST_RESULT=$?
+          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openssh

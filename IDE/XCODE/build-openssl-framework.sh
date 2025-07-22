@@ -67,7 +67,7 @@ build() { # <ARCH=arm64|x86_64> <TYPE=iphonesimulator|iphoneos|macosx|watchos|wa
     mkdir -p ${OUTDIR}/${TYPE}-${ARCH} && cd ${OUTDIR}/${TYPE}-${ARCH}
 
     CC="clang" CXX="clang" CFLAGS="${CFLAGS_COMMON} -Os -arch ${ARCH} -isysroot ${SDK_ROOT}" LDFLAGS="-arch ${ARCH} -isysroot ${SDK_ROOT}" ${WOLFSSL_DIR}/Configure no-asm ${TARGET} --prefix=${OUTDIR}/openssl-install-${TYPE}-${ARCH} ${CONF_OPTS}
-    make -j${NUMCPU}
+    make -j$((${NUMCPU} / 2))
     make install
 
     popd
@@ -80,10 +80,15 @@ for type in iphonesimulator macosx ; do
     build x86_64 ${type}
 
     # Create universal binaries from architecture-specific static libraries
-    lipo \
-        "$OUTDIR/openssl-install-${type}-x86_64/lib/libssl.a" \
-        "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" \
-        -create -output $LIPODIR/libopenssl-${type}.a
+    if [ -f "$OUTDIR/openssl-install-${type}-x86_64/lib/libssl.a" ] && [ -f "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" ]; then
+        lipo \
+            "$OUTDIR/openssl-install-${type}-x86_64/lib/libssl.a" \
+            "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" \
+            -create -output $LIPODIR/libopenssl-${type}.a
+        else
+        echo "ERROR: Required input libraries not found for ${type}"
+        exit 1
+    fi
 
     echo "Checking libraries"
     xcrun -sdk ${type} lipo -info $LIPODIR/libopenssl-${type}.a
@@ -94,9 +99,12 @@ for type in iphoneos ; do
     build arm64 ${type}
 
     # Create universal binaries from architecture-specific static libraries
-    lipo \
-        "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" \
-        -create -output $LIPODIR/libopenssl-${type}.a
+    if [ -f "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" ]; then
+        cp "$OUTDIR/openssl-install-${type}-arm64/lib/libssl.a" "$LIPODIR/libopenssl-${type}.a"
+        else
+        echo "ERROR: Required input library not found for ${type}"
+        exit 1
+    fi
 
     echo "Checking libraries"
     xcrun -sdk ${type} lipo -info $LIPODIR/libopenssl-${type}.a

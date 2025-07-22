@@ -33,19 +33,19 @@ source "${UTILS_DIR}/utils-openssl.sh"
 source "${UTILS_DIR}/utils-wolfssl.sh"
 source "${UTILS_DIR}/utils-wolfprovider.sh"
 
-# Initialize the environment
+# Initialize wolfProvider
 init_wolfprov
 
 # Fail flags
 FAIL=0
-FORCE_FAIL=0
 FORCE_FAIL_PASSED=0
 
-# Check for force fail parameter
-if [ "$1" = "WOLFPROV_FORCE_FAIL=1" ]; then
-    export WOLFPROV_FORCE_FAIL=1
-    FORCE_FAIL=1
-    echo -e "\nForce fail mode enabled for RSA tests"
+# Get the force fail parameter
+if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+    echo "Force fail mode enabled for RSA tests"
+fi
+if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
+    echo "FIPS mode enabled for RSA tests"
 fi
 
 # Verify wolfProvider is properly loaded
@@ -86,7 +86,7 @@ use_wolf_provider() {
 
 # Helper function to handle force fail checks
 check_force_fail() {
-    if [ $FORCE_FAIL -eq 1 ]; then
+    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
         echo "[PASS] Test passed when force fail was enabled"
         FORCE_FAIL_PASSED=1
     fi
@@ -379,7 +379,7 @@ for key_type in "${KEY_TYPES[@]}"; do
     done
 done
 
-if [ $FORCE_FAIL -eq 1 ]; then
+if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
     if [ $FORCE_FAIL_PASSED -eq 1 ]; then
         echo -e "\n=== RSA Tests Failed With Force Fail Enabled ==="
         echo "ERROR: Some tests passed when they should have failed"

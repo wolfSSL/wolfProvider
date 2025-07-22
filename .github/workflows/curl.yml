@@ -89,5 +89,6 @@ jobs:
 
           # Run tests and save output to test.log
           make -j$(nproc) test-ci 2>&1 | tee curl-test.log
-          TEST_RESULT=$?
+          # Capture the test result using PIPESTATUS (Bash only)
+          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl

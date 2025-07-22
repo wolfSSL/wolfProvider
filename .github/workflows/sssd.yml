@@ -74,12 +74,22 @@ jobs:
           ln -s samba-4.0/ldb_module.h /usr/include/ldb_module.h
           ln -s samba-4.0/ldb_version.h /usr/include/ldb_version.h
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+
       - name: Build and test sssd with wolfProvider
         run: |
           # Clone SSSD
           git clone https://github.com/SSSD/sssd.git
           cd sssd
           git checkout ${{ matrix.sssd_ref }}
+
+          # Apply patch for testing
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/sssd/sssd-${{ matrix.sssd_ref }}-wolfprov.patch
 
           # Configure and build SSSD with wolfProvider
           autoreconf -ivf
@@ -89,6 +99,7 @@ jobs:
 
       - name: Run tests
         working-directory: sssd
+        shell: bash
         run: |
           # Set environment variables
           export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
@@ -100,7 +111,12 @@ jobs:
           $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
           grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
+          # If force fail is enabled dont exit with error
+          if [ "${{ matrix.force_fail }}" == "WOLFPROV_FORCE_FAIL=1" ]; then
+            set +e
+          fi
+
           # Run tests and save result
           make check 2>&1 | tee sssd-test.log
-          TEST_RESULT=$?
+          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} sssd

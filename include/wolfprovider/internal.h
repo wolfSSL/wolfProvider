@@ -76,12 +76,16 @@
 #define WP_ENC_FORMAT_TYPE_SPECIFIC     4
 /** X9_62 encoding format. */
 #define WP_ENC_FORMAT_X9_62             5
+/** Text encoding format. */
+#define WP_ENC_FORMAT_TEXT              6
 
 /* Data format. */
 /** DER - Binary encoding. */
 #define WP_FORMAT_DER           0
 /** PEM - Text encoding. */
 #define WP_FORMAT_PEM           1
+/** Human readable text encoding. */
+#define WP_FORMAT_TEXT          2
 
 /* MAC key types. */
 /** HMAC key type. */

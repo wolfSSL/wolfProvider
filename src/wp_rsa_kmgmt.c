@@ -1113,7 +1113,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             p = &params[i];
             index = -1;
             for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
-                if (XSTRNCMP(p->key, wp_rsa_param_key[j], p->data_size) == 0) {
+                if (XSTRNCMP(p->key, wp_rsa_param_key[j], XSTRLEN(p->key)) == 0) {
                     index = j; 
                     break;
                 }
@@ -1435,6 +1435,10 @@ static wp_RsaGenCtx* wp_rsa_base_gen_init(WOLFPROV_CTX* provCtx,
     return ctx;
 }
 
+#ifndef WP_RSA_KEYGEN_MAX_RETRY_CNT
+#define WP_RSA_KEYGEN_MAX_RETRY_CNT 10
+#endif
+
 /**
  * Generate RSA key pair using wolfSSL.
  *
@@ -1447,6 +1451,8 @@ static wp_RsaGenCtx* wp_rsa_base_gen_init(WOLFPROV_CTX* provCtx,
 static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
 {
     wp_Rsa* rsa = NULL;
+    int rc = -1;
+    int i = 0;
 
     (void)cb;
     (void)cbArg;
@@ -1454,20 +1460,36 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
     if (wolfssl_prov_is_running() && wp_rsagen_check_key_size(ctx)) {
         rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
         if (rsa != NULL) {
-            int rc = wc_MakeRsaKey(&rsa->key, (int)ctx->bits, ctx->e,
-                &ctx->rng);
-            if (rc != 0) {
-                wp_rsa_free(rsa);
-                rsa = NULL;
-            }
-            else {
-                rsa->type      = ctx->type;
-                rsa->bits      = (int)ctx->bits;
-                rsa->hasPub    = 1;
-                rsa->hasPriv   = 1;
-                rsa->pssParams = ctx->pssParams;
+            /* wolfCrypt FIPS RSA keygen has a small chance it simply will not
+             * find RSA primes within the failCount. Account for this by
+             * retrying here. For simplicity we will always use this flow
+             * even for non-FIPS case. */
+            for (i = 0; i < WP_RSA_KEYGEN_MAX_RETRY_CNT; i++) {
+                rc = wc_MakeRsaKey(&rsa->key, (int)ctx->bits, ctx->e,
+                    &ctx->rng);
+                if (rc == PRIME_GEN_E) {
+                    /* retry */
+                }
+                else if (rc != 0) {
+                    wp_rsa_free(rsa);
+                    rsa = NULL;
+                    break;
+                }
+                else {
+                    rsa->type      = ctx->type;
+                    rsa->bits      = (int)ctx->bits;
+                    rsa->hasPub    = 1;
+                    rsa->hasPriv   = 1;
+                    rsa->pssParams = ctx->pssParams;
+                    break;
+                }
             }
         }
+    }
+
+    if (i == WP_RSA_KEYGEN_MAX_RETRY_CNT) {
+        wp_rsa_free(rsa);
+        rsa = NULL;
     }
 
     return rsa;
@@ -2167,7 +2189,7 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     if (rc != 0) {
         ok = 0;
     }
-#if LIBWOLFSSL_VERSION_HEX < 0x05000000
+#if LIBWOLFSSL_VERSION_HEX < 0x05000000 || defined(HAVE_FIPS)
     if (!ok) {
         idx = 0;
         rc = wc_GetPkcs8TraditionalOffset(data, &idx, len);
@@ -3848,6 +3870,334 @@ const OSSL_DISPATCH wp_rsapss_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
     { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
+    { 0, NULL }
+};
+
+
+/**
+ * Create a new RSA text encoder context.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New RSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_RsaEncDecCtx* wp_rsa_text_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_rsa_enc_dec_new(provCtx, RSA_FLAG_TYPE_RSA, WP_ENC_FORMAT_TEXT,
+        WP_FORMAT_TEXT);
+}
+
+/**
+ * Dispose of RSA text encoder context object.
+ *
+ * @param [in, out] ctx  RSA encoder/decoder context object.
+ */
+static void wp_rsa_text_enc_free(wp_RsaEncDecCtx* ctx)
+{
+    wp_rsa_enc_dec_free(ctx);
+}
+
+/**
+ * Return whether the RSA text encoder handles this part of the key.
+ *
+ * @param [in] provCtx   Provider context. Unused.
+ * @param [in] selection Parts of key to handle.
+ * @return  1 when supported.
+ * @return  0 when not supported.
+ */
+static int wp_rsa_text_enc_does_selection(WOLFPROV_CTX* provCtx, int selection)
+{
+    int ok;
+
+    (void)provCtx;
+
+    /* Text encoder supports both public and private key parts */
+    if (selection == 0) {
+        ok = 1;
+    }
+    else {
+        ok = ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) ||
+             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0);
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Encode a portion of the RSA key as hexadecimal.
+ *
+ * @param [in]      num        An mp_int to convert to hexadecimal.
+ * @param [out]     textData   Buffer to store hex in.
+ * @param [in]      textLen    Size of buffer.
+ * @param [in, out] pos        Current position in buffer.
+ * @param [in]      label      String describing section being encoded.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
+        size_t textLen, size_t* pos, const char* label)
+{
+    unsigned char* binData = NULL;
+    size_t binLen = 0;
+    size_t printAmt;
+    size_t dPos = *pos;
+    int bytes = 0;
+    int i;
+
+    int ok = 1;
+
+    if ((binLen = mp_unsigned_bin_size(num)) <= 0
+            || (binData = OPENSSL_malloc(binLen)) == NULL) {
+        ok = 0;
+    }
+    else if (mp_to_unsigned_bin((mp_int*)num, binData) != MP_OKAY) {
+        ok = 0;
+        OPENSSL_free(binData);
+        binData = NULL;
+    }
+    else {
+        if ((printAmt = XSNPRINTF(textData + dPos, textLen - dPos,
+                "%s:\n    ", label)) <= 0) {
+            ok = 0;
+        }
+        dPos += printAmt;
+
+        /* OSSL adds a leading 00 if MSB is set */
+        if (ok && *binData > 127) {
+            if ((printAmt = XSNPRINTF(textData + dPos, textLen - dPos,
+                    "00:")) <= 0) {
+                ok = 0;
+            }
+            dPos += printAmt;
+            bytes++;
+        }
+
+        /* OSSL does a newline + indent every 15 bytes */
+        if (ok) {
+            for (i = 0; i < (int)binLen - 1; i++) {
+                if (bytes >= 14) {
+                    if ((printAmt = XSNPRINTF(textData + dPos,
+                            textLen - dPos, "%02x:\n    ", binData[i])) <= 0) {
+                        ok = 0;
+                        break;
+                    }
+                    bytes = 0;
+                }
+                else {
+                    if ((printAmt = XSNPRINTF(textData + dPos,
+                            textLen - dPos, "%02x:", binData[i])) <= 0) {
+                        ok = 0;
+                        break;
+                    }
+                    bytes++;
+                }
+                dPos += printAmt;
+            }
+            if (ok && (printAmt = XSNPRINTF(textData + dPos,
+                    textLen - dPos, "%02x\n", binData[i])) <= 0) {
+                ok = 0;
+            }
+            dPos += printAmt;
+        }
+
+        OPENSSL_free(binData);
+        binData = NULL;
+    }
+
+    if (ok) {
+        *pos = dPos;
+    }
+
+    return ok;
+}
+
+/**
+ * Encode the RSA key in text format.
+ *
+ * @param [in]      ctx        RSA encoder/decoder context object.
+ * @param [in, out] cBio       Core BIO to write data to.
+ * @param [in]      key        RSA key object.
+ * @param [in]      params     Key parameters. Unused.
+ * @param [in]      selection  Parts of key to encode.
+ * @param [in]      pwCb       Password callback. Unused.
+ * @param [in]      pwCbArg    Argument to pass to password callback. Unused.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
+    const wp_Rsa* key, const OSSL_PARAM* params, int selection,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    int ok = 1;
+    BIO *out = wp_corebio_get_bio(ctx->provCtx, cBio);
+    int hasPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
+    int hasPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
+    char* textData = NULL;
+    size_t textLen = 0;
+    size_t pos = 0;
+    size_t printAmt;
+    char* expStr;
+    int expLen;
+
+    (void)params;
+    (void)pwCb;
+    (void)pwCbArg;
+
+    if (out == NULL) {
+        ok = 0;
+    }
+
+    /* Calculate total size needed for text output */
+    if (ok) {
+        /* 128 bytes provides space for labels: 'modulus:', 'prime1:', etc. */
+        textLen = 128;
+        if (hasPriv) {
+            /* displaying modulus and private exponent requires roughly 3 bytes
+             * per byte in key.
+             * prime1, prime2, exponent1, exponent2, and coefficient requires
+             * roughly 1.5 bytes per byte inkey.
+             * This is then 13.5 bytes per bytes in key + indents, which should
+             * be less than bits * 2.*/
+            textLen += key->bits << 1;
+        }
+        else if (hasPub) {
+            /* displaying modulus requires roughly 3 bytes per byte in key + a
+             * small amount for indents. This should be less than bits / 2 */
+            textLen += key->bits >> 1;
+        }
+
+        if ((textData = OPENSSL_malloc(textLen)) == NULL) {
+            ok = 0;
+        }
+    }
+
+    if (ok) {
+        /* OSSL uses nested macros to determine the number of primes, not sure
+         * when there wouldn't be two primes */
+        if (hasPriv && (printAmt = XSNPRINTF(textData + pos, textLen - pos,
+                "Private-Key: (%d bit, 2 primes)\n", key->bits)) <= 0) {
+            ok = 0;
+        }
+        else if (hasPub && (printAmt = XSNPRINTF(textData + pos,
+                textLen - pos, "Public-Key: (%d bit)\n", key->bits)) <= 0) {
+            ok = 0;
+        }
+        pos += printAmt;
+    }
+
+    /* OSSL uses 'modulus' and 'Modulus' */
+    if (hasPriv) {
+        ok = wp_rsa_encode_text_format_hex(&key->key.n, textData, textLen, &pos,
+            "modulus");
+    }
+    else if (hasPub) {
+        ok = wp_rsa_encode_text_format_hex(&key->key.n, textData, textLen, &pos,
+            "Modulus");
+    }
+
+    /* OSSL uses 'publicExponent' and 'Exponent' */
+    if (ok) {
+        if (mp_radix_size((mp_int*)&key->key.e, MP_RADIX_DEC, &expLen) != MP_OKAY
+                || ((expStr = OPENSSL_malloc(expLen)) == NULL)) {
+            ok = 0;
+        }
+        else if (mp_todecimal((mp_int*)&key->key.e, expStr) != MP_OKAY) {
+            ok = 0;
+            OPENSSL_free(expStr);
+            expStr = NULL;
+        }
+        else {
+            if (hasPriv && (printAmt = XSNPRINTF(textData + pos,
+                    textLen - pos, "publicExponent: %s ", expStr)) <= 0) {
+                ok = 0;
+            }
+            else if (hasPub && (printAmt = XSNPRINTF(textData + pos,
+                    textLen - pos, "Exponent: %s ", expStr)) <= 0) {
+                ok = 0;
+            }
+            pos += printAmt;
+
+            OPENSSL_free(expStr);
+            expStr = NULL;
+        }
+    }
+
+    if (ok) {
+        if (mp_radix_size((mp_int*)&key->key.e, MP_RADIX_HEX, &expLen) != MP_OKAY
+                || ((expStr = OPENSSL_malloc(expLen)) == NULL)) {
+            ok = 0;
+        }
+        else if (mp_tohex((mp_int*)&key->key.e, expStr) != MP_OKAY) {
+            ok = 0;
+            OPENSSL_free(expStr);
+            expStr = NULL;
+        }
+        else {
+            /* OSSL does not print a leading zero for the hex part */
+            if ((printAmt = XSNPRINTF(textData + pos,
+                    textLen - pos, "(0x%s)\n",
+                    (*expStr == '0') ? (expStr + 1) : (expStr))) <= 0) {
+                ok = 0;
+            }
+            pos += printAmt;
+
+            OPENSSL_free(expStr);
+            expStr = NULL;
+        }
+    }
+
+    /* Write private key components */
+    if (ok && hasPriv) {
+        if (ok) {
+            ok = wp_rsa_encode_text_format_hex(&key->key.d, textData, textLen,
+                &pos, "privateExponent");
+        }
+
+        if (ok) {
+            ok = wp_rsa_encode_text_format_hex(&key->key.p, textData, textLen,
+                &pos, "prime1");
+        }
+
+        if (ok) {
+            ok = wp_rsa_encode_text_format_hex(&key->key.q, textData, textLen,
+                &pos, "prime2");
+        }
+
+        if (ok) {
+            ok = wp_rsa_encode_text_format_hex(&key->key.dP, textData, textLen,
+                &pos, "exponent1");
+        }
+
+        if (ok) {
+            ok = wp_rsa_encode_text_format_hex(&key->key.dQ, textData, textLen,
+                &pos, "exponent2");
+        }
+
+        if (ok) {
+            ok = wp_rsa_encode_text_format_hex(&key->key.u, textData, textLen,
+                &pos, "coefficient");
+        }
+    }
+
+    /* TODO: display RSAPSS info */
+
+    if (ok && (BIO_write(out, textData, (int)pos) <= 0)) {
+        ok = 0;
+    }
+
+    OPENSSL_free(textData);
+    BIO_free(out);
+
+    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+const OSSL_DISPATCH wp_rsa_text_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_rsa_text_enc_new            },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_rsa_text_enc_free           },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_text_enc_does_selection },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode_text             },
     { 0, NULL }
 };
 

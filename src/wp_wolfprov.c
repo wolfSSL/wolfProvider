@@ -749,6 +749,10 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
       wp_rsapss_pki_pem_encoder_functions,
       "" },
+    /*{ WP_NAMES_RSA, WOLFPROV_PROPERTIES ",output=text", \*/
+    { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(type-specific, text), \
+      wp_rsa_text_encoder_functions,
+      "" }, 
 #endif
 #endif /* WP_HAVE_RSA */
 
@@ -1212,7 +1216,6 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
     const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
 {
     int ok = 1;
-    OSSL_FUNC_core_get_libctx_fn* c_get_libctx = NULL;
 
 #ifdef WOLFPROV_DEBUG
     ok = (wolfProv_Debugging_ON() == 0);
@@ -1253,9 +1256,6 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
             case OSSL_FUNC_CORE_GET_PARAMS:
                 c_get_params = OSSL_FUNC_core_get_params(in);
                 break;
-            case OSSL_FUNC_CORE_GET_LIBCTX:
-                c_get_libctx = OSSL_FUNC_core_get_libctx(in);
-                break;
             case OSSL_FUNC_BIO_READ_EX:
                 c_bio_read_ex = OSSL_FUNC_BIO_read_ex(in);
                 break;
@@ -1283,10 +1283,6 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
         }
     }
 
-    if (c_get_libctx == NULL) {
-        ok = 0;
-    }
-
     if (ok) {
         /* Create a new provider context. */
         *provCtx = wolfssl_prov_ctx_new();
@@ -1295,9 +1291,11 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
         }
     }
     if (ok) {
-        /* Store the library context in provider context. */
+        /* Using the OSSL_FUNC_core_get_libctx can yield you an
+         * uninitialized libctx in certain init flows. Instead create
+         * a new child libctx. The child libctx being NULL is allowed. */
         wolfssl_prov_ctx_set0_lib_ctx(*provCtx,
-            (OSSL_LIB_CTX*)c_get_libctx(handle));
+            OSSL_LIB_CTX_new_child(handle, in));
         /* Cache the handle in provider context. */
         wolfssl_prov_ctx_set0_handle(*provCtx, handle);
 
