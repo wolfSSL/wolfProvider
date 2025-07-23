@@ -57,6 +57,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config \
             python3 perl libpcre2-dev zlib1g-dev cmake ninja-build
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
       
       - name: Checkout Qt
         uses: actions/checkout@v4
@@ -82,17 +89,14 @@ jobs:
         if: matrix.qt_ref == 'dev'
         working-directory: qt5_repo
         run: |
+          # Apply patch from OSP repo
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/qtbase/qtbase-v6.10-wolfprov.patch
+         
           # Build the OpenSSL TLS backend plugin first
           ninja QTlsBackendOpenSSLPlugin
           
-          #hard loads to wolfProvider instead.
-          perl -pi -e 's/defaultProvider/wolfProvider/g; s/legacyProvider/wolfProvider/g; s/OSSL_PROVIDER_load\(nullptr, "default"\)/OSSL_PROVIDER_load(nullptr, "libwolfprov")/g; s/OSSL_PROVIDER_load\(nullptr, "legacy"\)/OSSL_PROVIDER_load(nullptr, "libwolfprov")/g;' src/corelib/tools/qcryptographichash.cpp
-
-           #Remove legacy loading
-           perl -pi -e 's/CASE\(Md4, "MD4"\);/CASE(Md4, nullptr);/g;' src/corelib/tools/qcryptographichash.cpp
-
-           # Build only the SSL test and its dependencies
-           cmake --build . --target tst_qsslsocket --parallel $(nproc)
+          # Build only the SSL test and its dependencies
+          cmake --build . --target tst_qsslsocket --parallel $(nproc)
       
       - name: Build Qt (v5.15.8 - qmake)
         if: matrix.qt_ref != 'dev'
