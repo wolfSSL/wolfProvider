@@ -63,7 +63,7 @@ fi
 
 echo "[*] Configuring pam_pkcs11..."
 
-# Temporarily unset WOLFPROV_FORCE_FAIL so we can test the failure case
+# Temporarily unset WOLFPROV_FORCE_FAIL so we can generate certs correctly
 ORIG_WOLFPROV_FORCE_FAIL="${WOLFPROV_FORCE_FAIL:-}"
 unset WOLFPROV_FORCE_FAIL || true
 
