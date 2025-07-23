@@ -42,7 +42,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 echo "[*] Cloning pam_pkcs11..."
 cd /opt
 if [[ ! -d "pam_pkcs11" ]]; then
-  git clone https://github.com/OpenSC/pam_pkcs11.git
+  git clone --branch=${PAM_PKCS11_REF} https://github.com/OpenSC/pam_pkcs11.git
 fi
 cd pam_pkcs11
 
@@ -62,6 +62,10 @@ else
 fi
 
 echo "[*] Configuring pam_pkcs11..."
+
+# Temporarily unset WOLFPROV_FORCE_FAIL so we can generate certs correctly
+ORIG_WOLFPROV_FORCE_FAIL="${WOLFPROV_FORCE_FAIL:-}"
+unset WOLFPROV_FORCE_FAIL || true
 
 # Generate dummy CA cert if missing
 if [ ! -f /test/certs/test-ca.crt ]; then
@@ -98,6 +102,9 @@ echo "subject=$CERT_SUBJECT; uid=testuser" | tee /etc/pam_pkcs11/pkcs11_mapper.m
 cp /etc/pam.d/common-auth /etc/pam.d/common-auth.bak
 echo "auth sufficient pam_pkcs11.so debug" | tee /etc/pam.d/common-auth > /dev/null
 cat /etc/pam.d/common-auth.bak | tee -a /etc/pam.d/common-auth > /dev/null
+
+# Restore WOLFPROV_FORCE_FAIL
+export WOLFPROV_FORCE_FAIL="$ORIG_WOLFPROV_FORCE_FAIL"
 
 echo "[*] Initializing SoftHSM (simulated smartcard)..."
 mkdir -p /var/lib/softhsm/tokens
