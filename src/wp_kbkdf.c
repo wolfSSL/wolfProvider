@@ -493,7 +493,9 @@ static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
 #endif
 #ifdef WP_HAVE_CMAC
         case WP_MAC_TYPE_CMAC:
+    #ifndef HAVE_FIPS
             ret = wc_CmacFree(&ctx->cmacCtx);
+    #endif
             break;
 #endif
     }
