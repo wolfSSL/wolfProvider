@@ -104,12 +104,20 @@ install_wolfssl() {
             WOLFSSL_CONFIG_CFLAGS=$WOLFSSL_FIPS_CONFIG_CFLAGS
         elif [ "$WOLFSSL_ISFIPS" = "1" ]; then
             printf "with FIPS ... "
-            CONF_ARGS+=" --enable-fips=v5"
+            if [ -n "$WOLFSSL_FIPS_VERSION" ]; then
+                CONF_ARGS+=" --enable-fips=$WOLFSSL_FIPS_VERSION"
+            else
+                CONF_ARGS+=" --enable-fips=v5"
+            fi
             WOLFSSL_CONFIG_OPTS=$WOLFSSL_FIPS_CONFIG_OPTS
             WOLFSSL_CONFIG_CFLAGS=$WOLFSSL_FIPS_CONFIG_CFLAGS
             if [ ! -e "XXX-fips-test" ]; then
                 # Sometimes the system OpenSSL is different than the one we're using. So for the 'git' commands, we'll just use whatever the system comes with
-                LD_LIBRARY_PATH="" ./fips-check.sh linuxv5.2.1 keep nomakecheck >>$LOG_FILE 2>&1
+                if [ -n "$WOLFSSL_FIPS_CHECK_TAG" ]; then
+                    LD_LIBRARY_PATH="" ./fips-check.sh "$WOLFSSL_FIPS_CHECK_TAG" keep nomakecheck >>$LOG_FILE 2>&1
+                else
+                    LD_LIBRARY_PATH="" ./fips-check.sh linuxv5.2.1 keep nomakecheck >>$LOG_FILE 2>&1
+                fi
                 if [ $? != 0 ]; then
                     printf "ERROR checking out FIPS\n"
                     rm -rf ${WOLFSSL_INSTALL_DIR}

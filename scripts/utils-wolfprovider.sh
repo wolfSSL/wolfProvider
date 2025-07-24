@@ -52,57 +52,55 @@ install_wolfprov() {
     unset OPENSSL_CONF
     printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
-    if [ ! -d ${WOLFPROV_INSTALL_DIR} ] || [ $(check_folder_age "${WOLFPROV_INSTALL_DIR}" "${WOLFSSL_INSTALL_DIR}") -lt 0 ] || [ $(check_folder_age "${WOLFPROV_INSTALL_DIR}" "${OPENSSL_INSTALL_DIR}") -lt 0 ]; then
-        printf "\tConfigure wolfProvider ... "
-        if [ ! -e "${WOLFPROV_SOURCE_DIR}/configure" ]; then
-            ./autogen.sh >>$LOG_FILE 2>&1
-        fi
-
-        if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            WOLFPROV_CONFIG_OPTS+=" --enable-debug"
-        fi
-
-        ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
-        RET=$?
-
-        if [ $RET != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
-
-        printf "\tBuild wolfProvider ... "
-        make -j$NUMCPU >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
-
-        printf "\tTest wolfProvider ... "
-        make test >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
-
-        printf "\tInstall wolfProvider ... "
-        make install >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
+    printf "\tConfigure wolfProvider ... "
+    if [ ! -e "${WOLFPROV_SOURCE_DIR}/configure" ]; then
+        ./autogen.sh >>$LOG_FILE 2>&1
     fi
+
+    if [ "$WOLFPROV_DEBUG" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-debug"
+    fi
+
+    ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
+    RET=$?
+
+    if [ $RET != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tBuild wolfProvider ... "
+    make -j$NUMCPU >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tTest wolfProvider ... "
+    make test >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tInstall wolfProvider ... "
+    make install >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
 }
 
 init_wolfprov() {
