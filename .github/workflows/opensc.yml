@@ -1,0 +1,116 @@
+name: OpenSC Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_opensc:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        opensc_ref: [ '0.25.1' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install OpenSC dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autotools-dev libtool automake autoconf make pkg-config \
+            libeac-dev gengetopt libpcsclite-dev libreadline-dev \
+            zlib1g-dev docbook-xsl xsltproc pcscd softhsm2 opensc pcsc-tools \
+            vim libcmocka-dev libjson-c-dev libp11-dev
+
+      - name: Download OpenSC
+        uses: actions/checkout@v4
+        with:
+          repository: OpenSC/OpenSC
+          ref: ${{ matrix.opensc_ref }}
+          path: opensc
+          fetch-depth: 1
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+        run: |
+            cd opensc
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/opensc/opensc-${{ matrix.opensc_ref }}-wolfprovider.patch
+
+      - name: Build OpenSC
+        working-directory: opensc
+        run: |
+          # Configure with custom OpenSSL and wolfProvider
+          ./bootstrap
+          OPENSSL_CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" \
+          OPENSSL_LIBS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lcrypto" \
+          ./configure \
+            --enable-openssl \
+            --enable-pcsc \
+            --disable-doc \
+            --prefix=$GITHUB_WORKSPACE/opensc-install \
+            --with-completiondir="$GITHUB_WORKSPACE/opensc-install/share/completions" \
+            CFLAGS="-Wno-error" \
+            LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64" \
+            CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
+
+          # Build OpenSC
+          make -j$(nproc)
+          sudo make install
+
+      - name: Run OpenSC tests
+        working-directory: opensc
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Run tests and save output
+          make check | tee opensc-test.log
+
+          # Check for expected test results in the test log (18 passes, 2 expected failures, with WPFF we expect 6 failures)
+          TEST_RESULT=$(((grep -q "# PASS:  10" opensc-test.log) && (grep -q "# PASS:  8" opensc-test.log) && (grep -q "# XFAIL: 2" opensc-test.log)) && echo "0" || echo "1")
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} opensc
