@@ -147,11 +147,8 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_PKCS12KDF      "PKCS12KDF"
 #define WP_NAMES_TLS1_3_KDF     "TLS13-KDF"
 #define WP_NAMES_TLS1_PRF       "TLS1-PRF"
-<<<<<<< HEAD
 #define WP_NAMES_KBKDF          "KBKDF"
-=======
 #define WP_NAMES_KRB5KDF        "KRB5KDF"
->>>>>>> 3e8e7f8eae9d5912155f4aeb0570c36565512baf
 
 /* Signature names. */
 #define WP_NAMES_RSA            "RSA:rsaEncryption:1.2.840.113549.1.1.1"
