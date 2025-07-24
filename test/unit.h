@@ -134,6 +134,8 @@ int test_hkdf(void *data);
 
 #ifdef WP_HAVE_KBKDF
 int test_kbkdf(void *data);
+#ifdef WP_HAVE_KRB5KDF
+int test_krb5kdf(void *data);
 #endif
 
 #ifdef WP_HAVE_DES3CBC
