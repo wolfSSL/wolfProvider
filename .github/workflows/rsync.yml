@@ -1,0 +1,156 @@
+name: rsync Tests
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_rsync:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        rsync_ref: [ 'master', 'v3.2.7' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - rsync_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install rsync dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ gawk autoconf automake python3-cmarkgfm \
+            acl libacl1-dev attr libattr1-dev libxxhash-dev \
+            libzstd-dev liblz4-dev
+
+      - name: Checkout rsync
+        uses: actions/checkout@v4
+        with:
+          repository: RsyncProject/rsync
+          path: rsync_repo
+          ref: ${{ matrix.rsync_ref }}
+          fetch-depth: 1
+
+      - name: Create SHA test script
+        run: |
+          cat > rsync_repo/testsuite/sha-test.test << 'EOF'
+          #!/bin/sh
+          # Use rsync binary from current directory or parent directory
+          if [ -f "./rsync" ]; then
+              RSYNC="./rsync"
+          elif [ -f "../rsync" ]; then
+              RSYNC="../rsync"
+          else
+              echo "ERROR: Could not find rsync binary"
+              exit 1
+          fi
+          # Verify SHA256 and SHA512 are available
+          if $RSYNC --version | grep -A1 "Daemon auth list:" | grep -q "sha512.*sha256"; then
+              echo "PASS: SHA256 and SHA512 available"
+          else
+              echo "FAIL: SHA256/SHA512 not found"
+              exit 1
+          fi
+          # Verify OpenSSL crypto is enabled
+          if $RSYNC --version | grep -q "openssl-crypto"; then
+              echo "PASS: OpenSSL crypto enabled"
+          else
+              echo "FAIL: OpenSSL crypto not enabled"
+              exit 1
+          fi
+          # Test daemon authentication
+          TEST_DIR="/tmp/rsync-sha-test"
+          SECRETS_FILE="$TEST_DIR/secrets"
+          CONFIG_FILE="$TEST_DIR/rsyncd.conf"
+          rm -rf "$TEST_DIR"
+          mkdir -p "$TEST_DIR"
+          echo "testuser:testpass" > "$SECRETS_FILE"
+          chmod 600 "$SECRETS_FILE"
+          cat > "$CONFIG_FILE" << EOC
+          port = 8730
+          [test]
+          path = /tmp
+          auth users = testuser
+          secrets file = $SECRETS_FILE
+          EOC
+          $RSYNC --daemon --config="$CONFIG_FILE" &
+          DAEMON_PID=$!
+          sleep 3
+          if echo "testpass" | $RSYNC --list-only --password-file=- rsync://testuser@localhost:8730/test/ >/dev/null 2>&1; then
+              echo "PASS: SHA authentication works"
+          else
+              echo "FAIL: SHA authentication failed"
+              kill $DAEMON_PID 2>/dev/null
+              rm -rf "$TEST_DIR"
+              exit 1
+          fi
+          kill $DAEMON_PID 2>/dev/null || true
+          rm -rf "$TEST_DIR" || true
+          exit 0
+          EOF
+          chmod +x rsync_repo/testsuite/sha-test.test
+
+      - name: Build and install rsync
+        working-directory: rsync_repo
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          ./configure --disable-xxhash
+          make -j$(nproc)
+          #export RSYNC_CHECKSUM_LIST="none"
+          #This can disable file checksums which currently use rsycs own implementation of MD4 and MD5
+
+      - name: Run rsync tests
+        working-directory: rsync_repo
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Run rsync test suite including our SHA test
+          make check 2>&1 | tee rsync-test.log
+
+          # Check test results - look for "0 failed" in the output
+          if grep -q "overall result is 0" rsync-test.log; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} rsync
