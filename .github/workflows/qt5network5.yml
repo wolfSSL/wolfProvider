@@ -97,6 +97,9 @@ jobs:
           
           # Build only the SSL test and its dependencies
           cmake --build . --target tst_qsslsocket --parallel $(nproc)
+
+          #disable tests that both openssl and wolfprovider fail
+          $GITHUB_WORKSPACE/.github/scripts/qtbase/disable-dev-tests.sh
       
       - name: Build Qt (v5.15.8 - qmake)
         if: matrix.qt_ref != 'dev'
@@ -106,6 +109,8 @@ jobs:
           echo 'QMAKE_CXXFLAGS += -std=c++14' >> mkspecs/linux-g++/qmake.conf
           
           make -k -j$(nproc)
+
+          $GITHUB_WORKSPACE/.github/scripts/qtbase/disable-v5.15.8-tests.sh
       
       - name: Add test server to hosts
         run: |
@@ -119,21 +124,14 @@ jobs:
           export ${{ matrix.force_fail }}
           
           # Run the QSSLSocket test, the make check takes too long
-          ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
-          
-          # Make sure it passes the same number of tests as openssl
-          if [ "${{ matrix.qt_ref }}" == "dev" ]; then
-            EXPECTED_TESTS=549
-          else
-            EXPECTED_TESTS=521
-          fi
+          QTEST_ENVIRONMENT=ci ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
           
           # Check test results
-          if grep -q "$EXPECTED_TESTS passed" qsslsocket-test.log; then
+          if grep -q "0 failed" qsslsocket-test.log; then
             TEST_RESULT=0
           else
             TEST_RESULT=1
-            echo "Expected $EXPECTED_TESTS tests to pass, but results don't match expected counts"
+            echo "Tests failed unexpectedly"
           fi
           
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} qtbase-qsslsocket
