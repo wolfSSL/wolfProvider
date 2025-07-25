@@ -163,6 +163,9 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
+#if !defined(NO_AES_CBC) && (defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC))
+    #define WP_HAVE_KBKDF
+#endif
 #ifndef WP_NO_FORCE_FAIL
     #define WP_CHECK_FORCE_FAIL
 #endif

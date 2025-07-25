@@ -23,6 +23,7 @@ test_unit_test_SOURCES = \
 	test/test_krb5kdf.c \
 	test/test_hkdf.c \
 	test/test_hmac.c \
+	test/test_kbkdf.c \
 	test/test_logging.c \
 	test/test_pbe.c \
 	test/test_pkey.c \

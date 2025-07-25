@@ -99,6 +99,9 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_HKDF
     TEST_DECL(test_hkdf, NULL),
 #endif
+#ifdef WP_HAVE_KBKDF
+    TEST_DECL(test_kbkdf, NULL),
+#endif
 #ifdef WP_HAVE_KRB5KDF
     TEST_DECL(test_krb5kdf, NULL),
 #endif

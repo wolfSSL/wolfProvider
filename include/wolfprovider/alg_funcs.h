@@ -50,6 +50,7 @@
     #include <wolfssl/wolfcrypt/kdf.h>
 #endif
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
 #include <wolfprovider/wp_logging.h>
 
@@ -146,6 +147,7 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_PKCS12KDF      "PKCS12KDF"
 #define WP_NAMES_TLS1_3_KDF     "TLS13-KDF"
 #define WP_NAMES_TLS1_PRF       "TLS1-PRF"
+#define WP_NAMES_KBKDF          "KBKDF"
 #define WP_NAMES_KRB5KDF        "KRB5KDF"
 
 /* Signature names. */
@@ -310,6 +312,7 @@ extern const OSSL_DISPATCH wp_kdf_pbkdf2_functions[];
 extern const OSSL_DISPATCH wp_kdf_pkcs12_functions[];
 extern const OSSL_DISPATCH wp_kdf_tls1_3_kdf_functions[];
 extern const OSSL_DISPATCH wp_kdf_tls1_prf_functions[];
+extern const OSSL_DISPATCH wp_kdf_kbkdf_functions[];
 extern const OSSL_DISPATCH wp_kdf_krb5kdf_functions[];
 
 /* Signature implementations. */
