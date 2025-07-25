@@ -1,6 +1,6 @@
 /* test_krb5kdf.c
  *
- * Copyright (C) 2006-2024 wolfSSL Inc.
+ * Copyright (C) 2006-2025 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -15,7 +15,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with wolfProvider.  If not, see <http://www.gnu.org/licenses/>.
+ * along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "unit.h"

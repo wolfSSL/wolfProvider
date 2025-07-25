@@ -2,7 +2,7 @@
 # do-cmd-tests.sh
 # Run all command-line tests for wolfProvider
 #
-# Copyright (C) 2006-2024 wolfSSL Inc.
+# Copyright (C) 2006-2025 wolfSSL Inc.
 #
 # This file is part of wolfProvider.
 #
@@ -17,8 +17,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+# along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
 # Get the force fail parameter
 if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
