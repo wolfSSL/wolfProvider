@@ -62,6 +62,22 @@ It will retrieve the dependencies and compile them as necessary. To use other th
 OPENSSL_TAG=openssl-3.5.0 WOLFSSL_TAG=v5.8.0-stable WOLFPROV_DEBUG=1 scripts/build-wolfprovider.sh
 ```
 
+To clean the build, use the following:
+```
+./scripts/build-wolfprovider.sh --clean
+```
+
+To remove all source directories, use the following:
+```
+./scripts/build-wolfprovider.sh --distclean
+```
+
+To build a Debian package file, use the following command. 
+Note this will remove all ignored files in the repo, and there must be no staged changes.
+```
+./scripts/build-wolfprovider.sh --debian
+```
+
 Alternatively, you can manually compile each component using the following guide.
 
 ### OpenSSL
