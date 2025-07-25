@@ -8,7 +8,7 @@ show_help() {
   echo "Script Arguments:"
   echo "  --help, -help, -h          Display this help menu and exit"
   echo "  --clean                    Run make clean in OpenSSL, wolfSSL, and wolfProvider"
-  echo "  --distclean                Remove source directories of OpenSSL and wolfSSL. If using wolfProvider it must be disabled or cloning will fail"
+  echo "  --distclean                Remove source directories of OpenSSL and wolfSSL"
   echo "  --debug                    Builds OpenSSL, wolfSSL, and WolfProvider with debugging enabled. This is the same as setting WOLFPROV_DEBUG=1"
   echo "  --debug-asn-template       Enable debug information for asn within wolfSSL"
   echo "  --disable-err-trace        No debug trace messages from library errors in wolfSSL"

@@ -36,6 +36,22 @@ WOLFPROV_DISABLE_ERR_TRACE=${WOLFPROV_DISABLE_ERR_TRACE:-0}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 USE_CUR_TAG=${USE_CUR_TAG:-0}
 
+clean_wolfssl() {
+    printf "\n"
+
+    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
+        printf "Cleaning wolfSSL ...\n"
+        if [ -f "${WOLFSSL_SOURCE_DIR}/Makefile" ]; then
+            make -C "${WOLFSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
+        fi
+        rm -rf "${WOLFSSL_INSTALL_DIR}"
+    fi
+    if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        printf "Removing wolfSSL source ...\n"
+        rm -rf "${WOLFSSL_SOURCE_DIR}"
+    fi
+}
+
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
     if [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
@@ -72,21 +88,7 @@ clone_wolfssl() {
 }
 
 install_wolfssl() {
-    printf "\n"
-
-    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
-        printf "Cleaning wolfSSL ...\n"
-        if [ -f "${WOLFSSL_SOURCE_DIR}/Makefile" ]; then
-            make -C "${WOLFSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
-        fi
-        rm -rf "${WOLFSSL_INSTALL_DIR}"
-    fi
-    if [ -d "${WOLFSSL_SOURCE_DIR}" ] && [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
-        printf "Removing wolfSSL source ...\n"
-        rm -rf "${WOLFSSL_SOURCE_DIR}"
-    fi
-
-    printf "Installing wolfSSL ${WOLFSSL_TAG} ...\n"
+    printf "\nInstalling wolfSSL ${WOLFSSL_TAG} ...\n"
     clone_wolfssl
     cd ${WOLFSSL_SOURCE_DIR}
 

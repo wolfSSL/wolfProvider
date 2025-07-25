@@ -46,12 +46,7 @@ WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 WOLFPROV_CLEAN=${WOLFPROV_CLEAN:-0}
 WOLFPROV_DISTCLEAN=${WOLFPROV_DISTCLEAN:-0}
 
-install_wolfprov() {
-    cd ${WOLFPROV_SOURCE_DIR}
-
-    init_openssl
-    init_wolfssl
-
+clean_wolfprov() {
     printf "\n"
 
     if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
@@ -61,8 +56,15 @@ install_wolfprov() {
         fi
         rm -rf ${WOLFPROV_INSTALL_DIR}
     fi
+}
 
-    printf "Consolidating wolfProvider ...\n"
+install_wolfprov() {
+    cd ${WOLFPROV_SOURCE_DIR}
+
+    init_openssl
+    init_wolfssl
+
+    printf "\nConsolidating wolfProvider ...\n"
     unset OPENSSL_MODULES
     unset OPENSSL_CONF
     printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
@@ -119,17 +121,23 @@ install_wolfprov() {
 }
 
 init_wolfprov() {
-    # Unset WPFF so we dont fail unit test when building
-    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        unset WOLFPROV_FORCE_FAIL
-        install_wolfprov
-        export WOLFPROV_FORCE_FAIL=1
+    if [ "$WOLFPROV_CLEAN" -eq "1" ] || [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        clean_openssl
+        clean_wolfssl
+        clean_wolfprov
     else
-        install_wolfprov
-    fi
-    printf "\twolfProvider installed in: ${WOLFPROV_INSTALL_DIR}\n"
+        # Unset WPFF so we dont fail unit test when building
+        if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+            unset WOLFPROV_FORCE_FAIL
+            install_wolfprov
+            export WOLFPROV_FORCE_FAIL=1
+        else
+            install_wolfprov
+        fi
+        printf "\twolfProvider installed in: ${WOLFPROV_INSTALL_DIR}\n"
 
-    export OPENSSL_MODULES=$WOLFPROV_PATH
-    export OPENSSL_CONF=${WOLFPROV_CONFIG}
+        export OPENSSL_MODULES=$WOLFPROV_PATH
+        export OPENSSL_CONF=${WOLFPROV_CONFIG}
+    fi
 }
 
