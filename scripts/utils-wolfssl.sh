@@ -65,11 +65,28 @@ clone_wolfssl() {
                 exit 1
             fi
             printf "Done.\n"
+        else
+            printf "\twolfSSL source directory exists: ${WOLFSSL_SOURCE_DIR}\n"
         fi
     fi
 }
 
 install_wolfssl() {
+    printf "\n"
+
+    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
+        printf "Cleaning wolfSSL ...\n"
+        if [ -f "${WOLFSSL_SOURCE_DIR}/Makefile" ]; then
+            make -C "${WOLFSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
+        fi
+        rm -rf "${WOLFSSL_INSTALL_DIR}"
+    fi
+    if [ -d "${WOLFSSL_SOURCE_DIR}" ] && [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        printf "Removing wolfSSL source ...\n"
+        rm -rf "${WOLFSSL_SOURCE_DIR}"
+    fi
+
+    printf "Installing wolfSSL ${WOLFSSL_TAG} ...\n"
     clone_wolfssl
     cd ${WOLFSSL_SOURCE_DIR}
 

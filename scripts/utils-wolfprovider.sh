@@ -43,11 +43,26 @@ WOLFPROV_PATH=$WOLFPROV_INSTALL_DIR/lib
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
+WOLFPROV_CLEAN=${WOLFPROV_CLEAN:-0}
+WOLFPROV_DISTCLEAN=${WOLFPROV_DISTCLEAN:-0}
+
 install_wolfprov() {
     cd ${WOLFPROV_SOURCE_DIR}
 
     init_openssl
     init_wolfssl
+
+    printf "\n"
+
+    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
+        printf "Cleaning wolfProvider ...\n"
+        if [ -f "Makefile" ]; then
+            make clean >>$LOG_FILE 2>&1
+        fi
+        rm -rf ${WOLFPROV_INSTALL_DIR}
+    fi
+
+    printf "Consolidating wolfProvider ...\n"
     unset OPENSSL_MODULES
     unset OPENSSL_CONF
     printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"

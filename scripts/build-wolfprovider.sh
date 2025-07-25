@@ -6,25 +6,32 @@ show_help() {
   echo "Usage: $0"
   echo ""
   echo "Script Arguments:"
-  echo "  --help, -help, -h      Display this help menu and exit"
-  echo "  --debug                Builds OpenSSL, wolfSSL, and WolfProvider with debugging enabled"
-  echo "  --openssl-ver=VER      Which version of OpenSSL to clone"
-  echo "  --wolfssl-ver=VER      Which version of wolfSSL to clone"
-  echo "  --enable-fips          Build wolfProvider with a cloned FIPS bundle. Cloned FIPS bundle can be changed with --fips-check"
-  echo "  --fips-bundle=DIR      Build wolfProvider with a directory containing a wolfSSL FIPS bundle instead of cloning from GitHub. Requires a FIPS version to be given by --fips-version"
-  echo "  --fips-check=TAG       Choose a FIPS tag to clone. May require a version to be given by --fips-version"
-  echo "  --fips-version=VER     Choose the wolfSSL FIPS version"
-  echo "  --quicktest            Disable some tests for a faster testing suite"
+  echo "  --help, -help, -h          Display this help menu and exit"
+  echo "  --clean                    Run make clean in OpenSSL, wolfSSL, and wolfProvider"
+  echo "  --distclean                Remove source directories of OpenSSL and wolfSSL. If using wolfProvider it must be disabled or cloning will fail"
+  echo "  --debug                    Builds OpenSSL, wolfSSL, and WolfProvider with debugging enabled. This is the same as setting WOLFPROV_DEBUG=1"
+  echo "  --debug-asn-template       Enable debug information for asn within wolfSSL"
+  echo "  --disable-err-trace        No debug trace messages from library errors in wolfSSL"
+  echo "  --openssl-ver=VER          Which version of OpenSSL to clone"
+  echo "  --wolfssl-ver=VER          Which version of wolfSSL to clone"
+  echo "  --enable-fips              Build wolfProvider with a cloned FIPS bundle. Cloned FIPS bundle can be changed with --fips-check"
+  echo "  --fips-bundle=DIR          Build wolfProvider with a directory containing a wolfSSL FIPS bundle instead of cloning from GitHub. Requires a FIPS version to be given by --fips-version"
+  echo "  --fips-check=TAG           Choose a FIPS tag to clone. May require a version to be given by --fips-version"
+  echo "  --fips-version=VER         Choose the wolfSSL FIPS version"
+  echo "  --quicktest                Disable some tests for a faster testing suite"
   echo ""
   echo "Environment Variables:"
-  echo "  OPENSSL_TAG            OpenSSL tag to use (e.g., openssl-3.5.0)"
-  echo "  WOLFSSL_TAG            wolfSSL tag to use (e.g., v5.8.0-stable)"
-  echo "  WOLFPROV_DEBUG         If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"
-  echo "  WOLFSSL_ISFIPS         If set to 1, clones a wolfSSL FIPS bundle from GitHub"
-  echo "  WOLFSSL_FIPS_BUNDLE    Directory containing the wolfSSL FIPS bundle to use instead of cloning from GitHub"
-  echo "  WOLFSSL_FIPS_VERSION   Version of wolfSSL FIPS bundle (v5, v6, ready), used as an argument for --enable-fips when configuring wolfSSL"
-  echo "  WOLFSSL_FIPS_CHECK_TAG Tag for wolfSSL FIPS bundle (linuxv5.2.1, v6.0.0, etc), used as an argument for fips-check.sh when cloning a wolfSSL FIPS version"
-  echo "  WOLFPROV_QUICKTEST     If set to 1, disables some tests in the test suite to increase test speed"
+  echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
+  echo "  WOLFSSL_TAG                wolfSSL tag to use (e.g., v5.8.0-stable)"
+  echo "  WOLFSSL_ISFIPS             If set to 1, clones a wolfSSL FIPS bundle from GitHub"
+  echo "  WOLFSSL_FIPS_BUNDLE        Directory containing the wolfSSL FIPS bundle to use instead of cloning from GitHub"
+  echo "  WOLFSSL_FIPS_VERSION       Version of wolfSSL FIPS bundle (v5, v6, ready), used as an argument for --enable-fips when configuring wolfSSL"
+  echo "  WOLFSSL_FIPS_CHECK_TAG     Tag for wolfSSL FIPS bundle (linuxv5.2.1, v6.0.0, etc), used as an argument for fips-check.sh when cloning a wolfSSL FIPS version"
+  echo "  WOLFPROV_CLEAN             If set to 1, run make clean in OpenSSL, wolfSSL, and wolfProvider"
+  echo "  WOLFPROV_DISTCLEAN         If set to 1, remove the source directories of OpenSSL and wolfSSL"
+  echo "  WOLFPROV_DEBUG             If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"
+  echo "  WOLFPROV_QUICKTEST         If set to 1, disables some tests in the test suite to increase test speed"
+  echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
   echo ""
 }
 
@@ -37,8 +44,20 @@ for arg in "$@"; do
             show_help
             exit 0
             ;;
+        --clean)
+            WOLFPROV_CLEAN=1
+            ;;
+        --distclean)
+            WOLFPROV_DISTCLEAN=1
+            ;;
         --debug)
             WOLFPROV_DEBUG=1
+            ;;
+        --debug-asn-template)
+            WOLFSSL_DEBUG_ASN_TEMPLATE=1
+            ;;
+        --disable-err-trace)
+            WOLFPROV_DISABLE_ERR_TRACE=1
             ;;
         --openssl-ver=*)
             IFS='=' read -r trash ossl_ver <<< "$arg"
@@ -91,7 +110,7 @@ for arg in "$@"; do
             WOLFPROV_QUICKTEST=1
             ;;
         *)
-            args_wrong+="$arg "
+            args_wrong+="$arg, "
             ;;
     esac
 done

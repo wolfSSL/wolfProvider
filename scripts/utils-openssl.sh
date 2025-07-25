@@ -78,7 +78,21 @@ clone_openssl() {
 }
 
 install_openssl() {
-    printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
+    printf "\n"
+
+    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
+        printf "Cleaning OpenSSL ...\n"
+        if [ -f "${OPENSSL_SOURCE_DIR}/Makefile" ]; then
+            make -C "${OPENSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
+        fi
+        rm -rf "${OPENSSL_INSTALL_DIR}"
+    fi
+    if [ -d "${OPENSSL_SOURCE_DIR}" ] && [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        printf "Removing OpenSSL source ...\n"
+        rm -rf "${OPENSSL_SOURCE_DIR}"
+    fi
+
+    printf "Installing OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
     cd ${OPENSSL_SOURCE_DIR}
 
