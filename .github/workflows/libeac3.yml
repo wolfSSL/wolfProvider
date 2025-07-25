@@ -1,0 +1,101 @@
+name: libeac3 Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_libeac3:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        openpace_ref: [ '1.1.3' ] # no master branch
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+
+    steps:
+      # Checkout the source so we can run the check-workflow-result script.
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install libeac3 dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool libc6 help2man gengetopt pkg-config m4 libeac3
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/osp
+          path: osp
+          fetch-depth: 1
+
+      - name: Checkout openpace
+        uses: actions/checkout@v4
+        with:
+          repository: frankmorgner/openpace
+          ref: ${{ matrix.openpace_ref }}
+          path: openpace
+          fetch-depth: 1
+
+      - name: Build openpace
+        working-directory: openpace
+        run: |
+          autoreconf --verbose --install
+          ./configure
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openpace/openpace-${{ matrix.openpace_ref }}-wolfprov.patch
+          make
+          sudo make install
+
+      - name: Run libeac3 tests
+        working-directory: openpace
+        run: |
+          echo "Setting environment variables..."
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          ./src/eactest > libeac3-test.log || echo "eactest failed with exit code $?"
+          cat libeac3-test.log
+
+          if grep -q "Everything works as expected." libeac3-test.log; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libeac3
