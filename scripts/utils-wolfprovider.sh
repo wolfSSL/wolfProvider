@@ -43,80 +43,101 @@ WOLFPROV_PATH=$WOLFPROV_INSTALL_DIR/lib
 
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
+WOLFPROV_CLEAN=${WOLFPROV_CLEAN:-0}
+WOLFPROV_DISTCLEAN=${WOLFPROV_DISTCLEAN:-0}
+
+clean_wolfprov() {
+    printf "\n"
+
+    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
+        printf "Cleaning wolfProvider ...\n"
+        if [ -f "Makefile" ]; then
+            make clean >>$LOG_FILE 2>&1
+        fi
+        rm -rf ${WOLFPROV_INSTALL_DIR}
+    fi
+}
+
 install_wolfprov() {
     cd ${WOLFPROV_SOURCE_DIR}
 
     init_openssl
     init_wolfssl
+
+    printf "\nConsolidating wolfProvider ...\n"
     unset OPENSSL_MODULES
     unset OPENSSL_CONF
     printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
-    if [ ! -d ${WOLFPROV_INSTALL_DIR} ] || [ $(check_folder_age "${WOLFPROV_INSTALL_DIR}" "${WOLFSSL_INSTALL_DIR}") -lt 0 ] || [ $(check_folder_age "${WOLFPROV_INSTALL_DIR}" "${OPENSSL_INSTALL_DIR}") -lt 0 ]; then
-        printf "\tConfigure wolfProvider ... "
-        if [ ! -e "${WOLFPROV_SOURCE_DIR}/configure" ]; then
-            ./autogen.sh >>$LOG_FILE 2>&1
-        fi
-
-        if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            WOLFPROV_CONFIG_OPTS+=" --enable-debug"
-        fi
-
-        ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
-        RET=$?
-
-        if [ $RET != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
-
-        printf "\tBuild wolfProvider ... "
-        make -j$NUMCPU >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
-
-        printf "\tTest wolfProvider ... "
-        make test >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
-
-        printf "\tInstall wolfProvider ... "
-        make install >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
+    printf "\tConfigure wolfProvider ... "
+    if [ ! -e "${WOLFPROV_SOURCE_DIR}/configure" ]; then
+        ./autogen.sh >>$LOG_FILE 2>&1
     fi
+
+    if [ "$WOLFPROV_DEBUG" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-debug"
+    fi
+
+    ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
+    RET=$?
+
+    if [ $RET != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tBuild wolfProvider ... "
+    make -j$NUMCPU >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tTest wolfProvider ... "
+    make test >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tInstall wolfProvider ... "
+    make install >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
 }
 
 init_wolfprov() {
-    # Unset WPFF so we dont fail unit test when building
-    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        unset WOLFPROV_FORCE_FAIL
-        install_wolfprov
-        export WOLFPROV_FORCE_FAIL=1
+    if [ "$WOLFPROV_CLEAN" -eq "1" ] || [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        clean_openssl
+        clean_wolfssl
+        clean_wolfprov
     else
-        install_wolfprov
-    fi
-    printf "\twolfProvider installed in: ${WOLFPROV_INSTALL_DIR}\n"
+        # Unset WPFF so we dont fail unit test when building
+        if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+            unset WOLFPROV_FORCE_FAIL
+            install_wolfprov
+            export WOLFPROV_FORCE_FAIL=1
+        else
+            install_wolfprov
+        fi
+        printf "\twolfProvider installed in: ${WOLFPROV_INSTALL_DIR}\n"
 
-    export OPENSSL_MODULES=$WOLFPROV_PATH
-    export OPENSSL_CONF=${WOLFPROV_CONFIG}
+        export OPENSSL_MODULES=$WOLFPROV_PATH
+        export OPENSSL_CONF=${WOLFPROV_CONFIG}
+    fi
 }
 

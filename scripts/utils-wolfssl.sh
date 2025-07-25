@@ -36,6 +36,22 @@ WOLFPROV_DISABLE_ERR_TRACE=${WOLFPROV_DISABLE_ERR_TRACE:-0}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 USE_CUR_TAG=${USE_CUR_TAG:-0}
 
+clean_wolfssl() {
+    printf "\n"
+
+    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
+        printf "Cleaning wolfSSL ...\n"
+        if [ -f "${WOLFSSL_SOURCE_DIR}/Makefile" ]; then
+            make -C "${WOLFSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
+        fi
+        rm -rf "${WOLFSSL_INSTALL_DIR}"
+    fi
+    if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        printf "Removing wolfSSL source ...\n"
+        rm -rf "${WOLFSSL_SOURCE_DIR}"
+    fi
+}
+
 # Depends on OPENSSL_INSTALL_DIR
 clone_wolfssl() {
     if [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
@@ -65,11 +81,14 @@ clone_wolfssl() {
                 exit 1
             fi
             printf "Done.\n"
+        else
+            printf "\twolfSSL source directory exists: ${WOLFSSL_SOURCE_DIR}\n"
         fi
     fi
 }
 
 install_wolfssl() {
+    printf "\nInstalling wolfSSL ${WOLFSSL_TAG} ...\n"
     clone_wolfssl
     cd ${WOLFSSL_SOURCE_DIR}
 
@@ -104,12 +123,20 @@ install_wolfssl() {
             WOLFSSL_CONFIG_CFLAGS=$WOLFSSL_FIPS_CONFIG_CFLAGS
         elif [ "$WOLFSSL_ISFIPS" = "1" ]; then
             printf "with FIPS ... "
-            CONF_ARGS+=" --enable-fips=v5"
+            if [ -n "$WOLFSSL_FIPS_VERSION" ]; then
+                CONF_ARGS+=" --enable-fips=$WOLFSSL_FIPS_VERSION"
+            else
+                CONF_ARGS+=" --enable-fips=v5"
+            fi
             WOLFSSL_CONFIG_OPTS=$WOLFSSL_FIPS_CONFIG_OPTS
             WOLFSSL_CONFIG_CFLAGS=$WOLFSSL_FIPS_CONFIG_CFLAGS
             if [ ! -e "XXX-fips-test" ]; then
                 # Sometimes the system OpenSSL is different than the one we're using. So for the 'git' commands, we'll just use whatever the system comes with
-                LD_LIBRARY_PATH="" ./fips-check.sh linuxv5.2.1 keep nomakecheck >>$LOG_FILE 2>&1
+                if [ -n "$WOLFSSL_FIPS_CHECK_TAG" ]; then
+                    LD_LIBRARY_PATH="" ./fips-check.sh "$WOLFSSL_FIPS_CHECK_TAG" keep nomakecheck >>$LOG_FILE 2>&1
+                else
+                    LD_LIBRARY_PATH="" ./fips-check.sh linuxv5.2.1 keep nomakecheck >>$LOG_FILE 2>&1
+                fi
                 if [ $? != 0 ]; then
                     printf "ERROR checking out FIPS\n"
                     rm -rf ${WOLFSSL_INSTALL_DIR}

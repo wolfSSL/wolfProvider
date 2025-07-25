@@ -37,6 +37,22 @@ NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 USE_CUR_TAG=${USE_CUR_TAG:-0}
 
+clean_openssl() {
+    printf "\n"
+
+    if [ "$WOLFPROV_CLEAN" -eq "1" ]; then
+        printf "Cleaning OpenSSL ...\n"
+        if [ -f "${OPENSSL_SOURCE_DIR}/Makefile" ]; then
+            make -C "${OPENSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
+        fi
+        rm -rf "${OPENSSL_INSTALL_DIR}"
+    fi
+    if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        printf "Removing OpenSSL source ...\n"
+        rm -rf "${OPENSSL_SOURCE_DIR}"
+    fi
+}
+
 clone_openssl() {
     if [ -d ${OPENSSL_SOURCE_DIR} ] && [ "$USE_CUR_TAG" != "1" ]; then
         check_git_match "${OPENSSL_TAG}" "${OPENSSL_SOURCE_DIR}"
