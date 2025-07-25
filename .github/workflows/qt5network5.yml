@@ -97,6 +97,9 @@ jobs:
           
           # Build only the SSL test and its dependencies
           cmake --build . --target tst_qsslsocket --parallel $(nproc)
+
+          #disable tests that both openssl and wolfprovider fail
+          cp $GITHUB_WORKSPACE/.github/scripts/qtbase/BLACKLIST tests/auto/network/ssl/qsslsocket/BLACKLIST
       
       - name: Build Qt (v5.15.8 - qmake)
         if: matrix.qt_ref != 'dev'
@@ -106,7 +109,7 @@ jobs:
           echo 'QMAKE_CXXFLAGS += -std=c++14' >> mkspecs/linux-g++/qmake.conf
           
           make -k -j$(nproc)
-      
+
       - name: Add test server to hosts
         run: |
           sudo sh -c 'echo "127.0.0.1 qt-test-server.qt-test-net" >> /etc/hosts'
@@ -119,21 +122,24 @@ jobs:
           export ${{ matrix.force_fail }}
           
           # Run the QSSLSocket test, the make check takes too long
-          ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
+          QTEST_ENVIRONMENT=ci ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
           
-          # Make sure it passes the same number of tests as openssl
-          if [ "${{ matrix.qt_ref }}" == "dev" ]; then
-            EXPECTED_TESTS=549
+          # Check test results based on qt_ref
+          if [[ "${{ matrix.qt_ref }}" == "dev" ]]; then
+            if grep -q "0 failed" qsslsocket-test.log; then
+              TEST_RESULT=0
+            else
+              TEST_RESULT=1
+              echo "Tests failed unexpectedly for 'dev' branch."
+            fi
           else
-            EXPECTED_TESTS=521
+            #No easy way to disable tests in v5.15.8. Both openssl and wolfprovider should always pass 521 tests on this version though
+            if grep -q "521 passed" qsslsocket-test.log; then
+              TEST_RESULT=0
+            else
+              TEST_RESULT=1
+              echo "Tests failed unexpectedly for 'v5.15.8-lts-lgpl' branch."
+            fi
           fi
-          
-          # Check test results
-          if grep -q "$EXPECTED_TESTS passed" qsslsocket-test.log; then
-            TEST_RESULT=0
-          else
-            TEST_RESULT=1
-            echo "Expected $EXPECTED_TESTS tests to pass, but results don't match expected counts"
-          fi
-          
+
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} qtbase-qsslsocket
