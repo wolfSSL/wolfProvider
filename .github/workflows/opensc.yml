@@ -76,7 +76,7 @@ jobs:
           repository: wolfssl/osp
           path: osp
           fetch-depth: 1
-        run: |
+      - run: |
             cd opensc
             patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/opensc/opensc-${{ matrix.opensc_ref }}-wolfprovider.patch
 
