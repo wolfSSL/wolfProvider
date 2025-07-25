@@ -4036,7 +4036,7 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     char* textData = NULL;
     size_t textLen = 0;
     size_t pos = 0;
-    size_t printAmt;
+    size_t printAmt = 0;
     char* expStr;
     int expLen;
 

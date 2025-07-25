@@ -1,0 +1,328 @@
+name: Debian Package Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+
+jobs:
+  test-debian-package:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout wolfProvider
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+    - run: |
+        # Fetch tags
+        git fetch --tags
+        # List all tags
+        git tag -l
+
+    - name: Set up environment
+      run: |
+        # Update package lists
+        sudo apt-get update
+        # Install build dependencies
+        sudo apt-get install -y \
+          build-essential \
+          devscripts \
+          debhelper \
+          dh-autoreconf \
+          libtool \
+          pkg-config \
+          git \
+          wget \
+          curl \
+          ca-certificates \
+          openssl \
+          dpkg-dev \
+          lintian \
+          fakeroot \
+          equivs
+        # Install additional tools for testing
+        sudo apt-get install -y \
+          expect \
+          xxd
+
+    # TODO: this step rebuilds the package for the current architecture
+    #       we may be able to remove it if we can ensure the package supports
+    #       the architecture of the runner (most likely amd64)
+    - name: Install custom wolfssl
+      run: |
+        mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
+        cd "$RUNNER_TEMP/wolfssl-pkg"
+        unzip $GITHUB_WORKSPACE/.github/packages/debian-packages-20250731T171211Z-1-001.zip
+        cd debian-packages
+        sudo dpkg-source -x wolfssl_5.8.2-1.dsc
+        cd wolfssl-5.8.2
+        sudo dpkg-buildpackage -b -us -uc
+        sudo dpkg -i ../libwolfssl*.deb
+
+    - name: Build Debian package
+      run: |
+        # List all tags 
+        echo "Listing all tags:"
+        git tag -l
+
+        # Run the build script
+        # Bypass the warning prompt with 'yes Y' 
+        yes Y | ./scripts/build-wolfprovider.sh --debian
+        
+        # List generated packages
+        echo "Generated Packages:"
+        ls -la ../*.deb ../*.dsc ../*.tar.gz || true
+
+    - name: Install package
+      run: |
+        # Find the package file
+        PACKAGE_FILE=$(find ../ -name "libwolfprov_*.deb" | head -n1)
+        if [ -z "$PACKAGE_FILE" ]; then
+          echo "No package file found!"
+          ls -la ../
+          exit 1
+        fi
+        
+        echo "Installing package: $PACKAGE_FILE"
+        sudo dpkg -i "$PACKAGE_FILE"
+        
+        # Fix any missing dependencies
+        sudo apt-get install -f -y
+        
+        # Verify installation
+        echo "Package Installation Verification:"
+        dpkg -l | grep libwolfprov
+        dpkg -L libwolfprov
+        
+    - name: Test OpenSSL provider functionality
+      run: |
+        # Check if wolfprovider is available
+        echo "1. Checking available providers:"
+        openssl list -providers
+        
+        # Check if wolfprovider is loaded
+        echo "2. Checking if wolfprovider is loaded:"
+        if openssl list -providers | grep -q "wolfprovider\|libwolfprov"; then
+          echo "PASS: wolfprovider is loaded"
+        else
+          echo "FAIL: wolfprovider is not loaded"
+          exit 1
+        fi
+        
+        # Create a test directory
+        mkdir -p /tmp/openssl-test
+        cd /tmp/openssl-test
+        
+        # Temporarily move wolfprovider config to disable it
+        echo "3. Temporarily disabling wolfprovider for default provider tests:"
+        if [ -f /etc/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+          sudo mv /etc/ssl/openssl.cnf.d/wolfprovider.conf /tmp/openssl-test/wolfprovider.conf.backup
+          echo "   - Moved wolfprovider.conf to /tmp/openssl-test/wolfprovider.conf.backup"
+        else
+          echo "wolfprovider.conf not found!"
+          exit 1
+        fi
+        
+        # Test data
+        TEST_STRING="Hello, this is a test string for wolfprovider interoperability testing!"
+        echo "$TEST_STRING" > test_input.txt
+        
+        echo "4. Testing SHA256 hash comparison between providers:"
+        
+        # Generate SHA256 hash using default provider (wolfprovider disabled)
+        echo "   - Generating SHA256 hash with default provider..."
+        openssl dgst -sha256 test_input.txt > default_hash.txt
+        if [ $? -ne 0 ]; then
+          echo "   FAIL: default provider SHA256 failed"
+          exit 1
+        fi
+        echo "   PASS: default provider SHA256 successful"
+        
+        # Generate SHA256 hash using wolfprovider
+        echo "   - Generating SHA256 hash with wolfprovider..."
+        OPENSSL_CONF=/tmp/openssl-test/wolfprovider.conf.backup openssl dgst -sha256 test_input.txt > wolfprovider_hash.txt
+        if [ $? -ne 0 ]; then
+          echo "   FAIL: wolfprovider SHA256 failed"
+          exit 1
+        fi
+        echo "   PASS: wolfprovider SHA256 successful"
+        
+        # Compare the hashes
+        echo "   - Comparing hashes..."
+        if cmp -s wolfprovider_hash.txt default_hash.txt; then
+          echo "   PASS: SHA256 hashes match between providers"
+        else
+          echo "   FAIL: SHA256 hashes do not match"
+          echo "   wolfprovider hash:"
+          cat wolfprovider_hash.txt
+          echo "   default provider hash:"
+          cat default_hash.txt
+          exit 1
+        fi
+        
+        echo "5. Testing AES256-CBC encryption/decryption interoperability:"
+        
+        # Generate a random key and IV for AES
+        echo "   - Generating AES key and IV..."
+        openssl rand -hex 32 > aes_key.hex
+        openssl rand -hex 16 > aes_iv.hex
+        
+        # Test 1: wolfprovider encrypt, default provider decrypt
+        echo "   - Test 1: wolfprovider encrypt -> default provider decrypt"
+        
+        # Encrypt with wolfprovider
+        echo "     - Encrypting with wolfprovider..."
+        OPENSSL_CONF=/tmp/openssl-test/wolfprovider.conf.backup openssl enc -aes-256-cbc \
+          -in test_input.txt -out encrypted_wolfprovider.bin \
+          -K $(cat aes_key.hex) -iv $(cat aes_iv.hex)
+        if [ $? -ne 0 ]; then
+          echo "     FAIL: wolfprovider encryption failed"
+          exit 1
+        fi
+        echo "     PASS: wolfprovider encryption successful"
+        
+        # Decrypt with default provider
+        echo "     - Decrypting with default provider..."
+        openssl enc -aes-256-cbc -d \
+          -in encrypted_wolfprovider.bin -out decrypted_default.txt \
+          -K $(cat aes_key.hex) -iv $(cat aes_iv.hex)
+        if [ $? -ne 0 ]; then
+          echo "     FAIL: default provider decryption failed"
+          exit 1
+        fi
+        echo "     PASS: default provider decryption successful"
+        
+        # Compare decrypted result with original
+        if cmp -s test_input.txt decrypted_default.txt; then
+          echo "     PASS: wolfprovider->default: decrypted text matches original"
+        else
+          echo "     FAIL: wolfprovider->default: decrypted text does not match original"
+          echo "     Original:"
+          cat test_input.txt
+          echo "     Decrypted:"
+          cat decrypted_default.txt
+          exit 1
+        fi
+        
+        # Test 2: default provider encrypt, wolfprovider decrypt
+        echo "   - Test 2: default provider encrypt -> wolfprovider decrypt"
+        
+        # Encrypt with default provider
+        echo "     - Encrypting with default provider..."
+        openssl enc -aes-256-cbc \
+          -in test_input.txt -out encrypted_default.bin \
+          -K $(cat aes_key.hex) -iv $(cat aes_iv.hex)
+        if [ $? -ne 0 ]; then
+          echo "     FAIL: default provider encryption failed"
+          exit 1
+        fi
+        echo "     PASS: default provider encryption successful"
+        
+        # Decrypt with wolfprovider
+        echo "     - Decrypting with wolfprovider..."
+        OPENSSL_CONF=/tmp/openssl-test/wolfprovider.conf.backup openssl enc -aes-256-cbc -d \
+          -in encrypted_default.bin -out decrypted_wolfprovider.txt \
+          -K $(cat aes_key.hex) -iv $(cat aes_iv.hex)
+        if [ $? -ne 0 ]; then
+          echo "     FAIL: wolfprovider decryption failed"
+          exit 1
+        fi
+        echo "     PASS: wolfprovider decryption successful"
+        
+        # Compare decrypted result with original
+        if cmp -s test_input.txt decrypted_wolfprovider.txt; then
+          echo "     PASS: default->wolfprovider: decrypted text matches original"
+        else
+          echo "     FAIL: default->wolfprovider: decrypted text does not match original"
+          echo "     Original:"
+          cat test_input.txt
+          echo "     Decrypted:"
+          cat decrypted_wolfprovider.txt
+          exit 1
+        fi
+        
+        # Clean up test files
+        rm -f test_input.txt wolfprovider_hash.txt default_hash.txt \
+              aes_key.hex aes_iv.hex encrypted_wolfprovider.bin encrypted_default.bin \
+              decrypted_default.txt decrypted_wolfprovider.txt
+        
+        # Restore wolfprovider configuration
+        echo "6. Restoring wolfprovider configuration:"
+        if [ -f /tmp/openssl-test/wolfprovider.conf.backup ]; then
+          sudo mv /tmp/openssl-test/wolfprovider.conf.backup /etc/ssl/openssl.cnf.d/wolfprovider.conf
+          echo "   - Restored wolfprovider.conf to /etc/ssl/openssl.cnf.d/"
+        fi
+        
+        echo "PASS: All provider interoperability tests successful"
+        
+    - name: Uninstall package and verify cleanup
+      run: |
+        # Uninstall the package
+        sudo apt-get remove --purge -y libwolfprov
+        
+        # Verify the package is removed
+        if dpkg -l | grep -q libwolfprov; then
+          echo "Package still installed after removal"
+          dpkg -l | grep libwolfprov
+          exit 1
+        else
+          echo "Package successfully removed"
+        fi
+        
+        # Check if the config file is removed
+        if [ -f /etc/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+          echo "wolfprovider.conf still exists after package removal"
+          ls -la /etc/ssl/openssl.cnf.d/
+          exit 1
+        else
+          echo "wolfprovider.conf successfully removed"
+        fi
+        
+        # Check if the library files are removed
+        if [ -f /usr/lib/*/ossl-modules/libwolfprov.so ]; then
+          echo "libwolfprov.so still exists after package removal"
+          find /usr/lib -name "libwolfprov.so*" 2>/dev/null || true
+          exit 1
+        else
+          echo "libwolfprov.so successfully removed"
+        fi
+        
+        # Verify default OpenSSL provider is active
+        echo "Verifying Default Provider is Active:"
+        openssl list -providers
+        
+        # Verify that the default provider is present and active
+        echo "Checking default provider status:"
+        if openssl list -providers | grep -q "default" && \
+           openssl list -providers | grep -q "OpenSSL Default Provider" && \
+           openssl list -providers | grep -q "status: active"; then
+          echo "Default provider is present and active"
+        else
+          echo "Default provider verification failed"
+          echo "Provider output:"
+          openssl list -providers
+          exit 1
+        fi
+        
+        echo "Package uninstallation and cleanup verification successful"
+
+    - name: Move package artifacts
+      run: |
+        # Move the generated packages to the temp directory
+        mv ../*.deb $RUNNER_TEMP/ || true
+        mv ../*.dsc $RUNNER_TEMP/ || true
+        mv ../*.tar.gz $RUNNER_TEMP/ || true
+        
+    - name: Upload package artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: debian-packages
+        path: |
+          ${{ runner.temp }}/*.deb
+          ${{ runner.temp }}/*.dsc
+          ${{ runner.temp }}/*.tar.gz
+        retention-days: 7 

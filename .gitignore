@@ -73,3 +73,20 @@ examples/openssl_example
 cscope.out
 
 tags
+
+# Debian build files
+libwolfprov*.tar.gz
+debian/tmp
+debian/*.dch
+debian/autoreconf*
+debian/tmp
+debian/*debhelper*
+debian/*.deb
+debian/*.buildinfo
+debian/files
+debian/libwolfprov*
+!debian/libwolfprov.install
+!debian/libwolfprov.postinst
+!debian/libwolfprov.postrm
+!debian/libwolfprov-dev.docs
+!debian/libwolfprov-dev.install

@@ -1,0 +1,7 @@
+libwolfprov (1.0.2-1) unstable; urgency=medium
+
+  * Initial release.
+    This is the first packaging of libwolfprov.  
+    No Debian bugs are being closed in this upload.
+
+ -- WolfSSL Developer <support@wolfssl.com>  Mon, 28 Jul 2025 13:52:20 -0700
