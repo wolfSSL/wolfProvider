@@ -58,20 +58,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev python3-impacket
 
+      - name: Download libssh2
+        uses: actions/checkout@v4
+        with:
+          repository: libssh2/libssh2
+          ref: ${{ matrix.libssh2_ref }}
+          path: libssh2
+          fetch-depth: 1
+
       - name: Checkout OSP
         uses: actions/checkout@v4
         with:
           repository: wolfssl/osp
           path: osp
           fetch-depth: 1
-
-      - name: Clone libssh2
-        run: |
-          git clone --depth=1 --branch ${{ matrix.libssh2_ref }} https://github.com/libssh2/libssh2.git libssh2
-
-      - name: Apply patch
-        working-directory: libssh2
-        run: |
+      - run: |
+          cd libssh2
           patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libssh2/${{ matrix.libssh2_ref }}-wolfprov.patch
 
       - name: Build libssh2
