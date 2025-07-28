@@ -1,0 +1,145 @@
+name: qtbase Network Tests
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**', 'qt5network5' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_qtbase_network:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        qt_ref: [ 'dev', 'v5.15.8-lts-lgpl' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - qt_ref: 'dev'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install Qt dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config \
+            python3 perl libpcre2-dev zlib1g-dev cmake ninja-build
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      
+      - name: Checkout Qt
+        uses: actions/checkout@v4
+        with:
+          repository: qt/qtbase
+          path: qt5_repo
+          ref: ${{ matrix.qt_ref }}
+          fetch-depth: 1
+
+      - name: Configure Qt
+        working-directory: qt5_repo
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          
+          # Configure Qt with GUI support to avoid test dependency issues
+          # Build with GUI support but skip examples and DBus
+          ./configure -opensource -confirm-license -developer-build \
+            -nomake examples -no-dbus -no-opengl \
+            -openssl-linked
+
+      - name: Build Qt (dev version - CMake)
+        if: matrix.qt_ref == 'dev'
+        working-directory: qt5_repo
+        run: |
+          # Apply patch from OSP repo
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/qtbase/qtbase-v6.10-wolfprov.patch
+         
+          # Build the OpenSSL TLS backend plugin first
+          ninja QTlsBackendOpenSSLPlugin
+          
+          # Build only the SSL test and its dependencies
+          cmake --build . --target tst_qsslsocket --parallel $(nproc)
+
+          #disable tests that both openssl and wolfprovider fail
+          cp $GITHUB_WORKSPACE/.github/scripts/qtbase/BLACKLIST tests/auto/network/ssl/qsslsocket/BLACKLIST
+      
+      - name: Build Qt (v5.15.8 - qmake)
+        if: matrix.qt_ref != 'dev'
+        working-directory: qt5_repo
+        run: |
+          # Force C++14 to avoid C++17 compatibility issues
+          echo 'QMAKE_CXXFLAGS += -std=c++14' >> mkspecs/linux-g++/qmake.conf
+          
+          make -k -j$(nproc)
+
+      - name: Add test server to hosts
+        run: |
+          sudo sh -c 'echo "127.0.0.1 qt-test-server.qt-test-net" >> /etc/hosts'
+
+      - name: Run QSSLSocket test
+        working-directory: qt5_repo
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          
+          # Run the QSSLSocket test, the make check takes too long
+          QTEST_ENVIRONMENT=ci ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
+          
+          # Check test results based on qt_ref
+          if [[ "${{ matrix.qt_ref }}" == "dev" ]]; then
+            if grep -q "0 failed" qsslsocket-test.log; then
+              TEST_RESULT=0
+            else
+              TEST_RESULT=1
+              echo "Tests failed unexpectedly for 'dev' branch."
+            fi
+          else
+            #No easy way to disable tests in v5.15.8. Both openssl and wolfprovider should always pass 521 tests on this version though
+            if grep -q "521 passed" qsslsocket-test.log; then
+              TEST_RESULT=0
+            else
+              TEST_RESULT=1
+              echo "Tests failed unexpectedly for 'v5.15.8-lts-lgpl' branch."
+            fi
+          fi
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} qtbase-qsslsocket
