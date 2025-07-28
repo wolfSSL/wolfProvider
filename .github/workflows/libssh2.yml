@@ -1,0 +1,96 @@
+name: libssh2 Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_libssh2:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        libssh2_ref: [ 'libssh2-1.10.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev python3-impacket
+
+      - name: Download libssh2
+        uses: actions/checkout@v4
+        with:
+          repository: libssh2/libssh2
+          ref: ${{ matrix.libssh2_ref }}
+          path: libssh2
+          fetch-depth: 1
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd libssh2
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libssh2/${{ matrix.libssh2_ref }}-wolfprov.patch
+
+      - name: Build libssh2
+        working-directory: libssh2
+        run: |
+          autoreconf -fi
+          ./configure --with-crypto=openssl --with-libssl-prefix="$GITHUB_WORKSPACE/openssl-install"
+          make -j$(nproc)
+
+      - name: Run libssh2 tests
+        working-directory: libssh2
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Run the tests and capture the result
+          make check 2>&1 | tee libssh2-test.log
+          TEST_RESULT=$(grep -q "FAIL: ssh2.sh" libssh2-test.log && echo "1" || echo "0")
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libssh2
