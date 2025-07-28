@@ -120,7 +120,7 @@
 #ifndef NO_RSA
     #define WP_HAVE_RSA
     #if defined(WC_RSA_PSS) && LIBWOLFSSL_VERSION_HEX >= 0x05005000
-        #define WOLFSSL_RSA_PSS_ENCODING
+        #define WP_RSA_PSS_ENCODING
     #endif
 #endif
 
