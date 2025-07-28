@@ -57,9 +57,10 @@ jobs:
       - name: Install kmod test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential meson ninja-build pkg-config \
-            python3-pip python3-setuptools python3-wheel python3-meson \
-            zlib1g-dev liblzma-dev libzstd-dev
+          sudo apt-get install -y git sudo build-essential meson ninja-build \
+            pkg-config python3-pip python3-setuptools python3-wheel \
+            zlib1g-dev liblzma-dev libzstd-dev autotools-dev libtool \
+            automake autoconf
 
       - name: Install kernel headers for kmod tests
         run: |
@@ -96,13 +97,13 @@ jobs:
       - name: Build and install kmod
         working-directory: kmod
         run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
           ./autogen.sh
           ./configure --prefix="$GITHUB_WORKSPACE/kmod-install" \
             --disable-manpages \
             --with-openssl \
             CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" \
             LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lcrypto" \
-            PKG_CONFIG_PATH="$PKG_CONFIG_PATH"
           make -j$(nproc)
           sudo make install
 
