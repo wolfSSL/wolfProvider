@@ -1,0 +1,102 @@
+name: rsync Tests
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_rsync:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        rsync_ref: [ 'master', 'v3.2.7' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - rsync_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install rsync dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ gawk autoconf automake python3-cmarkgfm \
+            acl libacl1-dev attr libattr1-dev libxxhash-dev \
+            libzstd-dev liblz4-dev
+
+      - name: Checkout rsync
+        uses: actions/checkout@v4
+        with:
+          repository: RsyncProject/rsync
+          path: rsync_repo
+          ref: ${{ matrix.rsync_ref }}
+          fetch-depth: 1
+
+      - name: Build and install rsync
+        working-directory: rsync_repo
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          ./configure --disable-xxhash
+
+          # Run the patch script from wolfProvider
+          $GITHUB_WORKSPACE/.github/scripts/add-rsync-sha-test.sh
+
+          make -j$(nproc)
+          #export RSYNC_CHECKSUM_LIST="none"
+          #This can disable file checksums which currently use rsycs own implementation of MD4 and MD5
+          #Causes a lot of tests in the make check to fail so im keeping it disabled
+
+      - name: Run rsync tests
+        working-directory: rsync_repo
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Run rsync test suite including our SHA test
+          make check 2>&1 | tee rsync-test.log
+
+          # Check test results - look for "0 failed" in the output
+          if grep -q "overall result is 0" rsync-test.log; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} rsync
