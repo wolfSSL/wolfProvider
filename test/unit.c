@@ -103,8 +103,10 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_krb5kdf, NULL),
 #endif
 #ifdef WP_HAVE_DES3CBC
-    TEST_DECL(test_des3_cbc, NULL),
-    TEST_DECL(test_des3_cbc_stream, NULL),
+    #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
+        TEST_DECL(test_des3_cbc, NULL),
+        TEST_DECL(test_des3_cbc_stream, NULL),
+    #endif
 #endif
 #ifdef WP_HAVE_AESECB
     TEST_DECL(test_aes128_ecb, NULL),
@@ -293,7 +295,9 @@ TEST_CASE test_case[] = {
 #endif /* WP_HAVE_ECDSA */
 
 #ifdef WP_HAVE_PBE
-    TEST_DECL(test_pbe, NULL),
+    #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
+        TEST_DECL(test_pbe, NULL),
+    #endif
 #endif
 
 #if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)

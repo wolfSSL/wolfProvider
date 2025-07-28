@@ -220,6 +220,24 @@ const OSSL_DISPATCH name##_functions[] = {                                     \
     { 0,                                NULL                                }  \
 };
 
+#if defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS)
+#define IMPLEMENT_DIGEST_NULL(name)                                            \
+/** Dispatch table for digest algorithms. */                                   \
+const OSSL_DISPATCH name##_functions[] = {                                     \
+    { OSSL_FUNC_DIGEST_NEWCTX,          (DFUNC)wp_digest_null               }, \
+    { OSSL_FUNC_DIGEST_INIT,            (DFUNC)wp_digest_null               }, \
+    { OSSL_FUNC_DIGEST_UPDATE,          (DFUNC)wp_digest_null               }, \
+    { OSSL_FUNC_DIGEST_FINAL,           (DFUNC)wp_digest_null               }, \
+    { OSSL_FUNC_DIGEST_FREECTX,         (DFUNC)wp_digest_void               }, \
+    { OSSL_FUNC_DIGEST_DUPCTX,          (DFUNC)wp_digest_null               }, \
+    { OSSL_FUNC_DIGEST_GET_PARAMS,      (DFUNC)wp_digest_null               }, \
+    { OSSL_FUNC_DIGEST_GETTABLE_PARAMS, (DFUNC)wp_digest_null               }, \
+    { 0,                                NULL                                }  \
+};
+
+static int wp_digest_null(void) { return 0; }
+static void wp_digest_void(void) {}
+#endif
 
 /**
  * Get parameters of a digest algorithm.
@@ -292,11 +310,15 @@ static const OSSL_PARAM* wp_digest_gettable_params(void* provCtx)
  ******************************************************************************/
 
 #ifdef WP_HAVE_MD5
+#if defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS)
+IMPLEMENT_DIGEST_NULL(wp_md5)
+#else
 IMPLEMENT_DIGEST(wp_md5, wc_Md5,
                  WC_MD5_BLOCK_SIZE, WC_MD5_DIGEST_SIZE,
                  0,
                  wc_InitMd5_ex, wc_Md5Update, wc_Md5Final,
                  wc_Md5Copy, wc_Md5Free)
+#endif
 #endif
 
 /*******************************************************************************
@@ -304,6 +326,7 @@ IMPLEMENT_DIGEST(wp_md5, wc_Md5,
  ******************************************************************************/
 
 #ifdef WP_HAVE_MD5_SHA1
+#if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
 /**
  * Combined MD5 and SHA-1 digest.
  */
@@ -326,7 +349,6 @@ typedef struct wp_Md5Sha {
 static int wp_InitMd5Sha_ex(wp_Md5Sha* dgst, void* heap, int devId)
 {
     int rc;
-
     rc = wc_InitMd5_ex(&dgst->md5, heap, devId);
     if (rc == 0) {
         rc = wc_InitSha_ex(&dgst->sha, heap, devId);
@@ -411,12 +433,14 @@ static void wp_Md5ShaFree(wp_Md5Sha* d)
         wc_ShaFree(&d->sha);
     }
 }
-
 IMPLEMENT_DIGEST(wp_md5_sha1, wp_Md5Sha,
                  WC_MD5_BLOCK_SIZE, WC_MD5_DIGEST_SIZE + WC_SHA_DIGEST_SIZE,
                  0,
                  wp_InitMd5Sha_ex, wp_Md5ShaUpdate, wp_Md5ShaFinal,
                  wp_Md5ShaCopy, wp_Md5ShaFree)
+#else   /* defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS) */
+IMPLEMENT_DIGEST_NULL(wp_md5_sha1)
+#endif
 #endif
 
 /*******************************************************************************
