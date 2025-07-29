@@ -103,7 +103,7 @@ jobs:
             --disable-manpages \
             --with-openssl \
             CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" \
-            LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lcrypto" \
+            LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lcrypto"
           make -j$(nproc)
           sudo make install
 
