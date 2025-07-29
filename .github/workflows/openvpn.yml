@@ -77,13 +77,15 @@ jobs:
           ref: ${{ matrix.openvpn_ref }}
           fetch-depth: 1
 
-      - name: Apply patch
-        working-directory: openvpn
-        run: |
-          # delete the test_des_encrypt test case, if it exists
-          perl -ni -e 'print unless /cmocka_unit_test\(test_des_encrypt\),/' tests/unit_tests/openvpn/test_crypto.c
-          # show the results of the patch
-          git diff
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd openvpn
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openvpn/openvpn-${{ matrix.openvpn_ref }}-wolfprov.patch
 
       - name: Build OpenVPN
         working-directory: openvpn
