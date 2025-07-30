@@ -336,7 +336,7 @@ static void n_fold(unsigned char *block, unsigned int blocksize,
     for (i = const_len; i < cnt; i += const_len) {
          unsigned int j;
          /* Calculate first index into constant to rotate. */
-         unsigned int ci = ((const_len - (rot >> 3)) - 1) % const_len;
+         unsigned int ci = ((cnt - (rot >> 3)) - 1) % const_len;
          /* Calculate amount to rotate right and left. */
          unsigned char rr = rot & 0x7;
          unsigned char rl = 8 - rr;
@@ -352,7 +352,8 @@ static void n_fold(unsigned char *block, unsigned int blocksize,
              rcv |= (unsigned char)(constant[ci] >> rr);
 
              /* Add block value and rotated constant value to previous carry. */
-             carry += block[bi] + rcv;
+             carry += block[bi];
+             carry += rcv;
              /* Store new block value. */
              block[bi] = (unsigned char)(carry & 0xff);
              /* Get carry. */
