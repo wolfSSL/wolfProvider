@@ -42,8 +42,7 @@ jobs:
           sudo apt-get install -y build-essential meson ninja-build \
             libmount-dev gperf python3-pytest libuv1-dev libnghttp2-dev \
             libcap-dev uuid-dev libdevmapper-dev libpopt-dev libjson-c-dev \
-            libssh-dev libargon2-dev libblkid-dev asciidoctor pkgconf \
-            zlib1g-dev
+            libargon2-dev libblkid-dev asciidoctor pkgconf zlib1g-dev
 
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
