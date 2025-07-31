@@ -78,7 +78,7 @@ jobs:
           ./configure \
             --prefix="$GITHUB_WORKSPACE/tpm2-tools-install" \
             --with-openssl="$GITHUB_WORKSPACE/openssl-install" \
-            --enable-unit \
+            --enable-unit
           make -j$(nproc)
 
       - name: Run tpm2-tools tests
