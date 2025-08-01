@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        cryptography_ref: [ 'main', '42.0.0' ]
+        cryptography_ref: [ 'main', '38.0.4' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
