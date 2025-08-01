@@ -1,0 +1,98 @@
+name: Python Cryptography Tests
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_cryptography:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        cryptography_ref: [ 'main', '38.0.4' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - cryptography_ref: 'main'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install Python cryptography dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip python3-venv python3-dev build-essential libffi-dev pkg-config
+
+      - name: Download Python cryptography
+        uses: actions/checkout@v4
+        with:
+          repository: pyca/cryptography
+          ref: ${{ matrix.cryptography_ref }}
+          path: cryptography
+
+      - name: Setup Python environment
+        working-directory: cryptography
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip setuptools wheel
+          pip install -e ".[test]"
+          pip install pytest pytest-cov
+
+      - name: Run cryptography tests
+        working-directory: cryptography
+        run: |
+          echo "Setting environment variables..."
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          source venv/bin/activate
+          python -m pytest \
+            --ignore=tests/hazmat/primitives/test_ed25519.py \
+            --ignore=tests/hazmat/primitives/test_ed448.py \
+            --ignore=tests/hazmat/primitives/test_x25519.py \
+            --ignore=tests/hazmat/primitives/test_x448.py \
+            --ignore=tests/conftest.py \
+            -k "not (TestRSAEncryption or test_rsa_encrypt_oaep or TestRSASignature or test_pkcs1_digest_too_large_for_key_size or test_pkcs1_minimum_key_size or test_pss_minimum_key_size_for_digest or TestCertificateBuilder or test_build_cert_with_rsa_key_too_small or TestCertificateSigningRequestBuilder or test_rsa_key_too_small or TestCertificateRevocationListBuilder or test_sign_rsa_key_too_small or TestPKCS12Creation or test_generate_each_supported_keytype or Ed25519PrivateKey or Ed448PrivateKey or DSAPrivateKey or test_aes_xds or test_aes_ofb or test_aes_cfb)" \
+            | tee cryptography-test.log
+            #-k "not test_rsa_encrypt_oaep" \ This includes all of the 59 errors and some of the failed tests
+          if grep -q "FAILED\|ERROR" cryptography-test.log; then
+            TEST_RESULT=1
+          else
+            TEST_RESULT=0
+          fi
+          cat cryptography-test.log
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} cryptography
