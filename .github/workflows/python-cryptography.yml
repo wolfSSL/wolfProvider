@@ -1,0 +1,113 @@
+name: Python Cryptography Tests
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_cryptography:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        cryptography_ref: [ 'main', '38.0.4' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - cryptography_ref: 'main'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install Python cryptography dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip python3-venv python3-dev build-essential libffi-dev pkg-config
+
+      - name: Checkout Python cryptography
+        uses: actions/checkout@v4
+        with:
+          repository: pyca/cryptography
+          path: cryptography_repo
+          ref: ${{ matrix.cryptography_ref }}
+          fetch-depth: 1
+
+      - name: Apply wolfProvider patch for cryptography 38.0.4
+        if: matrix.cryptography_ref == '38.0.4'
+        working-directory: cryptography_repo
+        run: |
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/python-cryptography/python-cryptography-38.0.4-wolfprov.patch
+
+      - name: Setup Python environment
+        working-directory: cryptography_repo
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -e .
+          pip install -e .[test]
+          pip install pytest pytest-cov
+          #disable non-standard key size RSA tests
+          perl -i -0777 -pe 's/def _check_fips_key_length\(backend, private_key\):\s*if \(\s*backend\._fips_enabled\s*and\s*private_key\.key_size\s*<\s*backend\._fips_rsa_min_key_size\s*\):\s*pytest\.skip\(f"Key size not FIPS compliant: \{private_key\.key_size\}"\)/def _check_fips_key_length(backend, private_key):\n    min_key_size = 2048\n    if private_key.key_size < min_key_size:\n        pytest.skip(f"Key size not compliant: {private_key.key_size} < {min_key_size}")/g' tests/hazmat/primitives/test_rsa.py
+
+      - name: Run cryptography tests
+        working-directory: cryptography_repo
+        run: |
+          echo "Setting environment variables..."
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+          source venv/bin/activate
+
+          set -o pipefail
+
+          python -m pytest --disable-warnings -m "not skip_fips" \
+            --ignore=tests/hazmat/primitives/test_ed25519.py \
+            --ignore=tests/hazmat/primitives/test_ed448.py \
+            --ignore=tests/hazmat/primitives/test_x25519.py \
+            --ignore=tests/hazmat/primitives/test_x448.py \
+            --ignore=tests/conftest.py \
+            --ignore=tests/hazmat/primitives/test_pkcs12.py \
+            -k "not (test_vector_version or test_build_cert_with_rsa_key_too_small or test_rsa_key_too_small or test_sign_rsa_key_too_small or SHA1 or sha1 or test_gcm_min_max_iv)" \
+            | tee cryptography-test.log
+
+          TEST_EXIT_CODE=$?
+
+          if [ $TEST_EXIT_CODE -eq 0 ]; then
+            TEST_RESULT=0
+          else
+            TEST_RESULT=1
+          fi
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} cryptography
