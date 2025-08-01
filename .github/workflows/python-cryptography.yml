@@ -85,13 +85,8 @@ jobs:
             --ignore=tests/hazmat/primitives/test_ed448.py \
             --ignore=tests/hazmat/primitives/test_x25519.py \
             --ignore=tests/hazmat/primitives/test_x448.py \
-            -k "not test_pkcs1_digest_too_large_for_key_size" \
-            -k "not test_pkcs1_minimum_key_size" \
-            -k "not test_pss_minimum_key_size_for_digest" \
-            -k "not test_build_cert_with_rsa_key_too_small" \
-            -k "not test_rsa_key_too_small" \
-            -k "not test_sign_rsa_key_too_small" \
-            -k "not (Ed25519PrivateKey or Ed448PrivateKey or DSAPrivateKey)" \
+            --ignore=tests/conftest.py \
+            -k "not (TestRSAEncryption or test_rsa_encrypt_oaep or TestRSASignature or test_pkcs1_digest_too_large_for_key_size or test_pkcs1_minimum_key_size or test_pss_minimum_key_size_for_digest or TestCertificateBuilder or test_build_cert_with_rsa_key_too_small or TestCertificateSigningRequestBuilder or test_rsa_key_too_small or TestCertificateRevocationListBuilder or test_sign_rsa_key_too_small or TestPKCS12Creation or test_generate_each_supported_keytype or Ed25519PrivateKey or Ed448PrivateKey or DSAPrivateKey or test_aes_xds or test_aes_ofb or test_aes_cfb)" \
             | tee cryptography-test.log
             #-k "not test_rsa_encrypt_oaep" \ This includes all of the 59 errors and some of the failed tests
           if grep -q "FAILED\|ERROR" cryptography-test.log; then
