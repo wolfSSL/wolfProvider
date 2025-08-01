@@ -99,5 +99,5 @@ jobs:
           test/integration/tests/rc_decode test/integration/tests/X509certutil" 2>&1 | tee tpm2-tools-test.log
 
           # Capture result - Fails test/unit/test_tpm2_policy and test/unit/test_tpm2_eventlog with WPFF
-          TEST_RESULT=$(grep -q "# FAIL:  2" tpm2-tools-test.log && echo "1" || echo "0")
+          TEST_RESULT=$(grep -q "# PASS:  20" tpm2-tools-test.log && echo "0" || echo "1")
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tpm2-tools
