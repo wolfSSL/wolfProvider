@@ -67,7 +67,7 @@ jobs:
       - name: Checkout cryptsetup
         uses: actions/checkout@v4
         with:
-          repository: cryptsetup/cryptsetup
+          repository: mbroz/cryptsetup
           path: cryptsetup
           ref: ${{ matrix.cryptsetup_ref }}
 
