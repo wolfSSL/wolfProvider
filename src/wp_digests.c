@@ -220,24 +220,21 @@ const OSSL_DISPATCH name##_functions[] = {                                     \
     { 0,                                NULL                                }  \
 };
 
-#if defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS)
 #define IMPLEMENT_DIGEST_NULL(name)                                            \
-/** Dispatch table for digest algorithms. */                                   \
+/** Dispatch table for digest_null algorithms. */                              \
+static int name##_digest_null(void) { return 0; }                              \
+static void name##_digest_void(void) {}                                        \
 const OSSL_DISPATCH name##_functions[] = {                                     \
-    { OSSL_FUNC_DIGEST_NEWCTX,          (DFUNC)wp_digest_null               }, \
-    { OSSL_FUNC_DIGEST_INIT,            (DFUNC)wp_digest_null               }, \
-    { OSSL_FUNC_DIGEST_UPDATE,          (DFUNC)wp_digest_null               }, \
-    { OSSL_FUNC_DIGEST_FINAL,           (DFUNC)wp_digest_null               }, \
-    { OSSL_FUNC_DIGEST_FREECTX,         (DFUNC)wp_digest_void               }, \
-    { OSSL_FUNC_DIGEST_DUPCTX,          (DFUNC)wp_digest_null               }, \
-    { OSSL_FUNC_DIGEST_GET_PARAMS,      (DFUNC)wp_digest_null               }, \
-    { OSSL_FUNC_DIGEST_GETTABLE_PARAMS, (DFUNC)wp_digest_null               }, \
+    { OSSL_FUNC_DIGEST_NEWCTX,          (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_INIT,            (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_UPDATE,          (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_FINAL,           (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_FREECTX,         (DFUNC)name##_digest_void           }, \
+    { OSSL_FUNC_DIGEST_DUPCTX,          (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_GET_PARAMS,      (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_GETTABLE_PARAMS, (DFUNC)name##_digest_null           }, \
     { 0,                                NULL                                }  \
 };
-
-static int wp_digest_null(void) { return 0; }
-static void wp_digest_void(void) {}
-#endif
 
 /**
  * Get parameters of a digest algorithm.
