@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+CONF_FILE="/etc/ssl/openssl.cnf"
+INCLUDE_LINE=".include /etc/ssl/openssl.cnf.d/"
+
+if ! grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
+    echo "Adding include for wolfprovider..."
+    sed -i "/^openssl_conf/ a $INCLUDE_LINE" "$CONF_FILE"
+fi
+
+exit 0

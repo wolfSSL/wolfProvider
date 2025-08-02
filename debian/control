@@ -1,0 +1,35 @@
+Source: libwolfprov
+Section: libs
+Priority: optional
+Maintainer: WolfSSL <support@wolfssl.com>
+Standards-Version: 4.6.2
+Build-Depends: debhelper (>= 12),
+               devscripts,
+               pkgconf,
+               openssl,
+               libssl-dev,
+               libwolfssl,
+               libwolfssl-dev
+
+Package: libwolfprov
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libwolfssl, openssl
+Description: wolfProvider library for OpenSSL
+ wolfProvider is a library that can be used as a Provider in OpenSSL.
+ It provides cryptographic functionality through wolfSSL including:
+ .
+  * Hash functions (MD5, SHA-1, SHA-2, SHA-3)
+  * Symmetric encryption (AES, DES)
+  * Asymmetric cryptography (RSA, ECC, DH)
+  * Key derivation functions (HKDF, PBKDF2)
+  * Message authentication codes (HMAC, CMAC, GMAC)
+ .
+ This package contains the runtime library.
+
+Package: libwolfprov-dev
+Architecture: any
+Section: libdevel
+Depends: libwolfprov (= ${binary:Version}), ${misc:Depends}
+Description: Development files for wolfProvider
+ This package contains the header files and development libraries
+ needed to build applications using wolfProvider.

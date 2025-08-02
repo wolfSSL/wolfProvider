@@ -18,6 +18,7 @@ show_help() {
   echo "  --fips-bundle=DIR          Build wolfProvider with a directory containing a wolfSSL FIPS bundle instead of cloning from GitHub. Requires a FIPS version to be given by --fips-version"
   echo "  --fips-check=TAG           Choose a FIPS tag to clone. May require a version to be given by --fips-version"
   echo "  --fips-version=VER         Choose the wolfSSL FIPS version"
+  echo "  --debian                   Build a Debian package"
   echo "  --quicktest                Disable some tests for a faster testing suite"
   echo ""
   echo "Environment Variables:"
@@ -106,6 +107,9 @@ for arg in "$@"; do
             fi
             WOLFSSL_FIPS_VERSION="$fips_ver"
             ;;
+        --debian)
+            build_debian=1
+            ;;
         --quicktest)
             WOLFPROV_QUICKTEST=1
             ;;
@@ -120,6 +124,12 @@ if [ -n "$args_wrong" ]; then
     echo "Unrecognized argument(s) provided: $args_wrong"
     echo "Use --help to see a list of arguments"
     exit 1
+fi
+
+if [ -n "$build_debian" ]; then
+    echo "Building Debian package..."
+    ./scripts/build-debian.sh
+    exit $?
 fi
 
 if [ -n "$args" ]; then
