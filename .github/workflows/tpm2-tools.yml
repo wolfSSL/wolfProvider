@@ -1,0 +1,103 @@
+name: tpm2-tools Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_tpm2_tools:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        tpm2_tools_ref: [ '5.7' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install tpm2-tools test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git sudo autoconf expect vim dbus vim-common \
+          autoconf-archive python3 python3-yaml python3-pip libefivar-dev \
+          libcmocka-dev automake libtool pkg-config build-essential pandoc \
+          libtss2-dev tpm2-abrmd swtpm tpm2-tools iproute2 libcurl4-openssl-dev
+
+      - name: Download tpm2-tools
+        uses: actions/checkout@v4
+        with:
+          repository: tpm2-software/tpm2-tools
+          ref: ${{ matrix.tpm2_tools_ref }}
+          path: tpm2-tools
+          fetch-depth: 1
+
+      - name: Build tpm2-tools
+        working-directory: tpm2-tools
+        run: |
+          ./bootstrap
+          ./configure \
+            --prefix="$GITHUB_WORKSPACE/tpm2-tools-install" \
+            --with-openssl="$GITHUB_WORKSPACE/openssl-install" \
+            --enable-unit
+          make -j$(nproc)
+
+      - name: Run tpm2-tools tests
+        working-directory: tpm2-tools
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Run only unit tests and integration tests that dont need TPM2 hardware/simulator
+          make check TESTS="test/unit/test_string_bytes test/unit/test_files \
+          test/unit/test_tpm2_header test/unit/test_tpm2_attr_util test/unit/test_tpm2_alg_util \
+          test/unit/test_pcr test/unit/test_tpm2_auth_util test/unit/test_tpm2_errata \
+          test/unit/test_tpm2_session test/unit/test_tpm2_policy test/unit/test_tpm2_util \
+          test/unit/test_options test/unit/test_cc_util test/unit/test_tpm2_eventlog \
+          test/unit/test_tpm2_eventlog_yaml test/unit/test_object \
+          test/integration/tests/X509certutil test/integration/tests/toggle_options \
+          test/integration/tests/rc_decode test/integration/tests/X509certutil" 2>&1 | tee tpm2-tools-test.log
+
+          # Capture result - Fails test/unit/test_tpm2_policy and test/unit/test_tpm2_eventlog with WPFF
+          TEST_RESULT=$(grep -q "# PASS:  20" tpm2-tools-test.log && echo "0" || echo "1")
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tpm2-tools
