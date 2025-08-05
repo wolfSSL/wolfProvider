@@ -56,6 +56,11 @@ export OPENSSL_CONF="${OPENSSL_CONF:=$DEFAULT_PROVIDER_CONF}"
 export OPENSSL_MODULES="${OPENSSL_MODULES:=$REPO_ROOT/wolfprov-install/lib}"
 export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
 
+# Other variables used by test scripts
+export WOLFPROV_PATH="${REPO_ROOT}/wolfprov-install/lib"
+export WOLFPROV_CONFIG="${DEFAULT_PROVIDER_CONF}"
+export OPENSSL_BIN="${REPO_ROOT}/openssl-install/bin/openssl"
+
 # If openssl-install does not exist, exit with failure status to terminate 
 # any workflows which depend on the result.
 # For normal interactive command line usage, this result is fine to ignore.
@@ -69,7 +74,7 @@ fi
 
 echo "Checking OpenSSL providers:"
 PROVIDER_LIST=$(mktemp -t provider-list.XXXXXX)
-$REPO_ROOT/openssl-install/bin/openssl list -providers | tee $PROVIDER_LIST
+$OPENSSL_BIN list -providers | tee $PROVIDER_LIST
 if grep -q libwolfprov $PROVIDER_LIST; then
   echo "libwolfprov found in OpenSSL providers"
 else
