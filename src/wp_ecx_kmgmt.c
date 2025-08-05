@@ -347,6 +347,10 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
 {
     wp_Ecx* dst;
 
+    if (!wolfssl_prov_is_running()) {
+        return NULL;
+    }
+
     (void)selection;
 
     dst = wp_ecx_new(src->provCtx, src->data);
@@ -1072,6 +1076,10 @@ static int wp_ecx_export(wp_Ecx* ecx, int selection, OSSL_CALLBACK* paramCb,
     unsigned char* data = NULL;
     size_t len = 0;
     int expPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
 
     XMEMSET(params, 0, sizeof(params));
     data = OPENSSL_malloc(wp_ecx_export_keypair_alloc_size(ecx, expPriv));
@@ -1928,6 +1936,10 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     wp_Ecx* ecx;
     const char* dataType = NULL;
 
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+
     (void)pwCb;
     (void)pwCbArg;
 
@@ -2021,6 +2033,10 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     int ok = 1;
     int rc;
     BIO* out = wp_corebio_get_bio(ctx->provCtx, cBio);
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
     unsigned char* keyData = NULL;
     size_t keyLen = 0;
     unsigned char derData[160];

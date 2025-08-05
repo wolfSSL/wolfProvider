@@ -2037,6 +2037,10 @@ static int wp_ecc_decode_spki(wp_Ecc* ecc, unsigned char* data, word32 len)
     int rc;
     word32 idx = 0;
 
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+
     rc = wc_EccPublicKeyDecode(data, &idx, &ecc->key, len);
     if (rc != 0) {
         ok = 0;
@@ -2068,6 +2072,10 @@ static int wp_ecc_decode_pki(wp_Ecc* ecc, unsigned char* data, word32 len)
     int ok = 1;
     int rc;
     word32 idx = 0;
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
 
     rc = wc_EccPrivateKeyDecode(data, &idx, &ecc->key, len);
     if (rc != 0) {
