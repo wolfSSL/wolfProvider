@@ -3940,7 +3940,7 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
 {
     unsigned char* binData = NULL;
     size_t binLen = 0;
-    size_t printAmt;
+    size_t printAmt = 0;
     size_t dPos = *pos;
     int bytes = 0;
     int i;
@@ -4036,7 +4036,7 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     char* textData = NULL;
     size_t textLen = 0;
     size_t pos = 0;
-    size_t printAmt;
+    size_t printAmt = 0;
     char* expStr;
     int expLen;
 
