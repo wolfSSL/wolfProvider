@@ -1,0 +1,207 @@
+name: hostap and wpa supplicant Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_hostap:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 90
+    strategy:
+      matrix:
+        hostap_ref: [ 'main' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '', 'OPENSSL' ]
+
+    steps:
+      # Checkout the source so we can run the check-workflow-result script.
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install hostap dependencies
+        env:
+          LD_LIBRARY_PATH: "$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
+          LDFLAGS: "-L$GITHUB_WORKSPACE/openssl-install/lib64"
+          CFLAGS: "-I$GITHUB_WORKSPACE/openssl-install/include"
+          PKG_CONFIG_PATH: "$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpcap0.8 libpcap-dev curl libcurl4-openssl-dev \
+            libnl-3-dev binutils-dev libssl-dev libiberty-dev libnl-genl-3-dev \
+            libnl-route-3-dev libdbus-1-dev bridge-utils tshark python3-pycryptodome \
+            libsqlite3-dev libzstd1 wireless-tools iw
+
+          # Uninstall system cryptography and reinstall with custom OpenSSL
+          sudo apt-get remove -y python3-cryptography
+          pip install --no-cache-dir --force-reinstall cryptography
+
+      - name: Checkout hostap
+        run: git clone git://w1.fi/hostap.git hostap
+
+      - name: Checkout linux
+        uses: actions/checkout@v4
+        with:
+          repository: torvalds/linux
+          path: linux
+          ref: master
+
+      - name: Compile linux
+        run: |
+          cp $GITHUB_WORKSPACE/hostap/tests/hwsim/vm/kernel-config.uml linux/.config
+          cd linux
+          yes "" | ARCH=um make -j $(nproc)
+
+      - name: Update config
+        working-directory: hostap/tests/hwsim
+        run: |
+          cat << EOF >> example-hostapd.config
+            # Custom OpenSSL installation paths
+            CFLAGS += -I$GITHUB_WORKSPACE/openssl-install/include
+            LDFLAGS += -L$GITHUB_WORKSPACE/openssl-install/lib64
+            # Override OpenSSL libraries to use custom installation with rpath
+            LIBS += -L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64
+          EOF
+          cat << EOF >> example-wpa_supplicant.config
+            # Custom OpenSSL installation paths
+            CFLAGS += -I$GITHUB_WORKSPACE/openssl-install/include
+            LDFLAGS += -L$GITHUB_WORKSPACE/openssl-install/lib64
+            # Override OpenSSL libraries to use custom installation with rpath
+            LIBS += -L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64
+          EOF
+
+      - name: Setup non-WPFF environment
+        working-directory: hostap/tests/hwsim
+        if: matrix.force_fail == ''
+        run: |
+          sed -i '115r /dev/stdin' vm/inside.sh << EOF
+            echo "setting env variables"
+            # Set up wolfSSL environment variables
+            # In UML mode, we can access the host filesystem directly
+            echo "Setting up wolfSSL environment in UML mode"
+            # Use the host filesystem paths directly
+            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
+            export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
+            export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
+            export CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1
+            echo "wolfSSL environment variables set:"
+            echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            echo "OPENSSL_CONF: $OPENSSL_CONF"
+            echo "OPENSSL_MODULES: $OPENSSL_MODULES"
+
+            # Test if wolfProvider is available
+            echo "Testing OpenSSL providers:"
+            $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+          EOF
+
+      - name: Setup WPFF environment
+        working-directory: hostap/tests/hwsim
+        if: matrix.force_fail == 'WOLFPROV_FORCE_FAIL=1'
+        run: |
+          sed -i '115r /dev/stdin' vm/inside.sh << EOF
+            echo "setting env variables"
+            # Set up wolfSSL environment variables
+            # In UML mode, we can access the host filesystem directly
+            echo "Setting up wolfSSL environment in UML mode"
+            # Use the host filesystem paths directly
+            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
+            export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
+            export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
+            export CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1
+            export WOLFPROV_FORCE_FAIL=1
+            echo "wolfSSL environment variables set:"
+            echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            echo "OPENSSL_CONF: $OPENSSL_CONF"
+            echo "OPENSSL_MODULES: $OPENSSL_MODULES"
+
+            # Test if wolfProvider is available
+            echo "Testing OpenSSL providers:"
+            $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+          EOF
+
+
+      - name: Update certs
+        working-directory: hostap/tests/hwsim/auth_serv
+        run: ./update.sh
+
+      - name: Build hostap and wpa_supplicant
+        working-directory: hostap/tests/hwsim/
+        run: ./build.sh
+
+      - name: Verify openssl binaries linked
+        working-directory: hostap
+        run: |
+          ldd hostapd/hostapd | grep ssl
+          ldd wpa_supplicant/wpa_supplicant | grep ssl
+
+      - name: Run tests
+        id: testing
+        working-directory: hostap/tests/hwsim/
+        continue-on-error: true
+        run: |
+          set +e
+          cat << EOF >> vm/vm-config
+            KERNELDIR=$GITHUB_WORKSPACE/linux
+            KVMARGS="-cpu host"
+          EOF
+          find . -name "*.py" -path "*/test_*" | xargs grep "def test_" | sed 's/.*def test_\([^(]*\).*/\1/' > test_list.txt
+          echo "=== Debug: Running tests in batches ==="
+          batch_count=0
+          touch final_failed_tests.log
+          while mapfile -t -n 50 ary && ((${#ary[@]})); do
+            batch_count=$((batch_count + 1))
+            echo "Batch count = $batch_count"
+            TESTS=$(printf '%s\n' "${ary[@]}" | tr '\n' ' ')
+            ./vm/parallel-vm.py --nocurses $(nproc) $TESTS || HWSIM_RES=$?
+            #echo "GREPPING FOR libwolfprov"
+            #grep -rA5 "Testing OpenSSL providers:" /tmp/hwsim-test-logs
+            if [ "$HWSIM_RES" -ne "0" ]; then
+              # Let's re-run the failing tests. We gather the failed tests from the log file.
+              FAILED_TESTS=$(grep 'failed tests' /tmp/hwsim-test-logs/*-parallel.log | sed 's/failed tests: //' | tr ' ' '\n' | sort | uniq | tr '\n' ' ')
+              RETRY_RES=0
+              ./vm/parallel-vm.py --nocurses $(nproc) $FAILED_TESTS || RETRY_RES=$?
+
+              if [ "$RETRY_RES" -ne "0" ]; then
+                echo "$FAILED_TESTS" >> final_failed_tests.log
+              fi
+            fi
+          done < test_list.txt
+
+          echo "=== FAILED TESTS: $(wc -l < final_failed_tests.log || echo 0)"
+          cat final_failed_tests.log || true
