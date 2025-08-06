@@ -9,7 +9,18 @@ on:
 jobs:
   bookworm:
     runs-on: ubuntu-22.04
+<<<<<<< HEAD
     # Important: use Debian Bookworm for compatibility
+=======
+    strategy:
+      matrix:
+        include:
+          - fips_mode: true
+            description: "FIPS Mode"
+          - fips_mode: false
+            description: "Non-FIPS Mode"
+    # Important: use Debian Bookwork for compatibility
+>>>>>>> 08f4141 (Add FIPS support for Debian package build)
     container:
       image: debian:bookworm   # or debian:bookworm-slim
       env:
@@ -61,9 +72,21 @@ jobs:
         mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
         cd "$RUNNER_TEMP/wolfssl-pkg"
         
+<<<<<<< HEAD
         echo "Using standard wolfSSL package"
         tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
 
+=======
+        # Use FIPS tarball if fips_flag is not empty, otherwise use standard tarball
+        if [ "${{ matrix.fips_mode }}" = "true" ]; then
+          echo "Using FIPS wolfSSL package"
+          tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl-fips.tar.gz
+        else
+          echo "Using standard wolfSSL package"
+          tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
+        fi
+        
+>>>>>>> 08f4141 (Add FIPS support for Debian package build)
         # Get current architecture
         CURRENT_ARCH=$(dpkg --print-architecture)
         echo "Current architecture: $CURRENT_ARCH"
@@ -87,8 +110,16 @@ jobs:
 
     - name: Build Debian package
       run: |
+<<<<<<< HEAD
+=======
+        # Run the build script with or without FIPS based on matrix
+        FIPS_FLAG=""
+        if [ "${{ matrix.fips_mode }}" = "true" ]; then
+          FIPS_FLAG="--enable-fips"
+        fi
+>>>>>>> 08f4141 (Add FIPS support for Debian package build)
         # Bypass the warning prompt with 'yes Y' 
-        yes Y | ./scripts/build-wolfprovider.sh --debian
+        yes Y | ./scripts/build-wolfprovider.sh --debian $FIPS_FLAG
 
         # List generated packages
         echo "Generated Packages:"
@@ -204,7 +235,11 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
+<<<<<<< HEAD
         name: wolfprovider-debian-packages
+=======
+        name: wolfprovider-debian-packages${{ matrix.fips_mode && '-fips' }}
+>>>>>>> 08f4141 (Add FIPS support for Debian package build)
         path: |
           ${{ runner.temp }}/*.deb
           ${{ runner.temp }}/*.dsc
