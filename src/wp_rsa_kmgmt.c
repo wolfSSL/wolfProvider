@@ -2154,10 +2154,10 @@ static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
     }
 
     if (ok) {
-    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
-    if (rc != 0) {
-        ok = 0;
-    }
+        rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
+        if (rc != 0) {
+            ok = 0;
+        }
     }
     if (ok && !wp_rsa_determine_type(rsa, data, len)) {
         ok = 0;
