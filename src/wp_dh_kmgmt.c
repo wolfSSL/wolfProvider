@@ -807,7 +807,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
         if (p != NULL) {
             if (p->data == NULL) {
-                p->return_size = dh->pubSz;
+                p->return_size = dh->privSz;
             }
             else if (p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
                 if (p->data_size < dh->privSz) {
