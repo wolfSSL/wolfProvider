@@ -7,14 +7,16 @@ Build-Depends: debhelper (>= 12),
                devscripts,
                pkgconf,
                openssl,
-               libssl-dev,
                libwolfssl,
                libwolfssl-dev
 
+
 Package: libwolfprov
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libwolfssl, openssl
-Description: wolfProvider library for OpenSSL
+Depends: ${shlibs:Depends}, ${misc:Depends}, libssl3 (>= 3.0.3), libwolfssl (>= 5.8.2), openssl
+Provides: ${variant:provides}
+XB-Variant: ${variant}
+Description: wolfProvider library for OpenSSL — ${variant:desc}
  wolfProvider is a library that can be used as a Provider in OpenSSL.
  It provides cryptographic functionality through wolfSSL including:
  .
