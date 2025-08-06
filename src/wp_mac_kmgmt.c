@@ -509,13 +509,9 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
 static wp_MacGenCtx* wp_mac_gen_init(WOLFPROV_CTX* provCtx,
     int selection, const OSSL_PARAM params[], int type)
 {
-    wp_MacGenCtx* ctx;
+    wp_MacGenCtx* ctx = NULL;
 
-    if (!wolfssl_prov_is_running()) {
-        ctx = NULL;
-    }
-
-    if (ctx != NULL) {
+    if (wolfssl_prov_is_running()) {
         ctx = OPENSSL_zalloc(sizeof(*ctx));
     }
     if (ctx != NULL) {
