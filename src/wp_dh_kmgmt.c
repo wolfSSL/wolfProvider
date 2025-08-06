@@ -490,14 +490,12 @@ static int wp_dh_copy_params(const wp_Dh *src, wp_Dh *dst)
  */
 static wp_Dh* wp_dh_dup(const wp_Dh *src, int selection)
 {
-    wp_Dh* dst;
+    wp_Dh* dst = NULL;
 
-    if (!wolfssl_prov_is_running()) {
-        return NULL;
+    if (wolfssl_prov_is_running()) {
+        /* Create a new dh object. */
+        dst = wp_dh_new(src->provCtx);
     }
-
-    /* Create a new DH key object to return. */
-    dst = wp_dh_new(src->provCtx);
     if (dst != NULL) {
         int ok = 1;
 
@@ -2202,9 +2200,11 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     ctx->selection = selection;
 
-    dh = wp_dh_new(ctx->provCtx);
-    if (dh == NULL) {
-        ok = 0;
+    if (ok) {
+        dh = wp_dh_new(ctx->provCtx);
+        if (dh == NULL) {
+            ok = 0;
+        }
     }
     if (ok && (!wp_read_der_bio(ctx->provCtx, cBio, &data, &len))) {
         ok = 0;

@@ -523,11 +523,9 @@ static wp_Rsa* wp_rsa_dup(const wp_Rsa* src, int selection)
 {
     wp_Rsa* dst = NULL;
 
-    if (!wolfssl_prov_is_running()) {
-        return NULL;
-    }
-
-    if ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0) {
+    if (wolfssl_prov_is_running() &&
+        (selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0) {
+        /* Create a new rsa object. */
         dst = wp_rsa_base_new(src->provCtx, src->type);
     }
     if (dst != NULL) {
@@ -2155,9 +2153,11 @@ static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
         ok = 0;
     }
 
+    if (ok) {
     rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
     if (rc != 0) {
         ok = 0;
+    }
     }
     if (ok && !wp_rsa_determine_type(rsa, data, len)) {
         ok = 0;
@@ -2197,9 +2197,11 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
         ok = 0;
     }
 
+    if (ok) {
     rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
     if (rc != 0) {
         ok = 0;
+    }
     }
 #if LIBWOLFSSL_VERSION_HEX < 0x05000000 || defined(HAVE_FIPS)
     if (!ok) {
@@ -2286,7 +2288,7 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     }
 
     /* Look for the PBKDF2 OID to know we have an encrypted key. */
-    if (!wp_rsa_find_pbkdf2_oid(data, len)) {
+    if (ok && !wp_rsa_find_pbkdf2_oid(data, len)) {
         ok = 0;
     }
     /* Get password for decryption. */

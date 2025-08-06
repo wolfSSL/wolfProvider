@@ -246,15 +246,13 @@ void wp_mac_free(wp_Mac* mac)
  */
 static wp_Mac* wp_mac_dup(const wp_Mac *src, int selection)
 {
-    wp_Mac* dst;
-
-    if (!wolfssl_prov_is_running()) {
-        return NULL;
-    }
+    wp_Mac* dst = NULL;
 
     (void)selection;
-
-    dst = wp_mac_new(src->provCtx, src->type);
+    if (wolfssl_prov_is_running()) {
+        /* Create a new mac object. */
+        dst = wp_mac_new(src->provCtx, src->type);
+    }
     if (dst != NULL) {
         int ok = 1;
 
@@ -471,7 +469,7 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
 
     XMEMSET(params, 0, sizeof(params));
 
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+    if (ok && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         size_t idx = 0;
 
         len = wp_mac_export_priv_key_alloc_size(mac);
@@ -514,10 +512,12 @@ static wp_MacGenCtx* wp_mac_gen_init(WOLFPROV_CTX* provCtx,
     wp_MacGenCtx* ctx;
 
     if (!wolfssl_prov_is_running()) {
-        return NULL;
+        ctx = NULL;
     }
 
-    ctx = OPENSSL_zalloc(sizeof(*ctx));
+    if (ctx != NULL) {
+        ctx = OPENSSL_zalloc(sizeof(*ctx));
+    }
     if (ctx != NULL) {
         ctx->provCtx = provCtx;
         ctx->selection = selection;
