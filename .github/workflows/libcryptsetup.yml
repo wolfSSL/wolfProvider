@@ -79,7 +79,7 @@ jobs:
           fetch-depth: 1
       - run: |
           cd cryptsetup
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/cryptsetup/cryptsetup-${{ matrix.cryptsetup_ref }}-wolfprov.patch
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libcryptsetup/libcryptsetup-${{ matrix.cryptsetup_ref }}-wolfprov.patch
 
       - name: Build cryptsetup
         working-directory: cryptsetup
