@@ -508,6 +508,9 @@ int test_dh_get_params(void *data)
             for (int j = 0; j < 2; j++) {
                 if (j == 0) {
                     mode = "Null data";
+                    paramsWolfProvider[0] = gettableParams[i];
+                    paramsWolfProvider[0].data = NULL;
+                    paramsWolfProvider[0].data_size = 0;
                 }
                 else {
                     mode = "Buffer data";
