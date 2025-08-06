@@ -19,42 +19,50 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-# Get the force fail parameter
-if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-    echo "Force fail mode enabled for all tests"
-fi
-if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
-    echo "FIPS mode enabled for all tests"
-fi
-
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
 UTILS_DIR="${REPO_ROOT}/scripts"
 
-# Get the built versions
-if [ -d "${REPO_ROOT}/openssl-source" ] && [ -d "${REPO_ROOT}/wolfssl-source" ]; then
-    # Get the actual versions that were built
-    export OPENSSL_TAG=$(cd ${REPO_ROOT}/openssl-source &&
-        (git describe --tags 2>/dev/null || git branch --show-current))
-    export WOLFSSL_TAG=$(cd ${REPO_ROOT}/wolfssl-source &&
-        (git describe --tags 2>/dev/null || git branch --show-current))
+source "${SCRIPT_DIR}/cmd-test-common.sh"
+
+# If OPENSSL_BIN is not set, assume we are using a local build
+if [ -z "${OPENSSL_BIN:-}" ]; then
+    # Check if the install directories exist
+    if [ ! -d "${REPO_ROOT}/openssl-install" ] || 
+       [ ! -d "${REPO_ROOT}/wolfssl-install" ]; then
+        echo "[FAIL] OpenSSL or wolfSSL install directories not found"
+        echo "Please set OPENSSL_BIN or run build-wolfprovider.sh first"
+        exit 1
+    fi
+
+    # Setup the environment for a local build
+    source "${REPO_ROOT}/scripts/env-setup"
 else
-    echo "[FAIL] OpenSSL or wolfSSL source directories not found"
-    echo "Please run build-wolfprovider.sh first"
-    exit 1
+    # We are using a user-provided OpenSSL binary, manually set the test
+    # environment variables rather than using env-setup.
+    # Find the location of the wolfProvider modules
+    if [ -z "${WOLFPROV_PATH:-}" ]; then
+        export WOLFPROV_PATH=$(find /usr/lib /usr/local/lib -type d -name ossl-modules 2>/dev/null | head -n 1)
+    fi
+    # Set the path to the wolfProvider config file
+    if [ -z "${WOLFPROV_CONFIG:-}" ]; then
+        if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
+            export WOLFPROV_CONFIG="${REPO_ROOT}/provider-fips.conf"
+        else
+            export WOLFPROV_CONFIG="${REPO_ROOT}/provider.conf"
+        fi  
+    fi
 fi
 
-# Use the current version tags for testing
-export USE_CUR_TAG=1
-
-# Source OpenSSL utilities and initialize OpenSSL
-source "${UTILS_DIR}/utils-openssl.sh"
-init_openssl
-
 echo "=== Running wolfProvider Command-Line Tests ==="
-echo "Using OpenSSL version: ${OPENSSL_TAG}"
-echo "Using wolfSSL version: ${WOLFSSL_TAG}"
+echo "Using OPENSSL_BIN: ${OPENSSL_BIN}" 
+echo "Using WOLFPROV_PATH: ${WOLFPROV_PATH}"
+echo "Using WOLFPROV_CONFIG: ${WOLFPROV_CONFIG}"
+
+# Ensure we can switch providers before proceeding
+use_default_provider
+use_wolf_provider
 
 # Run the hash comparison test
 echo -e "\n=== Running Hash Comparison Test ==="

@@ -13,25 +13,39 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'master', 'openssl-3.5.0' ]
+        debug: ['WOLFPROV_DEBUG=1', '']
+
   simple_test:
     name: Simple Test
     runs-on: ubuntu-22.04
+    needs: build_wolfprovider
     timeout-minutes: 20
     strategy:
       matrix:
-        openssl_ref: [ 'master', 'openssl-3.5.0' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'master', 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
-        debug: ['WOLFPROV_DEBUG=1', '']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
+      - name: Retrieving wolfProvider from cache
+        # Debug builds are not currently supported by build-wolfprovider.yml
+        # so those are manually built as a separate step.
+        if: ${{ matrix.debug == '' }}
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
         with:
           path: |
             wolfssl-install
@@ -41,21 +55,16 @@ jobs:
             openssl-install/bin
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          lookup-only: true
+          fail-on-cache-miss: true
 
-      # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+        if: ${{ matrix.debug != '' }}
         run: |
-          ${{ matrix.debug }} OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          ${{ matrix.debug }} \
+            OPENSSL_TAG=${{ matrix.openssl_ref }} \
+            WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+            ./scripts/build-wolfprovider.sh
 
       - name: Run simple tests
         run: |
-          ${{ matrix.force_fail }} ${{ matrix.debug }} ./scripts/cmd_test/do-cmd-tests.sh
-
-      - name: Print test logs
-        if: always()
-        run: |
-          if [ -f test-suite.log ] ; then
-            cat test-suite.log
-          fi
+          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
