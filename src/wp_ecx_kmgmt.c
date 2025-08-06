@@ -1933,7 +1933,7 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     unsigned char* data = NULL;
     word32 len = 0;
     word32 idx = 0;
-    wp_Ecx* ecx;
+    wp_Ecx* ecx = NULL;
     const char* dataType = NULL;
 
     if (!wolfssl_prov_is_running()) {

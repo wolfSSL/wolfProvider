@@ -5,11 +5,17 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ '*' ]
-  workflow_dispatch:
 
 jobs:
   test-debian-package:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - fips_mode: true
+            description: "FIPS Mode"
+          - fips_mode: false
+            description: "Non-FIPS Mode"
 
     steps:
     - name: Checkout wolfProvider
@@ -48,25 +54,50 @@ jobs:
           expect \
           xxd
 
-    # TODO: this step rebuilds the package for the current architecture
-    #       we may be able to remove it if we can ensure the package supports
-    #       the architecture of the runner (most likely amd64)
-    - name: Install custom wolfssl
+    - name: Install wolfssl debian package
       run: |
         mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
         cd "$RUNNER_TEMP/wolfssl-pkg"
-        unzip $GITHUB_WORKSPACE/.github/packages/debian-packages-20250731T171211Z-1-001.zip
+        
+        # Use FIPS tarball if fips_flag is not empty, otherwise use standard tarball
+        if [ "${{ matrix.fips_mode }}" = "true" ]; then
+          echo "Using FIPS wolfSSL package"
+          tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl-fips.tar.gz
+        else
+          echo "Using standard wolfSSL package"
+          tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
+        fi
+        
+        # Get current architecture
+        CURRENT_ARCH=$(dpkg --print-architecture)
+        echo "Current architecture: $CURRENT_ARCH"
+        
+        # Look for existing .deb files that match the current architecture
         cd debian-packages
-        sudo dpkg-source -x wolfssl_5.8.2-1.dsc
-        cd wolfssl-5.8.2
-        sudo dpkg-buildpackage -b -us -uc
-        sudo dpkg -i ../libwolfssl*.deb
+        MATCHING_DEB_FILES=$(find . -name "*_${CURRENT_ARCH}.deb" -o -name "*_${CURRENT_ARCH}_*.deb" 2>/dev/null || true)
+        
+        if [ -n "$MATCHING_DEB_FILES" ]; then
+          echo "Found matching .deb files for architecture $CURRENT_ARCH:"
+          echo "$MATCHING_DEB_FILES"
+          echo "Installing existing .deb files..."
+          sudo dpkg -i $MATCHING_DEB_FILES
+        else
+          echo "No matching .deb files found for architecture $CURRENT_ARCH, rebuilding from source..."
+          sudo dpkg-source -x wolfssl*.dsc
+          cd wolfssl*/
+          sudo dpkg-buildpackage -b -us -uc
+          sudo dpkg -i ../libwolfssl*.deb
+        fi
 
     - name: Build Debian package
       run: |
-        # Run the build script
+        # Run the build script with or without FIPS based on matrix
+        FIPS_FLAG=""
+        if [ "${{ matrix.fips_mode }}" = "true" ]; then
+          FIPS_FLAG="--enable-fips"
+        fi
         # Bypass the warning prompt with 'yes Y' 
-        yes Y | ./scripts/build-wolfprovider.sh --debian
+        yes Y | ./scripts/build-wolfprovider.sh --debian $FIPS_FLAG
 
         # List generated packages
         echo "Generated Packages:"
@@ -182,7 +213,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: debian-packages
+        name: wolfprovider-debian-packages${{ matrix.fips_mode && '-fips' }}
         path: |
           ${{ runner.temp }}/*.deb
           ${{ runner.temp }}/*.dsc
