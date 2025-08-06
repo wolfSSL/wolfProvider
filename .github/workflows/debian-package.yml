@@ -5,29 +5,22 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ '*' ]
-  workflow_dispatch:
 
 jobs:
-  test-debian-package:
-    runs-on: ubuntu-latest
-
+  bookworm:
+    runs-on: ubuntu-22.04
+    # Important: use Debian Bookworm for compatibility
+    container:
+      image: debian:bookworm   # or debian:bookworm-slim
+      env:
+        DEBIAN_FRONTEND: noninteractive
     steps:
-    - name: Checkout wolfProvider
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-    - run: |
-        # Fetch tags
-        git fetch --tags
-        # List all tags
-        git tag -l
-
     - name: Set up environment
       run: |
         # Update package lists
-        sudo apt-get update
+        apt-get update
         # Install build dependencies
-        sudo apt-get install -y \
+        apt-get install -y \
           build-essential \
           devscripts \
           debhelper \
@@ -44,27 +37,56 @@ jobs:
           fakeroot \
           equivs
         # Install additional tools for testing
-        sudo apt-get install -y \
+        apt-get install -y \
           expect \
           xxd
 
-    # TODO: this step rebuilds the package for the current architecture
-    #       we may be able to remove it if we can ensure the package supports
-    #       the architecture of the runner (most likely amd64)
-    - name: Install custom wolfssl
+    # Avoid "detected dubious ownership" warning
+    - name: Ensure the working directory safe
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+    - name: Checkout wolfProvider
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+    - run: |
+        # Fetch tags
+        git fetch --tags
+        # List all tags
+        git tag -l
+
+    - name: Install wolfssl debian package
       run: |
         mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
         cd "$RUNNER_TEMP/wolfssl-pkg"
-        unzip $GITHUB_WORKSPACE/.github/packages/debian-packages-20250731T171211Z-1-001.zip
+        
+        echo "Using standard wolfSSL package"
+        tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
+
+        # Get current architecture
+        CURRENT_ARCH=$(dpkg --print-architecture)
+        echo "Current architecture: $CURRENT_ARCH"
+        
+        # Look for existing .deb files that match the current architecture
         cd debian-packages
-        sudo dpkg-source -x wolfssl_5.8.2-1.dsc
-        cd wolfssl-5.8.2
-        sudo dpkg-buildpackage -b -us -uc
-        sudo dpkg -i ../libwolfssl*.deb
+        MATCHING_DEB_FILES=$(find . -name "*_${CURRENT_ARCH}.deb" -o -name "*_${CURRENT_ARCH}_*.deb" 2>/dev/null || true)
+        
+        if [ -n "$MATCHING_DEB_FILES" ]; then
+          echo "Found matching .deb files for architecture $CURRENT_ARCH:"
+          echo "$MATCHING_DEB_FILES"
+          echo "Installing existing .deb files..."
+          dpkg -i $MATCHING_DEB_FILES
+        else
+          echo "No matching .deb files found for architecture $CURRENT_ARCH, rebuilding from source..."
+          dpkg-source -x wolfssl*.dsc
+          cd wolfssl*/
+          dpkg-buildpackage -b -us -uc
+          dpkg -i ../libwolfssl*.deb
+        fi
 
     - name: Build Debian package
       run: |
-        # Run the build script
         # Bypass the warning prompt with 'yes Y' 
         yes Y | ./scripts/build-wolfprovider.sh --debian
 
@@ -83,7 +105,7 @@ jobs:
         fi
 
         echo "Installing package: $PACKAGE_FILE and dependencies"
-        sudo apt install -y ./"$PACKAGE_FILE"
+        apt install -y ./"$PACKAGE_FILE"
 
         # Verify installation
         echo "Package Installation Verification:"
@@ -99,7 +121,7 @@ jobs:
         echo "3. Temporarily disabling wolfprovider for default provider tests:"
         mkdir -p /tmp/openssl-test
         if [ -f $PROVIDER_CONF ]; then
-          sudo mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
+          mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
           echo "   - Moved $PROVIDER_CONF to $PROVIDER_CONF_BACKUP"
         else
           echo "$PROVIDER_CONF not found!"
@@ -113,7 +135,7 @@ jobs:
         # Restore wolfprovider configuration
         echo "5. Restoring wolfprovider configuration:"
         if [ -f $PROVIDER_CONF_BACKUP ]; then
-          sudo mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
+          mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
           echo "   - Restored $PROVIDER_CONF from $PROVIDER_CONF_BACKUP"
         fi
 
@@ -122,7 +144,7 @@ jobs:
     - name: Uninstall package and verify cleanup
       run: |
         # Uninstall the package
-        sudo apt-get remove --purge -y libwolfprov
+        apt-get remove --purge -y libwolfprov
 
         # Verify the package is removed
         if dpkg -l | grep -q libwolfprov; then
@@ -182,9 +204,9 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: debian-packages
+        name: wolfprovider-debian-packages
         path: |
           ${{ runner.temp }}/*.deb
           ${{ runner.temp }}/*.dsc
           ${{ runner.temp }}/*.tar.gz
-        retention-days: 7 
+        retention-days: 7

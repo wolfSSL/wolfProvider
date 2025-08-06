@@ -157,7 +157,6 @@ test_sign_verify_pkeyutl() {
     fi
     
     # Test 3: Cross-provider verification (default sign, wolf verify)
-    echo "Current FAIL status: $FAIL"
     if [ $FAIL -eq 0 ]; then # only verify if previous tests passed
         use_wolf_provider
         echo "Test 3: Cross-provider verification (default sign, wolf verify)"

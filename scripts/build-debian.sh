@@ -110,6 +110,7 @@ git archive --format=tar.gz --prefix="${TARBALL_PREFIX}/" \
 
 # Step 10: Build package
 echo "⚙️  Building package..."
-debuild -us -uc
+WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
+debuild --set-envvar WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS} -us -uc
 
 echo "✅ Build completed for version $VERSION"
