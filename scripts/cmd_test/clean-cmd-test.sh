@@ -30,10 +30,8 @@ clean_cmd_test() {
 
 # Function to clean up all command test artifacts
 clean_all_cmd_tests() {
-    rm -rf ./scripts/cmd_test/*.log
-    rm -rf ./aes_outputs
-    rm -rf ./ecc_outputs
-    rm -rf ./hash_outputs
-    rm -rf ./rsa_outputs
-    rm -rf ./test.txt
+    clean_cmd_test "aes"
+    clean_cmd_test "ecc"
+    clean_cmd_test "hash"
+    clean_cmd_test "rsa"
 }
