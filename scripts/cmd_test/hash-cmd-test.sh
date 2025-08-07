@@ -21,11 +21,16 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${SCRIPT_DIR}/clean-cmd-test.sh"
 cmd_test_env_setup "hash-test.log"
+clean_cmd_test "hash"
+
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create test data and output directories
 mkdir -p hash_outputs
-echo "This is test data for hash algorithm testing." > test.txt
+echo "This is test data for hash cmd test." > hash_outputs/test_data.txt
 
 # Array of hash algorithms to test
 HASH_ALGOS=("sha1" "sha224" "sha256" "sha384" "sha512")
@@ -39,7 +44,7 @@ run_hash_test() {
     local output_file="$3"
     
     # Run the hash algorithm with specified provider options
-    if ! $OPENSSL_BIN dgst -$algo $provider_opts -out "$output_file" test.txt; then
+    if ! $OPENSSL_BIN dgst -$algo $provider_opts -out "$output_file" hash_outputs/test_data.txt; then
         echo "[FAIL] Hash generation failed for ${algo}"
         FAIL=1
     fi
