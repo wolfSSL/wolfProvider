@@ -20,8 +20,19 @@ jobs:
       openssl_ref: ${{ matrix.openssl_ref }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'master', 'openssl-3.5.0' ]
+        wolfssl_ref: [ 
+          'master', 
+          'v5.8.2-stable',
+          'v5.8.0-stable']
+        # Test against the newest of each minor version
+        openssl_ref: [
+          'openssl-3.5.2',
+          'openssl-3.4.2',
+          'openssl-3.3.4',
+          'openssl-3.2.5',
+          'openssl-3.1.8',
+          'openssl-3.0.17']
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         debug: ['WOLFPROV_DEBUG=1', '']
 
   simple_test:
@@ -31,9 +42,20 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'master', 'openssl-3.5.0' ]
+        wolfssl_ref: [ 
+          'master', 
+          'v5.8.2-stable', 
+          'v5.8.0-stable']
+        # Test against the newest of each minor version
+        openssl_ref: [
+          'openssl-3.5.2',
+          'openssl-3.4.2',
+          'openssl-3.3.4',
+          'openssl-3.2.5',
+          'openssl-3.1.8',
+          'openssl-3.0.17']
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        debug: ['WOLFPROV_DEBUG=1', '']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -55,16 +77,22 @@ jobs:
             openssl-install/bin
 
           key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          fail-on-cache-miss: true
+          # Normally we would fail on cache miss, but we rebuild below 
+          # for the DEBUG build.
+          fail-on-cache-miss: false
 
-      - name: Build wolfProvider
-        if: ${{ matrix.debug != '' }}
+      - name: Build and test wolfProvider
+        # Only run the test for a cache miss. On hit, we've already run the test.
+        if: steps.wolfprov-cache-restore.cache-hit != 'true'
         run: |
           ${{ matrix.debug }} \
             OPENSSL_TAG=${{ matrix.openssl_ref }} \
             WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
             ./scripts/build-wolfprovider.sh
 
-      - name: Run simple tests
+      - name: Print errors
+        if: ${{ failure() }}
         run: |
-          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi

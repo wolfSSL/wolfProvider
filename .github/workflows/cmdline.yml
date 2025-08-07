@@ -1,0 +1,60 @@
+name: Command Line Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  cmdtest_test:
+    name: Command line test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        openssl_ref: [ 'master', 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        debug: ['WOLFPROV_DEBUG=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checking wolfSSL/wolfProvider in cache
+        # Debug builds are not currently supported by build-wolfprovider.yml
+        # so those are manually built as a separate step.
+        if: ${{ matrix.debug == '' }}
+        uses: actions/cache@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+                    # Normally we would fail on cache miss, but we rebuild below 
+          # for the DEBUG build.
+          fail-on-cache-miss: false
+
+      # If not yet built this version, build it now
+      - name: Build wolfProvider
+        # Only run the test for a cache miss. On hit, we've already run the test.
+        if: steps.wolfprov-cache-restore.cache-hit != 'true'
+        run: |
+          ${{ matrix.debug }} OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Run tests
+        run: |
+          ${{ matrix.force_fail }} ${{ matrix.debug }} ./scripts/cmd_test/do-cmd-tests.sh
