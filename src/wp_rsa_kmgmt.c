@@ -523,7 +523,9 @@ static wp_Rsa* wp_rsa_dup(const wp_Rsa* src, int selection)
 {
     wp_Rsa* dst = NULL;
 
-    if ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0) {
+    if (wolfssl_prov_is_running() &&
+        (selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0) {
+        /* Create a new rsa object. */
         dst = wp_rsa_base_new(src->provCtx, src->type);
     }
     if (dst != NULL) {
@@ -2147,9 +2149,15 @@ static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
     int rc;
     word32 idx = 0;
 
-    rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
-    if (rc != 0) {
+    if (!wolfssl_prov_is_running()) {
         ok = 0;
+    }
+
+    if (ok) {
+        rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
+        if (rc != 0) {
+            ok = 0;
+        }
     }
     if (ok && !wp_rsa_determine_type(rsa, data, len)) {
         ok = 0;
@@ -2185,9 +2193,15 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     int rc;
     word32 idx = 0;
 
-    rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
-    if (rc != 0) {
+    if (!wolfssl_prov_is_running()) {
         ok = 0;
+    }
+
+    if (ok) {
+        rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
+        if (rc != 0) {
+            ok = 0;
+        }
     }
 #if LIBWOLFSSL_VERSION_HEX < 0x05000000 || defined(HAVE_FIPS)
     if (!ok) {
@@ -2269,8 +2283,12 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     char password[1024];
     size_t passwordSz = sizeof(password);
 
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+
     /* Look for the PBKDF2 OID to know we have an encrypted key. */
-    if (!wp_rsa_find_pbkdf2_oid(data, len)) {
+    if (ok && !wp_rsa_find_pbkdf2_oid(data, len)) {
         ok = 0;
     }
     /* Get password for decryption. */
@@ -3098,6 +3116,10 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     int ok = 1;
     int rc;
     BIO *out = wp_corebio_get_bio(ctx->provCtx, cBio);
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
     unsigned char* keyData = NULL;
     size_t keyLen;
     unsigned char* derData = NULL;
@@ -4031,6 +4053,10 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 {
     int ok = 1;
     BIO *out = wp_corebio_get_bio(ctx->provCtx, cBio);
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
     int hasPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
     int hasPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
     char* textData = NULL;
