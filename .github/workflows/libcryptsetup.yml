@@ -87,6 +87,7 @@ jobs:
           ./autogen.sh
           ./configure --enable-static \
             --with-crypto-backend=openssl \
+            --disable-ssh-token \
             --with-openssl-includes=$GITHUB_WORKSPACE/openssl-install/include \
             --with-openssl-libs=$GITHUB_WORKSPACE/openssl-install/lib64
           make -j$(nproc)
