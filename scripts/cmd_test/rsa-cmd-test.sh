@@ -23,11 +23,13 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
 cmd_test_env_setup "rsa-test.log"
+clean_cmd_test "rsa"
 
-# Create test directories
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Create test data and output directories
 mkdir -p rsa_outputs
-
-# Create test data for signing
 echo "This is test data for RSA signing and verification." > rsa_outputs/test_data.txt
 
 # Array of RSA key types, sizes, and providers to test
@@ -150,12 +152,8 @@ test_sign_verify_pkeyutl() {
     local sign_func=$4
     local verify_func=$5
 
-    # Print the provider args
-    if [ "$provider_args" = "-provider default" ]; then
-        provider_name="default"
-    else
-        provider_name="wolfProvider"
-    fi
+    # Get the provider name
+    provider_name=$(get_provider_name "$provider_args")
     
     # Handle different key naming conventions
     local key_prefix="${key_type}"
@@ -240,8 +238,11 @@ generate_and_test_key() {
     local key_size=$2
     local provider_args=$3
     local output_file="rsa_outputs/${key_type}_${key_size}.pem"
+
+    # Get the provider name
+    provider_name=$(get_provider_name "$provider_args")
     
-    echo -e "\n=== Testing ${key_type} Key Generation (${key_size}) with provider default ==="
+    echo -e "\n=== Testing ${key_type} Key Generation (${key_size}) with ${provider_name} ==="
     echo "Generating ${key_type} key (${key_size})..."
     if [ "$key_type" = "RSA-PSS" ]; then
         # For RSA-PSS, specify all parameters
@@ -284,30 +285,29 @@ generate_and_test_key() {
     # Validate key
     validate_key "$key_type" "$key_size" "$output_file" "$provider_args"
 
-    # Try to use the key with provider default
-    echo -e "\n=== Testing ${key_type} Key (${key_size}) with provider default ==="
-    echo "Checking if provider default can use the key..."
+    # Try to use the key with different providers
+    echo -e "\n=== Testing ${key_type} Key (${key_size}) with ${provider_name} ==="
+    echo "Checking if ${provider_name} can use the key..."
     
     # Try to use the key with wolfProvider (just check if it loads)
     if $OPENSSL_BIN pkey -in "$output_file" -check \
         ${provider_args} -passin pass: >/dev/null; then
-        echo "[PASS] provider default can use ${key_type} key (${key_size})"
+        echo "[PASS] ${provider_name} can use ${key_type} key (${key_size})"
         check_force_fail
     else
-        echo "[FAIL] provider default cannot use ${key_type} key (${key_size})"
+        echo "[FAIL] ${provider_name} cannot use ${key_type} key (${key_size})"
         FAIL=1
     fi
 }
 
-# Test key generation for each type, size, and provider
+# Test key generation and sign/verify for each type, size, and provider
 for key_type in "${KEY_TYPES[@]}"; do
     for key_size in "${KEY_SIZES[@]}"; do
-        # Generate with default provider
-        test_provider="-provider default"
-        generate_and_test_key "$key_type" "$key_size" "$test_provider"
-    
-        # Test sign/verify interoperability with appropriate function
         for test_provider in "${PROVIDER_ARGS[@]}"; do
+            # Generate key with current provider
+            generate_and_test_key "$key_type" "$key_size" "$test_provider"
+
+            # Test sign/verify interoperability with appropriate function
             if [ "$key_type" = "RSA-PSS" ]; then
                 test_sign_verify_pkeyutl "$key_type" "$key_size" "$test_provider" sign_rsa_pss verify_rsa_pss
             else

@@ -23,10 +23,14 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
 cmd_test_env_setup "aes-test.log"
+clean_cmd_test "aes"
+
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create test data and output directories
 mkdir -p aes_outputs
-echo "This is test data for AES encryption testing." > test.txt
+echo "This is test data for AES encryption testing." > aes_outputs/test_data.txt
 
 # Arrays for test configurations
 KEY_SIZES=("128" "192" "256")
@@ -64,7 +68,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         
         # Encryption with OpenSSL default provider
         if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider default \
-            -in test.txt -out "$enc_file" -p; then
+            -in aes_outputs/test_data.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt failed"
             FAIL=1
         fi
@@ -77,7 +81,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         fi
         
         if [ $FAIL -eq 0 ]; then
-            if cmp -s "test.txt" "$dec_file"; then
+            if cmp -s "aes_outputs/test_data.txt" "$dec_file"; then
                 echo "[PASS] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
                 check_force_fail
             else
@@ -93,7 +97,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         
         # Encryption with wolfProvider
         if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider-path "$WOLFPROV_PATH" -provider libwolfprov \
-            -in test.txt -out "$enc_file" -p; then
+            -in aes_outputs/test_data.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt failed"
             FAIL=1
         fi
@@ -106,7 +110,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         fi
         
         if [ $FAIL -eq 0 ]; then
-            if cmp -s "test.txt" "$dec_file"; then
+            if cmp -s "aes_outputs/test_data.txt" "$dec_file"; then
                 echo "[PASS] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
                 check_force_fail
             else
