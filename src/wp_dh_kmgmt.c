@@ -807,7 +807,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
         if (p != NULL) {
             if (p->data == NULL) {
-                p->return_size = dh->pubSz;
+                p->return_size = dh->privSz;
             }
             else if (p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
                 if (p->data_size < dh->privSz) {
@@ -826,9 +826,15 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
             }
         }
     }
-    if (ok && (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
-            dh->priv, dh->privSz))) {
-        ok = 0;
+    if (ok) {
+        /* Only call if we haven't already handled OSSL_PKEY_PARAM_PRIV_KEY */
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
+        if (p == NULL || p->data != NULL) {
+            if (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
+                    dh->priv, dh->privSz)) {
+                ok = 0;
+            }
+        }
     }
     if (ok && (!wp_dh_get_params_encoded_public_key(dh, params))) {
         ok = 0;
