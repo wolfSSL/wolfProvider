@@ -21,6 +21,7 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${SCRIPT_DIR}/clean-cmd-test.sh"
 cmd_test_env_setup "aes-test.log"
 
 # Create test data and output directories
