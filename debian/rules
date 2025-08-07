@@ -1,0 +1,46 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with autoreconf
+
+# Multiarch triplet
+DEB_HOST_MULTIARCH := $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+# Destination directory for installation
+DESTDIR=debian/tmp
+
+override_dh_auto_configure:
+	./autogen.sh
+	./configure
+
+override_dh_auto_build:
+	make -j$(shell nproc)
+
+override_dh_auto_install:
+	# Install library
+	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
+	install -m755 ./.libs/libwolfprov.so* \
+		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
+	install -m755 ./.libs/libwolfprov.la* \
+		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
+
+	# Install headers
+	install -d $(DESTDIR)/usr/include/wolfprovider
+	install -m644 ./include/wolfprovider/*.h \
+		$(DESTDIR)/usr/include/wolfprovider/
+
+	# Install provider config file
+	install -d $(DESTDIR)/etc/ssl/openssl.cnf.d
+	install -m644 ./provider.conf \
+		$(DESTDIR)/etc/ssl/openssl.cnf.d/wolfprovider.conf
+
+override_dh_auto_clean:
+	dh_auto_clean
+	./scripts/build-wolfprovider.sh --clean --distclean
+
+override_dh_auto_test:
+	@echo "Skipping dh_auto_test (tests already run during build phase)"
+
+# Avoid warnings of the form package-has-unnecessary-activation-of-ldconfig-trigger
+override_dh_makeshlibs:
+	dh_makeshlibs -n
+
