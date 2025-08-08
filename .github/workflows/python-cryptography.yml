@@ -69,7 +69,8 @@ jobs:
         if: matrix.cryptography_ref == '38.0.4'
         working-directory: cryptography_repo
         run: |
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/python-cryptography/python-cryptography-38.0.4-wolfprov.patch
+         # patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/python-cryptography/python-cryptography-38.0.4-wolfprov.patch
+         # commented out til patch is merged or we decide to use later version
 
       - name: Setup Python environment
         working-directory: cryptography_repo
