@@ -561,5 +561,49 @@ int wolfProv_DisableAlgorithm(const char* algorithm)
     return -1; /* Unknown algorithm */
 }
 
+#else /* !WOLFPROV_DEBUG */
+
+/* Stub implementations when debugging is disabled */
+int wolfProv_EnableComponent(int component)
+{
+    (void)component;
+    return 0; /* No-op when debugging disabled */
+}
+
+int wolfProv_DisableComponent(int component)
+{
+    (void)component;
+    return 0; /* No-op when debugging disabled */
+}
+
+int wolfProv_IsComponentEnabled(int component)
+{
+    (void)component;
+    return 0; /* Always disabled when debugging not compiled in */
+}
+
+int wolfProv_SetVerbosityLevel(int level)
+{
+    (void)level;
+    return 0; /* No-op when debugging disabled */
+}
+
+int wolfProv_GetVerbosityLevel(void)
+{
+    return 0; /* No verbosity when debugging disabled */
+}
+
+int wolfProv_EnableAlgorithm(const char* algorithm)
+{
+    (void)algorithm;
+    return 0; /* No-op when debugging disabled */
+}
+
+int wolfProv_DisableAlgorithm(const char* algorithm)
+{
+    (void)algorithm;
+    return 0; /* No-op when debugging disabled */
+}
+
 #endif /* WOLFPROV_DEBUG */
 

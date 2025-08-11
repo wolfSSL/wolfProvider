@@ -159,28 +159,34 @@ wolfProv_EnableComponent(WP_LOG_COMPONENTS_ALL);
 
 ### Using the Test Program
 ```bash
-# Build the test program
+# Build the test program (requires proper OpenSSL configuration)
 cd /path/to/wolfProvider
 source ./scripts/utils-wolfprovider.sh
 gcc -I. -I./include -L./.libs -o test_logging test_logging.c -lwolfprov -lcrypto -lssl -Wl,-rpath,./.libs
 
-# Run with debugging enabled
+# Run with debugging enabled and proper OpenSSL configuration
 export WOLFPROV_DEBUG=1
 export LD_LIBRARY_PATH=./.libs:$LD_LIBRARY_PATH
+export OPENSSL_CONF=$WOLFPROV_INSTALL_DIR/openssl.cnf
 ./test_logging
 ```
 
-### Using Unit Tests
+### Using Unit Tests (Recommended)
 ```bash
-# Run specific algorithm tests with logging
+# Run specific algorithm tests with logging (easiest method)
+cd /path/to/wolfProvider
 source ./scripts/utils-wolfprovider.sh
 export WOLFPROV_DEBUG=1
 
-# Test HKDF specifically
+# Test HKDF specifically - should show detailed ENTER/LEAVE and debug logs
 ./test/unit.test 16
 
-# Test all algorithms
+# Test all algorithms with logging
 ./test/unit.test
+
+# Note: Enhanced logging output may require specific verbosity settings
+# The unit test framework may suppress detailed logging output
+# For verbose logging, try setting WOLFPROV_LOG_LEVEL environment variable
 ```
 
 ## Environment Variables
