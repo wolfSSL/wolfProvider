@@ -76,7 +76,7 @@ jobs:
           repository: wolfssl/osp
           path: osp
           fetch-depth: 1
-        run: |
+      - run: |
           cd krb5
           # Apply the wolfProvider patch
           patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/krb5/krb5-1.20.1-final-wolfprov.patch
