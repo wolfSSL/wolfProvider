@@ -61,14 +61,7 @@ jobs:
             bison flex libldap2-dev libkeyutils-dev \
             libverto-dev libcom-err2 comerr-dev \
             libss2 ss-dev
-
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/osp
-          path: osp
-          fetch-depth: 1
-
+      
       - name: Checkout KRB5
         uses: actions/checkout@v4
         with:
@@ -77,12 +70,20 @@ jobs:
           ref: ${{ matrix.krb5_ref }}
           fetch-depth: 1
 
-      - name: Build and test KRB5 with wolfProvider
-        working-directory: krb5
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
         run: |
+          cd krb5
           # Apply the wolfProvider patch
           patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/krb5/krb5-1.20.1-final-wolfprov.patch
 
+      - name: Build and test KRB5 with wolfProvider
+        working-directory: krb5
+        run: |
           # Build KRB5
           cd src
           autoreconf -fiv
