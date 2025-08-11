@@ -136,6 +136,47 @@ export LD_LIBRARY_PATH=/usr/local/ssl/lib
 make check
 ```
 
+## Enhanced Logging System
+
+wolfProvider includes a comprehensive logging system for debugging and development. See **[LOGGING.md](LOGGING.md)** for complete documentation.
+
+### Quick Start - Enable Debugging
+
+```bash
+# Enable debugging and run tests
+export WOLFPROV_DEBUG=1
+source ./scripts/utils-wolfprovider.sh
+./test/unit.test 16  # Test HKDF with detailed logging
+```
+
+### Key Features
+
+- **Granular algorithm-specific logging** (HKDF, RSA, AES, ECDSA, etc.)
+- **Multiple verbosity levels** (ERROR, DEBUG, VERBOSE, TRACE, FULL_DEBUG)
+- **Function entry/exit tracking** (ENTER/LEAVE pairs for all functions)
+- **Runtime logging control** without recompilation
+- **Query operation logging** for algorithm fetching
+
+### Example: HKDF-Only Debug Logging
+
+```c
+#include "wolfprovider/wp_logging.h"
+
+// Enable HKDF-only logging with detailed output
+wolfProv_Debugging_ON();
+wolfProv_SetVerbosityLevel(WP_LOG_DEBUG);
+wolfProv_DisableComponent(WP_LOG_COMPONENTS_ALL);
+wolfProv_EnableAlgorithm("HKDF");
+
+// Now only HKDF operations will produce detailed logs:
+// ENTER: wp_kdf_hkdf_derive
+// DEBUG: HKDF derive: keyLen=32, mode=3
+// DEBUG: HKDF derive: keySz=32, saltSz=16, infoSz=16
+// LEAVE: wp_kdf_hkdf_derive (success)
+```
+
+See [LOGGING.md](LOGGING.md) for complete API reference, testing procedures, and troubleshooting guide.
+
 ## Testing
 
 ### Unit Tests
