@@ -1247,6 +1247,9 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 {
     int ok = 1;
 
+    /* Initialize logging from environment variables with string parsing support */
+    wolfProv_InitLoggingFromEnv();
+
 #ifdef WOLFPROV_DEBUG
     ok = (wolfProv_Debugging_ON() == 0);
     if (ok) {

@@ -137,6 +137,175 @@ int wolfProv_SetLogComponents(int componentMask)
 #endif
 }
 
+/**
+ * Parse string-based log level to bitmask value.
+ *
+ * @param levelStr [IN] String representation of log level.
+ * @return Bitmask value for the log level.
+ */
+int wolfProv_ParseLogLevel(const char* levelStr)
+{
+    if (levelStr == NULL) return 0;
+    
+    if (XSTRCMP(levelStr, "error") == 0) return WP_LOG_ERROR;
+    if (XSTRCMP(levelStr, "enter") == 0) return WP_LOG_ENTER;
+    if (XSTRCMP(levelStr, "leave") == 0) return WP_LOG_LEAVE;
+    if (XSTRCMP(levelStr, "info") == 0) return WP_LOG_INFO;
+    if (XSTRCMP(levelStr, "verbose") == 0) return WP_LOG_VERBOSE;
+    if (XSTRCMP(levelStr, "debug") == 0) return WP_LOG_DEBUG;
+    if (XSTRCMP(levelStr, "trace") == 0) return WP_LOG_TRACE;
+    if (XSTRCMP(levelStr, "full") == 0) return WP_LOG_FULL_DEBUG;
+    if (XSTRCMP(levelStr, "full_debug") == 0) return WP_LOG_FULL_DEBUG;
+    if (XSTRCMP(levelStr, "all") == 0) return WP_LOG_LEVEL_ALL;
+    
+    /* Check for combined levels */
+    if (XSTRCMP(levelStr, "enter_leave") == 0) return WP_LOG_ENTER | WP_LOG_LEAVE;
+    if (XSTRCMP(levelStr, "basic") == 0) return WP_LOG_BASIC;
+    if (XSTRCMP(levelStr, "standard") == 0) return WP_LOG_STANDARD;
+    if (XSTRCMP(levelStr, "detailed") == 0) return WP_LOG_DETAILED;
+    
+    /* Try to parse as hex if it starts with 0x */
+    if (XSTRNCMP(levelStr, "0x", 2) == 0) {
+        /* Simple hex parsing - skip 0x and convert manually */
+        const char* hex = levelStr + 2;
+        int result = 0;
+        while (*hex) {
+            if (*hex >= '0' && *hex <= '9') {
+                result = result * 16 + (*hex - '0');
+            } else if (*hex >= 'a' && *hex <= 'f') {
+                result = result * 16 + (*hex - 'a' + 10);
+            } else if (*hex >= 'A' && *hex <= 'F') {
+                result = result * 16 + (*hex - 'A' + 10);
+            } else {
+                break;
+            }
+            hex++;
+        }
+        return result;
+    }
+    
+    return 0; /* Unknown level */
+}
+
+/**
+ * Parse string-based component list to bitmask value.
+ *
+ * @param componentStr [IN] Comma-separated list of component names.
+ * @return Bitmask value for the components.
+ */
+int wolfProv_ParseComponents(const char* componentStr)
+{
+    int components = 0;
+    char* str;
+    char* token;
+    char* saveptr = NULL;
+    
+    if (componentStr == NULL) return 0;
+    
+    /* Handle special cases */
+    if (XSTRCMP(componentStr, "all") == 0) return WP_LOG_COMPONENTS_ALL;
+    if (XSTRCMP(componentStr, "none") == 0) return 0;
+    
+    /* Try to parse as hex if it starts with 0x */
+    if (XSTRNCMP(componentStr, "0x", 2) == 0) {
+        /* Simple hex parsing - skip 0x and convert manually */
+        const char* hex = componentStr + 2;
+        int result = 0;
+        while (*hex) {
+            if (*hex >= '0' && *hex <= '9') {
+                result = result * 16 + (*hex - '0');
+            } else if (*hex >= 'a' && *hex <= 'f') {
+                result = result * 16 + (*hex - 'a' + 10);
+            } else if (*hex >= 'A' && *hex <= 'F') {
+                result = result * 16 + (*hex - 'A' + 10);
+            } else {
+                break;
+            }
+            hex++;
+        }
+        return result;
+    }
+    
+    /* Make a copy for tokenization */
+    size_t len = XSTRLEN(componentStr);
+    str = XMALLOC(len + 1, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (str == NULL) return 0;
+    XMEMCPY(str, componentStr, len + 1);
+    
+    /* Parse comma-separated component names */
+    token = XSTRTOK(str, ",", &saveptr);
+    while (token != NULL) {
+        /* Trim whitespace */
+        while (*token == ' ' || *token == '\t') token++;
+        
+        if (XSTRCMP(token, "rsa") == 0) components |= WP_LOG_RSA;
+        else if (XSTRCMP(token, "ecc") == 0) components |= WP_LOG_ECC;
+        else if (XSTRCMP(token, "ecdsa") == 0) components |= WP_LOG_ECDSA;
+        else if (XSTRCMP(token, "ecdh") == 0) components |= WP_LOG_ECDH;
+        else if (XSTRCMP(token, "dh") == 0) components |= WP_LOG_DH;
+        else if (XSTRCMP(token, "aes") == 0) components |= WP_LOG_AES;
+        else if (XSTRCMP(token, "des") == 0) components |= WP_LOG_DES;
+        else if (XSTRCMP(token, "sha") == 0) components |= WP_LOG_SHA;
+        else if (XSTRCMP(token, "md5") == 0) components |= WP_LOG_MD5;
+        else if (XSTRCMP(token, "hmac") == 0) components |= WP_LOG_HMAC;
+        else if (XSTRCMP(token, "cmac") == 0) components |= WP_LOG_CMAC;
+        else if (XSTRCMP(token, "hkdf") == 0) components |= WP_LOG_HKDF;
+        else if (XSTRCMP(token, "pbkdf2") == 0) components |= WP_LOG_PBKDF2;
+        else if (XSTRCMP(token, "krb5kdf") == 0) components |= WP_LOG_KRB5KDF;
+        else if (XSTRCMP(token, "drbg") == 0) components |= WP_LOG_DRBG;
+        else if (XSTRCMP(token, "x25519") == 0) components |= WP_LOG_X25519;
+        else if (XSTRCMP(token, "x448") == 0) components |= WP_LOG_X448;
+        else if (XSTRCMP(token, "ed25519") == 0) components |= WP_LOG_ED25519;
+        else if (XSTRCMP(token, "ed448") == 0) components |= WP_LOG_ED448;
+        else if (XSTRCMP(token, "query") == 0) components |= WP_LOG_QUERY;
+        else if (XSTRCMP(token, "provider") == 0) components |= WP_LOG_PROVIDER;
+        else if (XSTRCMP(token, "rng") == 0) components |= WP_LOG_RNG;
+        else if (XSTRCMP(token, "digest") == 0) components |= WP_LOG_DIGEST;
+        else if (XSTRCMP(token, "mac") == 0) components |= WP_LOG_MAC;
+        else if (XSTRCMP(token, "cipher") == 0) components |= WP_LOG_CIPHER;
+        else if (XSTRCMP(token, "pk") == 0) components |= WP_LOG_PK;
+        else if (XSTRCMP(token, "ke") == 0) components |= WP_LOG_KE;
+        else if (XSTRCMP(token, "kdf") == 0) components |= WP_LOG_KDF;
+        
+        token = XSTRTOK(NULL, ",", &saveptr);
+    }
+    
+    XFREE(str, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    return components;
+}
+
+/**
+ * Initialize logging from environment variables with string parsing support.
+ */
+void wolfProv_InitLoggingFromEnv(void)
+{
+    const char* debugEnv = XGETENV("WOLFPROV_DEBUG");
+    const char* levelEnv = XGETENV("WOLFPROV_LOG_LEVEL");
+    const char* componentsEnv = XGETENV("WOLFPROV_LOG_COMPONENTS");
+    
+    /* Enable debugging if WOLFPROV_DEBUG is set */
+    if (debugEnv != NULL && XSTRCMP(debugEnv, "1") == 0) {
+        wolfProv_Debugging_ON();
+    }
+    
+    /* Set log level from string or hex */
+    if (levelEnv != NULL) {
+        int level = wolfProv_ParseLogLevel(levelEnv);
+        if (level > 0) {
+            wolfProv_SetLogLevel(level);
+        }
+    }
+    
+    /* Set components from string list or hex */
+    if (componentsEnv != NULL) {
+        int components = wolfProv_ParseComponents(componentsEnv);
+        if (components > 0) {
+            wolfProv_SetLogComponents(components);
+        }
+    }
+}
+
+
 #ifdef WOLFPROV_DEBUG
 
 /**
@@ -564,6 +733,18 @@ int wolfProv_DisableAlgorithm(const char* algorithm)
 #else /* !WOLFPROV_DEBUG */
 
 /* Stub implementations when debugging is disabled */
+int wolfProv_ParseLogLevel(const char* levelStr)
+{
+    (void)levelStr;
+    return 0;
+}
+
+int wolfProv_ParseComponents(const char* componentStr)
+{
+    (void)componentStr;
+    return 0;
+}
+
 int wolfProv_EnableComponent(int component)
 {
     (void)component;
