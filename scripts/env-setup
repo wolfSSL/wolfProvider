@@ -41,8 +41,11 @@ else
     exit 1
 fi
 
+WOLFSSL_LIB_PATH="$REPO_ROOT/wolfssl-install/lib"
+WOLFPROV_LIB_PATH="$REPO_ROOT/wolfprov-install/lib"
+
 # Set variables with default values if not already set
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:=$REPO_ROOT/wolfssl-install/lib:$OPENSSL_LIB_PATH}"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:=$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH}"
 
 # Auto-detect FIPS mode and use appropriate config
 if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
@@ -53,11 +56,11 @@ else
 fi
 export OPENSSL_CONF="${OPENSSL_CONF:=$DEFAULT_PROVIDER_CONF}"
 
-export OPENSSL_MODULES="${OPENSSL_MODULES:=$REPO_ROOT/wolfprov-install/lib}"
+export OPENSSL_MODULES="${OPENSSL_MODULES:=$WOLFPROV_LIB_PATH}"
 export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
 
 # Other variables used by test scripts
-export WOLFPROV_PATH="${REPO_ROOT}/wolfprov-install/lib"
+export WOLFPROV_PATH="${WOLFPROV_LIB_PATH}"
 export WOLFPROV_CONFIG="${DEFAULT_PROVIDER_CONF}"
 export OPENSSL_BIN="${REPO_ROOT}/openssl-install/bin/openssl"
 
