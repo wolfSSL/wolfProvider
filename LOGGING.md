@@ -157,45 +157,113 @@ wolfProv_EnableComponent(WP_LOG_COMPONENTS_ALL);
 
 ## Testing Logging Combinations
 
-### Using the Test Program
+### Method 1: Using Unit Tests (Recommended)
 ```bash
-# Build the test program (requires proper OpenSSL configuration)
+# Run algorithm tests with enhanced logging
 cd /path/to/wolfProvider
 source ./scripts/utils-wolfprovider.sh
-gcc -I. -I./include -L./.libs -o test_logging test_logging.c -lwolfprov -lcrypto -lssl -Wl,-rpath,./.libs
 
-# Run with debugging enabled and proper OpenSSL configuration
+# Enable debugging and set verbosity level
 export WOLFPROV_DEBUG=1
-export LD_LIBRARY_PATH=./.libs:$LD_LIBRARY_PATH
-export OPENSSL_CONF=$WOLFPROV_INSTALL_DIR/openssl.cnf
-./test_logging
-```
+export WOLFPROV_LOG_LEVEL=0x007F  # Enable all log levels
 
-### Using Unit Tests (Recommended)
-```bash
-# Run specific algorithm tests with logging (easiest method)
-cd /path/to/wolfProvider
-source ./scripts/utils-wolfprovider.sh
-export WOLFPROV_DEBUG=1
-
-# Test HKDF specifically - should show detailed ENTER/LEAVE and debug logs
+# Test HKDF specifically
 ./test/unit.test 16
 
-# Test all algorithms with logging
+# Test all algorithms
 ./test/unit.test
 
-# Note: Enhanced logging output may require specific verbosity settings
-# The unit test framework may suppress detailed logging output
-# For verbose logging, try setting WOLFPROV_LOG_LEVEL environment variable
+# Test specific algorithms by number:
+# 1=AES, 2=Digest, 3=HMAC, 4=CMAC, 5=RSA, 6=ECC, 7=DH, 16=HKDF, etc.
+```
+
+### Method 2: Using API Functions in Code
+```c
+#include "wolfprovider/wp_logging.h"
+
+int main() {
+    // Enable debugging
+    wolfProv_Debugging_ON();
+    
+    // Set maximum verbosity
+    wolfProv_SetVerbosityLevel(WP_LOG_FULL_DEBUG);
+    
+    // Enable all components
+    wolfProv_EnableComponent(WP_LOG_COMPONENTS_ALL);
+    
+    // Or enable specific algorithms only
+    wolfProv_DisableComponent(WP_LOG_COMPONENTS_ALL);
+    wolfProv_EnableAlgorithm("HKDF");
+    wolfProv_EnableAlgorithm("RSA");
+    
+    // Your cryptographic operations here...
+    // Should now show detailed logging
+    
+    return 0;
+}
+```
+
+### Method 3: Environment Variable Control
+```bash
+# Set environment variables for logging control
+export WOLFPROV_DEBUG=1                    # Enable debugging
+export WOLFPROV_LOG_LEVEL=0x007F           # All log levels
+export WOLFPROV_LOG_COMPONENTS=0xFFFFFFFF  # All components
+
+# Run your application
+./your_application
+```
+
+### Method 4: Granular Algorithm Testing
+```bash
+# Test specific algorithm combinations
+source ./scripts/utils-wolfprovider.sh
+export WOLFPROV_DEBUG=1
+
+# Test only HKDF operations
+export WOLFPROV_LOG_COMPONENTS=0x20000  # WP_LOG_HKDF only
+./test/unit.test 16
+
+# Test only RSA operations  
+export WOLFPROV_LOG_COMPONENTS=0x100    # WP_LOG_RSA only
+./test/unit.test 5
+
+# Test only AES operations
+export WOLFPROV_LOG_COMPONENTS=0x800    # WP_LOG_AES only
+./test/unit.test 1
 ```
 
 ## Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `WOLFPROV_DEBUG` | Enable/disable wolfProvider debugging | `export WOLFPROV_DEBUG=1` |
-| `LD_LIBRARY_PATH` | Library path for dynamic linking | `export LD_LIBRARY_PATH=./.libs:$LD_LIBRARY_PATH` |
-| `OPENSSL_CONF` | OpenSSL configuration file | `export OPENSSL_CONF=$WOLFPROV_INSTALL_DIR/openssl.cnf` |
+| Variable | Description | Example | Hex Values |
+|----------|-------------|---------|------------|
+| `WOLFPROV_DEBUG` | Enable/disable wolfProvider debugging | `export WOLFPROV_DEBUG=1` | 1=on, 0=off |
+| `WOLFPROV_LOG_LEVEL` | Set verbosity level bitmask | `export WOLFPROV_LOG_LEVEL=0x007F` | See Log Level Values below |
+| `WOLFPROV_LOG_COMPONENTS` | Set component bitmask | `export WOLFPROV_LOG_COMPONENTS=0x20000` | See Component Values below |
+| `LD_LIBRARY_PATH` | Library path for dynamic linking | `export LD_LIBRARY_PATH=./.libs:$LD_LIBRARY_PATH` | Path string |
+| `OPENSSL_CONF` | OpenSSL configuration file | `export OPENSSL_CONF=$WOLFPROV_INSTALL_DIR/openssl.cnf` | Path string |
+
+### Log Level Values (Bitmask)
+| Level | Hex Value | Description |
+|-------|-----------|-------------|
+| WP_LOG_ERROR | 0x0001 | Error messages only |
+| WP_LOG_ENTER | 0x0002 | Function entry logging |
+| WP_LOG_LEAVE | 0x0004 | Function exit logging |
+| WP_LOG_INFO | 0x0008 | Informational messages |
+| WP_LOG_VERBOSE | 0x0010 | Verbose operational details |
+| WP_LOG_DEBUG | 0x0020 | Debug-level information |
+| WP_LOG_TRACE | 0x0040 | Trace-level ultra-detailed info |
+| **All Levels** | **0x007F** | **Enable all logging levels** |
+
+### Component Values (Bitmask)
+| Component | Hex Value | Description |
+|-----------|-----------|-------------|
+| WP_LOG_HKDF | 0x20000 | HKDF operations only |
+| WP_LOG_RSA | 0x100 | RSA operations only |
+| WP_LOG_AES | 0x800 | AES operations only |
+| WP_LOG_ECDSA | 0x200000 | ECDSA operations only |
+| WP_LOG_QUERY | 0x8000000 | Algorithm query operations |
+| **All Components** | **0xFFFFFFFF** | **Enable all algorithm logging** |
 
 ## API Reference
 
@@ -232,28 +300,158 @@ WOLFPROV_MSG_TRACE(category, format, ...);
 ## Troubleshooting
 
 ### No Log Output
-1. Verify `WOLFPROV_DEBUG=1` is set
-2. Check that `wolfProv_Debugging_ON()` is called
-3. Ensure verbosity level is appropriate (`WP_LOG_DEBUG` or higher)
-4. Verify the correct component categories are enabled
+1. **Check Environment Variables:**
+   ```bash
+   echo $WOLFPROV_DEBUG          # Should be 1
+   echo $WOLFPROV_LOG_LEVEL      # Should be 0x007F for full logging
+   echo $WOLFPROV_LOG_COMPONENTS # Should be 0xFFFFFFFF for all components
+   ```
+
+2. **Verify Library Installation:**
+   ```bash
+   source ./scripts/utils-wolfprovider.sh
+   nm -D ./.libs/libwolfprov.so | grep wolfProv  # Should show logging functions
+   ```
+
+3. **Test API Functions:**
+   ```bash
+   gcc -I./include -L./.libs -o test_api verify_logging_docs.c -lwolfprov
+   ./test_api  # Should show "All API Functions Work Correctly"
+   ```
 
 ### Too Much Log Output
-1. Use granular categories to limit output to specific algorithms
-2. Lower the verbosity level (e.g., `WP_LOG_ERROR` only)
-3. Disable unnecessary components with `wolfProv_DisableComponent()`
+1. **Use Granular Component Control:**
+   ```bash
+   # Only HKDF logging
+   export WOLFPROV_LOG_COMPONENTS=0x20000
+   
+   # Only RSA + ECDSA logging  
+   export WOLFPROV_LOG_COMPONENTS=0x200100
+   ```
+
+2. **Reduce Verbosity Level:**
+   ```bash
+   # Errors only
+   export WOLFPROV_LOG_LEVEL=0x0001
+   
+   # ENTER/LEAVE only
+   export WOLFPROV_LOG_LEVEL=0x0006
+   ```
 
 ### Provider Loading Issues
-1. Ensure `LD_LIBRARY_PATH` includes the wolfProvider library path
-2. Check that `OPENSSL_CONF` points to the correct configuration
-3. Verify the provider is properly installed with `make install`
+1. **Environment Setup:**
+   ```bash
+   source ./scripts/utils-wolfprovider.sh  # REQUIRED for proper setup
+   export LD_LIBRARY_PATH=./.libs:$LD_LIBRARY_PATH
+   export OPENSSL_CONF=$WOLFPROV_INSTALL_DIR/openssl.cnf
+   ```
 
-## Examples
+2. **Verify Installation:**
+   ```bash
+   make install
+   ls -la $WOLFPROV_INSTALL_DIR/lib/libwolfprov.so*
+   ```
 
-See `test_logging.c` for complete working examples of:
-- HKDF logging with parameter details
-- Algorithm query logging
-- Granular category control
-- Verbosity level testing
+### Unit Test Framework Considerations
+- The unit test framework may suppress detailed logging output
+- Use environment variables for the most reliable logging control
+- For development debugging, consider adding temporary printf statements
+- The enhanced logging system works but may not always be visible in unit test output
+
+## Complete Working Examples
+
+### Example 1: HKDF-Only Debug Logging
+```bash
+cd /path/to/wolfProvider
+source ./scripts/utils-wolfprovider.sh
+
+# Enable HKDF-only logging with maximum verbosity
+export WOLFPROV_DEBUG=1
+export WOLFPROV_LOG_LEVEL=0x007F        # All log levels
+export WOLFPROV_LOG_COMPONENTS=0x20000  # HKDF only
+
+# Run HKDF test
+./test/unit.test 16
+```
+
+### Example 2: RSA + ECDSA Function Tracking
+```bash
+# Enable ENTER/LEAVE tracking for RSA and ECDSA only
+export WOLFPROV_DEBUG=1
+export WOLFPROV_LOG_LEVEL=0x0006        # ENTER + LEAVE only
+export WOLFPROV_LOG_COMPONENTS=0x200100 # RSA + ECDSA
+
+# Run RSA test
+./test/unit.test 5
+
+# Run ECC test  
+./test/unit.test 6
+```
+
+### Example 3: Query Operation Debugging
+```bash
+# Enable query logging to see algorithm fetching
+export WOLFPROV_DEBUG=1
+export WOLFPROV_LOG_LEVEL=0x007F         # All levels
+export WOLFPROV_LOG_COMPONENTS=0x8000000 # Query operations only
+
+# Run any test to see algorithm queries
+./test/unit.test 1
+```
+
+### Example 4: Comprehensive Debugging
+```bash
+# Enable everything for maximum debugging
+export WOLFPROV_DEBUG=1
+export WOLFPROV_LOG_LEVEL=0x007F      # All log levels
+export WOLFPROV_LOG_COMPONENTS=0xFFFFFFFF # All components
+
+# Run all tests with full logging
+./test/unit.test
+```
+
+### Example 5: API Function Control
+```c
+// File: my_debug_app.c
+#include "wolfprovider/wp_logging.h"
+#include <openssl/evp.h>
+#include <openssl/kdf.h>
+
+int main() {
+    // Enable debugging with API functions
+    wolfProv_Debugging_ON();
+    wolfProv_SetVerbosityLevel(WP_LOG_FULL_DEBUG);
+    
+    // Enable only HKDF logging
+    wolfProv_DisableComponent(WP_LOG_COMPONENTS_ALL);
+    wolfProv_EnableAlgorithm("HKDF");
+    
+    // Load provider and perform HKDF operation
+    OSSL_PROVIDER *prov = OSSL_PROVIDER_load(NULL, "wolfprovider");
+    EVP_KDF *kdf = EVP_KDF_fetch(NULL, "HKDF", "provider=wolfprovider");
+    
+    // Your HKDF operations here - will show detailed logs
+    
+    EVP_KDF_free(kdf);
+    OSSL_PROVIDER_unload(prov);
+    return 0;
+}
+```
+
+### Example 6: Build and Test Custom Application
+```bash
+# Compile custom application with logging
+source ./scripts/utils-wolfprovider.sh
+gcc -I./include -L./.libs -o my_debug_app my_debug_app.c -lwolfprov -lcrypto -lssl -Wl,-rpath,./.libs
+
+# Run with proper environment
+export WOLFPROV_DEBUG=1
+export LD_LIBRARY_PATH=./.libs:$LD_LIBRARY_PATH
+export OPENSSL_CONF=$WOLFPROV_INSTALL_DIR/openssl.cnf
+./my_debug_app
+```
+
+See `verify_logging_docs.c` for a complete working example that tests all API functions.
 
 ## Performance Considerations
 
