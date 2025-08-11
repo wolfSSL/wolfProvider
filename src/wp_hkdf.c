@@ -532,10 +532,12 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     size_t keyLen)
 {
     int ok = 1;
-    size_t idx = 0;
-    int rc;
 
     WOLFPROV_ENTER(WP_LOG_HKDF, "wp_tls13_hkdf_expand");
+    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "TLS1.3 HKDF expand: inKeyLen=%zu, dataLen=%zu, keyLen=%zu", 
+                       inKeyLen, dataLen, keyLen);
+    size_t idx = 0;
+    int rc;
 
     WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "TLS1.3 HKDF expand: inKeyLen=%zu, dataLen=%zu, keyLen=%zu", 
                        inKeyLen, dataLen, keyLen);
@@ -588,6 +590,8 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
 {
     int ok = 1;
     int rc;
+
+    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_tls13_hkdf_extract");
     unsigned char secret[WC_MAX_DIGEST_SIZE];
     unsigned char zeros[WC_MAX_DIGEST_SIZE];
     unsigned char* inKey;

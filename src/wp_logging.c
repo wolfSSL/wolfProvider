@@ -606,6 +606,7 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
     }
 }
 
+
 /**
  * Enable a specific logging component.
  *
@@ -614,7 +615,11 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
  */
 int wolfProv_EnableComponent(int component)
 {
+#ifdef WOLFPROV_DEBUG
     providerLogComponents |= component;
+#else
+    (void)component;
+#endif
     return 0;
 }
 
@@ -626,7 +631,11 @@ int wolfProv_EnableComponent(int component)
  */
 int wolfProv_DisableComponent(int component)
 {
+#ifdef WOLFPROV_DEBUG
     providerLogComponents &= ~component;
+#else
+    (void)component;
+#endif
     return 0;
 }
 
@@ -638,7 +647,12 @@ int wolfProv_DisableComponent(int component)
  */
 int wolfProv_IsComponentEnabled(int component)
 {
+#ifdef WOLFPROV_DEBUG
     return (providerLogComponents & component) != 0;
+#else
+    (void)component;
+    return 0;
+#endif
 }
 
 /**
@@ -649,7 +663,11 @@ int wolfProv_IsComponentEnabled(int component)
  */
 int wolfProv_SetVerbosityLevel(int level)
 {
+#ifdef WOLFPROV_DEBUG
     providerLogLevel = level;
+#else
+    (void)level;
+#endif
     return 0;
 }
 
@@ -660,7 +678,11 @@ int wolfProv_SetVerbosityLevel(int level)
  */
 int wolfProv_GetVerbosityLevel(void)
 {
+#ifdef WOLFPROV_DEBUG
     return providerLogLevel;
+#else
+    return 0;
+#endif
 }
 
 /**
@@ -671,6 +693,7 @@ int wolfProv_GetVerbosityLevel(void)
  */
 int wolfProv_EnableAlgorithm(const char* algorithm)
 {
+#ifdef WOLFPROV_DEBUG
     if (algorithm == NULL) return -1;
     
     if (XSTRCMP(algorithm, "RSA") == 0) return wolfProv_EnableComponent(WP_LOG_RSA);
@@ -694,7 +717,11 @@ int wolfProv_EnableAlgorithm(const char* algorithm)
     if (XSTRCMP(algorithm, "X448") == 0) return wolfProv_EnableComponent(WP_LOG_X448);
     if (XSTRCMP(algorithm, "QUERY") == 0) return wolfProv_EnableComponent(WP_LOG_QUERY);
     
-    return -1; /* Unknown algorithm */
+    return -1;
+#else
+    (void)algorithm;
+    return 0;
+#endif
 }
 
 /**
@@ -705,6 +732,7 @@ int wolfProv_EnableAlgorithm(const char* algorithm)
  */
 int wolfProv_DisableAlgorithm(const char* algorithm)
 {
+#ifdef WOLFPROV_DEBUG
     if (algorithm == NULL) return -1;
     
     if (XSTRCMP(algorithm, "RSA") == 0) return wolfProv_DisableComponent(WP_LOG_RSA);
@@ -728,53 +756,14 @@ int wolfProv_DisableAlgorithm(const char* algorithm)
     if (XSTRCMP(algorithm, "X448") == 0) return wolfProv_DisableComponent(WP_LOG_X448);
     if (XSTRCMP(algorithm, "QUERY") == 0) return wolfProv_DisableComponent(WP_LOG_QUERY);
     
-    return -1; /* Unknown algorithm */
+    return -1;
+#else
+    (void)algorithm;
+    return 0;
+#endif
 }
 
 #else /* !WOLFPROV_DEBUG */
-
-/* Stub implementations when debugging is disabled */
-
-int wolfProv_EnableComponent(int component)
-{
-    (void)component;
-    return 0; /* No-op when debugging disabled */
-}
-
-int wolfProv_DisableComponent(int component)
-{
-    (void)component;
-    return 0; /* No-op when debugging disabled */
-}
-
-int wolfProv_IsComponentEnabled(int component)
-{
-    (void)component;
-    return 0; /* Always disabled when debugging not compiled in */
-}
-
-int wolfProv_SetVerbosityLevel(int level)
-{
-    (void)level;
-    return 0; /* No-op when debugging disabled */
-}
-
-int wolfProv_GetVerbosityLevel(void)
-{
-    return 0; /* No verbosity when debugging disabled */
-}
-
-int wolfProv_EnableAlgorithm(const char* algorithm)
-{
-    (void)algorithm;
-    return 0; /* No-op when debugging disabled */
-}
-
-int wolfProv_DisableAlgorithm(const char* algorithm)
-{
-    (void)algorithm;
-    return 0; /* No-op when debugging disabled */
-}
 
 #endif /* WOLFPROV_DEBUG */
 
