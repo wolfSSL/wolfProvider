@@ -137,6 +137,39 @@ int wolfProv_SetLogComponents(int componentMask)
 #endif
 }
 
+
+/**
+ * Initialize logging from environment variables with string parsing support.
+ */
+void wolfProv_InitLoggingFromEnv(void)
+{
+    const char* debugEnv = XGETENV("WOLFPROV_DEBUG");
+    const char* levelEnv = XGETENV("WOLFPROV_LOG_LEVEL");
+    const char* componentsEnv = XGETENV("WOLFPROV_LOG_COMPONENTS");
+    
+    /* Enable debugging if WOLFPROV_DEBUG is set */
+    if (debugEnv != NULL && XSTRCMP(debugEnv, "1") == 0) {
+        wolfProv_Debugging_ON();
+    }
+    
+    /* Set log level from string or hex */
+    if (levelEnv != NULL) {
+        int level = wolfProv_ParseLogLevel(levelEnv);
+        if (level > 0) {
+            wolfProv_SetLogLevel(level);
+        }
+    }
+    
+    /* Set components from string list or hex */
+    if (componentsEnv != NULL) {
+        int components = wolfProv_ParseComponents(componentsEnv);
+        if (components > 0) {
+            wolfProv_SetLogComponents(components);
+        }
+    }
+}
+
+
 /**
  * Parse string-based log level to bitmask value.
  *
@@ -273,38 +306,6 @@ int wolfProv_ParseComponents(const char* componentStr)
     XFREE(str, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     return components;
 }
-
-/**
- * Initialize logging from environment variables with string parsing support.
- */
-void wolfProv_InitLoggingFromEnv(void)
-{
-    const char* debugEnv = XGETENV("WOLFPROV_DEBUG");
-    const char* levelEnv = XGETENV("WOLFPROV_LOG_LEVEL");
-    const char* componentsEnv = XGETENV("WOLFPROV_LOG_COMPONENTS");
-    
-    /* Enable debugging if WOLFPROV_DEBUG is set */
-    if (debugEnv != NULL && XSTRCMP(debugEnv, "1") == 0) {
-        wolfProv_Debugging_ON();
-    }
-    
-    /* Set log level from string or hex */
-    if (levelEnv != NULL) {
-        int level = wolfProv_ParseLogLevel(levelEnv);
-        if (level > 0) {
-            wolfProv_SetLogLevel(level);
-        }
-    }
-    
-    /* Set components from string list or hex */
-    if (componentsEnv != NULL) {
-        int components = wolfProv_ParseComponents(componentsEnv);
-        if (components > 0) {
-            wolfProv_SetLogComponents(components);
-        }
-    }
-}
-
 
 #ifdef WOLFPROV_DEBUG
 
@@ -733,17 +734,6 @@ int wolfProv_DisableAlgorithm(const char* algorithm)
 #else /* !WOLFPROV_DEBUG */
 
 /* Stub implementations when debugging is disabled */
-int wolfProv_ParseLogLevel(const char* levelStr)
-{
-    (void)levelStr;
-    return 0;
-}
-
-int wolfProv_ParseComponents(const char* componentStr)
-{
-    (void)componentStr;
-    return 0;
-}
 
 int wolfProv_EnableComponent(int component)
 {
