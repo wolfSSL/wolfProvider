@@ -1105,55 +1105,73 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
 {
     const OSSL_ALGORITHM* alg;
 
+    WOLFPROV_ENTER(WP_LOG_QUERY, "wolfprov_query");
+    WOLFPROV_MSG_DEBUG(WP_LOG_QUERY, "Query operation ID: %d", id);
+
     (void)provCtx;
 
     *no_cache = 0;
 
     switch (id) {
         case OSSL_OP_DIGEST:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning digest algorithms");
             alg = wolfprov_digests;
             break;
         case OSSL_OP_CIPHER:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning cipher algorithms");
             alg = wolfprov_ciphers;
             break;
         case OSSL_OP_MAC:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning MAC algorithms");
             alg = wolfprov_macs;
             break;
         case OSSL_OP_KDF:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning KDF algorithms");
             alg = wolfprov_kdfs;
             break;
         case OSSL_OP_RAND:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning random algorithms");
             alg = wolfprov_rands;
             break;
         case OSSL_OP_KEYMGMT:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning key management algorithms");
             alg = wolfprov_keymgmt;
             break;
         case OSSL_OP_KEYEXCH:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning key exchange algorithms");
             alg = wolfprov_keyexch;
             break;
         case OSSL_OP_SIGNATURE:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning signature algorithms");
             alg = wolfprov_signature;
             break;
         case OSSL_OP_ASYM_CIPHER:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning asymmetric cipher algorithms");
             alg = wolfprov_asym_cipher;
             break;
         case OSSL_OP_KEM:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning KEM algorithms");
             alg = wolfprov_asym_kem;
             break;
         case OSSL_OP_ENCODER:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning encoder algorithms");
             alg = wolfprov_encoder;
             break;
         case OSSL_OP_DECODER:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning decoder algorithms");
             alg = wolfprov_decoder;
             break;
         case OSSL_OP_STORE:
+            WOLFPROV_MSG_TRACE(WP_LOG_QUERY, "Returning store algorithms");
             alg = wolfprov_store;
             break;
         default:
+            WOLFPROV_MSG_DEBUG(WP_LOG_QUERY, "Unsupported operation ID: %d", id);
             alg = NULL;
             break;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_QUERY, "wolfprov_query", (alg != NULL) ? 1 : 0);
     return alg;
 }
 

@@ -189,7 +189,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -223,7 +223,7 @@ static int wp_rsa_setup_mgf1_md(wp_RsaSigCtx* ctx, const char* mdName,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -436,7 +436,7 @@ static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx* ctx)
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -522,7 +522,7 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -547,7 +547,7 @@ static int wp_rsa_sign_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
         ok = wp_rsa_signverify_init(ctx, rsa, params, EVP_PKEY_OP_SIGN);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -632,7 +632,7 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
 
     OPENSSL_free(encodedDigest);
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -686,7 +686,7 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -707,14 +707,14 @@ static int wp_add_x931_padding(unsigned char* to, size_t toLen,
     int padBytes;
 
     if (to == NULL || from == NULL) {
-        WOLFPROV_ERROR_MSG(WP_LOG_PK, "Bad argument.");
+        WOLFPROV_ERROR_MSG(WP_LOG_RSA, "Bad argument.");
         ok = 0;
     }
     else {
         /* Need at least two bytes for trailer and header. */
         padBytes = (int)(toLen - fromLen - 2);
         if (padBytes < 0) {
-            WOLFPROV_ERROR_MSG(WP_LOG_PK, "Output buffer too small.");
+            WOLFPROV_ERROR_MSG(WP_LOG_RSA, "Output buffer too small.");
             ok = 0;
         }
     }
@@ -735,7 +735,7 @@ static int wp_add_x931_padding(unsigned char* to, size_t toLen,
         to[toLen - 1] = 0xCC;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
 
     return ok;
 }
@@ -781,7 +781,7 @@ static int wp_rsa_sign_no_pad(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -914,7 +914,7 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
     mp_free(&toMp);
     mp_free(&nMinusTo);
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -938,7 +938,7 @@ static int wp_rsa_sign(wp_RsaSigCtx* ctx, unsigned char* sig, size_t* sigLen,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_PK, __FUNCTION__);
+    WOLFPROV_ENTER(WP_LOG_RSA, __FUNCTION__);
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -970,7 +970,7 @@ static int wp_rsa_sign(wp_RsaSigCtx* ctx, unsigned char* sig, size_t* sigLen,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -995,7 +995,7 @@ static int wp_rsa_verify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
         ok = wp_rsa_signverify_init(ctx, rsa, params, EVP_PKEY_OP_VERIFY);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1056,7 +1056,7 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx* ctx, const unsigned char* sig,
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1123,7 +1123,7 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1157,7 +1157,7 @@ static int wp_rsa_verify_no_pad(wp_RsaSigCtx* ctx, const unsigned char* sig,
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1220,7 +1220,7 @@ static int wp_remove_x931_padding(unsigned char** to, const unsigned char* from,
         ret = (int)numCopy;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ret);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ret);
     return ret;
 }
 
@@ -1317,7 +1317,7 @@ static int wp_rsa_verify_x931(wp_RsaSigCtx* ctx, const unsigned char* sig,
         OPENSSL_free(unpadded);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1337,7 +1337,7 @@ static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_PK, __FUNCTION__);
+    WOLFPROV_ENTER(WP_LOG_RSA, __FUNCTION__);
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -1375,7 +1375,7 @@ static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
         OPENSSL_free(decryptedSig);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1401,7 +1401,7 @@ static int wp_rsa_verify_recover_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
             EVP_PKEY_OP_VERIFYRECOVER);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1428,7 +1428,7 @@ static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, unsigned char* rout,
 
     /* Only PKCS1 supported for now */
     if (ok && (ctx->padMode != RSA_PKCS1_PADDING)) {
-        WOLFPROV_ERROR_MSG(WP_LOG_PK, "Only PKCS1 padding supported"
+        WOLFPROV_ERROR_MSG(WP_LOG_RSA, "Only PKCS1 padding supported"
                                       " for verify recover");
         ok = 0;
     }
@@ -1469,7 +1469,7 @@ static int wp_rsa_digest_signverify_init(wp_RsaSigCtx* ctx, const char* mdName,
         ok = wp_rsa_setup_md(ctx, mdName, ctx->propQuery, op);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1496,7 +1496,7 @@ static int wp_rsa_digest_signverify_update(wp_RsaSigCtx* ctx,
     if (rc != 0) {
         ok = 0;
     }
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1523,7 +1523,7 @@ static int wp_rsa_digest_sign_init(wp_RsaSigCtx* ctx, const char* mdName,
             EVP_PKEY_OP_SIGN);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1573,7 +1573,7 @@ static int wp_rsa_digest_sign_final(wp_RsaSigCtx* ctx, unsigned char* sig,
             ));
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1600,7 +1600,7 @@ static int wp_rsa_digest_verify_init(wp_RsaSigCtx* ctx, const char* mdName,
             EVP_PKEY_OP_VERIFY);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1646,7 +1646,7 @@ static int wp_rsa_digest_verify_final(wp_RsaSigCtx* ctx, unsigned char* sig,
             ));
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1675,7 +1675,7 @@ static int wp_rsa_pss_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
         ok = OSSL_PARAM_set_octet_string(p, pssAlgId, len);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1723,7 +1723,7 @@ static int wp_rsa_get_alg_id(wp_RsaSigCtx* ctx, OSSL_PARAM* p)
     }
     /* TODO: support more digests */
     else {
-        WOLFPROV_MSG(WP_LOG_PK, "Digest not supported: %s\n", ctx->mdName);
+        WOLFPROV_MSG(WP_LOG_RSA, "Digest not supported: %s\n", ctx->mdName);
     }
 
     return ok;
@@ -1762,7 +1762,7 @@ static int wp_rsa_get_pad_mode(int padMode, OSSL_PARAM* p)
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1821,7 +1821,7 @@ static int wp_rsa_get_salt_len(int saltLen, OSSL_PARAM* p)
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1877,7 +1877,7 @@ static int wp_rsa_get_ctx_params(wp_RsaSigCtx* ctx, OSSL_PARAM* params)
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -1937,7 +1937,7 @@ static int wp_rsa_set_digest(wp_RsaSigCtx* ctx, const OSSL_PARAM* p,
         ok = wp_rsa_setup_md(ctx, mdName, pmdProps, ctx->op);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -2008,7 +2008,7 @@ static int wp_rsa_set_pad_mode(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
         ctx->padMode = padMode;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -2064,7 +2064,7 @@ static int wp_rsa_set_salt_len(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -2100,7 +2100,7 @@ static int wp_rsa_set_mgf1_digest(wp_RsaSigCtx* ctx, const OSSL_PARAM* p,
         ok = wp_rsa_setup_mgf1_md(ctx, mgfMdName, pmgfMdProps);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -2163,7 +2163,7 @@ static int wp_rsa_set_ctx_params(wp_RsaSigCtx* ctx, const OSSL_PARAM params[])
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

@@ -168,7 +168,7 @@ static int wp_pbkdf2_base_set_ctx_params(wp_Pbkdf2Ctx* ctx,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_PBKDF2, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -194,7 +194,7 @@ static int wp_kdf_pbkdf2_get_ctx_params(wp_Pbkdf2Ctx* ctx, OSSL_PARAM params[])
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_PBKDF2, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -270,7 +270,7 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_PBKDF2, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -292,7 +292,7 @@ static int wp_kdf_pbkdf2_set_ctx_params(wp_Pbkdf2Ctx* ctx,
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_PBKDF2, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -382,7 +382,7 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_PBKDF2, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -405,7 +405,7 @@ static int wp_kdf_pkcs12_set_ctx_params(wp_Pbkdf2Ctx* ctx,
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_PBKDF2, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

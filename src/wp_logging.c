@@ -226,6 +226,38 @@ void WOLFPROV_MSG_VERBOSE(int component, const char* fmt, ...)
 }
 
 /**
+ * Log function for debug messages, prints to WP_LOG_DEBUG level.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param fmt   [IN] Log message format string.
+ * @param vargs [IN] Variable arguments, used with format string, fmt.
+ */
+WP_PRINTF_FUNC(2, 3)
+void WOLFPROV_MSG_DEBUG(int component, const char* fmt, ...)
+{
+    va_list vlist;
+    va_start(vlist, fmt);
+    wolfprovider_msg_internal(component, WP_LOG_DEBUG, fmt, vlist);
+    va_end(vlist);
+}
+
+/**
+ * Log function for trace messages, prints to WP_LOG_TRACE level.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param fmt   [IN] Log message format string.
+ * @param vargs [IN] Variable arguments, used with format string, fmt.
+ */
+WP_PRINTF_FUNC(2, 3)
+void WOLFPROV_MSG_TRACE(int component, const char* fmt, ...)
+{
+    va_list vlist;
+    va_start(vlist, fmt);
+    wolfprovider_msg_internal(component, WP_LOG_TRACE, fmt, vlist);
+    va_end(vlist);
+}
+
+/**
  * Log function used to record function entry.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
@@ -402,6 +434,131 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
         buffer += WOLFPROV_LINE_LEN;
         buflen -= WOLFPROV_LINE_LEN;
     }
+}
+
+/**
+ * Enable a specific logging component.
+ *
+ * @param component [IN] Component to enable from wolfProv_LogComponents enum.
+ * @return 0 on success, NOT_COMPILED_IN if debugging has not been enabled.
+ */
+int wolfProv_EnableComponent(int component)
+{
+    providerLogComponents |= component;
+    return 0;
+}
+
+/**
+ * Disable a specific logging component.
+ *
+ * @param component [IN] Component to disable from wolfProv_LogComponents enum.
+ * @return 0 on success, NOT_COMPILED_IN if debugging has not been enabled.
+ */
+int wolfProv_DisableComponent(int component)
+{
+    providerLogComponents &= ~component;
+    return 0;
+}
+
+/**
+ * Check if a specific logging component is enabled.
+ *
+ * @param component [IN] Component to check from wolfProv_LogComponents enum.
+ * @return 1 if enabled, 0 if disabled or not compiled in.
+ */
+int wolfProv_IsComponentEnabled(int component)
+{
+    return (providerLogComponents & component) != 0;
+}
+
+/**
+ * Set verbosity level using convenience constants.
+ *
+ * @param level [IN] Verbosity level from wolfProv_LogType convenience constants.
+ * @return 0 on success, NOT_COMPILED_IN if debugging has not been enabled.
+ */
+int wolfProv_SetVerbosityLevel(int level)
+{
+    providerLogLevel = level;
+    return 0;
+}
+
+/**
+ * Get current verbosity level.
+ *
+ * @return Current verbosity level, 0 if not compiled in.
+ */
+int wolfProv_GetVerbosityLevel(void)
+{
+    return providerLogLevel;
+}
+
+/**
+ * Enable logging for a specific algorithm by name.
+ *
+ * @param algorithm [IN] Algorithm name string (e.g., "RSA", "AES", "SHA").
+ * @return 0 on success, -1 if unknown algorithm, NOT_COMPILED_IN if debugging not enabled.
+ */
+int wolfProv_EnableAlgorithm(const char* algorithm)
+{
+    if (algorithm == NULL) return -1;
+    
+    if (XSTRCMP(algorithm, "RSA") == 0) return wolfProv_EnableComponent(WP_LOG_RSA);
+    if (XSTRCMP(algorithm, "ECC") == 0) return wolfProv_EnableComponent(WP_LOG_ECC);
+    if (XSTRCMP(algorithm, "DH") == 0) return wolfProv_EnableComponent(WP_LOG_DH);
+    if (XSTRCMP(algorithm, "AES") == 0) return wolfProv_EnableComponent(WP_LOG_AES);
+    if (XSTRCMP(algorithm, "DES") == 0) return wolfProv_EnableComponent(WP_LOG_DES);
+    if (XSTRCMP(algorithm, "SHA") == 0) return wolfProv_EnableComponent(WP_LOG_SHA);
+    if (XSTRCMP(algorithm, "MD5") == 0) return wolfProv_EnableComponent(WP_LOG_MD5);
+    if (XSTRCMP(algorithm, "HMAC") == 0) return wolfProv_EnableComponent(WP_LOG_HMAC);
+    if (XSTRCMP(algorithm, "CMAC") == 0) return wolfProv_EnableComponent(WP_LOG_CMAC);
+    if (XSTRCMP(algorithm, "HKDF") == 0) return wolfProv_EnableComponent(WP_LOG_HKDF);
+    if (XSTRCMP(algorithm, "PBKDF2") == 0) return wolfProv_EnableComponent(WP_LOG_PBKDF2);
+    if (XSTRCMP(algorithm, "KRB5KDF") == 0) return wolfProv_EnableComponent(WP_LOG_KRB5KDF);
+    if (XSTRCMP(algorithm, "DRBG") == 0) return wolfProv_EnableComponent(WP_LOG_DRBG);
+    if (XSTRCMP(algorithm, "ECDSA") == 0) return wolfProv_EnableComponent(WP_LOG_ECDSA);
+    if (XSTRCMP(algorithm, "ECDH") == 0) return wolfProv_EnableComponent(WP_LOG_ECDH);
+    if (XSTRCMP(algorithm, "ED25519") == 0) return wolfProv_EnableComponent(WP_LOG_ED25519);
+    if (XSTRCMP(algorithm, "ED448") == 0) return wolfProv_EnableComponent(WP_LOG_ED448);
+    if (XSTRCMP(algorithm, "X25519") == 0) return wolfProv_EnableComponent(WP_LOG_X25519);
+    if (XSTRCMP(algorithm, "X448") == 0) return wolfProv_EnableComponent(WP_LOG_X448);
+    if (XSTRCMP(algorithm, "QUERY") == 0) return wolfProv_EnableComponent(WP_LOG_QUERY);
+    
+    return -1; /* Unknown algorithm */
+}
+
+/**
+ * Disable logging for a specific algorithm by name.
+ *
+ * @param algorithm [IN] Algorithm name string (e.g., "RSA", "AES", "SHA").
+ * @return 0 on success, -1 if unknown algorithm, NOT_COMPILED_IN if debugging not enabled.
+ */
+int wolfProv_DisableAlgorithm(const char* algorithm)
+{
+    if (algorithm == NULL) return -1;
+    
+    if (XSTRCMP(algorithm, "RSA") == 0) return wolfProv_DisableComponent(WP_LOG_RSA);
+    if (XSTRCMP(algorithm, "ECC") == 0) return wolfProv_DisableComponent(WP_LOG_ECC);
+    if (XSTRCMP(algorithm, "DH") == 0) return wolfProv_DisableComponent(WP_LOG_DH);
+    if (XSTRCMP(algorithm, "AES") == 0) return wolfProv_DisableComponent(WP_LOG_AES);
+    if (XSTRCMP(algorithm, "DES") == 0) return wolfProv_DisableComponent(WP_LOG_DES);
+    if (XSTRCMP(algorithm, "SHA") == 0) return wolfProv_DisableComponent(WP_LOG_SHA);
+    if (XSTRCMP(algorithm, "MD5") == 0) return wolfProv_DisableComponent(WP_LOG_MD5);
+    if (XSTRCMP(algorithm, "HMAC") == 0) return wolfProv_DisableComponent(WP_LOG_HMAC);
+    if (XSTRCMP(algorithm, "CMAC") == 0) return wolfProv_DisableComponent(WP_LOG_CMAC);
+    if (XSTRCMP(algorithm, "HKDF") == 0) return wolfProv_DisableComponent(WP_LOG_HKDF);
+    if (XSTRCMP(algorithm, "PBKDF2") == 0) return wolfProv_DisableComponent(WP_LOG_PBKDF2);
+    if (XSTRCMP(algorithm, "KRB5KDF") == 0) return wolfProv_DisableComponent(WP_LOG_KRB5KDF);
+    if (XSTRCMP(algorithm, "DRBG") == 0) return wolfProv_DisableComponent(WP_LOG_DRBG);
+    if (XSTRCMP(algorithm, "ECDSA") == 0) return wolfProv_DisableComponent(WP_LOG_ECDSA);
+    if (XSTRCMP(algorithm, "ECDH") == 0) return wolfProv_DisableComponent(WP_LOG_ECDH);
+    if (XSTRCMP(algorithm, "ED25519") == 0) return wolfProv_DisableComponent(WP_LOG_ED25519);
+    if (XSTRCMP(algorithm, "ED448") == 0) return wolfProv_DisableComponent(WP_LOG_ED448);
+    if (XSTRCMP(algorithm, "X25519") == 0) return wolfProv_DisableComponent(WP_LOG_X25519);
+    if (XSTRCMP(algorithm, "X448") == 0) return wolfProv_DisableComponent(WP_LOG_X448);
+    if (XSTRCMP(algorithm, "QUERY") == 0) return wolfProv_DisableComponent(WP_LOG_QUERY);
+    
+    return -1; /* Unknown algorithm */
 }
 
 #endif /* WOLFPROV_DEBUG */

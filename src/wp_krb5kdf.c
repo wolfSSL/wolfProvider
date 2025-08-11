@@ -437,6 +437,8 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
     size_t keyLen, const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_KRB5KDF, "wp_kdf_krb5kdf_derive");
     size_t osize = 0;
     size_t cipherLen = 0;
     int rc;
@@ -507,6 +509,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
 
     wc_AesFree(&aes);
 
+    WOLFPROV_LEAVE(WP_LOG_KRB5KDF, "wp_kdf_krb5kdf_derive", ok);
     return ok;
 }
 
