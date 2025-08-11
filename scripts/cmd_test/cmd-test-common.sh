@@ -81,3 +81,13 @@ check_force_fail() {
         FORCE_FAIL_PASSED=1
     fi
 }
+
+# Helper function to get provider name from provider arguments
+get_provider_name() {
+    local provider_args=$1
+    if [ "$provider_args" = "-provider default" ]; then
+        echo "default"
+    else
+        echo "libwolfprov"
+    fi
+}

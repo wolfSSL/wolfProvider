@@ -345,11 +345,13 @@ void wp_ecx_free(wp_Ecx* ecx)
  */
 static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
 {
-    wp_Ecx* dst;
+    wp_Ecx* dst = NULL;
 
     (void)selection;
-
-    dst = wp_ecx_new(src->provCtx, src->data);
+    if (wolfssl_prov_is_running()) {
+        /* Create a new ecx object. */
+        dst = wp_ecx_new(src->provCtx, src->data);
+    }
     if (dst != NULL) {
         XMEMCPY(&dst->key, &src->key, sizeof(src->key));
         dst->includePublic = src->includePublic;
@@ -1073,10 +1075,16 @@ static int wp_ecx_export(wp_Ecx* ecx, int selection, OSSL_CALLBACK* paramCb,
     size_t len = 0;
     int expPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
 
-    XMEMSET(params, 0, sizeof(params));
-    data = OPENSSL_malloc(wp_ecx_export_keypair_alloc_size(ecx, expPriv));
-    if (data == NULL) {
+    if (!wolfssl_prov_is_running()) {
         ok = 0;
+    }
+
+    if (ok) {
+        XMEMSET(params, 0, sizeof(params));
+        data = OPENSSL_malloc(wp_ecx_export_keypair_alloc_size(ecx, expPriv));
+        if (data == NULL) {
+            ok = 0;
+        }
     }
     if (ok && !wp_ecx_export_keypair(ecx, params, &paramsSz, data, &len,
             expPriv)) {
@@ -1925,46 +1933,52 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     unsigned char* data = NULL;
     word32 len = 0;
     word32 idx = 0;
-    wp_Ecx* ecx;
+    wp_Ecx* ecx = NULL;
     const char* dataType = NULL;
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
 
     (void)pwCb;
     (void)pwCbArg;
 
-    ctx->selection = selection;
+    if (ok) {
+        ctx->selection = selection;
 #ifdef WP_HAVE_X25519
-    if (ctx->keyType == WP_KEY_TYPE_X25519) {
-        ecx = wp_x25519_new(ctx->provCtx);
-        dataType = "X25519";
-    }
-    else
+        if (ctx->keyType == WP_KEY_TYPE_X25519) {
+            ecx = wp_x25519_new(ctx->provCtx);
+            dataType = "X25519";
+        }
+        else
 #endif /* WP_HAVE_X25519 */
 #ifdef WP_HAVE_ED25519
-    if (ctx->keyType == WP_KEY_TYPE_ED25519) {
-        ecx = wp_ed25519_new(ctx->provCtx);
-        dataType = "ED25519";
-    }
-    else
+        if (ctx->keyType == WP_KEY_TYPE_ED25519) {
+            ecx = wp_ed25519_new(ctx->provCtx);
+            dataType = "ED25519";
+        }
+        else
 #endif /* WP_HAVE_ED25519 */
 #ifdef WP_HAVE_X448
-    if (ctx->keyType == WP_KEY_TYPE_X448) {
-        ecx = wp_x448_new(ctx->provCtx);
-        dataType = "X448";
-    }
-    else
+        if (ctx->keyType == WP_KEY_TYPE_X448) {
+            ecx = wp_x448_new(ctx->provCtx);
+            dataType = "X448";
+        }
+        else
 #endif /* WP_HAVE_X448 */
 #ifdef WP_HAVE_ED448
-    if (ctx->keyType == WP_KEY_TYPE_ED448) {
-        ecx = wp_ed448_new(ctx->provCtx);
-        dataType = "ED448";
-    }
-    else
+        if (ctx->keyType == WP_KEY_TYPE_ED448) {
+            ecx = wp_ed448_new(ctx->provCtx);
+            dataType = "ED448";
+        }
+        else
 #endif /* WP_HAVE_ED448 */
-    {
-        ecx = NULL;
-    }
-    if (ecx == NULL) {
-        ok = 0;
+        {
+            ecx = NULL;
+        }
+        if (ecx == NULL) {
+            ok = 0;
+        }
     }
 
     if (ok) {
@@ -2021,6 +2035,10 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     int ok = 1;
     int rc;
     BIO* out = wp_corebio_get_bio(ctx->provCtx, cBio);
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
     unsigned char* keyData = NULL;
     size_t keyLen = 0;
     unsigned char derData[160];

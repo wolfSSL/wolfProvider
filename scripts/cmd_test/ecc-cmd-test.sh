@@ -21,12 +21,15 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${SCRIPT_DIR}/clean-cmd-test.sh"
 cmd_test_env_setup "ecc-test.log"
+clean_cmd_test "ecc"
 
-# Create test directories
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Create test data and output directories
 mkdir -p ecc_outputs
-
-# Create test data for signing
 echo "This is test data for ECC signing and verification." > ecc_outputs/test_data.txt
 
 # Array of ECC curves and providers to test
@@ -106,12 +109,8 @@ test_sign_verify_pkeyutl() {
     local curve=$1
     local provider_args=$2
     
-    # Print the provider args
-    if [ "$provider_args" = "-provider default" ]; then
-        provider_name="default"
-    else
-        provider_name="wolfProvider"
-    fi
+    # Get the provider name
+    provider_name=$(get_provider_name "$provider_args")
     
     local key_file="ecc_outputs/ecc_${curve}.pem"
     local pub_key_file="ecc_outputs/ecc_${curve}_pub.pem"
@@ -189,8 +188,11 @@ generate_and_test_key() {
     local curve=$1
     local provider_args=$2
     local output_file="ecc_outputs/ecc_${curve}.pem"
+
+    # Get the provider name
+    provider_name=$(get_provider_name "$provider_args")
     
-    echo -e "\n=== Testing ECC Key Generation (${curve}) with provider default ==="
+    echo -e "\n=== Testing ECC Key Generation (${curve}) with ${provider_name} ==="
     echo "Generating ECC key (${curve})..."
     
     if $OPENSSL_BIN genpkey -algorithm EC \
@@ -216,29 +218,28 @@ generate_and_test_key() {
     # Validate key
     validate_key "$curve" "$output_file" "$provider_args"
 
-    # Try to use the key with provider default
-    echo -e "\n=== Testing ECC Key (${curve}) with provider default ==="
-    echo "Checking if provider default can use the key..."
+    # Try to use the key with different providers
+    echo -e "\n=== Testing ECC Key (${curve}) with ${provider_name} ==="
+    echo "Checking if ${provider_name} can use the key..."
     
     # Try to use the key with wolfProvider (just check if it loads)
     if $OPENSSL_BIN pkey -in "$output_file" -check \
         ${provider_args} -passin pass: >/dev/null; then
-        echo "[PASS] provider default can use ECC key (${curve})"
+        echo "[PASS] ${provider_name} can use ECC key (${curve})"
         check_force_fail
     else
-        echo "[FAIL] provider default cannot use ECC key (${curve})"
+        echo "[FAIL] ${provider_name} cannot use ECC key (${curve})"
         FAIL=1
     fi
 }
 
 # Test key generation for each curve and provider
 for curve in "${CURVES[@]}"; do
-    # Generate with default provider
-    test_provider="-provider default"
-    generate_and_test_key "$curve" "$test_provider"
-
-    # Test sign/verify interoperability with appropriate function
     for test_provider in "${PROVIDER_ARGS[@]}"; do
+        # Generate key with current provider
+        generate_and_test_key "$curve" "$test_provider"
+
+        # Test sign/verify interoperability
         test_sign_verify_pkeyutl "$curve" "$test_provider"
     done
 done

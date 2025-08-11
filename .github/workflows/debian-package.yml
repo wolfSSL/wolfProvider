@@ -1,0 +1,190 @@
+name: Debian Package Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+
+jobs:
+  test-debian-package:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout wolfProvider
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+    - run: |
+        # Fetch tags
+        git fetch --tags
+        # List all tags
+        git tag -l
+
+    - name: Set up environment
+      run: |
+        # Update package lists
+        sudo apt-get update
+        # Install build dependencies
+        sudo apt-get install -y \
+          build-essential \
+          devscripts \
+          debhelper \
+          dh-autoreconf \
+          libtool \
+          pkg-config \
+          git \
+          wget \
+          curl \
+          ca-certificates \
+          openssl \
+          dpkg-dev \
+          lintian \
+          fakeroot \
+          equivs
+        # Install additional tools for testing
+        sudo apt-get install -y \
+          expect \
+          xxd
+
+    # TODO: this step rebuilds the package for the current architecture
+    #       we may be able to remove it if we can ensure the package supports
+    #       the architecture of the runner (most likely amd64)
+    - name: Install custom wolfssl
+      run: |
+        mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
+        cd "$RUNNER_TEMP/wolfssl-pkg"
+        unzip $GITHUB_WORKSPACE/.github/packages/debian-packages-20250731T171211Z-1-001.zip
+        cd debian-packages
+        sudo dpkg-source -x wolfssl_5.8.2-1.dsc
+        cd wolfssl-5.8.2
+        sudo dpkg-buildpackage -b -us -uc
+        sudo dpkg -i ../libwolfssl*.deb
+
+    - name: Build Debian package
+      run: |
+        # Run the build script
+        # Bypass the warning prompt with 'yes Y' 
+        yes Y | ./scripts/build-wolfprovider.sh --debian
+
+        # List generated packages
+        echo "Generated Packages:"
+        ls -la ../*.deb ../*.dsc ../*.tar.gz || true
+
+    - name: Install package
+      run: |
+        # Find the package file
+        PACKAGE_FILE=$(find ../ -name "libwolfprov_*.deb" | head -n1)
+        if [ -z "$PACKAGE_FILE" ]; then
+          echo "No package file found!"
+          ls -la ../
+          exit 1
+        fi
+
+        echo "Installing package: $PACKAGE_FILE and dependencies"
+        sudo apt install -y ./"$PACKAGE_FILE"
+
+        # Verify installation
+        echo "Package Installation Verification:"
+        dpkg -l | grep libwolfprov
+        dpkg -L libwolfprov
+
+    - name: Test OpenSSL provider functionality
+      run: |
+        PROVIDER_CONF="/etc/ssl/openssl.cnf.d/wolfprovider.conf"
+        PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
+
+        # Temporarily move wolfprovider config so we can toggle between providers
+        echo "3. Temporarily disabling wolfprovider for default provider tests:"
+        mkdir -p /tmp/openssl-test
+        if [ -f $PROVIDER_CONF ]; then
+          sudo mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
+          echo "   - Moved $PROVIDER_CONF to $PROVIDER_CONF_BACKUP"
+        else
+          echo "$PROVIDER_CONF not found!"
+          exit 1
+        fi
+
+        # Run the do-cmd-test.sh script to execute interoperability tests
+        echo "Running OpenSSL provider interoperability tests..."
+        OPENSSL_BIN=$(eval which openssl) ./scripts/cmd_test/do-cmd-tests.sh
+
+        # Restore wolfprovider configuration
+        echo "5. Restoring wolfprovider configuration:"
+        if [ -f $PROVIDER_CONF_BACKUP ]; then
+          sudo mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
+          echo "   - Restored $PROVIDER_CONF from $PROVIDER_CONF_BACKUP"
+        fi
+
+        echo "PASS: All provider interoperability tests successful"
+
+    - name: Uninstall package and verify cleanup
+      run: |
+        # Uninstall the package
+        sudo apt-get remove --purge -y libwolfprov
+
+        # Verify the package is removed
+        if dpkg -l | grep -q libwolfprov; then
+          echo "Package still installed after removal"
+          dpkg -l | grep libwolfprov
+          exit 1
+        else
+          echo "Package successfully removed"
+        fi
+
+        # Check if the config file is removed
+        if [ -f /etc/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+          echo "wolfprovider.conf still exists after package removal"
+          ls -la /etc/ssl/openssl.cnf.d/
+          exit 1
+        else
+          echo "wolfprovider.conf successfully removed"
+        fi
+
+        # Check if the library files are removed
+        if [ -f /usr/lib/*/ossl-modules/libwolfprov.so ]; then
+          echo "libwolfprov.so still exists after package removal"
+          find /usr/lib -name "libwolfprov.so*" 2>/dev/null || true
+          exit 1
+        else
+          echo "libwolfprov.so successfully removed"
+        fi
+
+        # Verify default OpenSSL provider is active
+        echo "Verifying Default Provider is Active:"
+        openssl list -providers
+
+        # Verify that the default provider is present and active
+        echo "Checking default provider status:"
+        if openssl list -providers | grep -q "default" && \
+           openssl list -providers | grep -q "OpenSSL Default Provider" && \
+           openssl list -providers | grep -q "status: active"; then
+          echo "Default provider is present and active"
+        else
+          echo "Default provider verification failed"
+          echo "Provider output:"
+          openssl list -providers
+          exit 1
+        fi
+
+        echo "Package uninstallation and cleanup verification successful"
+
+    - name: Move package artifacts
+      run: |
+        # Move the generated packages to the temp directory
+        mv ../*.deb $RUNNER_TEMP/ || true
+        mv ../*.dsc $RUNNER_TEMP/ || true
+        mv ../*.tar.gz $RUNNER_TEMP/ || true
+
+    # Save the build outputs which for use in release packages
+    - name: Upload package artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: debian-packages
+        path: |
+          ${{ runner.temp }}/*.deb
+          ${{ runner.temp }}/*.dsc
+          ${{ runner.temp }}/*.tar.gz
+        retention-days: 7 

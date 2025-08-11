@@ -17,10 +17,21 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-# Clean up command test artifacts
-rm -rf ./scripts/cmd_test/*.log
-rm -rf ./aes_outputs
-rm -rf ./ecc_outputs
-rm -rf ./hash_outputs
-rm -rf ./rsa_outputs
-rm -rf ./test.txt
+# Function to clean up specific command test artifacts
+clean_cmd_test() {
+    local test_type=$1
+
+    # Clean up specific log file
+    rm -f "./scripts/cmd_test/${test_type}-test.log"
+
+    # Clean up corresponding output directory
+    rm -rf "./${test_type}_outputs"
+}
+
+# Function to clean up all command test artifacts
+clean_all_cmd_tests() {
+    clean_cmd_test "aes"
+    clean_cmd_test "ecc"
+    clean_cmd_test "hash"
+    clean_cmd_test "rsa"
+}
