@@ -133,6 +133,8 @@ static int wp_aes_wrap_get_params(OSSL_PARAM params[], unsigned int mode,
     int ok = 1;
     OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_wrap_get_params");
+
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_MODE);
     if ((p != NULL) && (!OSSL_PARAM_set_uint(p, mode))) {
         ok = 0;
@@ -241,6 +243,8 @@ static int wp_aes_wrap_init(wp_AesWrapCtx *ctx, const unsigned char *key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_wrap_init");
+
     ctx->wrap = wrap;
 
     if (!wolfssl_prov_is_running()) {
@@ -336,6 +340,8 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_wrap_update");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -409,6 +415,8 @@ static int wp_aes_wrap_final(wp_AesWrapCtx* ctx, unsigned char *out,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_wrap_final");
+
     (void)ctx;
     (void)out;
     (void)outSize;
@@ -436,6 +444,8 @@ static int wp_aes_wrap_get_ctx_params(wp_AesWrapCtx* ctx, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_wrap_get_ctx_params");
 
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_IVLEN);
     if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, ctx->ivLen))) {
@@ -479,6 +489,8 @@ static int wp_aes_wrap_set_ctx_params(wp_AesWrapCtx *ctx,
     const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_wrap_set_ctx_params");
 
     if (params != NULL) {
         size_t keyLen = ctx->keyLen;

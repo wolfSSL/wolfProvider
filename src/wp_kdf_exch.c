@@ -153,6 +153,8 @@ static int wp_kdf_init(wp_KdfCtx* ctx, wp_Kdf* kdf, const OSSL_PARAM params[])
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_KDF, "wp_kdf_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -188,6 +190,8 @@ static int wp_kdf_derive(wp_KdfCtx* ctx, unsigned char* secret, size_t* secLen,
     size_t secSize)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_KDF, "wp_kdf_derive");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;

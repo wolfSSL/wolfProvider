@@ -78,6 +78,8 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
  */
 int wolfssl_prov_is_running(void)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_prov_is_running");
+
 #ifdef WP_CHECK_FORCE_FAIL
     if (forceFail) {
       WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
@@ -183,6 +185,8 @@ static int bio_core_puts(BIO *bio, const char *str)
 
 static int bio_core_new(BIO *bio)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "bio_core_new");
+
     BIO_set_init(bio, 1);
 
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
@@ -191,6 +195,8 @@ static int bio_core_new(BIO *bio)
         
 static int bio_core_free(BIO *bio)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "bio_core_free");
+
     BIO_set_init(bio, 0);
     wolfssl_prov_bio_free(BIO_get_data(bio));
     
@@ -303,6 +309,8 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfprov_get_params");
 
     (void)provCtx;
 

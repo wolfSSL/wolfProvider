@@ -144,6 +144,8 @@ static int wp_ecc_map_group_name(wp_Ecc* ecc, const char* name)
     int ok = 1;
     size_t i;
 
+    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_map_group_name");
+
     for (i = 0; i < WP_ECC_GROUP_MAP_SZ; i++) {
         if (strcasecmp(wp_ecc_group_map[i].name, name) == 0) {
             ecc->curveId = wp_ecc_group_map[i].curveId;
@@ -195,6 +197,8 @@ static int wp_ecc_set_bits(wp_Ecc* ecc)
 {
     int ok = 0;
     size_t i;
+
+    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_set_bits");
 
     for (i = 0; i < WP_ECC_GROUP_MAP_SZ; i++) {
         if (ecc->curveId == wp_ecc_group_map[i].curveId) {

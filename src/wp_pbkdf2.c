@@ -147,6 +147,8 @@ static int wp_pbkdf2_base_set_ctx_params(wp_Pbkdf2Ctx* ctx,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_PBKDF2, "wp_pbkdf2_base_set_ctx_params");
+
     if (params != NULL) {
         if (!wp_params_get_digest(params, NULL, ctx->provCtx->libCtx,
                 &ctx->mdType, &ctx->mdLen)) {
@@ -184,6 +186,8 @@ static int wp_kdf_pbkdf2_get_ctx_params(wp_Pbkdf2Ctx* ctx, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PBKDF2, "wp_kdf_pbkdf2_get_ctx_params");
 
     (void)ctx;
 
@@ -244,6 +248,8 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_PBKDF2, "wp_kdf_pbkdf2_derive");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -286,6 +292,8 @@ static int wp_kdf_pbkdf2_set_ctx_params(wp_Pbkdf2Ctx* ctx,
     const OSSL_PARAM params[])
 {
     int ok;
+
+    WOLFPROV_ENTER(WP_LOG_PBKDF2, "wp_kdf_pbkdf2_set_ctx_params");
 
     ok = wp_pbkdf2_base_set_ctx_params(ctx, params);
     if (ok && !wp_params_get_int(params, OSSL_KDF_PARAM_PKCS5, &ctx->pkcs5)) {
@@ -355,6 +363,8 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     size_t keyLen, const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_PBKDF2, "wp_kdf_pkcs12_derive");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;

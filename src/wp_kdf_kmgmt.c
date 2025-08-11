@@ -58,6 +58,8 @@ int wp_kdf_up_ref(wp_Kdf* kdf)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_KDF, "wp_kdf_up_ref");
+
     rc = wc_LockMutex(&kdf->mutex);
     if (rc < 0) {
         ok = 0;
@@ -150,6 +152,8 @@ void wp_kdf_free(wp_Kdf* kdf)
  */
 static int wp_kdf_has(const wp_Kdf* kdf, int selection)
 {
+    WOLFPROV_ENTER(WP_LOG_KDF, "wp_kdf_has");
+    
     (void)kdf;
     (void)selection;
     WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);

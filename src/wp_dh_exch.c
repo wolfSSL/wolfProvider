@@ -177,6 +177,8 @@ static int wp_dh_init(wp_DhCtx* ctx, wp_Dh* dh, const OSSL_PARAM params[])
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -215,6 +217,8 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
     size_t* keyLen, size_t keySize, unsigned char* sec, size_t secLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_kdf_derive");
 
     if (keySize < ctx->keyLen) {
         ok = 0;
@@ -264,6 +268,8 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
     word32 privSz;
     unsigned char* pub;
     word32 pubSz;
+
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_derive_secret");
 
     /* Get our private key data. */
     if (!wp_dh_get_priv(ctx->key, &priv, &privSz)) {
@@ -321,6 +327,8 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
     size_t outLen = 0;
     unsigned char* tmp = NULL;
     size_t maxLen = 0;
+
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_derive");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -418,6 +426,8 @@ static const OSSL_PARAM* wp_dh_settable_ctx_params(wp_DhCtx* ctx,
 static int wp_dh_set_peer(wp_DhCtx* ctx, wp_Dh* peer)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_set_peer");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;

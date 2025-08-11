@@ -274,6 +274,8 @@ static int wp_rsa_gen_set_params(wp_RsaGenCtx* ctx, const OSSL_PARAM params[]);
  */
 int wp_rsa_up_ref(wp_Rsa* rsa)
 {
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_up_ref");
+
 #ifndef WP_SINGLE_THREADED
     int ok = 1;
     int rc;
@@ -352,6 +354,8 @@ wolfSSL_Mutex* wp_rsa_get_mutex(wp_Rsa* rsa)
 static int wp_rsa_check_key_size_int(int keySize, int allow1024)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_check_key_size_int");
 
     if ((keySize < RSA_MIN_SIZE) || (keySize > RSA_MAX_SIZE)) {
         WOLFPROV_MSG(WP_LOG_RSA, "RSA key size invalid: %d\n", keySize);

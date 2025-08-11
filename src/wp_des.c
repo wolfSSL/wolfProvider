@@ -144,6 +144,8 @@ static int wp_des3_block_get_params(OSSL_PARAM params[], unsigned int mode,
     int ok = 1;
     OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_get_params");
+
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_MODE);
     if ((p != NULL) && (!OSSL_PARAM_set_uint(p, mode))) {
         ok = 0;
@@ -237,6 +239,8 @@ static int wp_des3_init_iv(wp_Des3BlockCtx *ctx, const unsigned char *iv,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_init_iv");
+
     if (ivLen != ctx->ivLen) {
         ok = 0;
     }
@@ -276,6 +280,8 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
     const OSSL_PARAM params[], int enc)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_init");
 
     ctx->bufSz = 0;
     ctx->enc = enc;
@@ -403,6 +409,8 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
     int ok = 1;
     size_t oLen = 0;
     size_t nextBlocks;
+
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_update");
 
     if ((ctx->tls_version > 0) && (ctx->enc)) {
         int i;

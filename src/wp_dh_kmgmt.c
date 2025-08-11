@@ -174,6 +174,8 @@ static int wp_dh_map_group_name(wp_Dh* dh, const char* name)
     int ok = 1;
     size_t i;
 
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_map_group_name");
+
     for (i = 0; i < WP_DH_GROUP_MAP_SZ; i++) {
         if (strcasecmp(wp_dh_group_map[i].name, name) == 0) {
     #ifdef HAVE_PUBLIC_FFDHE
@@ -263,6 +265,8 @@ int wp_dh_up_ref(wp_Dh* dh)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_up_ref");
+
     rc = wc_LockMutex(&dh->mutex);
     if (rc < 0) {
         ok = 0;
@@ -319,6 +323,8 @@ int wp_dh_get_priv(wp_Dh* dh, unsigned char** priv, word32* privSz)
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_get_priv");
+
     if (privSz == 0) {
         ok = 0;
     }
@@ -346,6 +352,8 @@ int wp_dh_get_priv(wp_Dh* dh, unsigned char** priv, word32* privSz)
 int wp_dh_get_pub(wp_Dh* dh, unsigned char** pub, word32* pubSz)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_get_pub");
 
     if (pubSz == 0) {
         ok = 0;
@@ -451,6 +459,8 @@ static int wp_dh_copy_params(const wp_Dh *src, wp_Dh *dst)
 {
     int ok = 1;
     int rc;
+
+    WOLFPROV_ENTER(WP_LOG_DH, "wp_dh_copy_params");
 
     /* Copy prime in wolfSSL object. */
     rc = mp_copy((mp_int*)&src->key.p, &dst->key.p);

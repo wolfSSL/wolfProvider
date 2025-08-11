@@ -54,6 +54,8 @@ int wp_provctx_lock_rng(WOLFPROV_CTX* provCtx)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_provctx_lock_rng");
+
     rc = wc_LockMutex(&provCtx->rng_mutex);
     if (rc != 0) {
         ok = 0;
@@ -90,6 +92,8 @@ int wp_lock(wolfSSL_Mutex *mutex)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_lock");
+
     if (mutex == NULL) {
         ok = 0;
     }
@@ -124,6 +128,8 @@ int wp_unlock(wolfSSL_Mutex* mutex)
 #ifndef WP_SINGLE_THREADED
     int ok = 1;
     int rc;
+
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_unlock");
 
     if (mutex == NULL) {
         ok = 0;
@@ -327,6 +333,8 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
 {
     int ok = 1;
     int rc = 0;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_hash_copy");
 
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
     switch (src->type)

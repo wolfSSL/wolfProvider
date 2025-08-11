@@ -178,6 +178,8 @@ static int wp_ecdh_init(wp_EcdhCtx* ctx, wp_Ecc* ecc, const OSSL_PARAM params[])
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_ECDH, "wp_ecdh_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -216,6 +218,8 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
     size_t* keyLen, size_t keySize, unsigned char* secret, size_t secLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_ECDH, "wp_ecdh_kdf_derive");
 
     if (keySize < ctx->keyLen) {
         ok = 0;
@@ -261,6 +265,8 @@ static int wp_ecdh_derive_secret(wp_EcdhCtx* ctx, unsigned char* secret,
     int rc;
     word32 len = (word32)*secLen;
 
+    WOLFPROV_ENTER(WP_LOG_ECDH, "wp_ecdh_derive_secret");
+
 #ifdef HAVE_ECC_CDH
     if (ctx->cofactor) {
         wc_ecc_set_flags(wp_ecc_get_key(ctx->key), WC_ECC_FLAG_COFACTOR);
@@ -304,6 +310,8 @@ static int wp_ecdh_derive(wp_EcdhCtx* ctx, unsigned char* secret,
     unsigned char* out;
     size_t outLen;
     unsigned char tmp[72];
+
+    WOLFPROV_ENTER(WP_LOG_ECDH, "wp_ecdh_derive");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -366,6 +374,8 @@ static int wp_ecdh_derive(wp_EcdhCtx* ctx, unsigned char* secret,
 static int wp_ecdh_set_peer(wp_EcdhCtx* ctx, wp_Ecc* peer)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_ECDH, "wp_ecdh_set_peer");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;

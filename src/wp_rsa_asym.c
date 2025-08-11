@@ -209,6 +209,8 @@ static int wp_rsaa_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsaa_init");
+
     if (ctx->rsa != rsa) {
         if (wp_rsa_get_type(rsa) != RSA_FLAG_TYPE_RSA) {
             ERR_raise_data(ERR_LIB_PROV,
@@ -252,6 +254,8 @@ static int wp_rsaa_encrypt_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
 {
     int ok;
 
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsaa_encrypt_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -283,6 +287,8 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
 {
     int ok = 1;
     word32 sz;
+
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsaa_encrypt");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -358,6 +364,8 @@ static int wp_rsaa_decrypt_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
 {
     int ok;
 
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsaa_decrypt_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -386,6 +394,8 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
 {
     int ok = 1;
     word32 sz;
+
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsaa_decrypt");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;

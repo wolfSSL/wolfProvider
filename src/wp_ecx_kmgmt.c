@@ -214,6 +214,8 @@ int wp_ecx_up_ref(wp_Ecx* ecx)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ecx_up_ref");
+
     rc = wc_LockMutex(&ecx->mutex);
     if (rc < 0) {
         ok = 0;
@@ -226,6 +228,7 @@ int wp_ecx_up_ref(wp_Ecx* ecx)
     WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ecx_up_ref");
     ecx->refCnt++;
     WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
@@ -414,6 +417,8 @@ static int wp_ecx_set_params(wp_Ecx* ecx, const OSSL_PARAM params[])
     int ok = 1;
     unsigned char* data = NULL;
     size_t len;
+
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ecx_set_params");
 
     if (!wp_params_get_octet_string_ptr(params,
             OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, &data, &len)) {

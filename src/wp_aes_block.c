@@ -146,6 +146,8 @@ static int wp_aes_block_get_params(OSSL_PARAM params[], unsigned int mode,
     int ok = 1;
     OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_block_get_params");
+
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_MODE);
     if ((p != NULL) && (!OSSL_PARAM_set_uint(p, mode))) {
         ok = 0;
@@ -252,6 +254,8 @@ static int wp_aes_init_iv(wp_AesBlockCtx *ctx, const unsigned char *iv,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_init_iv");
+
     if (ivLen != ctx->ivLen) {
         ok = 0;
     }
@@ -292,6 +296,8 @@ static int wp_aes_block_init(wp_AesBlockCtx *ctx, const unsigned char *key,
     const OSSL_PARAM params[], int enc)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_block_init");
 
     ctx->bufSz = 0;
     ctx->enc = enc;
@@ -442,6 +448,8 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
     size_t oLen = 0;
     size_t nextBlocks;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_block_update");
+
     if ((ctx->tls_version > 0) && (ctx->enc)) {
         int i;
         unsigned char off = inLen % AES_BLOCK_SIZE;
@@ -535,11 +543,13 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_aes_block_final_enc(wp_AesBlockCtx* ctx, unsigned char *out,
+static int wp_aes_block_final_enc(wp_AesBlockCtx *ctx, unsigned char *out,
     size_t *outLen, size_t outSize)
 {
     int ok = 1;
     size_t oLen = 0;
+
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_block_final_enc");
 
     if (ctx->pad) {
         size_t i;

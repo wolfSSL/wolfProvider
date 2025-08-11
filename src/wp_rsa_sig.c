@@ -119,6 +119,8 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_setup_md");
+
     if (mdProps == NULL) {
         mdProps = ctx->propQuery;
     }
@@ -207,6 +209,8 @@ static int wp_rsa_setup_mgf1_md(wp_RsaSigCtx* ctx, const char* mdName,
 {
     int ok = 1;
     int mgf;
+
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_setup_mgf1_md");
 
     if (mdName != NULL) {
         OPENSSL_strlcpy(ctx->mgf1MdName, mdName, sizeof(ctx->mgf1MdName));
@@ -405,6 +409,8 @@ static int wp_rsa_check_pss_salt_len(wp_RsaSigCtx* ctx)
     int ok = 1;
     int maxSaltLen;
     int bits = wp_rsa_get_bits(ctx->rsa);
+
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_check_pss_salt_len");
 
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
     maxSaltLen = ((bits + 7) / 8) - wc_HashGetDigestSize(ctx->hash.type) - 2;

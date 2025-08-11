@@ -151,6 +151,8 @@ static int wp_tls_group_capability(OSSL_CALLBACK *cb, void *arg)
     int ok = 1;
     size_t i;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_tls_group_capability");
+
     for (i = 0; i < WP_PARAM_GROUP_CNT; i++) {
         if (!cb(wp_param_group_list[i], arg)) {
             ok = 0;
@@ -178,6 +180,8 @@ int wolfssl_prov_get_capabilities(void *provCtx, const char *capability,
     OSSL_CALLBACK *cb, void *arg)
 {
     int ok = 0;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_prov_get_capabilities");
 
     (void)provCtx;
 

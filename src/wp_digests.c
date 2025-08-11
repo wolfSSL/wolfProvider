@@ -123,6 +123,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 {                                                                              \
     int ok = 1;                                                                \
     (void)params;                                                              \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_init");                             \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -150,6 +151,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_update");                           \
     int rc = upd(ctx, in, (word32)inLen);                                      \
     if (rc != 0) {                                                             \
         ok = 0;                                                                \

@@ -154,6 +154,8 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
     const char* base64Data;
     size_t base64Len;
 
+    WOLFPROV_ENTER(WP_LOG_PK, "wp_pem2der_convert");
+
     /* Skip '-----BEGIN <name>-----\n'. */
     base64Data = data + 16 + nameLen + 1;
     base64Len = len - 16 + nameLen + 1;
@@ -216,6 +218,8 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
 #ifdef WOLFSSL_ENCRYPTED_KEYS
     wp_PasswordCbData wpPwCb = { pwCb, pwCbArg };
 #endif
+
+    WOLFPROV_ENTER(WP_LOG_PK, "wp_pem2der_decode_data");
 
     (void)pwCb;
     (void)pwCbArg;
@@ -406,6 +410,8 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     unsigned char* data = NULL;
     word32 len = 0;
     word32 idx = 0;
+
+    WOLFPROV_ENTER(WP_LOG_PK, "wp_pem2der_decode");
 
     (void)ctx;
     (void)selection;

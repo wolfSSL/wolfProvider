@@ -227,6 +227,8 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
     mp_int mod;
     RsaKey* key = wp_rsa_get_key(ctx->rsa);
 
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsasve_gen_rand_bytes");
+
     rc = mp_init_multi(&r, &mod, NULL, NULL, NULL, NULL);
     if (rc != 0) {
         ok = 0;
@@ -289,6 +291,8 @@ static int wp_rsasve_generate(wp_RsaKemCtx* ctx, unsigned char* out,
     word32 nLen;
     word32 oLen;
     RsaKey* rsa = NULL;
+
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsasve_generate");
 
     if ((out == NULL) && (outLen == NULL) && (secretLen == NULL)) {
         ok = 0;
@@ -357,6 +361,8 @@ static int wp_rsakem_encapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
 {
     int ok;
 
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsakem_encapsulate");
+
     switch (ctx->op) {
         case WP_RSA_KEM_OP_RSASVE:
             ok = wp_rsasve_generate(ctx, out, outlen, secret, secretlen);
@@ -391,6 +397,8 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
     int ok = 1;
     word32 nLen;
     RsaKey* rsa = wp_rsa_get_key(ctx->rsa);
+
+    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsasve_recover");
 
     /* Step 1: get the byte length of n */
     nLen = wc_RsaEncryptSize(rsa);

@@ -142,6 +142,8 @@ static int wp_aes_stream_get_params(OSSL_PARAM params[], unsigned int mode,
     int ok = 1;
     OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_stream_get_params");
+
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_MODE);
     if ((p != NULL) && (!OSSL_PARAM_set_uint(p, mode))) {
         ok = 0;
@@ -258,6 +260,8 @@ static int wp_aes_init_iv(wp_AesStreamCtx *ctx, const unsigned char *iv,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_init_iv");
+
     if (ivLen != ctx->ivLen) {
         ok = 0;
     }
@@ -292,6 +296,8 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
     int ok = 1;
     /* Decryption is the same as encryption with CTR mode. */
     int dir = AES_ENCRYPTION;
+
+    WOLFPROV_ENTER(WP_LOG_AES, "wp_aes_stream_init");
 
     ctx->enc = enc;
 

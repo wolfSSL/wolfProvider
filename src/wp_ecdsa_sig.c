@@ -185,6 +185,8 @@ static int wp_ecdsa_signverify_init(wp_EcdsaSigCtx *ctx, wp_Ecc* ecc,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_ECDSA, "wp_ecdsa_signverify_init");
+
     if (ctx == NULL || (ecc == NULL && ctx->ecc == NULL)) {
         ok = 0;
     }
@@ -224,6 +226,8 @@ static int wp_ecdsa_sign_init(wp_EcdsaSigCtx *ctx, wp_Ecc *ecc,
 {
     int ok;
 
+    WOLFPROV_ENTER(WP_LOG_ECDSA, "wp_ecdsa_sign_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -254,6 +258,8 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
     size_t *sigLen, size_t sigSize, const unsigned char *tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_ECDSA, "wp_ecdsa_sign");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -317,6 +323,8 @@ static int wp_ecdsa_verify_init(wp_EcdsaSigCtx *ctx, wp_Ecc *ecc,
 {
     int ok;
 
+    WOLFPROV_ENTER(WP_LOG_ECDSA, "wp_ecdsa_verify_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -343,6 +351,8 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
     size_t sigLen, const unsigned char *tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_ECDSA, "wp_ecdsa_verify");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -376,6 +386,8 @@ static int wp_ecdsa_verify_recover_init(wp_EcdsaSigCtx *ctx, wp_Ecc *ecc,
     const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_ECDSA, "wp_ecdsa_verify_recover_init");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
