@@ -156,10 +156,8 @@ static void wolfprovider_log(const int logLevel, const int component,
                            const char *const logMessage)
 {
     /* Check compile-time configuration first */
-#ifdef WOLFPROV_DEBUG
     if (!WOLFPROV_COMPILE_TIME_CHECK(component, logLevel))
         return;
-#endif
 
     /* Don't log messages that do not match our current logging level */
     if ((providerLogLevel & logLevel) != logLevel)
@@ -446,10 +444,6 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
         buflen -= WOLFPROV_LINE_LEN;
     }
 }
-
-
-
-#else /* !WOLFPROV_DEBUG */
 
 #endif /* WOLFPROV_DEBUG */
 

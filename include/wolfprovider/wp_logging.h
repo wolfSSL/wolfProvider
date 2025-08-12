@@ -82,6 +82,7 @@
  *                        Examples:
  *                        - WP_LOG_HKDF (HKDF only)
  *                        - (WP_LOG_AES | WP_LOG_DES) (ciphers only)
+ *                        - (WP_LOG_ECC | WP_LOG_RSA | WP_LOG_HKDF) (multiple algorithms)
  *                        - WP_LOG_CIPHER (all cipher operations)
  *
  * Examples:
@@ -90,8 +91,8 @@
  * // Shows level 2+ (ERROR + ENTER/LEAVE) for HKDF operations only
  *
  * #define WOLFPROV_LOG_LEVEL 3
- * #define WOLFPROV_LOG_COMPONENTS_FILTER (WP_LOG_AES | WP_LOG_DES)
- * // Shows level 3+ (detailed operations) for cipher algorithms only
+ * #define WOLFPROV_LOG_COMPONENTS_FILTER (WP_LOG_ECC | WP_LOG_RSA | WP_LOG_HKDF)
+ * // Shows level 3+ (detailed operations) for ECC, RSA, and HKDF only
  */
 enum wolfProv_LogType {
     WP_LOG_ERROR   = 0x0001,  /* logs errors */
@@ -102,16 +103,8 @@ enum wolfProv_LogType {
     WP_LOG_DEBUG   = 0x0020,  /* logs debug-level detailed information */
     WP_LOG_TRACE   = 0x0040,  /* logs trace-level ultra-detailed information */
 
-    /* Convenience level combinations */
-    WP_LOG_NONE    = 0x0000,  /* no logging */
-    WP_LOG_ERRORS_ONLY = WP_LOG_ERROR,
-    WP_LOG_BASIC   = (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE),
-    WP_LOG_STANDARD = (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE | WP_LOG_INFO),
-    WP_LOG_DETAILED = (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE | WP_LOG_INFO | WP_LOG_VERBOSE),
-    WP_LOG_FULL_DEBUG = (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE | WP_LOG_INFO | WP_LOG_VERBOSE | WP_LOG_DEBUG),
-
-    /* default log level when logging is turned on, all but verbose */
-    WP_LOG_LEVEL_DEFAULT = WP_LOG_STANDARD,
+    /* default log level when logging is turned on */
+    WP_LOG_LEVEL_DEFAULT = (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE | WP_LOG_INFO),
 
     /* log all, including verbose */
     WP_LOG_LEVEL_ALL = (WP_LOG_ERROR
@@ -213,7 +206,7 @@ enum wolfProv_LogComponents {
 #elif WOLFPROV_LOG_LEVEL == 4
     #define WOLFPROV_COMPILE_TIME_LEVEL WP_LOG_LEVEL_ALL
 #else
-    #define WOLFPROV_COMPILE_TIME_LEVEL WP_LOG_NONE
+    #define WOLFPROV_COMPILE_TIME_LEVEL 0
 #endif
 
 /* Conditional logging macro that checks compile-time configuration */
