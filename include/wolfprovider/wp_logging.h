@@ -67,6 +67,31 @@
  * WOLFPROV_LOG_PRINTF  Define to Use printf instead of fprintf (to stderr)
  *                        for logs. Not applicable if using WOLFPROV_USER_LOG
  *                        or custom logging callback.
+ *
+ * COMPILE-TIME MACRO CONFIGURATION (Internal Developer Use):
+ * Define these macros in this header to control logging at compile time:
+ *
+ * WOLFPROV_LOG_LEVEL   Set verbosity level (1-4):
+ *                        1 = ERROR only
+ *                        2 = ERROR + ENTER/LEAVE (function tracking)
+ *                        3 = Level 2 + INFO + VERBOSE (detailed operations)
+ *                        4 = All levels including DEBUG and TRACE
+ *
+ * WOLFPROV_LOG_COMPONENTS_FILTER  Set component bitmask to filter specific
+ *                        algorithms. Use WP_LOG_* constants from enum below.
+ *                        Examples:
+ *                        - WP_LOG_HKDF (HKDF only)
+ *                        - (WP_LOG_AES | WP_LOG_DES) (ciphers only)
+ *                        - WP_LOG_CIPHER (all cipher operations)
+ *
+ * Examples:
+ * #define WOLFPROV_LOG_LEVEL 2
+ * #define WOLFPROV_LOG_COMPONENTS_FILTER WP_LOG_HKDF
+ * // Shows level 2+ (ERROR + ENTER/LEAVE) for HKDF operations only
+ *
+ * #define WOLFPROV_LOG_LEVEL 3
+ * #define WOLFPROV_LOG_COMPONENTS_FILTER (WP_LOG_AES | WP_LOG_DES)
+ * // Shows level 3+ (detailed operations) for cipher algorithms only
  */
 enum wolfProv_LogType {
     WP_LOG_ERROR   = 0x0001,  /* logs errors */
@@ -164,6 +189,41 @@ enum wolfProv_LogComponents {
     /* default compoenents logged */
     WP_LOG_COMPONENTS_DEFAULT = WP_LOG_COMPONENTS_ALL
 };
+
+/* ========================================================================== */
+/* COMPILE-TIME MACRO CONFIGURATION FOR INTERNAL DEVELOPERS                  */
+/* ========================================================================== */
+
+/* Numbered verbosity levels (1-4) - modify these macros to control logging */
+#ifndef WOLFPROV_LOG_LEVEL
+#define WOLFPROV_LOG_LEVEL 0  /* 0 = off, 1-4 = increasing verbosity */
+#endif
+
+#ifndef WOLFPROV_LOG_COMPONENTS_FILTER
+#define WOLFPROV_LOG_COMPONENTS_FILTER WP_LOG_COMPONENTS_ALL  /* all components */
+#endif
+
+/* Map numbered levels to bitmask combinations */
+#if WOLFPROV_LOG_LEVEL == 1
+    #define WOLFPROV_COMPILE_TIME_LEVEL WP_LOG_ERROR
+#elif WOLFPROV_LOG_LEVEL == 2
+    #define WOLFPROV_COMPILE_TIME_LEVEL (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE)
+#elif WOLFPROV_LOG_LEVEL == 3
+    #define WOLFPROV_COMPILE_TIME_LEVEL (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE | WP_LOG_INFO | WP_LOG_VERBOSE)
+#elif WOLFPROV_LOG_LEVEL == 4
+    #define WOLFPROV_COMPILE_TIME_LEVEL WP_LOG_LEVEL_ALL
+#else
+    #define WOLFPROV_COMPILE_TIME_LEVEL WP_LOG_NONE
+#endif
+
+/* Conditional logging macro that checks compile-time configuration */
+#ifdef WOLFPROV_DEBUG
+    #define WOLFPROV_COMPILE_TIME_CHECK(component, level) \
+        ((WOLFPROV_COMPILE_TIME_LEVEL & (level)) && \
+         (WOLFPROV_LOG_COMPONENTS_FILTER & (component)))
+#else
+    #define WOLFPROV_COMPILE_TIME_CHECK(component, level) 0
+#endif
 
 typedef void (*wolfProv_Logging_cb)(const int logLevel, const int component,
     const char *const logMessage);

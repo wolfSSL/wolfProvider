@@ -320,6 +320,12 @@ int wolfProv_ParseComponents(const char* componentStr)
 static void wolfprovider_log(const int logLevel, const int component,
                            const char *const logMessage)
 {
+    /* Check compile-time configuration first */
+#ifdef WOLFPROV_DEBUG
+    if (!WOLFPROV_COMPILE_TIME_CHECK(component, logLevel))
+        return;
+#endif
+
     /* Don't log messages that do not match our current logging level */
     if ((providerLogLevel & logLevel) != logLevel)
         return;
