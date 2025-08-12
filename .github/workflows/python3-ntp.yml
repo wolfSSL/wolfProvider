@@ -3,7 +3,7 @@ name: python3-ntp Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ '*' ] #'master', 'main', 'release/**' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
