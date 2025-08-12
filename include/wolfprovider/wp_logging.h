@@ -238,21 +238,6 @@ void wolfProv_Debugging_OFF(void);
 int wolfProv_SetLogLevel(int levelMask);
 /* Set which components are logged, bitmask of wolfProv_LogComponents */
 int wolfProv_SetLogComponents(int componentMask);
-/* Initialize logging from environment variables with string parsing */
-void wolfProv_InitLoggingFromEnv(void);
-
-/* String parsing functions for environment variables */
-int wolfProv_ParseLogLevel(const char* levelStr);
-int wolfProv_ParseComponents(const char* componentStr);
-
-/* Enhanced logging control functions */
-int wolfProv_EnableComponent(int component);
-int wolfProv_DisableComponent(int component);
-int wolfProv_IsComponentEnabled(int component);
-int wolfProv_SetVerbosityLevel(int level);
-int wolfProv_GetVerbosityLevel(void);
-int wolfProv_EnableAlgorithm(const char* algorithm);
-int wolfProv_DisableAlgorithm(const char* algorithm);
 
 #ifdef WOLFPROV_DEBUG
 
