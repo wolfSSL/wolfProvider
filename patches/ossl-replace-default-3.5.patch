@@ -1,0 +1,30 @@
+diff --git a/crypto/provider_predefined.c b/crypto/provider_predefined.c
+index 068e0b7..499a9ca 100644
+--- a/crypto/provider_predefined.c
++++ b/crypto/provider_predefined.c
+@@ -10,21 +10,15 @@
+ #include <openssl/core.h>
+ #include "provider_local.h"
+ 
+-OSSL_provider_init_fn ossl_default_provider_init;
++OSSL_provider_init_fn wolfprov_provider_init;
+ OSSL_provider_init_fn ossl_base_provider_init;
+ OSSL_provider_init_fn ossl_null_provider_init;
+-OSSL_provider_init_fn ossl_fips_intern_provider_init;
+-#ifdef STATIC_LEGACY
+-OSSL_provider_init_fn ossl_legacy_provider_init;
+-#endif
+ const OSSL_PROVIDER_INFO ossl_predefined_providers[] = {
+ #ifdef FIPS_MODULE
+-    { "fips", NULL, ossl_fips_intern_provider_init, NULL, 1 },
++    { "fips", NULL, wolfprov_provider_init, NULL, 1 },
+ #else
+-    { "default", NULL, ossl_default_provider_init, NULL, 1 },
+-# ifdef STATIC_LEGACY
+-    { "legacy", NULL, ossl_legacy_provider_init, NULL, 0 },
+-# endif
++    { "default", NULL, wolfprov_provider_init, NULL, 1 },
++    { "legacy", NULL, wolfprov_provider_init, NULL, 0 },
+     { "base", NULL, ossl_base_provider_init, NULL, 0 },
+     { "null", NULL, ossl_null_provider_init, NULL, 0 },
+ #endif

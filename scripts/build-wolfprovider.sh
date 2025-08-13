@@ -20,6 +20,7 @@ show_help() {
   echo "  --fips-version=VER         Choose the wolfSSL FIPS version"
   echo "  --debian                   Build a Debian package"
   echo "  --quicktest                Disable some tests for a faster testing suite"
+  echo "  --replace-default          Patch OpenSSL and build it so that wolfProvider is the default provider"
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -81,7 +82,6 @@ for arg in "$@"; do
             WOLFSSL_ISFIPS=1
             ;;
         --fips-bundle=*)
-            unset WOLFSSL_ISFIPS
             unset WOLFSSL_FIPS_CHECK_TAG
             IFS='=' read -r trash fips_bun <<< "$arg"
             if [ -z "$fips_bun" ]; then
@@ -113,6 +113,9 @@ for arg in "$@"; do
         --quicktest)
             WOLFPROV_QUICKTEST=1
             ;;
+        --replace-default)
+            WOLFPROV_REPLACE_DEFAULT=1
+            ;;
         *)
             args_wrong+="$arg, "
             ;;
@@ -143,6 +146,10 @@ LOG_FILE=${SCRIPT_DIR}/build-release.log
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
 
 echo "Using openssl: $OPENSSL_TAG, wolfssl: $WOLFSSL_TAG"
+
+if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+    build_default_stub
+fi
 
 init_wolfprov
 
