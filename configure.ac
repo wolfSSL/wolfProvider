@@ -123,8 +123,14 @@ AS_IF([ test "x$ENABLED_SINGLETHREADED" = "xno" ],[
                       ])
       ])
 
+# Replace default provider
+AC_ARG_ENABLE([replace-default],
+    [AS_HELP_STRING([--enable-replace-default],[Build real libdefault.so from wp_default_replace.c (default: disabled).])],
+    [ ENABLED_REPLACE_DEFAULT=$enableval ],
+    [ ENABLED_REPLACE_DEFAULT=no ]
+    )
 
-
+AM_CONDITIONAL([BUILD_REPLACE_DEFAULT], [test "x$ENABLED_REPLACE_DEFAULT" = "xyes"])
 
 
 AX_HARDEN_CC_COMPILER_FLAGS
@@ -170,6 +176,7 @@ echo
 echo "   Features "
 echo "   * User settings:              $ENABLED_USERSETTINGS"
 echo "   * Dynamic provider:           $ENABLED_DYNAMIC_PROVIDER"
+echo "   * Replace default:            $ENABLED_REPLACE_DEFAULT"
 echo ""
 echo "---"
 

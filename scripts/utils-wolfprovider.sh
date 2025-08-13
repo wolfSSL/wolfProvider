@@ -25,6 +25,7 @@ source ${SCRIPT_DIR}/utils-general.sh
 
 WOLFPROV_SOURCE_DIR=${SCRIPT_DIR}/..
 WOLFPROV_INSTALL_DIR=${SCRIPT_DIR}/../wolfprov-install
+LIBDEFAULT_STUB_INSTALL_DIR=${SCRIPT_DIR}/../libdefault-stub-install
 WOLFPROV_CONFIG_OPTS=${WOLFPROV_CONFIG_OPTS:-"--with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} --prefix=${WOLFPROV_INSTALL_DIR}"}
 WOLFPROV_CONFIG_CFLAGS=${WOLFPROV_CONFIG_CFLAGS:-''}
 
@@ -45,6 +46,55 @@ WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 
 WOLFPROV_CLEAN=${WOLFPROV_CLEAN:-0}
 WOLFPROV_DISTCLEAN=${WOLFPROV_DISTCLEAN:-0}
+
+build_default_stub() {
+    printf "\nBuilding default stub library ...\n"
+    cd ${SCRIPT_DIR}/../default_stub
+
+    printf "\tGenerate build system ... "
+    if [ ! -e "configure" ]; then
+        ./autogen.sh >>$LOG_FILE 2>&1
+        if [ $? != 0 ]; then
+            printf "\n\n...\n"
+            tail -n 40 $LOG_FILE
+            do_cleanup
+            exit 1
+        fi
+    fi
+    printf "Done.\n"
+
+    printf "\tConfigure default stub ... "
+    ./configure --prefix=${LIBDEFAULT_STUB_INSTALL_DIR} >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tBuild default stub ... "
+    make >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tInstall default stub ... "
+    make install >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "\n\n...\n"
+        tail -n 40 $LOG_FILE
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    cd ${SCRIPT_DIR}/..
+}
 
 clean_wolfprov() {
     printf "\n"
@@ -76,6 +126,16 @@ install_wolfprov() {
 
     if [ "$WOLFPROV_DEBUG" = "1" ]; then
         WOLFPROV_CONFIG_OPTS+=" --enable-debug"
+    fi
+
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-replace-default"
+        # Add stub library path for replace-default functionality
+        if [ -z "$LD_LIBRARY_PATH" ]; then
+            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib"
+        else
+            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib:$LD_LIBRARY_PATH"
+        fi
     fi
 
     ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1

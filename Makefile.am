@@ -1,5 +1,5 @@
 
-SUFFIXES = 
+SUFFIXES =
 TESTS =
 noinst_PROGRAMS =
 noinst_HEADERS =
@@ -13,6 +13,13 @@ ACLOCAL_AMFLAGS = -I m4
 AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libwolfprov.la
+
+# Conditionally build libdefault.so when --replace-default is enabled
+if BUILD_REPLACE_DEFAULT
+lib_LTLIBRARIES += libdefault.la
+libdefault_la_SOURCES = src/wp_default_replace.c
+libdefault_la_LIBADD = libwolfprov.la
+endif
 
 EXTRA_DIST+=ChangeLog.md
 EXTRA_DIST+=README.md
