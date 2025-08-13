@@ -95,6 +95,8 @@ int wp_mac_up_ref(wp_Mac* mac)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_up_ref");
+
     rc = wc_LockMutex(&mac->mutex);
     if (rc < 0) {
         ok = 0;
@@ -136,6 +138,8 @@ int wp_mac_get_type(wp_Mac* mac)
 int wp_mac_get_private_key(wp_Mac* mac, unsigned char** priv, size_t* privLen)
 {
     int ok = 0;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_get_private_key");
 
     if (mac != NULL) {
         *priv = mac->key;
@@ -304,6 +308,8 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_has");
+
     if (!wolfssl_prov_is_running()) {
        ok = 0;
     }
@@ -330,6 +336,8 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
 static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
 {
    int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_match");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -358,6 +366,8 @@ static int wp_mac_import(wp_Mac *mac, int selection, const OSSL_PARAM params[])
 {
     int ok = 1;
     const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_import");
 
     if ((!wolfssl_prov_is_running()) || (mac == NULL)) {
         ok = 0;
@@ -423,6 +433,8 @@ static int wp_mac_export_priv_key(wp_Mac* mac, OSSL_PARAM* params, int* pIdx,
 {
     int i = *pIdx;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_export_priv_key");
+
     if (mac->keyLen != MAX_SIZE_T) {
         XMEMCPY(data + *idx, mac->key, mac->keyLen);
         wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PRIV_KEY,
@@ -462,6 +474,8 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
     int paramsSz = 0;
     unsigned char* data = NULL;
     size_t len = 0;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_export");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -539,6 +553,8 @@ static wp_MacGenCtx* wp_mac_gen_init(WOLFPROV_CTX* provCtx,
 static int wp_mac_gen_set_params(wp_MacGenCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_gen_set_params");
 
     if (!wp_params_get_octet_string(params, OSSL_PKEY_PARAM_PRIV_KEY,
             &ctx->key, &ctx->keyLen, 1)) {
@@ -628,6 +644,8 @@ static int wp_mac_get_params(wp_Mac* mac, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_get_params");
 
     if (mac->keyLen != MAX_SIZE_T) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);

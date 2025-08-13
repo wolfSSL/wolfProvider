@@ -62,6 +62,12 @@ It will retrieve the dependencies and compile them as necessary. To use other th
 OPENSSL_TAG=openssl-3.5.0 WOLFSSL_TAG=v5.8.0-stable WOLFPROV_DEBUG=1 scripts/build-wolfprovider.sh
 ```
 
+Or you can set them with variables like so:
+
+```
+./scripts/build-wolfprovider.sh --debug --openssl-ver=openssl-3.5.0 --wolfssl-ver=v5.8.0-stable
+```
+
 To clean the build, use the following:
 ```
 ./scripts/build-wolfprovider.sh --clean
@@ -152,4 +158,9 @@ To run the command tests:
 
 To run the cipher suite testing:
 * `./scripts/test-wp-cs.sh`
+
+
+## Debugging
+
+To enable wolfProvider debug logging, build with `--debug`. If you want to filter logging a certain way, set `WOLFPROV_LOG_LEVEL_FILTER` and `WOLFPROV_LOG_COMPONENTS_FILTER` in `include/wolfprovider/wp_logging.h` as needed. See comments in that file for examples.
 

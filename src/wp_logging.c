@@ -150,6 +150,10 @@ int wolfProv_SetLogComponents(int componentMask)
 static void wolfprovider_log(const int logLevel, const int component,
                            const char *const logMessage)
 {
+    /* Check compile-time configuration first */
+    if (!WOLFPROV_COMPILE_TIME_CHECK(component, logLevel))
+        return;
+
     /* Don't log messages that do not match our current logging level */
     if ((providerLogLevel & logLevel) != logLevel)
         return;
@@ -222,6 +226,38 @@ void WOLFPROV_MSG_VERBOSE(int component, const char* fmt, ...)
     va_list vlist;
     va_start(vlist, fmt);
     wolfprovider_msg_internal(component, WP_LOG_VERBOSE, fmt, vlist);
+    va_end(vlist);
+}
+
+/**
+ * Log function for debug messages, prints to WP_LOG_DEBUG level.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param fmt   [IN] Log message format string.
+ * @param vargs [IN] Variable arguments, used with format string, fmt.
+ */
+WP_PRINTF_FUNC(2, 3)
+void WOLFPROV_MSG_DEBUG(int component, const char* fmt, ...)
+{
+    va_list vlist;
+    va_start(vlist, fmt);
+    wolfprovider_msg_internal(component, WP_LOG_DEBUG, fmt, vlist);
+    va_end(vlist);
+}
+
+/**
+ * Log function for trace messages, prints to WP_LOG_TRACE level.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param fmt   [IN] Log message format string.
+ * @param vargs [IN] Variable arguments, used with format string, fmt.
+ */
+WP_PRINTF_FUNC(2, 3)
+void WOLFPROV_MSG_TRACE(int component, const char* fmt, ...)
+{
+    va_list vlist;
+    va_start(vlist, fmt);
+    wolfprovider_msg_internal(component, WP_LOG_TRACE, fmt, vlist);
     va_end(vlist);
 }
 
