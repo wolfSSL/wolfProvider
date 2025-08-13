@@ -162,5 +162,5 @@ To run the cipher suite testing:
 
 ## Debugging
 
-To enable wolfProvider debug logging, build with `--debug`. If you want to filter logging a certain way, set `WOLFPROV_LOG_LEVEL_FILTER` and `WOLFPROV_LOG_COMPONENTS_FILTER` in `include/wolfprovider/wp_logging.h` as needed. See comments in that file for examples.
+To enable wolfProvider debug logging, build with `--debug` which enables exit messages, error messages, and informational messages. If you want to filter logging a certain way or increase detail level, set `WOLFPROV_LOG_LEVEL_FILTER` and `WOLFPROV_LOG_COMPONENTS_FILTER` in `include/wolfprovider/wp_logging.h` as needed. See comments in that file for examples.
 

@@ -151,16 +151,19 @@ static void wolfprovider_log(const int logLevel, const int component,
                            const char *const logMessage)
 {
     /* Check compile-time configuration first */
-    if (!WOLFPROV_COMPILE_TIME_CHECK(component, logLevel))
+    if (!WOLFPROV_COMPILE_TIME_CHECK(component, logLevel)) {
         return;
+    }
 
     /* Don't log messages that do not match our current logging level */
-    if ((providerLogLevel & logLevel) != logLevel)
+    if ((providerLogLevel & logLevel) != logLevel) {
         return;
+    }
 
     /* Don't log messages from components that do not match enabled list */
-    if ((providerLogComponents & component) != component)
+    if ((providerLogComponents & component) != component) {
         return;
+    }
 
     if (log_function) {
         log_function(logLevel, component, logMessage);

@@ -262,7 +262,7 @@ void WOLFPROV_ERROR_FUNC_NULL_LINE(int type, const char* funcName,
 void WOLFPROV_BUFFER(int type, const unsigned char* buffer,
     unsigned int length);
 
-#else
+#else /* WOLFPROV_DEBUG */
 
 #define WOLFPROV_ENTER(t, m)
 #define WOLFPROV_LEAVE(t, m, r)
