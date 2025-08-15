@@ -47,6 +47,7 @@ clean_openssl() {
             make -C "${OPENSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
         fi
         rm -rf "${OPENSSL_INSTALL_DIR}"
+        rm -rf "${OPENSSL_STUB_INSTALL_DIR}"
     fi
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing OpenSSL source ...\n"
@@ -70,7 +71,7 @@ clone_openssl() {
         DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
         printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
-        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR}
+        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
         RET=$?
 
         if [ $RET != 0 ]; then
@@ -158,11 +159,102 @@ patch_openssl() {
     fi
 }
 
+install_openssl_deb() {
+    printf "\nInstalling OpenSSL ${OPENSSL_TAG} for Debian packaging ...\n"
+    clone_openssl
+    patch_openssl
+    check_openssl_replace_default_mismatch
+
+    # Build stub first so we can link OpenSSL against it
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        install_default_stub
+    fi
+
+    pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
+
+    if [ -d ${OPENSSL_INSTALL_DIR} ]; then
+        printf "\tOpenSSL install directory already exists: ${OPENSSL_INSTALL_DIR}\n"
+        printf "\tRemoving existing install directory...\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+    fi
+
+    # Build configure command
+    CONFIG_CMD="./config shared"
+
+    # Determine the install paths for Debian Bookworm
+    DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+    CONFIG_CMD+=" --prefix=/usr --openssldir=/usr/lib/ssl --libdir=lib/${DEB_HOST_MULTIARCH} "
+
+    if [ "$WOLFPROV_DEBUG" = "1" ]; then
+        CONFIG_CMD+=" enable-trace --debug"
+    fi
+
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        CONFIG_CMD+=" no-external-tests no-tests"
+
+        # Set up library paths to find the stub libdefault
+        if [ -d "${OPENSSL_STUB_INSTALL_DIR}" ]; then
+            # Link the stub library directly into libcrypto using LDFLAGS and LDLIBS
+            CONFIGURE_LDFLAGS="-L${OPENSSL_STUB_INSTALL_DIR}/lib"
+            CONFIGURE_LDLIBS="-ldefault"
+        else
+            printf "ERROR - stub libdefault not found in: ${OPENSSL_STUB_INSTALL_DIR}\n"
+            do_cleanup
+            exit 1
+        fi
+
+        CONFIG_CMD+=" LDFLAGS=${CONFIGURE_LDFLAGS} LDLIBS=${CONFIGURE_LDLIBS}"
+    fi
+
+    printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
+    $CONFIG_CMD >>$LOG_FILE 2>&1
+    RET=$?
+    if [ $RET != 0 ]; then
+        printf "ERROR.\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
+    make -j$NUMCPU >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "ERROR.\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    # Manually set up the install directory rather than running 'make install'
+    # so that we don't modify the system OpenSSL installation
+    printf "\tCopying outputs to ${OPENSSL_INSTALL_DIR} for OpenSSL ${OPENSSL_TAG} ... "
+    mkdir -p ${OPENSSL_INSTALL_DIR}/bin
+    mkdir -p ${OPENSSL_INSTALL_DIR}/lib
+    mkdir -p ${OPENSSL_INSTALL_DIR}/include/openssl
+    mkdir -p ${OPENSSL_INSTALL_DIR}/lib/pkgconfig
+    cp -r apps/openssl ${OPENSSL_INSTALL_DIR}/bin/openssl
+    cp -r libcrypto.so* libcrypto.a ${OPENSSL_INSTALL_DIR}/lib/
+    cp -r libssl.so* libssl.a ${OPENSSL_INSTALL_DIR}/lib/
+    cp -r include/openssl/* ${OPENSSL_INSTALL_DIR}/include/openssl/
+    cp -r *.pc ${OPENSSL_INSTALL_DIR}/lib/pkgconfig/
+    printf "Done.\n"
+
+    popd &> /dev/null
+}
+
 install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
     patch_openssl
     check_openssl_replace_default_mismatch
+
+    # Build stub first so we can link OpenSSL against it
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        install_default_stub
+    fi
+
     pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
 
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then

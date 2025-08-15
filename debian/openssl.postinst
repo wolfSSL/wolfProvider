@@ -1,7 +1,6 @@
 #!/bin/sh
 set -e
 
-INCLUDE_LINE=".include /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
 CONF_FILE="/usr/lib/ssl/openssl.cnf"
 CONF_DEFAULT="/usr/share/openssl-defaults/openssl.cnf"
 
@@ -14,14 +13,6 @@ if [ ! -f "$CONF_FILE" ]; then
         echo "Default config file does not exist: $CONF_DEFAULT"
         exit 1
     fi
-fi
-
-# Add include for wolfprovider config file if not already present
-if grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
-    echo "Include line already exists in $CONF_FILE"
-else 
-    echo "Adding include for wolfprovider to $CONF_FILE..."
-    sed -i "/^openssl_conf/ a $INCLUDE_LINE" "$CONF_FILE"
 fi
 
 #DEBHELPER#

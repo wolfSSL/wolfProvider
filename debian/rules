@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 
 %:
-	dh $@ --with autoreconf
+	dh $@
 
 # Multiarch triplet
 DEB_HOST_MULTIARCH := $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
@@ -10,6 +10,9 @@ DESTDIR=debian/tmp
 
 # Grab the base version from debian/changelog
 BASEVER := $(shell dpkg-parsechangelog -SVersion)
+
+# Get OpenSSL version from the build (this will be set after build)
+OPENSSL_VERSION ?= 3.5.0
 
 # Check if FIPS build is requested
 WOLFSSL_ISFIPS?=0
@@ -30,35 +33,117 @@ else
   FIPS_FLAG         :=
 endif
 
-# Override just the control-file generation to inject our values
+override_dh_auto_configure:
+	# None, handled below
+
+override_dh_auto_build:
+	# Always build OpenSSL with wolfProvider as the default provider
+	WOLFPROV_BUILD_DEBIAN=1 ./scripts/build-wolfprovider.sh --replace-default $(FIPS_FLAG)
+
+override_dh_auto_install:
+	# Install OpenSSL binary for openssl package
+	install -d $(DESTDIR)/usr/bin
+	install -m755 ./openssl-install/bin/openssl \
+		$(DESTDIR)/usr/bin/
+
+	# Install OpenSSL shared libraries for libssl3 package
+	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)
+	install -m755 ./openssl-install/lib/libssl.so* \
+		./openssl-install/lib/libcrypto.so* \
+		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/
+
+	# Install OpenSSL headers and dev files for libssl-dev package
+	install -d $(DESTDIR)/usr/include
+	find ./openssl-install/include/openssl -type d -exec install -d "$(DESTDIR)/usr/include/openssl/{}" \;
+	find ./openssl-install/include/openssl -type f -exec install -m644 "{}" "$(DESTDIR)/usr/include/openssl/{}" \;
+	cd ../../
+
+# 	# Install static libraries and pkg-config files
+# 	install -m644 ./openssl-install/lib/libssl.a \
+# 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/
+# 	install -m644 ./openssl-install/lib/libcrypto.a \
+# 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/
+	
+# 	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig
+# 	install -m644 ./openssl-install/lib/pkgconfig/libssl.pc \
+# 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig/
+# 	install -m644 ./openssl-install/lib/pkgconfig/libcrypto.pc \
+# 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig/
+
+	# Install wolfProvider library
+	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
+	install -m755 ./.libs/libwolfprov.so* \
+		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
+
+	# Install wolfProvider headers
+	install -d $(DESTDIR)/usr/include/wolfprovider
+	install -m644 ./include/wolfprovider/*.h \
+		$(DESTDIR)/usr/include/wolfprovider/
+
+	# Install provider config file
+	install -d $(DESTDIR)/usr/lib/ssl/openssl.cnf.d
+	install -m644 ./$(PROVIDER_CONF) \
+		$(DESTDIR)/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
+
+	# Install default openssl.cnf template (do NOT ship it directly in /usr/lib/ssl)
+	# The postinsall script will handle copying it to the system location
+	install -d $(DESTDIR)/usr/share/openssl-defaults
+	install -m 0644 ./openssl-source/apps/openssl.cnf \
+		$(DESTDIR)/usr/share/openssl-defaults/openssl.cnf
+
+override_dh_makeshlibs:
+	# Create shlibs only for real SONAME’d libs; skip provider modules under ossl-modules/
+	dh_makeshlibs -V -p libssl3
+	dh_makeshlibs -V -p libdefault0
+	dh_makeshlibs -V -p libdefault-wolf0
+	# do NOT run on libwolfprov (plugin-only, no SONAME)
+
+override_dh_shlibdeps:
+	# First, compute ${shlibs:Depends} for the libdefault* runtime packages
+	# (resolve their NEEDED: libcrypto.so.3 to our just-built libssl3)
+	dh_shlibdeps -plibdefault0 \
+	  -ldebian/libssl3/usr/lib/$(DEB_HOST_MULTIARCH) \
+	  -- -Sdebian/libssl3 -v
+	dh_shlibdeps -plibdefault-wolf0 \
+	  -ldebian/libssl3/usr/lib/$(DEB_HOST_MULTIARCH) \
+	  -- -Sdebian/libssl3 -v
+
+	# Do not auto-add a dependency on libdefault{0,-wolf0} for these two packages;
+	# we supply the OR manually in debian/control.
+	dh_shlibdeps -plibssl3 \
+	  -ldebian/libdefault0/usr/lib/$(DEB_HOST_MULTIARCH) \
+	  -ldebian/libdefault-wolf0/usr/lib/$(DEB_HOST_MULTIARCH) \
+	  -- -xlibdefault0 -xlibdefault-wolf0 -v
+	dh_shlibdeps -plibssl-dev \
+	  -ldebian/libdefault0/usr/lib/$(DEB_HOST_MULTIARCH) \
+	  -ldebian/libdefault-wolf0/usr/lib/$(DEB_HOST_MULTIARCH) \
+	  -- -xlibdefault0 -xlibdefault-wolf0 -v
+
+	# Everyone else (openssl, libwolfprov, etc.)
+	dh_shlibdeps --remaining-packages -- -v
+
+
 override_dh_gencontrol:
+	# Generate control for wolfProvider packages
 	dh_gencontrol -- \
 	 -v$(VERSION) \
 	 -Vvariant=$(VARIANT) \
 	 -Vvariant:desc="$(VARIANT_DESC)" \
 	 -Vvariant:provides="$(VARIANT_PROVIDES)"
 
-override_dh_auto_configure:
-	# None, handled below
+	# Extract OpenSSL version from the current build
+	$(eval OPENSSL_VERSION := $(shell LD_LIBRARY_PATH=./openssl-install/lib:./libdefault-stub-install/lib ./openssl-install/bin/openssl version | cut  -d' ' -f2))
 
-override_dh_auto_build:
-	./scripts/build-wolfprovider.sh $(FIPS_FLAG)
-
-override_dh_auto_install:
-	# Install library
-	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
-	install -m755 ./.libs/libwolfprov.so* \
-		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
-
-	# Install headers
-	install -d $(DESTDIR)/usr/include/wolfprovider
-	install -m644 ./include/wolfprovider/*.h \
-		$(DESTDIR)/usr/include/wolfprovider/
-
-	# Install provider config file
-	install -d $(DESTDIR)/etc/ssl/openssl.cnf.d
-	install -m644 ./$(PROVIDER_CONF) \
-		$(DESTDIR)/etc/ssl/openssl.cnf.d/wolfprovider.conf
+	# Generate control for OpenSSL packages with OpenSSL version
+	dh_gencontrol -popenssl -- \
+	 -v$(OPENSSL_VERSION)-1 \
+	 -Vopenssl:Version=$(OPENSSL_VERSION)
+	dh_gencontrol -plibssl3 -- \
+	 -v$(OPENSSL_VERSION)-1 \
+	 -Vopenssl:Version=$(OPENSSL_VERSION)
+	dh_gencontrol -plibssl-dev -- \
+	 -v$(OPENSSL_VERSION)-1 \
+	 -Vopenssl:Version=$(OPENSSL_VERSION)
 
 override_dh_auto_clean:
 	dh_auto_clean
@@ -67,7 +152,11 @@ override_dh_auto_clean:
 override_dh_auto_test:
 	@echo "Skipping dh_auto_test (tests already run during build phase)"
 
-# Avoid warnings of the form package-has-unnecessary-activation-of-ldconfig-trigger
-override_dh_makeshlibs:
-	dh_makeshlibs -n
+override_dh_install:
+	dh_install
+
+# Fail the build if anything in debian/tmp (or elsewhere) wasn’t picked up
+override_dh_missing:
+	dh_missing --fail-missing
+
 

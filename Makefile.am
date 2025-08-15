@@ -14,15 +14,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libwolfprov.la
 
-# Conditionally build libdefault.so when --replace-default is enabled
-if BUILD_REPLACE_DEFAULT
-# Install libdefault.la directly to OpenSSL lib directory
-openssldir = $(OPENSSL_LIB_DIR)
-openssl_LTLIBRARIES = libdefault.la
-libdefault_la_SOURCES = src/wp_default_replace.c
-libdefault_la_LIBADD = libwolfprov.la
-endif
-
 EXTRA_DIST+=ChangeLog.md
 EXTRA_DIST+=README.md
 EXTRA_DIST+=IDE

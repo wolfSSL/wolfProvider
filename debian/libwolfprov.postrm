@@ -3,7 +3,10 @@ set -e
 
 case "$1" in
   remove|purge)
-    rm -f /etc/ssl/openssl.cnf.d/wolfprovider.conf
-    rmdir /etc/ssl/openssl.cnf.d 2>/dev/null || true
+    rm -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
+    rm -rf /usr/share/wolfprovider-defaults
     ;;
 esac
+
+#DEBHELPER#
+exit 0

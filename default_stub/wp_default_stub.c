@@ -23,9 +23,6 @@
  *       nor use the system OpenSSL headers.
  */
 
-/* Prototype of public function that initializes the wolfSSL provider. */
-int wolfssl_provider_init();
-
 /* Prototype for the wolfprov_provider_init function */
 int wolfprov_provider_init();
 

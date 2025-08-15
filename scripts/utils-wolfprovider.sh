@@ -25,21 +25,20 @@ source ${SCRIPT_DIR}/utils-general.sh
 
 WOLFPROV_SOURCE_DIR=${SCRIPT_DIR}/..
 WOLFPROV_INSTALL_DIR=${SCRIPT_DIR}/../wolfprov-install
-LIBDEFAULT_STUB_SOURCE_DIR=${SCRIPT_DIR}/../default_stub
+LIBDEFAULT_SOURCE_DIR=${SCRIPT_DIR}/../default_stub
+LIBDEFAULT_INSTALL_DIR=${WOLFPROV_INSTALL_DIR}
 LIBDEFAULT_STUB_INSTALL_DIR=${SCRIPT_DIR}/../libdefault-stub-install
 WOLFPROV_WITH_WOLFSSL=--with-wolfssl=${WOLFSSL_INSTALL_DIR}
 
 # Check if using system wolfSSL installation
 if command -v dpkg >/dev/null 2>&1; then
     if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then
-        printf "\nSkipping wolfSSL installation - libwolfssl and libwolfssl-dev packages are already installed.\n"
         WOLFPROV_WITH_WOLFSSL=
     fi
 fi
 
 WOLFPROV_CONFIG_OPTS=${WOLFPROV_CONFIG_OPTS:-"--with-openssl=${OPENSSL_INSTALL_DIR} ${WOLFPROV_WITH_WOLFSSL} --prefix=${WOLFPROV_INSTALL_DIR}"}
 WOLFPROV_CONFIG_CFLAGS=${WOLFPROV_CONFIG_CFLAGS:-''}
-
 
 if [ "${WOLFPROV_QUICKTEST}" = "1" ]; then
     WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_QUICKTEST"
@@ -59,12 +58,42 @@ WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
 WOLFPROV_CLEAN=${WOLFPROV_CLEAN:-0}
 WOLFPROV_DISTCLEAN=${WOLFPROV_DISTCLEAN:-0}
 
+clean_default_stub() {
+    # Remove autoconf files in default_stub
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/aclocal.m4 
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/config.h 
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/config.log 
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/config.status 
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/configure 
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/depcomp 
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/install-sh
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/*.o
+    rm -f ${LIBDEFAULT_SOURCE_DIR}/*.lo
+}
+
 install_default_stub() {
-    printf "\nBuilding default stub library ...\n"
-    pushd ${LIBDEFAULT_STUB_SOURCE_DIR} &> /dev/null
+    # set flag for stub build based on incoming parameter
+    if [ "$1" = "replace" ]; then
+        LIBDEFAULT_CONFIG_OPTS="--prefix=${LIBDEFAULT_INSTALL_DIR}"
+        LIBDEFAULT_CONFIG_OPTS+=" --enable-replace"
+        printf "\n\tBuilding default replacement library ...\n"
+    else
+        LIBDEFAULT_CONFIG_OPTS="--prefix=${LIBDEFAULT_STUB_INSTALL_DIR}"
+        printf "\n\tBuilding default stub library ...\n"
+    fi
+    
+    pushd ${LIBDEFAULT_SOURCE_DIR} &> /dev/null
 
     # Ensure openssl is present for header files
     clone_openssl
+
+    # if openssl source dir is present, add the include path
+    if [ -d "${OPENSSL_SOURCE_DIR}" ]; then
+        LIBDEFAULT_CONFIG_OPTS+=" --with-openssl=${OPENSSL_INSTALL_DIR}"
+    fi
+
+    # Always do a clean build
+    clean_default_stub
 
     printf "\tGenerate build system ... "
     if [ ! -e "configure" ]; then
@@ -79,7 +108,7 @@ install_default_stub() {
     printf "Done.\n"
 
     printf "\tConfigure default stub ... "
-    ./configure --prefix=${LIBDEFAULT_STUB_INSTALL_DIR} >>$LOG_FILE 2>&1
+    ./configure ${LIBDEFAULT_CONFIG_OPTS} >>$LOG_FILE 2>&1
     if [ $? != 0 ]; then
         printf "\n\n...\n"
         tail -n 40 $LOG_FILE
@@ -120,26 +149,22 @@ clean_wolfprov() {
             make clean >>$LOG_FILE 2>&1
         fi
         # Clean default_stub build artifacts
-        if [ -f "${LIBDEFAULT_STUB_SOURCE_DIR}/Makefile" ]; then
+        if [ -f "${LIBDEFAULT_SOURCE_DIR}/Makefile" ]; then
             printf "Cleaning default stub ...\n"
-            make -C ${LIBDEFAULT_STUB_SOURCE_DIR} clean >>$LOG_FILE 2>&1
+            make -C ${LIBDEFAULT_SOURCE_DIR} clean >>$LOG_FILE 2>&1
         fi
         # Remove root libdefault.la file
         rm -f libdefault.la
-        # Remove autoconf files in default_stub
-        rm -f ${LIBDEFAULT_STUB_SOURCE_DIR}/aclocal.m4 
-        rm -f ${LIBDEFAULT_STUB_SOURCE_DIR}/config.h 
-        rm -f ${LIBDEFAULT_STUB_SOURCE_DIR}/config.log 
-        rm -f ${LIBDEFAULT_STUB_SOURCE_DIR}/config.status 
-        rm -f ${LIBDEFAULT_STUB_SOURCE_DIR}/configure 
-        rm -f ${LIBDEFAULT_STUB_SOURCE_DIR}/depcomp 
-        rm -f ${LIBDEFAULT_STUB_SOURCE_DIR}/install-sh
+        # Clean the stub
+        clean_default_stub
         # Remove entire wolfProvider install directory
         rm -rf ${WOLFPROV_INSTALL_DIR}
+        rm -rf ${LOG_FILE}
     fi
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing wolfProvider install ...\n"
         rm -rf ${WOLFPROV_INSTALL_DIR}
+        rm -rf ${LIBDEFAULT_INSTALL_DIR}
         rm -rf ${LIBDEFAULT_STUB_INSTALL_DIR}
     fi
 }
@@ -147,28 +172,10 @@ clean_wolfprov() {
 install_wolfprov() {
     pushd ${WOLFPROV_SOURCE_DIR} &> /dev/null
 
-    # Add stub library path for replace-default functionality after dependencies are installed
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
-        if [ -z "$LD_LIBRARY_PATH" ]; then
-            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib"
-        else
-            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib:$LD_LIBRARY_PATH"
-        fi
-    fi
-
-    # Build stub first so we can link OpenSSL against it
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
-        install_default_stub
-    fi
-
     init_openssl
     init_wolfssl
 
-    printf "\nConsolidating wolfProvider ...\n"
-    unset OPENSSL_MODULES
-    unset OPENSSL_CONF
-
-    printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
+    printf "\nInstalling wolfProvider ...\n"
 
     printf "\tConfigure wolfProvider ... "
     if [ ! -e "${WOLFPROV_SOURCE_DIR}/configure" ]; then
@@ -189,7 +196,6 @@ install_wolfprov() {
 
     ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
     RET=$?
-
     if [ $RET != 0 ]; then
         printf "\n\n...\n"
         tail -n 40 $LOG_FILE
@@ -208,15 +214,22 @@ install_wolfprov() {
     fi
     printf "Done.\n"
 
-    printf "\tTest wolfProvider ... "
-    make test >>$LOG_FILE 2>&1
-    if [ $? != 0 ]; then
-        printf "\n\n...\n"
-        tail -n 40 $LOG_FILE
-        do_cleanup
-        exit 1
+    # Build the replacement default library after wolfprov to avoid linker errors
+    # but before testing so that the library is present if needed
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then 
+        printf "\tWARNING: Skipping tests in replace mode...\n"
+        install_default_stub "replace"
+    else
+        printf "\tTest wolfProvider ... "
+        make test >>$LOG_FILE 2>&1
+        if [ $? != 0 ]; then
+            printf "\n\n...\n"
+            tail -n 40 $LOG_FILE
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
     fi
-    printf "Done.\n"
 
     printf "\tInstall wolfProvider ... "
     make install >>$LOG_FILE 2>&1
