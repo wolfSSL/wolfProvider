@@ -9,18 +9,7 @@ on:
 jobs:
   bookworm:
     runs-on: ubuntu-22.04
-<<<<<<< HEAD
     # Important: use Debian Bookworm for compatibility
-=======
-    strategy:
-      matrix:
-        include:
-          - fips_mode: true
-            description: "FIPS Mode"
-          - fips_mode: false
-            description: "Non-FIPS Mode"
-    # Important: use Debian Bookwork for compatibility
->>>>>>> 08f4141 (Add FIPS support for Debian package build)
     container:
       image: debian:bookworm   # or debian:bookworm-slim
       env:
@@ -69,55 +58,30 @@ jobs:
 
     - name: Install wolfssl debian package
       run: |
-        mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
-        cd "$RUNNER_TEMP/wolfssl-pkg"
+        mkdir -p "/tmp/wolfssl-pkg"
+        cd "/tmp/wolfssl-pkg"
         
-<<<<<<< HEAD
-        echo "Using standard wolfSSL package"
-        tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
+        # Install wolfssl packages
+        chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
+        $GITHUB_WORKSPACE/debian/install-wolfssl.sh \
+          $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz \
+          "/tmp/wolfssl-pkg"
 
-=======
-        # Use FIPS tarball if fips_flag is not empty, otherwise use standard tarball
-        if [ "${{ matrix.fips_mode }}" = "true" ]; then
-          echo "Using FIPS wolfSSL package"
-          tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl-fips.tar.gz
-        else
-          echo "Using standard wolfSSL package"
-          tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
-        fi
+        # Create wolfprov-packages directory and move wolfssl files there
+        mkdir -p "/tmp/wolfprov-packages"
+        echo "Moving wolfssl files to artifacts directory..."
         
->>>>>>> 08f4141 (Add FIPS support for Debian package build)
-        # Get current architecture
-        CURRENT_ARCH=$(dpkg --print-architecture)
-        echo "Current architecture: $CURRENT_ARCH"
+        # Copy all wolfssl-related files (source and binary packages)
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.deb" -exec cp {} /tmp/wolfprov-packages/ \;
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.dsc" -exec cp {} /tmp/wolfprov-packages/ \;
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.orig.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
         
-        # Look for existing .deb files that match the current architecture
-        cd debian-packages
-        MATCHING_DEB_FILES=$(find . -name "*_${CURRENT_ARCH}.deb" -o -name "*_${CURRENT_ARCH}_*.deb" 2>/dev/null || true)
-        
-        if [ -n "$MATCHING_DEB_FILES" ]; then
-          echo "Found matching .deb files for architecture $CURRENT_ARCH:"
-          echo "$MATCHING_DEB_FILES"
-          echo "Installing existing .deb files..."
-          dpkg -i $MATCHING_DEB_FILES
-        else
-          echo "No matching .deb files found for architecture $CURRENT_ARCH, rebuilding from source..."
-          dpkg-source -x wolfssl*.dsc
-          cd wolfssl*/
-          dpkg-buildpackage -b -us -uc
-          dpkg -i ../libwolfssl*.deb
-        fi
+        echo "WolfSSL files in artifacts directory:"
+        ls -la /tmp/wolfprov-packages/*wolfssl* || true
 
     - name: Build Debian package
       run: |
-<<<<<<< HEAD
-=======
-        # Run the build script with or without FIPS based on matrix
-        FIPS_FLAG=""
-        if [ "${{ matrix.fips_mode }}" = "true" ]; then
-          FIPS_FLAG="--enable-fips"
-        fi
->>>>>>> 08f4141 (Add FIPS support for Debian package build)
         # Bypass the warning prompt with 'yes Y' 
         yes Y | ./scripts/build-wolfprovider.sh --debian $FIPS_FLAG
 
@@ -145,7 +109,7 @@ jobs:
 
     - name: Test OpenSSL provider functionality
       run: |
-        PROVIDER_CONF="/etc/ssl/openssl.cnf.d/wolfprovider.conf"
+        PROVIDER_CONF="/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
         PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
 
         # Temporarily move wolfprovider config so we can toggle between providers
@@ -187,9 +151,9 @@ jobs:
         fi
 
         # Check if the config file is removed
-        if [ -f /etc/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+        if [ -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf ]; then
           echo "wolfprovider.conf still exists after package removal"
-          ls -la /etc/ssl/openssl.cnf.d/
+          ls -la /usr/lib/ssl/openssl.cnf.d/
           exit 1
         else
           echo "wolfprovider.conf successfully removed"
@@ -225,23 +189,21 @@ jobs:
 
     - name: Move package artifacts
       run: |
-        # Move the generated packages to the temp directory
-        mv ../*.deb $RUNNER_TEMP/ || true
-        mv ../*.dsc $RUNNER_TEMP/ || true
-        mv ../*.tar.gz $RUNNER_TEMP/ || true
+        # Create a clean artifacts directory
+        mkdir -p "/tmp/wolfprov-packages"
+        # Move the generated packages to the artifacts directory
+        mv ../*.deb /tmp/wolfprov-packages/ || true
+        mv ../*.dsc /tmp/wolfprov-packages/ || true
+        mv ../*.tar.gz /tmp/wolfprov-packages/ || true
 
     # Save the build outputs which for use in release packages
     - name: Upload package artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-<<<<<<< HEAD
         name: wolfprovider-debian-packages
-=======
-        name: wolfprovider-debian-packages${{ matrix.fips_mode && '-fips' }}
->>>>>>> 08f4141 (Add FIPS support for Debian package build)
         path: |
-          ${{ runner.temp }}/*.deb
-          ${{ runner.temp }}/*.dsc
-          ${{ runner.temp }}/*.tar.gz
+          /tmp/wolfprov-packages/*.deb
+          /tmp/wolfprov-packages/*.dsc
+          /tmp/wolfprov-packages/*.tar.gz
         retention-days: 7

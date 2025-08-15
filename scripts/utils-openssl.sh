@@ -70,7 +70,7 @@ clone_openssl() {
         DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
         printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
-        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR}
+        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
         RET=$?
 
         if [ $RET != 0 ]; then
@@ -158,6 +158,63 @@ patch_openssl() {
     fi
 }
 
+install_openssl_deb() {
+    printf "\nInstalling OpenSSL ${OPENSSL_TAG} for Debian packaging ...\n"
+    clone_openssl
+    pushd ${OPENSSL_SOURCE_DIR}
+
+    if [ -d ${OPENSSL_INSTALL_DIR} ]; then
+        printf "\tOpenSSL install directory already exists: ${OPENSSL_INSTALL_DIR}\n"
+        printf "\tRemoving existing install directory...\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+    fi
+
+    # Determine the install paths for Debian Bookworm
+    DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+    OPENSSL_CONFIGURE_FLAGS="--prefix=/usr --openssldir=/usr/lib/ssl --libdir=lib/${DEB_HOST_MULTIARCH} "
+
+    if [ "$WOLFPROV_DEBUG" = "1" ]; then
+        OPENSSL_CONFIGURE_FLAGS+="enable-trace --debug "
+    fi
+
+    printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
+    ./config shared ${OPENSSL_CONFIGURE_FLAGS} >>$LOG_FILE 2>&1
+    RET=$?
+    if [ $RET != 0 ]; then
+        printf "ERROR.\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
+    make -j$NUMCPU >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "ERROR.\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    # Manually set up the install directory rather than running 'make install'
+    # so that we don't modify the system OpenSSL installation
+    printf "\tCopying outputs to ${OPENSSL_INSTALL_DIR} for OpenSSL ${OPENSSL_TAG} ... "
+    mkdir -p ${OPENSSL_INSTALL_DIR}/bin
+    mkdir -p ${OPENSSL_INSTALL_DIR}/lib
+    mkdir -p ${OPENSSL_INSTALL_DIR}/include/openssl
+    mkdir -p ${OPENSSL_INSTALL_DIR}/lib/pkgconfig
+    cp -r apps/openssl ${OPENSSL_INSTALL_DIR}/bin/openssl
+    cp -r libcrypto.so* libcrypto.a ${OPENSSL_INSTALL_DIR}/lib/
+    cp -r libssl.so* libssl.a ${OPENSSL_INSTALL_DIR}/lib/
+    cp -r include/openssl/* ${OPENSSL_INSTALL_DIR}/include/openssl/
+    cp -r *.pc ${OPENSSL_INSTALL_DIR}/lib/pkgconfig/
+    printf "Done.\n"
+
+    popd
+}
+
 install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
@@ -225,7 +282,11 @@ install_openssl() {
 }
 
 init_openssl() {
-    install_openssl
+    if [ -n "$WOLFPROV_BUILD_DEBIAN" ]; then
+        install_openssl_deb
+    else
+        install_openssl
+    fi
     printf "\tOpenSSL ${OPENSSL_TAG} installed in: ${OPENSSL_INSTALL_DIR}\n"
 
     # Skip version check for replace-default mode since we only build libraries

@@ -78,12 +78,6 @@ To remove all source directories, use the following:
 ./scripts/build-wolfprovider.sh --distclean
 ```
 
-To build a Debian package file, use the following command. 
-Note this will remove all ignored files in the repo, and there must be no staged changes.
-```
-./scripts/build-wolfprovider.sh --debian
-```
-
 Alternatively, you can manually compile each component using the following guide.
 
 ### OpenSSL
