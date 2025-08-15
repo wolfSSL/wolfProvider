@@ -280,6 +280,27 @@ void WOLFPROV_ENTER(int component, const char* msg)
 }
 
 /**
+ * Log function used to record function entry for check functions.
+ * These functions use WOLFPROV_LEAVE_SILENT and may not show up in logs.
+ * The "[NOEXIT]" prefix indicates that exit logging may be suppressed.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param msg  [IN] Log message.
+ */
+void WOLFPROV_ENTER_NOEXIT(int component, const char* msg)
+{
+    if (loggingEnabled) {
+#ifdef WOLFPROV_LEAVE_SILENT_MODE
+        char buffer[WOLFPROV_MAX_LOG_WIDTH];
+        XSNPRINTF(buffer, sizeof(buffer), "wolfProv Entering [NOEXIT] %s", msg);
+        wolfprovider_log(WP_LOG_ENTER, component, buffer);
+#else
+        WOLFPROV_ENTER(component, msg);
+#endif
+    }
+}
+
+/**
  * Log function used to record function exit. Extended for function name.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
@@ -288,13 +309,45 @@ void WOLFPROV_ENTER(int component, const char* msg)
  * @param ret  [IN] Value that function will be returning.
  */
 void WOLFPROV_LEAVE_EX(int component, const char* func, const char* msg,
-    int ret)
+                         int ret)
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
         XSNPRINTF(buffer, sizeof(buffer), "wolfProv Leaving %s, return %d (%s)",
                   msg, ret, func);
         wolfprovider_log(WP_LOG_LEAVE, component, buffer);
+    }
+}
+
+/**
+ * Log function to suppress LEAVE messages. This function only prints if
+ * ret == 1 AND matched is set. All other cases are suppressed by default
+ * to reduce noise from probe failures. Define WOLFPROV_LEAVE_SILENT to 
+ * enable this logic.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param func    [IN] Name of function that is exiting.
+ * @param msg     [IN] Log message (typically file:line).
+ * @param matched [IN] Nonzero if the probe envelope matched.
+ * @param ret     [IN] Value that function will be returning.
+ */
+void WOLFPROV_LEAVE_SILENT_EX(int component, const char* func, 
+                              const char* msg, int matched, int ret)
+{
+    if (loggingEnabled) {
+#ifdef WOLFPROV_LEAVE_SILENT_MODE
+        /* Success with match - always print */
+        if (ret == 1 && matched == 1) {
+            WOLFPROV_LEAVE_EX(component, func, msg, ret);
+        }
+        else {
+            /* Anything else is suppressed */
+        }
+#else
+        (void)matched;
+        /* Legacy behavior: log all returns including return 0 */
+        WOLFPROV_LEAVE_EX(component, func, msg, ret);
+#endif
     }
 }
 
