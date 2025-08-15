@@ -1,0 +1,7 @@
+#!/usr/bin/dh-exec
+usr/include/openssl/*
+usr/lib/${DEB_HOST_MULTIARCH}/libcrypto.so
+usr/lib/${DEB_HOST_MULTIARCH}/libssl.so
+usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/openssl.pc
+usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/libcrypto.pc
+usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/libssl.pc

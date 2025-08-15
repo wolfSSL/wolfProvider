@@ -1,12 +1,42 @@
 #!/bin/sh
 set -e
 
-CONF_FILE="/etc/ssl/openssl.cnf"
-INCLUDE_LINE=".include /etc/ssl/openssl.cnf.d/"
+INCLUDE_LINE=".include /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
+CONF_FILE="/usr/lib/ssl/openssl.cnf"
+CONF_DEFAULT="/usr/share/openssl-defaults/openssl.cnf"
 
-if ! grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
-    echo "Adding include for wolfprovider..."
+# Copy from our template if it doesn't exist
+if [ ! -f "$CONF_FILE" ]; then
+    echo "Config file does not exist: $CONF_FILE"
+    if [ -f "$CONF_DEFAULT" ]; then
+        install -Dm644 "$CONF_DEFAULT" "$CONF_FILE"
+    else
+        echo "Default config file does not exist: $CONF_DEFAULT"
+        exit 1
+    fi
+fi
+
+# Add include for wolfprovider config file if not already present
+if grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
+    echo "Include line already exists in $CONF_FILE"
+else 
+    echo "Adding include for wolfprovider to $CONF_FILE..."
     sed -i "/^openssl_conf/ a $INCLUDE_LINE" "$CONF_FILE"
 fi
 
+# Link /usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/libwolfprov.so to /usr/lib/$(DEB_HOST_MULTIARCH)/
+# This is needed for the custom openssl build where libwolfprov is a normal module
+# Todo: this could possibly be done with a .links file in debian/
+DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+# Loop through /usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/libwolfprov.so* and create the link
+for file in "/usr/lib/${DEB_HOST_MULTIARCH}/ossl-modules/libwolfprov.so"*; do
+    # use the same extension as the original file
+    extension="${file##*.}"
+    if [ -f "$file" ]; then
+        echo "Linking $file to /usr/lib/${DEB_HOST_MULTIARCH}/ossl-modules/libwolfprov.$extension"
+        ln -sf "$file" "/usr/lib/${DEB_HOST_MULTIARCH}/libwolfprov.$extension"
+    fi
+done
+
+#DEBHELPER#
 exit 0
