@@ -20,6 +20,7 @@ show_help() {
   echo "  --fips-version=VER         Choose the wolfSSL FIPS version"
   echo "  --debian                   Build a Debian package"
   echo "  --quicktest                Disable some tests for a faster testing suite"
+  echo "  --leave-silent             Enable leave silent mode to suppress return 0 logging in probing functions"
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -112,6 +113,9 @@ for arg in "$@"; do
             ;;
         --quicktest)
             WOLFPROV_QUICKTEST=1
+            ;;
+        --leave-silent)
+            WOLFPROV_LEAVE_SILENT=1
             ;;
         *)
             args_wrong+="$arg, "
