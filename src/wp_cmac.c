@@ -112,6 +112,8 @@ static int wp_cmac_set_key(wp_CmacCtx* macCtx, const unsigned char* key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_set_key");
+
     if (keyLen > AES_256_KEY_SIZE) {
         ok = 0;
     }
@@ -187,6 +189,8 @@ static int wp_cmac_init(wp_CmacCtx* macCtx, const unsigned char* key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -219,6 +223,8 @@ static int wp_cmac_update(wp_CmacCtx* macCtx, const unsigned char* data,
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_update");
+
     rc = wc_CmacUpdate(&macCtx->cmac, data, (word32)dataLen);
     if (rc != 0) {
         ok = 0;
@@ -244,6 +250,8 @@ static int wp_cmac_final(wp_CmacCtx* macCtx, unsigned char* out, size_t* outl,
     int ok = 1;
     int rc;
     word32 outSz;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_final");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -302,6 +310,8 @@ static int wp_cmac_get_ctx_params(wp_CmacCtx* macCtx, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_get_ctx_params");
 
     p = OSSL_PARAM_locate(params, OSSL_MAC_PARAM_SIZE);
     if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, macCtx->size))) {
@@ -379,6 +389,8 @@ static int wp_cmac_setup_cipher(wp_CmacCtx* macCtx, const OSSL_PARAM params[])
     int ok = 1;
     const OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_setup_cipher");
+
     p = OSSL_PARAM_locate_const(params, OSSL_ALG_PARAM_CIPHER);
     if (p != NULL) {
         if (p->data_type != OSSL_PARAM_UTF8_STRING) {
@@ -421,6 +433,8 @@ static int wp_cmac_set_param_key(wp_CmacCtx* macCtx, const OSSL_PARAM params[])
     unsigned char* data = NULL;
     size_t len;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_set_param_key");
+
     if (!wp_params_get_octet_string_ptr(params, OSSL_MAC_PARAM_KEY, &data,
             &len)) {
         ok = 0;
@@ -444,6 +458,8 @@ static int wp_cmac_set_param_key(wp_CmacCtx* macCtx, const OSSL_PARAM params[])
 static int wp_cmac_set_ctx_params(wp_CmacCtx* macCtx, const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_cmac_set_ctx_params");
 
     if (params != NULL) {
         if (!wp_cmac_setup_cipher(macCtx, params)) {

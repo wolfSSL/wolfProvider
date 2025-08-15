@@ -194,6 +194,8 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     size_t passwordLen;
     word32 tradIdx = 0;
 
+    WOLFPROV_ENTER(WP_LOG_PK, "wp_epki2pki_decode");
+
     (void)ctx;
     (void)selection;
 

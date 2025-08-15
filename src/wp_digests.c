@@ -123,6 +123,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 {                                                                              \
     int ok = 1;                                                                \
     (void)params;                                                              \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_init");                             \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -150,6 +151,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_update");                           \
     int rc = upd(ctx, in, (word32)inLen);                                      \
     if (rc != 0) {                                                             \
         ok = 0;                                                                \
@@ -174,6 +176,7 @@ static int name##_final(void* ctx, unsigned char* out, size_t* outLen,         \
     size_t outSize)                                                            \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_final");                            \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -251,6 +254,8 @@ static int wp_digest_get_params(OSSL_PARAM params[], size_t blkSize,
 {
     OSSL_PARAM* p = NULL;
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DIGEST, "wp_digest_get_params");
 
     p = OSSL_PARAM_locate(params, OSSL_DIGEST_PARAM_BLOCK_SIZE);
     if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, blkSize))) {
@@ -565,6 +570,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 {                                                                              \
     int ok = 1;                                                                \
     (void)params;                                                              \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_init");                             \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -597,6 +603,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     size_t outSize)                                                            \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_final");                            \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -674,6 +681,7 @@ static CTX* name##_dupctx(CTX* src)                                            \
 static int name##_set_ctx_params(CTX* ctx, const OSSL_PARAM params[])          \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_set_ctx_params");                   \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \

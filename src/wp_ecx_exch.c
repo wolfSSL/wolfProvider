@@ -136,6 +136,8 @@ static int wp_ecx_init(wp_EcxCtx* ctx, wp_Ecx* ecx, const OSSL_PARAM params[])
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_X25519, "wp_ecx_init");
+
     /* No settable parameters. */
     (void)params;
 
@@ -153,7 +155,7 @@ static int wp_ecx_init(wp_EcxCtx* ctx, wp_Ecx* ecx, const OSSL_PARAM params[])
         ctx->key = ecx;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_X25519, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -170,6 +172,8 @@ static int wp_ecx_set_peer(wp_EcxCtx* ctx, wp_Ecx* peer)
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_X25519, "wp_ecx_set_peer");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -185,7 +189,7 @@ static int wp_ecx_set_peer(wp_EcxCtx* ctx, wp_Ecx* peer)
         ctx->peer = peer;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_X25519, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -219,6 +223,8 @@ static int wp_x25519_derive(wp_EcxCtx* ctx, unsigned char* secret,
     size_t* secLen, size_t secSize)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_X25519, "wp_x25519_derive");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -266,7 +272,7 @@ static int wp_x25519_derive(wp_EcxCtx* ctx, unsigned char* secret,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_X25519, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -306,6 +312,8 @@ static int wp_x448_derive(wp_EcxCtx* ctx, unsigned char* secret,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_X448, "wp_x448_derive");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -336,7 +344,7 @@ static int wp_x448_derive(wp_EcxCtx* ctx, unsigned char* secret,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_X448, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

@@ -193,6 +193,8 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
     OSSL_PARAM lParams[4];
     int lParamSz = 0;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_digest_sign_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -263,6 +265,8 @@ static int wp_mac_digest_sign_update(wp_MacSigCtx *ctx,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_digest_sign_update");
+
     if (!EVP_MAC_update(ctx->macCtx, data, dataLen)) {
         ok = 0;
     }
@@ -288,6 +292,8 @@ static int wp_mac_digest_sign_final(wp_MacSigCtx *ctx, unsigned char *sig,
     size_t *sigLen, size_t sigSize)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_digest_sign_final");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;

@@ -118,6 +118,8 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_instantiate");
+
     (void)predResist;
     (void)params;
 
@@ -159,6 +161,8 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
  */
 static int wp_drbg_uninstantiate(wp_DrbgCtx* ctx)
 {
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_uninstantiate");
+
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
     (void)wc_rng_free(ctx->rng);
 #else
@@ -188,6 +192,8 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
 {
     int ok = 1;
     int rc;
+
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_generate");
 
     (void)predResist;
 
@@ -236,6 +242,8 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_reseed");
+
 #if 0
     /* Calling Hash_DRBG_Instantiate would be better. */
     int rc;
@@ -274,6 +282,8 @@ static int wp_drbg_enable_locking(wp_DrbgCtx* ctx)
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_enable_locking");
+
 #ifndef WP_SINGLE_THREADED
     if (ctx->mutex == NULL) {
         ctx->mutex = OPENSSL_malloc(sizeof(*ctx->mutex));
@@ -304,6 +314,9 @@ static int wp_drbg_enable_locking(wp_DrbgCtx* ctx)
 static int wp_drbg_lock(wp_DrbgCtx* ctx)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_lock");
+
 #ifndef WP_SINGLE_THREADED
     int rc;
 
@@ -327,6 +340,8 @@ static int wp_drbg_lock(wp_DrbgCtx* ctx)
  */
 static int wp_drbg_unlock(wp_DrbgCtx* ctx)
 {
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_unlock");
+
 #ifndef WP_SINGLE_THREADED
     if (ctx->mutex != NULL) {
        wc_UnLockMutex(ctx->mutex);
@@ -371,6 +386,8 @@ static int wp_drbg_get_ctx_params(wp_DrbgCtx* ctx, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_get_ctx_params");
 
     (void)ctx;
 
@@ -419,6 +436,8 @@ static const OSSL_PARAM* wp_drbg_settable_ctx_params(wp_DrbgCtx* ctx,
  */
 static int wp_drbg_set_ctx_params(wp_DrbgCtx* ctx, const OSSL_PARAM params[])
 {
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_set_ctx_params");
+
     (void)ctx;
     (void)params;
     WOLFPROV_LEAVE(WP_LOG_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
@@ -433,6 +452,8 @@ static int wp_drbg_set_ctx_params(wp_DrbgCtx* ctx, const OSSL_PARAM params[])
  */
 static int wp_drbg_verify_zeroization(wp_DrbgCtx* ctx)
 {
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_verify_zeroization");
+
     (void)ctx;
     WOLFPROV_LEAVE(WP_LOG_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
@@ -457,6 +478,8 @@ static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
     int ok = 1;
     int rc;
     unsigned char* buffer;
+
+    WOLFPROV_ENTER(WP_LOG_RNG, "wp_drbg_get_seed");
 
     (void)entropy;
     (void)maxLen;
