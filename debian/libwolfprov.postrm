@@ -3,7 +3,12 @@ set -e
 
 case "$1" in
   remove|purge)
-    rm -f /etc/ssl/openssl.cnf.d/wolfprovider.conf
-    rmdir /etc/ssl/openssl.cnf.d 2>/dev/null || true
+    DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+    rm -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
+    rm -f /usr/lib/${DEB_HOST_MULTIARCH}/ossl-modules/libwolfprov.so*
+    rm -f /usr/lib/${DEB_HOST_MULTIARCH}/libwolfprov.so*
     ;;
 esac
+
+#DEBHELPER#
+exit 0

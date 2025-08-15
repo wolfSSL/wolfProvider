@@ -47,6 +47,7 @@ clean_openssl() {
             make -C "${OPENSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
         fi
         rm -rf "${OPENSSL_INSTALL_DIR}"
+        rm -rf "${OPENSSL_STUB_INSTALL_DIR}"
     fi
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing OpenSSL source ...\n"
@@ -70,7 +71,7 @@ clone_openssl() {
         DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
         printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
-        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR}
+        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
         RET=$?
 
         if [ $RET != 0 ]; then
@@ -94,15 +95,24 @@ clone_openssl() {
     fi
 }
 
+is_openssl_patched() {
+    if [ ! -f "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" ]; then
+        return 0
+    fi
+
+    pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
+    patch_applied=$(git diff --quiet "crypto/provider_predefined.c" 2>/dev/null && echo 1 || echo 0)
+    popd &> /dev/null
+    return $patch_applied
+}
+
 check_openssl_replace_default_mismatch() {
     local openssl_is_patched=0
 
     # Check if the source was patched for --replace-default
-    if [ -f "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" ]; then
-        if grep -q "wolfprov_provider_init" "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" 2>/dev/null; then
-            openssl_is_patched=1
-            printf "INFO: OpenSSL source modified - wolfProvider integrated as default provider (non-stock build).\n"
-        fi
+    if is_openssl_patched; then
+        openssl_is_patched=1
+        printf "INFO: OpenSSL source modified - wolfProvider integrated as default provider (non-stock build).\n"
     fi
 
     # Check for mismatch
@@ -123,6 +133,19 @@ check_openssl_replace_default_mismatch() {
     fi
 }
 
+patch_openssl_version() {
+    # Patch the OpenSSL version (wolfProvider/openssl-source/VERSION.dat) 
+    # with our BUILD_METADATA, depending on the FIPS flag. Either "wolfProvider" or "wolfProvider-fips".
+    if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+        sed -i 's/BUILD_METADATA=.*/BUILD_METADATA=wolfProvider-fips/g' ${OPENSSL_SOURCE_DIR}/VERSION.dat
+    else
+        sed -i 's/BUILD_METADATA=.*/BUILD_METADATA=wolfProvider-nonfips/g' ${OPENSSL_SOURCE_DIR}/VERSION.dat
+    fi
+
+    # Patch the OpenSSL RELEASE_DATE field with the current date in the format DD MMM YYYY
+    sed -i "s/RELEASE_DATE=.*/RELEASE_DATE=$(date '+%d %b %Y')/g" ${OPENSSL_SOURCE_DIR}/VERSION.dat
+}
+
 patch_openssl() {
     if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
 
@@ -135,10 +158,10 @@ patch_openssl() {
         fi
 
         printf "\tApplying OpenSSL default provider patch ... "
-        cd ${OPENSSL_SOURCE_DIR}
+        pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
 
         # Check if patch is already applied
-        if grep -q "wolfprov_provider_init" crypto/provider_predefined.c 2>/dev/null; then
+        if is_openssl_patched; then
             printf "Already applied.\n"
             return 0
         fi
@@ -152,10 +175,78 @@ patch_openssl() {
             do_cleanup
             exit 1
         fi
+        patch_openssl_version
         printf "Done.\n"
 
-        cd ${SCRIPT_DIR}/..
+        popd &> /dev/null
     fi
+}
+
+install_openssl_deb() {
+    printf "\nInstalling OpenSSL ${OPENSSL_TAG} for Debian packaging ...\n"
+    clone_openssl
+    patch_openssl
+    check_openssl_replace_default_mismatch
+
+    pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
+
+    if [ -d ${OPENSSL_INSTALL_DIR} ]; then
+        printf "\tOpenSSL install directory already exists: ${OPENSSL_INSTALL_DIR}\n"
+        printf "\tRemoving existing install directory...\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+    fi
+
+    # Build configure command
+    CONFIG_CMD="./config shared"
+
+    # Determine the install paths for Debian Bookworm
+    DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+    CONFIG_CMD+=" --prefix=/usr --openssldir=/usr/lib/ssl --libdir=lib/${DEB_HOST_MULTIARCH} "
+
+    if [ "$WOLFPROV_DEBUG" = "1" ]; then
+        CONFIG_CMD+=" enable-trace --debug"
+    fi
+
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        CONFIG_CMD+=" no-external-tests no-tests"
+    fi
+
+    printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
+    $CONFIG_CMD >>$LOG_FILE 2>&1
+    RET=$?
+    if [ $RET != 0 ]; then
+        printf "ERROR.\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
+    make -j$NUMCPU >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "ERROR.\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    # Manually set up the install directory rather than running 'make install'
+    # so that we don't modify the system OpenSSL installation
+    printf "\tCopying outputs to ${OPENSSL_INSTALL_DIR} for OpenSSL ${OPENSSL_TAG} ... "
+    mkdir -p ${OPENSSL_INSTALL_DIR}/bin
+    mkdir -p ${OPENSSL_INSTALL_DIR}/lib
+    mkdir -p ${OPENSSL_INSTALL_DIR}/include/openssl
+    mkdir -p ${OPENSSL_INSTALL_DIR}/lib/pkgconfig
+    cp -r apps/openssl ${OPENSSL_INSTALL_DIR}/bin/openssl
+    cp -r libcrypto.so* libcrypto.a ${OPENSSL_INSTALL_DIR}/lib/
+    cp -r libssl.so* libssl.a ${OPENSSL_INSTALL_DIR}/lib/
+    cp -r include/openssl/* ${OPENSSL_INSTALL_DIR}/include/openssl/
+    cp -r *.pc ${OPENSSL_INSTALL_DIR}/lib/pkgconfig/
+    printf "Done.\n"
+
+    popd &> /dev/null
 }
 
 install_openssl() {
@@ -163,6 +254,7 @@ install_openssl() {
     clone_openssl
     patch_openssl
     check_openssl_replace_default_mismatch
+
     pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
 
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
@@ -175,19 +267,6 @@ install_openssl() {
         fi
         if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
             CONFIG_CMD+=" no-external-tests no-tests"
-
-            # Set up library paths to find the stub libdefault
-            if [ -d "${OPENSSL_STUB_INSTALL_DIR}" ]; then
-                # Link the stub library directly into libcrypto using LDFLAGS and LDLIBS
-                CONFIGURE_LDFLAGS="-L${OPENSSL_STUB_INSTALL_DIR}/lib"
-                CONFIGURE_LDLIBS="-ldefault"
-            else
-                printf "ERROR - stub libdefault not found in: ${OPENSSL_STUB_INSTALL_DIR}\n"
-                do_cleanup
-                exit 1
-            fi
-
-            CONFIG_CMD+=" LDFLAGS=${CONFIGURE_LDFLAGS} LDLIBS=${CONFIGURE_LDLIBS}"
         fi
 
         $CONFIG_CMD >>$LOG_FILE 2>&1
@@ -227,19 +306,6 @@ install_openssl() {
 init_openssl() {
     install_openssl
     printf "\tOpenSSL ${OPENSSL_TAG} installed in: ${OPENSSL_INSTALL_DIR}\n"
-
-    # Skip version check for replace-default mode since we only build libraries
-    if [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ]; then
-        OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS} $OPENSSL_BIN version | tail -n1`
-        case $OSSL_VER in
-            OpenSSL\ 3.*) ;;
-            *)
-                echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
-                echo "Set: OPENSSL_DIR"
-                exit 1
-                ;;
-        esac
-    fi
 
     if [ -z $LD_LIBRARY_PATH ]; then
       export LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS}
