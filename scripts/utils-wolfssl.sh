@@ -98,6 +98,19 @@ install_wolfssl() {
     # use the custom OpenSSL built with wolfProvider.
     if command -v dpkg >/dev/null 2>&1; then
         if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then
+            # Check if there is a FIPS mismatch
+            # If the system wolfSSL is FIPS, we need to be doing a FIPS build
+            dpkg -l | grep "^ii.*libwolfssl[[:space:]]" | grep -q "fips"
+            if [ $? -eq 0 ] && [ "$WOLFSSL_ISFIPS" != "1" ]; then
+                printf "ERROR: System wolfSSL is FIPS, but WOLFSSL_ISFIPS is not set to 1\n"
+                do_cleanup
+                exit 1
+            elif [ $? -eq 0 ] && [ "$WOLFSSL_ISFIPS" != "0" ]; then
+                printf "ERROR: System wolfSSL is non-FIPS, but WOLFSSL_ISFIPS is set to 1\n"
+                do_cleanup
+                exit 1
+            fi
+            
             printf "\nSkipping wolfSSL installation - libwolfssl and libwolfssl-dev packages are already installed.\n"
             # Set WOLFSSL_INSTALL_DIR to system installation directory
             WOLFSSL_INSTALL_DIR="/usr"

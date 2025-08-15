@@ -24,7 +24,16 @@ else
 fi
 
 pushd $SCRIPT_DIR
-REPO_ROOT="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
+if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+    # In a GitHub Actions workflow, GITHUB_WORKSPACE is set to the root of the repository
+    REPO_ROOT="$GITHUB_WORKSPACE"
+elif git rev-parse --show-toplevel >/dev/null 2>&1; then
+    # In a local environment, use the output of git rev-parse --show-toplevel
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+else
+    # Fallback: use parent directory of scripts folder
+    REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+fi
 popd
 
 echo "SCRIPT_DIR: $SCRIPT_DIR"
@@ -46,7 +55,7 @@ WOLFPROV_LIB_PATH="$REPO_ROOT/wolfprov-install/lib"
 
 # Always reconstruct LD_LIBRARY_PATH with correctly detected OPENSSL_LIB_PATH
 # ${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} expands to :$LD_LIBRARY_PATH only if LD_LIBRARY_PATH was already set
-export LD_LIBRARY_PATH="$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$WOLFPROV_LIB_PATH:$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 # Auto-detect FIPS mode and use appropriate config
 if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
