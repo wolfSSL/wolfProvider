@@ -104,6 +104,13 @@ clean_wolfprov() {
         if [ -f "Makefile" ]; then
             make clean >>$LOG_FILE 2>&1
         fi
+        # Clean default_stub build artifacts
+        if [ -f "default_stub/Makefile" ]; then
+            printf "Cleaning default stub ...\n"
+            make -C default_stub clean >>$LOG_FILE 2>&1
+        fi
+        # Remove root libdefault.la file
+        rm -f libdefault.la
         rm -rf ${WOLFPROV_INSTALL_DIR}
     fi
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
