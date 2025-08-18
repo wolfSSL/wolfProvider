@@ -1,0 +1,122 @@
+name: libp11 Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_libp11:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        libp11_ref: [ 'master', 'libp11-0.4.12' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - libp11_ref: 'master'
+            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    steps:
+      # Checkout the source so we can run the check-workflow-result script
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+              .github
+      - name: Retrieving OpenSSL from cache
+        uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: |
+            openssl-source
+            openssl-install
+          key: ossl-depends-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-source
+            wolfssl-install
+            wolfprov-install
+            provider.conf
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install libp11 dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool libc6 pkg-config libc6 opensc
+          #libp11 PKCS11 object for testing
+          sudo apt-get install softhsm2
+
+      - name: Download libp11
+        uses: actions/checkout@v4
+        with:
+          repository: OpenSC/libp11
+          ref: ${{ matrix.libp11_ref }}
+          path: libp11
+
+      - name: Build softhsm2
+        working-directory: libp11
+        run: |
+          mkdir -p ~/.config/softhsm2
+          echo "directories.tokendir = $HOME/.local/share/softhsm2/tokens/" > "$HOME/.config/softhsm2/softhsm2.conf"
+          mkdir -p ~/.local/share/softhsm2/tokens
+          export SOFTHSM2_CONF=$HOME/.config/softhsm2/softhsm2.conf
+          softhsm2-util --init-token --slot 0 --label "TestToken" --so-pin 1234 --pin 5678
+          softhsm2-util --show-slots
+          export PKCS11_MODULE_PATH=$(find /usr -name 'libsofthsm2.so' 2>/dev/null | head -n 1)
+
+      - name: Build libp11
+        working-directory: libp11
+        run: |
+          ./bootstrap
+          ./configure
+          make
+          sudo make install
+
+      - name: Run libp11 tests
+        working-directory: libp11
+        run: |
+          echo "Setting environment variables..."
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
+          export ${{ matrix.force_fail }}
+
+
+          # Run tests
+          softhsm2-util --show-slots
+          make check 2>&1 | tee libp11-test.log
+          TEST_RESULT=${PIPESTATUS[0]}
+          echo "TEST_RESULT = $TEST_RESULT"
+
+          echo "Checking OpenSSL providers:"
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
+          grep libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
+          #$GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libp11
