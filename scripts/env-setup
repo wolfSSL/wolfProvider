@@ -33,9 +33,9 @@ echo "PWD: $PWD"
 
 # Detect the openssl library path
 if [ -d $REPO_ROOT/openssl-install/lib ]; then
-    OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib
+    export OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib
 elif [ -d $REPO_ROOT/openssl-install/lib64 ]; then
-    OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib64
+    export OPENSSL_LIB_PATH=$REPO_ROOT/openssl-install/lib64
 else
     echo "Error: Could not find OpenSSL lib directory in $REPO_ROOT/openssl-install"
     exit 1

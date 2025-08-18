@@ -50,6 +50,8 @@ clean_openssl() {
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing OpenSSL source ...\n"
         rm -rf "${OPENSSL_SOURCE_DIR}"
+        printf "Removing OpenSSL install ...\n"
+        rm -rf "${OPENSSL_INSTALL_DIR}"
     fi
 }
 

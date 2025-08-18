@@ -106,10 +106,24 @@ clean_wolfprov() {
         fi
         rm -rf ${WOLFPROV_INSTALL_DIR}
     fi
+    if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        printf "Removing wolfProvider install ...\n"
+        rm -rf ${WOLFPROV_INSTALL_DIR}
+        rm -rf ${LIBDEFAULT_STUB_INSTALL_DIR}
+    fi
 }
 
 install_wolfprov() {
     cd ${WOLFPROV_SOURCE_DIR}
+
+    # Add stub library path for replace-default functionality after dependencies are installed
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        if [ -z "$LD_LIBRARY_PATH" ]; then
+            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib"
+        else
+            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib:$LD_LIBRARY_PATH"
+        fi
+    fi
 
     init_openssl
     init_wolfssl
@@ -117,6 +131,7 @@ install_wolfprov() {
     printf "\nConsolidating wolfProvider ...\n"
     unset OPENSSL_MODULES
     unset OPENSSL_CONF
+
     printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
 
     printf "\tConfigure wolfProvider ... "
@@ -130,12 +145,6 @@ install_wolfprov() {
 
     if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
         WOLFPROV_CONFIG_OPTS+=" --enable-replace-default"
-        # Add stub library path for replace-default functionality
-        if [ -z "$LD_LIBRARY_PATH" ]; then
-            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib"
-        else
-            export LD_LIBRARY_PATH="${LIBDEFAULT_STUB_INSTALL_DIR}/lib:$LD_LIBRARY_PATH"
-        fi
     fi
 
     ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1

@@ -132,6 +132,18 @@ AC_ARG_ENABLE([replace-default],
 
 AM_CONDITIONAL([BUILD_REPLACE_DEFAULT], [test "x$ENABLED_REPLACE_DEFAULT" = "xyes"])
 
+# Set OpenSSL lib directory for installing libdefault.so
+if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then
+    if test -d "$OPENSSL_INSTALL_DIR/lib64"; then
+        OPENSSL_LIB_DIR="$OPENSSL_INSTALL_DIR/lib64"
+    elif test -d "$OPENSSL_INSTALL_DIR/lib"; then
+        OPENSSL_LIB_DIR="$OPENSSL_INSTALL_DIR/lib"
+    else
+        OPENSSL_LIB_DIR="$OPENSSL_INSTALL_DIR/lib"
+    fi
+fi
+AC_SUBST([OPENSSL_LIB_DIR])
+
 
 AX_HARDEN_CC_COMPILER_FLAGS
 

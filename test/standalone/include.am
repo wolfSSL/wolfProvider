@@ -1,0 +1,36 @@
+# vim:ft=automake
+# included from test/include.am
+# All paths should be given relative to the root
+
+# Standalone test programs use no extension - simple and clean!
+
+# Common standalone test headers
+noinst_HEADERS += test/standalone/test_common.h
+
+# Standalone test programs
+# Each test compiles to its own binary for isolated execution
+check_PROGRAMS += test/sha256_simple.test test/hardload.test
+noinst_PROGRAMS += test/sha256_simple.test test/hardload.test
+DISTCLEANFILES += test/.libs/sha256_simple.test test/.libs/hardload.test
+
+# Common flags for all standalone tests
+STANDALONE_COMMON_CPPFLAGS = -DCERTS_DIR='"$(abs_top_srcdir)/certs"' \
+                            -I$(srcdir)/test/standalone
+STANDALONE_COMMON_LDADD = libwolfprov.la
+
+# Individual test configurations
+test_sha256_simple_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
+test_sha256_simple_test_SOURCES = test/standalone/tests/sha256_simple/test_sha256_simple.c
+test_sha256_simple_test_LDADD = $(STANDALONE_COMMON_LDADD)
+
+test_hardload_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
+test_hardload_test_SOURCES = test/standalone/tests/hardload/test_hardload.c
+test_hardload_test_LDADD = $(STANDALONE_COMMON_LDADD)
+
+# Common test utilities are built automatically by automake
+
+# Add standalone tests to the test suite
+# We'll run these through our multi-environment runner manually
+# TESTS += test/sha256_simple.test
+
+# Note: test results are cleaned by the test runner automatically

@@ -49,6 +49,8 @@ clean_wolfssl() {
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing wolfSSL source ...\n"
         rm -rf "${WOLFSSL_SOURCE_DIR}"
+        printf "Removing wolfSSL install ...\n"
+        rm -rf "${WOLFSSL_INSTALL_DIR}"
     fi
 }
 
@@ -72,7 +74,10 @@ clone_wolfssl() {
             DEPTH_ARG=${WOLFPROV_DEBUG:+""}
             DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
-            git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${WOLFSSL_GIT} ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            # If we are replacing default provider, our current built openssl still
+            # links to the default stub and is non-functional. Run the clone with
+            # no explicitly LD_LIBRARY_PATH to ensure use of global openssl for clone
+            LD_LIBRARY_PATH="" git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${WOLFSSL_GIT} ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
             RET=$?
 
             if [ $RET != 0 ]; then
