@@ -19,7 +19,7 @@ if [ ! -f "$BINARY_PATH" ]; then
 fi
 
 # Source env-setup
-if ! source "$ROOT_DIR/scripts/env-setup" >/dev/null 2>&1; then
+if ! source "$ROOT_DIR/scripts/env-setup" >/dev/null; then
     echo "Error: env-setup failed"
     exit 1
 fi
