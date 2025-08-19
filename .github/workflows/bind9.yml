@@ -88,14 +88,14 @@ jobs:
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
-          export ${{ matrix.force_fail }}
 
           autoreconf -ivf
           ./configure
           make clean
           make -j$(nproc)
           sudo ./bin/tests/system/ifconfig.sh up
-          make -j$(nproc) check 2>&1 | tee bind9-test.log
 
+          export ${{ matrix.force_fail }}
+          make -j$(nproc) check 2>&1 | tee bind9-test.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} bind9
