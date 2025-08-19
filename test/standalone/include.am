@@ -9,7 +9,7 @@ noinst_HEADERS += test/standalone/test_common.h
 
 # Standalone test programs
 # Each test compiles to its own binary for isolated execution
-check_PROGRAMS += test/sha256_simple.test test/hardload.test
+# Note: These are NOT in check_PROGRAMS because they must be run through scripts, not directly
 noinst_PROGRAMS += test/sha256_simple.test test/hardload.test
 DISTCLEANFILES += test/.libs/sha256_simple.test test/.libs/hardload.test
 
@@ -29,8 +29,7 @@ test_hardload_test_LDADD = $(STANDALONE_COMMON_LDADD)
 
 # Common test utilities are built automatically by automake
 
-# Add standalone tests to the test suite
-# We'll run these through our multi-environment runner manually
-# TESTS += test/sha256_simple.test
+# Standalone tests are available for manual execution but not part of make check
+# Run manually with: ./test/standalone/runners/run_standalone_tests.sh
 
 # Note: test results are cleaned by the test runner automatically

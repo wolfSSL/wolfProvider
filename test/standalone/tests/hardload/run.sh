@@ -36,7 +36,12 @@ fi
 if [ "$WP_USING_REPLACE_DEFAULT" = "1" ]; then
     echo "Detected: --replace-default build"
     unset OPENSSL_CONF
+    EXPECTED_PROVIDER_NAME="wolfSSL Provider"
+else
+    EXPECTED_PROVIDER_NAME="OpenSSL Default Provider"
 fi
+
+echo "Expected provider name: $EXPECTED_PROVIDER_NAME"
 
 echo "Using environment:"
 echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
@@ -77,7 +82,7 @@ run_test() {
     # Create temporary file for test output
     output_file=$(mktemp)
     
-    if "$BINARY_PATH" >"$output_file" 2>&1; then
+    if "$BINARY_PATH" "$EXPECTED_PROVIDER_NAME" >"$output_file" 2>&1; then
         result="PASS"
     else
         result="FAIL"

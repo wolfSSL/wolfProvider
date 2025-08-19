@@ -52,10 +52,20 @@ int main(int argc, char *argv[])
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_len = 0;
     char digest_hex[EVP_MAX_MD_SIZE * 2 + 1];
+    const char *expected_provider_name = "default";
     int ret = TEST_FAILURE;
+    const char *wpProviderName = NULL;
+    OSSL_PARAM wpParams[] = {
+        { OSSL_PROV_PARAM_NAME, OSSL_PARAM_UTF8_PTR, &wpProviderName, 0, 0 },
+        { NULL, 0, NULL, 0, 0 }
+    };
 
-    (void)argc;
-    (void)argv;
+    /* Parse command line arguments */
+    if (argc > 1) {
+        expected_provider_name = argv[1];
+    }
+
+    TEST_INFO("Expected provider name: %s", expected_provider_name);
 
     /* Initialize OpenSSL */
     OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG, NULL);
@@ -83,6 +93,28 @@ int main(int argc, char *argv[])
     }
 
     TEST_INFO("Default provider hard loaded successfully");
+
+    /* Validate the provider name matches expected using OSSL_PROVIDER_get_params */
+    if (OSSL_PROVIDER_get_params(default_prov, wpParams) != 1) {
+        TEST_ERROR("Failed to get provider parameters");
+        ERR_print_errors_fp(stderr);
+        goto cleanup;
+    }
+
+    if (wpProviderName == NULL) {
+        TEST_ERROR("Provider name parameter returned NULL");
+        goto cleanup;
+    }
+
+    TEST_INFO("Actual provider name: %s", wpProviderName);
+
+    if (strcmp(wpProviderName, expected_provider_name) != 0) {
+        TEST_ERROR("Provider name mismatch - Expected: '%s', Got: '%s'",
+                   expected_provider_name, wpProviderName);
+        goto cleanup;
+    }
+
+    TEST_INFO("Provider name validation passed: %s", wpProviderName);
 
     /* Get SHA256 algorithm from the explicitly loaded default provider */
     sha256 = EVP_MD_fetch(libctx, "SHA256", NULL);
