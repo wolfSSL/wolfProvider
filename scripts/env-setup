@@ -44,8 +44,9 @@ fi
 WOLFSSL_LIB_PATH="$REPO_ROOT/wolfssl-install/lib"
 WOLFPROV_LIB_PATH="$REPO_ROOT/wolfprov-install/lib"
 
-# Set variables with default values if not already set
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:=$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH}"
+# Always reconstruct LD_LIBRARY_PATH with correctly detected OPENSSL_LIB_PATH
+# (avoids conditional assignment that would skip update if LD_LIBRARY_PATH already set)
+export LD_LIBRARY_PATH="$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 # Auto-detect FIPS mode and use appropriate config
 if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
