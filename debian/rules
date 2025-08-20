@@ -8,19 +8,46 @@ DEB_HOST_MULTIARCH := $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 # Destination directory for installation
 DESTDIR=debian/tmp
 
+# Grab the base version from debian/changelog
+BASEVER := $(shell dpkg-parsechangelog -SVersion)
+
+# Check if FIPS build is requested
+WOLFSSL_ISFIPS?=0
+# Variant-specific metadata
+ifeq ($(WOLFSSL_ISFIPS),1)
+  VARIANT           := fips
+  VARIANT_DESC      := FIPS build
+  VARIANT_PROVIDES  := libwolfprov-fips
+  VERSION           := $(BASEVER)+fips
+  FIPS_FLAG         := --enable-fips
+  PROVIDER_CONF     := provider-fips.conf
+else
+  VARIANT           := non-fips
+  VARIANT_DESC      := non-FIPS build
+  VARIANT_PROVIDES  := libwolfprov-nonfips
+  VERSION           := $(BASEVER)
+  PROVIDER_CONF     := provider.conf
+  FIPS_FLAG         :=
+endif
+
+# Override just the control-file generation to inject our values
+override_dh_gencontrol:
+	dh_gencontrol -- \
+	 -v$(VERSION) \
+	 -Vvariant=$(VARIANT) \
+	 -Vvariant:desc="$(VARIANT_DESC)" \
+	 -Vvariant:provides="$(VARIANT_PROVIDES)"
+
 override_dh_auto_configure:
-	./autogen.sh
-	./configure
+	# None, handled below
 
 override_dh_auto_build:
-	make -j$(shell nproc)
+	./scripts/build-wolfprovider.sh $(FIPS_FLAG)
 
 override_dh_auto_install:
 	# Install library
 	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
 	install -m755 ./.libs/libwolfprov.so* \
-		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
-	install -m755 ./.libs/libwolfprov.la* \
 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
 
 	# Install headers
@@ -30,7 +57,7 @@ override_dh_auto_install:
 
 	# Install provider config file
 	install -d $(DESTDIR)/etc/ssl/openssl.cnf.d
-	install -m644 ./provider.conf \
+	install -m644 ./$(PROVIDER_CONF) \
 		$(DESTDIR)/etc/ssl/openssl.cnf.d/wolfprovider.conf
 
 override_dh_auto_clean:

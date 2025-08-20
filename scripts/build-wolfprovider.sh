@@ -19,6 +19,7 @@ show_help() {
   echo "  --fips-check=TAG           Choose a FIPS tag to clone. May require a version to be given by --fips-version"
   echo "  --fips-version=VER         Choose the wolfSSL FIPS version"
   echo "  --debian                   Build a Debian package"
+  echo "  --debian --enable-fips     Build a Debian package with FIPS support"
   echo "  --quicktest                Disable some tests for a faster testing suite"
   echo ""
   echo "Environment Variables:"
@@ -128,7 +129,7 @@ fi
 
 if [ -n "$build_debian" ]; then
     echo "Building Debian package..."
-    ./scripts/build-debian.sh
+    WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0} ./scripts/build-debian.sh
     exit $?
 fi
 
