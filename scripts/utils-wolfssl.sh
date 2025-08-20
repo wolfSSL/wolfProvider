@@ -93,6 +93,18 @@ clone_wolfssl() {
 }
 
 install_wolfssl() {
+    # Check if libwolfssl and libwolfssl-dev packages are already installed
+    # This is allowed only for wolfSSL, but not for OpenSSL because we want to
+    # use the custom OpenSSL built with wolfProvider.
+    if command -v dpkg >/dev/null 2>&1; then
+        if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then
+            printf "\nSkipping wolfSSL installation - libwolfssl and libwolfssl-dev packages are already installed.\n"
+            # Set WOLFSSL_INSTALL_DIR to system installation directory
+            WOLFSSL_INSTALL_DIR="/usr"
+            return 0
+        fi
+    fi
+
     printf "\nInstalling wolfSSL ${WOLFSSL_TAG} ...\n"
     clone_wolfssl
     cd ${WOLFSSL_SOURCE_DIR}

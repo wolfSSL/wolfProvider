@@ -116,6 +116,8 @@ static int wp_gmac_set_key(wp_GmacCtx* macCtx, const unsigned char *key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_set_key");
+
     if (keyLen > AES_256_KEY_SIZE) {
         ok = 0;
     }
@@ -190,6 +192,8 @@ static int wp_gmac_init(wp_GmacCtx* macCtx, const unsigned char* key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -218,6 +222,8 @@ static int wp_gmac_update(wp_GmacCtx* macCtx, const unsigned char* data,
 {
     int ok = 1;
     unsigned char* p;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_update");
 
     /* Data cached as wolfSSL doesn't have a streaming API. */
     p = OPENSSL_realloc(macCtx->data, macCtx->dataLen + dataLen);
@@ -249,6 +255,8 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
 {
     int ok = 1;
     int rc;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_final");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -303,6 +311,8 @@ static int wp_gmac_get_params(OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM *p;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_get_params");
 
     p = OSSL_PARAM_locate(params, OSSL_MAC_PARAM_SIZE);
     if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, AES_BLOCK_SIZE))) {
@@ -374,6 +384,8 @@ static int wp_gmac_setup_cipher(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
     int ok = 1;
     const OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_setup_cipher");
+
     p = OSSL_PARAM_locate_const(params, OSSL_ALG_PARAM_CIPHER);
     if (p != NULL) {
         if (p->data_type != OSSL_PARAM_UTF8_STRING) {
@@ -413,6 +425,8 @@ static int wp_gmac_set_param_key(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
     unsigned char* data = NULL;
     size_t len;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_set_param_key");
+
     if (!wp_params_get_octet_string_ptr(params, OSSL_MAC_PARAM_KEY, &data,
             &len)) {
         ok = 0;
@@ -438,6 +452,8 @@ static int wp_gmac_set_param_iv(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
     int ok = 1;
     unsigned char* data = NULL;
     size_t len;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_set_param_iv");
 
     if (!wp_params_get_octet_string_ptr(params, OSSL_MAC_PARAM_IV, &data,
              &len)) {
@@ -468,6 +484,8 @@ static int wp_gmac_set_param_iv(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
 static int wp_gmac_set_ctx_params(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_gmac_set_ctx_params");
 
     if (params != NULL) {
 

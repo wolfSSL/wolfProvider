@@ -199,6 +199,8 @@ static int wp_file_set_ctx_params(wp_FileCtx* ctx, const OSSL_PARAM params[])
     int ok = 1;
     const OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_file_set_ctx_params");
+
     p = OSSL_PARAM_locate_const(params, OSSL_STORE_PARAM_PROPERTIES);
     if (p != NULL) {
         OPENSSL_free(ctx->propQuery);
@@ -279,6 +281,8 @@ static int wp_file_decoder_set_input_structure(OSSL_DECODER_CTX* decCtx,
     int type)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_file_decoder_set_input_structure");
 
     switch (type) {
         case OSSL_STORE_INFO_CERT:
@@ -363,6 +367,8 @@ static int wp_file_set_decoder(wp_FileCtx* ctx, OSSL_DECODER_CTX* decCtx)
     size_t i;
     OSSL_DECODER* decoder;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_file_set_decoder");
+
     for (i = 0; ok && (i < WP_DECODERS_SIZE); i++) {
         decoder = OSSL_DECODER_fetch(ctx->provCtx->libCtx, wp_decoders[i].name,
             wp_decoders[i].propQuery);
@@ -441,6 +447,8 @@ static int wp_file_load(wp_FileCtx* ctx, OSSL_CALLBACK* objCb, void* objCbArg,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_file_load");
+
     if (ctx->decCtx == NULL) {
         ctx->decCtx = wp_file_setup_decoders(ctx);
     }
@@ -485,6 +493,8 @@ static int wp_file_eof(wp_FileCtx* ctx)
  */
 static int wp_file_close(wp_FileCtx* ctx)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_file_close");
+
     wp_filectx_free(ctx);
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;

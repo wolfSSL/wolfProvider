@@ -182,6 +182,8 @@ static int wp_ecx_digest_signverify_init(wp_EcxSigCtx *ctx,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ecx_digest_signverify_init");
+
     (void)params;
 
     if ((mdName != NULL) && (mdName[0] != '\0')) {
@@ -223,6 +225,8 @@ static int wp_ecx_digest_sign_init(wp_EcxSigCtx *ctx, const char *mdName,
 {
     int ok;
 
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ecx_digest_sign_init");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -249,6 +253,8 @@ static int wp_ecx_digest_verify_init(wp_EcxSigCtx *ctx, const char *mdName,
     wp_Ecx *ecx, const OSSL_PARAM params[])
 {
     int ok;
+
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ecx_digest_verify_init");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -321,6 +327,8 @@ static int wp_ed25519_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
     int ok = 1;
     OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ed25519_get_ctx_params");
+
     if (ctx == NULL) {
         ok = 0;
     }
@@ -353,6 +361,8 @@ static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
     size_t *sigLen, size_t sigSize, const unsigned char *tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ed25519_digest_sign");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -429,6 +439,8 @@ static int wp_ed25519_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
     size_t sigLen, const unsigned char *tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ed25519_digest_verify");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -520,6 +532,8 @@ static int wp_ed448_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
     int ok = 1;
     OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ed448_get_ctx_params");
+
     if (ctx == NULL) {
         ok = 0;
     }
@@ -552,6 +566,8 @@ static int wp_ed448_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
     size_t *sigLen, size_t sigSize, const unsigned char *tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ed448_digest_sign");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -631,6 +647,8 @@ static int wp_ed448_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
     size_t sigLen, const unsigned char *tbs, size_t tbsLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_KE, "wp_ed448_digest_verify");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
