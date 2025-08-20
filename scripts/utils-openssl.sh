@@ -95,6 +95,37 @@ clone_openssl() {
     fi
 }
 
+check_openssl_replace_default_mismatch() {
+    # Only check if OpenSSL is already installed
+    if [ -d "${OPENSSL_INSTALL_DIR}" ]; then
+        local openssl_is_patched=0
+
+        # Check if the source was patched for --replace-default
+        if [ -f "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" ]; then
+            if grep -q "wolfprov_provider_init" "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" 2>/dev/null; then
+                openssl_is_patched=1
+            fi
+        fi
+
+        # Check for mismatch
+        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$openssl_is_patched" = "0" ]; then
+            printf "ERROR: --replace-default build mode mismatch!\n"
+            printf "Existing OpenSSL was built WITHOUT --replace-default patch\n"
+            printf "Current request: --replace-default build\n\n"
+            printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+            printf "Then rebuild with desired configuration.\n"
+            exit 1
+        elif [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ] && [ "$openssl_is_patched" = "1" ]; then
+            printf "ERROR: Standard build mode mismatch!\n"
+            printf "Existing OpenSSL was built WITH --replace-default patch\n"
+            printf "Current request: standard build\n\n"
+            printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+            printf "Then rebuild with desired configuration.\n"
+            exit 1
+        fi
+    fi
+}
+
 patch_openssl() {
     if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
         printf "\tApplying OpenSSL default provider patch ... "
@@ -102,7 +133,7 @@ patch_openssl() {
 
         # Check if patch is already applied
         if grep -q "wolfprov_provider_init" crypto/provider_predefined.c 2>/dev/null; then
-    printf "Already applied.\n"
+            printf "Already applied.\n"
             return 0
         fi
 
@@ -124,6 +155,7 @@ patch_openssl() {
 install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
+    check_openssl_replace_default_mismatch
     patch_openssl
     cd ${OPENSSL_SOURCE_DIR}
 
