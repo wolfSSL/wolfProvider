@@ -16,19 +16,11 @@ lib_LTLIBRARIES = libwolfprov.la
 
 # Conditionally build libdefault.so when --replace-default is enabled
 if BUILD_REPLACE_DEFAULT
-lib_LTLIBRARIES += libdefault.la
+# Install libdefault.la directly to OpenSSL lib directory
+openssldir = $(OPENSSL_LIB_DIR)
+openssl_LTLIBRARIES = libdefault.la
 libdefault_la_SOURCES = src/wp_default_replace.c
 libdefault_la_LIBADD = libwolfprov.la
-
-# Install libdefault.so to OpenSSL lib directory for replace-default builds
-install-exec-hook:
-	@echo "Installing libdefault.so to OpenSSL lib directory..."
-	$(INSTALL) -m 755 "$(DESTDIR)$(libdir)/libdefault.so.0.0.0" "$(OPENSSL_LIB_DIR)/libdefault.so.0"
-	cd "$(OPENSSL_LIB_DIR)" && ln -sf libdefault.so.0 libdefault.so
-
-uninstall-hook:
-	@echo "Removing libdefault.so from OpenSSL lib directory..."
-	rm -f "$(OPENSSL_LIB_DIR)/libdefault.so" "$(OPENSSL_LIB_DIR)/libdefault.so.0"
 endif
 
 EXTRA_DIST+=ChangeLog.md
