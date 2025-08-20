@@ -138,7 +138,7 @@ patch_openssl() {
         fi
 
         # Apply the patch
-        patch -p1 < ${SCRIPT_DIR}/../patches/ossl-replace-default-3.5.patch >>$LOG_FILE 2>&1
+        patch -p1 < ${SCRIPT_DIR}/../patches/openssl3-replace-default.patch >>$LOG_FILE 2>&1
         if [ $? != 0 ]; then
             printf "ERROR.\n"
             printf "\n\nPatch application failed. Last 40 lines of log:\n"
