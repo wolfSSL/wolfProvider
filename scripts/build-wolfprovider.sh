@@ -21,10 +21,7 @@ show_help() {
   echo "  --debian                   Build a Debian package"
   echo "  --debian --enable-fips     Build a Debian package with FIPS support"
   echo "  --quicktest                Disable some tests for a faster testing suite"
-<<<<<<< HEAD
   echo "  --replace-default          Patch OpenSSL and build it so that wolfProvider is the default provider"
-=======
->>>>>>> a04ce8f (Add more detailed help menu)
   echo "  --leave-silent             Enable leave silent mode to suppress logging of return 0 in probing functions where expected failures may occur."
   echo "                             Note: This only affects logging; the calling function is still responsible for handling all return values appropriately."
   echo ""
