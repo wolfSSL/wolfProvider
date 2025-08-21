@@ -21,7 +21,12 @@ show_help() {
   echo "  --debian                   Build a Debian package"
   echo "  --debian --enable-fips     Build a Debian package with FIPS support"
   echo "  --quicktest                Disable some tests for a faster testing suite"
+<<<<<<< HEAD
   echo "  --replace-default          Patch OpenSSL and build it so that wolfProvider is the default provider"
+=======
+>>>>>>> a04ce8f (Add more detailed help menu)
+  echo "  --leave-silent             Enable leave silent mode to suppress logging of return 0 in probing functions where expected failures may occur."
+  echo "                             Note: This only affects logging; the calling function is still responsible for handling all return values appropriately."
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -35,6 +40,7 @@ show_help() {
   echo "  WOLFPROV_DEBUG             If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"
   echo "  WOLFPROV_QUICKTEST         If set to 1, disables some tests in the test suite to increase test speed"
   echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
+  echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
   echo ""
 }
 
@@ -117,6 +123,9 @@ for arg in "$@"; do
         --replace-default)
             WOLFPROV_REPLACE_DEFAULT=1
             ;;
+        --leave-silent)
+            WOLFPROV_LEAVE_SILENT=1
+            ;;
         *)
             args_wrong+="$arg, "
             ;;
@@ -127,6 +136,12 @@ if [ -n "$args_wrong" ]; then
     args_wrong="`echo $args_wrong | head -c -2 -`"
     echo "Unrecognized argument(s) provided: $args_wrong"
     echo "Use --help to see a list of arguments"
+    exit 1
+fi
+
+# Check if --leave-silent was used without debug mode
+if [ "${WOLFPROV_LEAVE_SILENT}" = "1" ] && [ -z "$WOLFPROV_DEBUG" ] && [ -z "$debug" ]; then
+    echo "Error: --leave-silent requires --debug to be set."
     exit 1
 fi
 

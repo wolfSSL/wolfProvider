@@ -42,6 +42,17 @@
 #define WOLFPROV_MAX_LOG_WIDTH 120
 #endif
 
+
+/* Helper macro to select function name for logging */
+#if defined(_WIN32)
+    #define WOLFPROV_FUNC_NAME __FUNCTION__
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+    #define WOLFPROV_FUNC_NAME __func__
+#else
+    #define WOLFPROV_FUNC_NAME ""
+#endif
+
+
 /* wolfProv debug logging support can be compiled in by defining
  * WOLFPROV_DEBUG or by using the --enable-debug configure option.
  *
@@ -234,20 +245,15 @@ int wolfProv_SetLogComponents(int componentMask);
     WOLFPROV_ERROR_FUNC_LINE(type, funcName, ret, __FILE__, __LINE__)
 #define WOLFPROV_ERROR_FUNC_NULL(type, funcName, ret)                       \
     WOLFPROV_ERROR_FUNC_NULL_LINE(type, funcName, ret, __FILE__, __LINE__)
-
 void WOLFPROV_ENTER(int type, const char* msg);
-/* Call the extended version of the API with the function name of the caller. */
-#ifdef _WIN32
-    #define WOLFPROV_LEAVE(type, msg, ret) \
-        WOLFPROV_LEAVE_EX(type, __FUNCTION__, msg, ret)
-#elif __STDC__ && __STDC_VERSION__ >= 199901L
-    #define WOLFPROV_LEAVE(type, msg, ret) \
-        WOLFPROV_LEAVE_EX(type, __func__, msg, ret)
-#else
-    #define WOLFPROV_LEAVE(type, msg, ret) \
-        WOLFPROV_LEAVE_EX(type, "", msg, ret)
-#endif
+void WOLFPROV_ENTER_SILENT(int type, const char* msg);
+#define WOLFPROV_LEAVE(type, msg, ret) \
+    WOLFPROV_LEAVE_EX(type, WOLFPROV_FUNC_NAME, msg, ret)
 void WOLFPROV_LEAVE_EX(int type, const char* func, const char* msg, int ret);
+#define WOLFPROV_LEAVE_SILENT(type, msg, ret) \
+    WOLFPROV_LEAVE_SILENT_EX(type, WOLFPROV_FUNC_NAME, msg, ret)
+void WOLFPROV_LEAVE_SILENT_EX(int type, const char* func, const char* msg,
+    int ret);
 void WOLFPROV_MSG(int type, const char* fmt, ...);
 void WOLFPROV_MSG_VERBOSE(int type, const char* fmt, ...);
 void WOLFPROV_MSG_DEBUG(int type, const char* fmt, ...);
@@ -265,7 +271,9 @@ void WOLFPROV_BUFFER(int type, const unsigned char* buffer,
 #else /* WOLFPROV_DEBUG */
 
 #define WOLFPROV_ENTER(t, m)
+#define WOLFPROV_ENTER_SILENT(t, m)
 #define WOLFPROV_LEAVE(t, m, r)
+#define WOLFPROV_LEAVE_SILENT(t, m, r)
 #define WOLFPROV_MSG(t, m, ...)
 #define WOLFPROV_MSG_VERBOSE(t, m, ...)
 #define WOLFPROV_MSG_DEBUG(t, m, ...)
