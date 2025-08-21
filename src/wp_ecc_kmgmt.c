@@ -2006,7 +2006,7 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
     int rc;
     word32 oidLen;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_decode_params");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     /* TODO: manually decoding as wolfSSL doesn't offer API to do this. */
     if (len < 3) {
@@ -2047,16 +2047,26 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
+/**
+ * Decode the DER encoded ECC parameters (OID) into the ECC key object.
+ *
+ * @param [in, out] ecc   ECC key object.
+ * @param [in]      data  DER encoding of the parameters (OID).
+ * @param [in]      len   Length, in bytes, of DER encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
 static int wp_ecc_decode_x963_pub(wp_Ecc* ecc, unsigned char* data, word32 len)
 {
     int ok = 1;
     int rc;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_decode_x963_pub");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     rc = wc_ecc_import_x963((const byte *)data, len, &ecc->key);
     if (rc != 0) {
@@ -2071,7 +2081,8 @@ static int wp_ecc_decode_x963_pub(wp_Ecc* ecc, unsigned char* data, word32 len)
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
@@ -2090,7 +2101,7 @@ static int wp_ecc_decode_spki(wp_Ecc* ecc, unsigned char* data, word32 len)
     int rc;
     word32 idx = 0;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_decode_spki");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -2110,7 +2121,8 @@ static int wp_ecc_decode_spki(wp_Ecc* ecc, unsigned char* data, word32 len)
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
@@ -2129,7 +2141,7 @@ static int wp_ecc_decode_pki(wp_Ecc* ecc, unsigned char* data, word32 len)
     int rc;
     word32 idx = 0;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_decode_pki");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -2171,7 +2183,8 @@ static int wp_ecc_decode_pki(wp_Ecc* ecc, unsigned char* data, word32 len)
         ecc->hasPub = 1;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
@@ -2236,7 +2249,7 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     unsigned char* data = NULL;
     word32 len = 0;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_decode");
+    WOLFPROV_ENTER(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     (void)pwCb;
     (void)pwCbArg;
@@ -2921,7 +2934,7 @@ static int wp_ecc_type_specific_does_selection(WOLFPROV_CTX* provCtx,
 {
     int ok;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_type_specific_does_selection");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     (void)provCtx;
 
@@ -2932,7 +2945,8 @@ static int wp_ecc_type_specific_does_selection(WOLFPROV_CTX* provCtx,
         ok = (selection & OSSL_KEYMGMT_SELECT_ALL_PARAMETERS) != 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
@@ -3038,7 +3052,7 @@ static int wp_ecc_spki_does_selection(WOLFPROV_CTX* provCtx, int selection)
 {
     int ok;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_spki_does_selection");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     (void)provCtx;
 
@@ -3049,7 +3063,8 @@ static int wp_ecc_spki_does_selection(WOLFPROV_CTX* provCtx, int selection)
         ok = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
@@ -3149,7 +3164,7 @@ static int wp_ecc_pki_does_selection(WOLFPROV_CTX* provCtx, int selection)
 {
     int ok;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_pki_does_selection");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     (void)provCtx;
 
@@ -3160,7 +3175,8 @@ static int wp_ecc_pki_does_selection(WOLFPROV_CTX* provCtx, int selection)
         ok = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
@@ -3321,7 +3337,7 @@ static int wp_ecc_x9_62_does_selection(WOLFPROV_CTX* provCtx,
 {
     int ok;
 
-    WOLFPROV_ENTER(WP_LOG_ECC, "wp_ecc_x9_62_does_selection");
+    WOLFPROV_ENTER_SILENT(WP_LOG_ECC, WOLFPROV_FUNC_NAME);
 
     (void)provCtx;
 
@@ -3333,7 +3349,8 @@ static int wp_ecc_x9_62_does_selection(WOLFPROV_CTX* provCtx,
                            OSSL_KEYMGMT_SELECT_PRIVATE_KEY)) != 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE_SILENT(WP_LOG_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 

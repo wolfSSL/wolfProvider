@@ -274,9 +274,32 @@ void WOLFPROV_ENTER(int component, const char* msg)
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), "wolfProv Entering %s", msg);
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "wolfProv Entering %s", msg);
         wolfprovider_log(WP_LOG_ENTER, component, buffer);
     }
+}
+
+/**
+ * Log function used to record function entry for check functions.
+ * These functions use WOLFPROV_LEAVE_SILENT and may not show up in logs.
+ * The "[leaving silently]" prefix indicates that exit logging may be suppressed.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param msg  [IN] Log message.
+ */
+void WOLFPROV_ENTER_SILENT(int component, const char* msg)
+{
+#ifdef WOLFPROV_LEAVE_SILENT_MODE
+    if (loggingEnabled) {
+        char buffer[WOLFPROV_MAX_LOG_WIDTH];
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "wolfProv Entering [leaving silently] %s", msg);
+        wolfprovider_log(WP_LOG_ENTER, component, buffer);
+    }
+#else
+    WOLFPROV_ENTER(component, msg);
+#endif
 }
 
 /**
@@ -288,14 +311,41 @@ void WOLFPROV_ENTER(int component, const char* msg)
  * @param ret  [IN] Value that function will be returning.
  */
 void WOLFPROV_LEAVE_EX(int component, const char* func, const char* msg,
-    int ret)
+                         int ret)
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), "wolfProv Leaving %s, return %d (%s)",
-                  msg, ret, func);
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "wolfProv Leaving %s, return %d (%s)", msg, ret, func);
         wolfprovider_log(WP_LOG_LEAVE, component, buffer);
     }
+}
+
+/**
+ * Log function to suppress LEAVE messages. This function only prints if
+ * ret == 1. All other cases are suppressed by default to reduce noise from
+ * probe failures. Define WOLFPROV_LEAVE_SILENT to enable this logic.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param func    [IN] Name of function that is exiting.
+ * @param msg     [IN] Log message (typically file:line).
+ * @param ret     [IN] Value that function will be returning.
+ */
+void WOLFPROV_LEAVE_SILENT_EX(int component, const char* func, 
+                              const char* msg, int ret)
+{
+#ifdef WOLFPROV_LEAVE_SILENT_MODE
+        /* Success - always print */
+        if (ret == 1) {
+            WOLFPROV_LEAVE_EX(component, func, msg, ret);
+        }
+        else {
+            /* Anything else is suppressed */
+        }
+#else
+        /* Legacy behavior: log all returns including return 0 */
+        WOLFPROV_LEAVE_EX(component, func, msg, ret);
+#endif
 }
 
 /**
@@ -330,8 +380,8 @@ void WOLFPROV_ERROR_MSG_LINE(int component, const char* msg,
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), "%s:%d - wolfProv Error %s",
-                  file, line, msg);
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "%s:%d - wolfProv Error %s", file, line, msg);
         wolfprovider_log(WP_LOG_ERROR, component, buffer);
     }
 }
