@@ -35,3 +35,5 @@ test_unit_test_SOURCES = \
 test_unit_test_LDADD = libwolfprov.la
 noinst_HEADERS += test/unit.h
 
+# Include standalone binary tests
+include test/standalone/include.am

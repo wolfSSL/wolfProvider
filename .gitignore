@@ -61,6 +61,30 @@
 /wolfprov-install/
 /artifacts
 
+# Default stub autotools files
+default_stub/ar-lib
+default_stub/compile
+default_stub/config.guess
+default_stub/config.sub
+default_stub/depcomp
+default_stub/install-sh
+default_stub/ltmain.sh
+default_stub/missing
+
+# Build install directories
+*-install/
+
+# Libtool archive files
+*.la
+
+# Test artifacts in subdirectories
+test/**/*.log
+test/**/*.test
+test/**/*.trs
+test/**/*.o
+test/**/.deps/
+test/**/.dirstamp
+
 IDE/Android/android-ndk-r26b/
 IDE/Android/openssl-source/
 IDE/Android/openssl-install/

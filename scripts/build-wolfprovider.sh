@@ -8,7 +8,7 @@ show_help() {
   echo "Script Arguments:"
   echo "  --help, -help, -h          Display this help menu and exit"
   echo "  --clean                    Run make clean in OpenSSL, wolfSSL, and wolfProvider"
-  echo "  --distclean                Remove source directories of OpenSSL and wolfSSL"
+  echo "  --distclean                Remove source and install directories of OpenSSL, wolfSSL, and wolfProvider"
   echo "  --debug                    Builds OpenSSL, wolfSSL, and WolfProvider with debugging enabled. This is the same as setting WOLFPROV_DEBUG=1"
   echo "  --debug-asn-template       Enable debug information for asn within wolfSSL"
   echo "  --disable-err-trace        No debug trace messages from library errors in wolfSSL"
@@ -21,6 +21,7 @@ show_help() {
   echo "  --debian                   Build a Debian package"
   echo "  --debian --enable-fips     Build a Debian package with FIPS support"
   echo "  --quicktest                Disable some tests for a faster testing suite"
+  echo "  --replace-default          Patch OpenSSL and build it so that wolfProvider is the default provider"
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -30,7 +31,7 @@ show_help() {
   echo "  WOLFSSL_FIPS_VERSION       Version of wolfSSL FIPS bundle (v5, v6, ready), used as an argument for --enable-fips when configuring wolfSSL"
   echo "  WOLFSSL_FIPS_CHECK_TAG     Tag for wolfSSL FIPS bundle (linuxv5.2.1, v6.0.0, etc), used as an argument for fips-check.sh when cloning a wolfSSL FIPS version"
   echo "  WOLFPROV_CLEAN             If set to 1, run make clean in OpenSSL, wolfSSL, and wolfProvider"
-  echo "  WOLFPROV_DISTCLEAN         If set to 1, remove the source directories of OpenSSL and wolfSSL"
+  echo "  WOLFPROV_DISTCLEAN         If set to 1, remove the source and install directories of OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DEBUG             If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"
   echo "  WOLFPROV_QUICKTEST         If set to 1, disables some tests in the test suite to increase test speed"
   echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
@@ -82,7 +83,6 @@ for arg in "$@"; do
             WOLFSSL_ISFIPS=1
             ;;
         --fips-bundle=*)
-            unset WOLFSSL_ISFIPS
             unset WOLFSSL_FIPS_CHECK_TAG
             IFS='=' read -r trash fips_bun <<< "$arg"
             if [ -z "$fips_bun" ]; then
@@ -114,6 +114,9 @@ for arg in "$@"; do
         --quicktest)
             WOLFPROV_QUICKTEST=1
             ;;
+        --replace-default)
+            WOLFPROV_REPLACE_DEFAULT=1
+            ;;
         *)
             args_wrong+="$arg, "
             ;;
@@ -144,6 +147,10 @@ LOG_FILE=${SCRIPT_DIR}/build-release.log
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
 
 echo "Using openssl: $OPENSSL_TAG, wolfssl: $WOLFSSL_TAG"
+
+if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+    build_default_stub
+fi
 
 init_wolfprov
 

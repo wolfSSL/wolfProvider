@@ -50,6 +50,8 @@ clean_openssl() {
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing OpenSSL source ...\n"
         rm -rf "${OPENSSL_SOURCE_DIR}"
+        printf "Removing OpenSSL install ...\n"
+        rm -rf "${OPENSSL_INSTALL_DIR}"
     fi
 }
 
@@ -93,19 +95,113 @@ clone_openssl() {
     fi
 }
 
+check_openssl_replace_default_mismatch() {
+    local openssl_is_patched=0
+
+    # Check if the source was patched for --replace-default
+    if [ -f "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" ]; then
+        if grep -q "wolfprov_provider_init" "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" 2>/dev/null; then
+            openssl_is_patched=1
+            printf "INFO: OpenSSL source modified - wolfProvider integrated as default provider (non-stock build).\n"
+        fi
+    fi
+
+    # Check for mismatch
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$openssl_is_patched" = "0" ]; then
+        printf "ERROR: --replace-default build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITHOUT --replace-default patch\n"
+        printf "Current request: --replace-default build\n\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
+        exit 1
+    elif [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ] && [ "$openssl_is_patched" = "1" ]; then
+        printf "ERROR: Standard build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITH --replace-default patch\n"
+        printf "Current request: standard build\n\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
+        exit 1
+    fi
+}
+
+patch_openssl() {
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+
+        if [ -d "${OPENSSL_INSTALL_DIR}" ]; then
+            # If openssl is already installed, patching makes no sense as
+            # it will not be rebuilt. It may already be built as patched,
+            # just return and let check_openssl_replace_default_mismatch
+            # check for the mismatch.
+            return 0
+        fi
+
+        printf "\tApplying OpenSSL default provider patch ... "
+        cd ${OPENSSL_SOURCE_DIR}
+
+        # Check if patch is already applied
+        if grep -q "wolfprov_provider_init" crypto/provider_predefined.c 2>/dev/null; then
+            printf "Already applied.\n"
+            return 0
+        fi
+
+        # Apply the patch
+        patch -p1 < ${SCRIPT_DIR}/../patches/openssl3-replace-default.patch >>$LOG_FILE 2>&1
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            printf "\n\nPatch application failed. Last 40 lines of log:\n"
+            tail -n 40 $LOG_FILE
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+
+        cd ${SCRIPT_DIR}/..
+    fi
+}
+
 install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
+    patch_openssl
+    check_openssl_replace_default_mismatch
     cd ${OPENSSL_SOURCE_DIR}
 
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
+
+        # Build configure command
+        CONFIG_CMD="./config shared --prefix=${OPENSSL_INSTALL_DIR}"
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
-            ./config shared enable-trace --prefix=${OPENSSL_INSTALL_DIR} --debug >>$LOG_FILE 2>&1
-            RET=$?
+            CONFIG_CMD+=" enable-trace --debug"
+        fi
+        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+            CONFIG_CMD+=" no-external-tests no-tests"
+
+            # Set up library paths to find the stub libdefault
+            STUB_LIB_DIR=${SCRIPT_DIR}/../libdefault-stub-install/lib
+            if [ -d "${STUB_LIB_DIR}" ]; then
+                export PKG_CONFIG_PATH="${STUB_LIB_DIR}/pkgconfig:${PKG_CONFIG_PATH}"
+                # Link the stub library directly into libcrypto using LDFLAGS and LDLIBS
+                CONFIGURE_LDFLAGS="-L${STUB_LIB_DIR}"
+                CONFIGURE_LDLIBS="-ldefault"
+            else
+                printf "ERROR - stub libdefault not found in: ${STUB_LIB_DIR}\n"
+                do_cleanup
+                exit 1
+            fi
+        fi
+
+        # Execute configure
+        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+            $CONFIG_CMD LDFLAGS="${CONFIGURE_LDFLAGS}" LDLIBS="${CONFIGURE_LDLIBS}" >>$LOG_FILE 2>&1
         else
-            ./config shared --prefix=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-            RET=$?
+            $CONFIG_CMD >>$LOG_FILE 2>&1
+        fi
+        RET=$?
+
+        # Clean up environment
+        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+            unset LDFLAGS
         fi
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
@@ -143,15 +239,18 @@ init_openssl() {
     install_openssl
     printf "\tOpenSSL ${OPENSSL_TAG} installed in: ${OPENSSL_INSTALL_DIR}\n"
 
-    OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS} $OPENSSL_BIN version | tail -n1`
-    case $OSSL_VER in
-        OpenSSL\ 3.*) ;;
-        *)
-            echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
-            echo "Set: OPENSSL_DIR"
-            exit 1
-            ;;
-    esac
+    # Skip version check for replace-default mode since we only build libraries
+    if [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ]; then
+        OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS} $OPENSSL_BIN version | tail -n1`
+        case $OSSL_VER in
+            OpenSSL\ 3.*) ;;
+            *)
+                echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
+                echo "Set: OPENSSL_DIR"
+                exit 1
+                ;;
+        esac
+    fi
 
     if [ -z $LD_LIBRARY_PATH ]; then
       export LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS}
