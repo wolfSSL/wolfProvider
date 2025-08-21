@@ -32,6 +32,7 @@ OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
 OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
 OPENSSL_LIB_DIRS="${OPENSSL_INSTALL_DIR}/lib:${OPENSSL_INSTALL_DIR}/lib64"
+OPENSSL_STUB_INSTALL_DIR=${SCRIPT_DIR}/../libdefault-stub-install
 
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
@@ -178,31 +179,21 @@ install_openssl() {
             CONFIG_CMD+=" no-external-tests no-tests"
 
             # Set up library paths to find the stub libdefault
-            STUB_LIB_DIR=${SCRIPT_DIR}/../libdefault-stub-install/lib
-            if [ -d "${STUB_LIB_DIR}" ]; then
-                export PKG_CONFIG_PATH="${STUB_LIB_DIR}/pkgconfig:${PKG_CONFIG_PATH}"
+            if [ -d "${OPENSSL_STUB_INSTALL_DIR}" ]; then
                 # Link the stub library directly into libcrypto using LDFLAGS and LDLIBS
-                CONFIGURE_LDFLAGS="-L${STUB_LIB_DIR}"
+                CONFIGURE_LDFLAGS="-L${OPENSSL_STUB_INSTALL_DIR}/lib"
                 CONFIGURE_LDLIBS="-ldefault"
             else
-                printf "ERROR - stub libdefault not found in: ${STUB_LIB_DIR}\n"
+                printf "ERROR - stub libdefault not found in: ${OPENSSL_STUB_INSTALL_DIR}\n"
                 do_cleanup
                 exit 1
             fi
+
+            CONFIG_CMD+=" LDFLAGS=${CONFIGURE_LDFLAGS} LDLIBS=${CONFIGURE_LDLIBS}"
         fi
 
-        # Execute configure
-        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
-            $CONFIG_CMD LDFLAGS="${CONFIGURE_LDFLAGS}" LDLIBS="${CONFIGURE_LDLIBS}" >>$LOG_FILE 2>&1
-        else
-            $CONFIG_CMD >>$LOG_FILE 2>&1
-        fi
+        $CONFIG_CMD >>$LOG_FILE 2>&1
         RET=$?
-
-        # Clean up environment
-        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
-            unset LDFLAGS
-        fi
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
             rm -rf ${OPENSSL_INSTALL_DIR}
