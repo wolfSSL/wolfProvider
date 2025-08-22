@@ -91,7 +91,18 @@ static int test_hkdf_calc(OSSL_LIB_CTX* libCtx, unsigned char *key, int keyLen,
     return err;
 }
 
-#if OPENSSL_VERSION_NUMBER <= 0x30400000L
+/*
+ * OpenSSL's magnificently consistent approach to API stability has blessed us
+ * with this delightful version-dependent behavior where
+ * EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) returns different values
+ * across versions for the same input.
+ */
+#define OPENSSL_REJECTS_NULL_SALT_VERSIONS \
+    (OPENSSL_VERSION_NUMBER == 0x30000110L || /* 3.0.17 */ \
+     OPENSSL_VERSION_NUMBER == 0x30200050L || /* 3.2.5 */  \
+     OPENSSL_VERSION_NUMBER == 0x30300040L || /* 3.3.4 */  \
+     OPENSSL_VERSION_NUMBER == 0x30400020L || /* 3.4.2 */  \
+     OPENSSL_VERSION_NUMBER >= 0x30500010L)   /* 3.5.1+ assume all future versions reject NULL salt */
 
 static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
     int keyLen, const EVP_MD *md, int mode)
@@ -137,15 +148,12 @@ static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
         }
     }
     if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXPAND_ONLY)) {
-#if OPENSSL_VERSION_NUMBER >= 0x30100000L && \
-    OPENSSL_VERSION_NUMBER != 0x30200050L && \
-    OPENSSL_VERSION_NUMBER != 0x30300040L
-        if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 1) {
-#else
-        /* In 3.1.x, the following code was added to hkdf_common_set_ctx_params()
-         * if (p->data_size != 0 && p->data != NULL) {
-         * The above code is not present in 3.2.5 and 3.3.4. */
+#if OPENSSL_REJECTS_NULL_SALT_VERSIONS
+        /* These versions return 0 for EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) */
         if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 0) {
+#else
+        /* All other versions return 1 for EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) */
+        if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 1) {
 #endif
             PRINT_MSG("Failed to set HKDF salt to NULL");
             err = 1;
@@ -187,8 +195,6 @@ static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
     return err;
 }
 
-#endif
-
 static int test_hkdf_md(const EVP_MD *md, int mode)
 {
     int err = 0;
@@ -218,7 +224,7 @@ static int test_hkdf_md(const EVP_MD *md, int mode)
         err = 1;
     }
 
-#if OPENSSL_VERSION_NUMBER <= 0x30400000L
+#if OPENSSL_VERSION_NUMBER <= 0x30600000L
 
     memset(oKey, 0, sizeof(oKey));
     memset(wKey, 0, sizeof(wKey));
