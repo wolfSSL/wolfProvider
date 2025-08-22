@@ -63,8 +63,6 @@ clone_openssl() {
 
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tOpenSSL source directory not found: ${OPENSSL_SOURCE_DIR}\n"
-        printf "\tParent directory:\n"
-        tree -L 2 $(dirname ${OPENSSL_SOURCE_DIR}/..) || true
         CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
         CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
 
@@ -165,7 +163,7 @@ install_openssl() {
     clone_openssl
     patch_openssl
     check_openssl_replace_default_mismatch
-    cd ${OPENSSL_SOURCE_DIR}
+    pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
 
     if [ ! -d ${OPENSSL_INSTALL_DIR} ]; then
         printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
@@ -223,7 +221,7 @@ install_openssl() {
         printf "Done.\n"
     fi
 
-    cd ..
+    popd &> /dev/null
 }
 
 init_openssl() {
