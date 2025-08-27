@@ -265,6 +265,19 @@ void WOLFPROV_MSG_TRACE(int component, const char* fmt, ...)
 }
 
 /**
+ * Log function for debug messages with return code, prints to WP_LOG_DEBUG level.
+ * Unified function to reduce code duplication for common "function failed with rc=%d" pattern.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param func_name [IN] Name of the function that failed.
+ * @param rc       [IN] Return code value.
+ */
+void WOLFPROV_MSG_DEBUG_RETCODE(int component, const char* func_name, int rc)
+{
+    WOLFPROV_MSG_DEBUG(component, "%s failed with rc=%d", func_name, rc);
+}
+
+/**
  * Log function used to record function entry.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.

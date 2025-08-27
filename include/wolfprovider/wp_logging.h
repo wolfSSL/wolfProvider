@@ -83,7 +83,7 @@
  * Define these macros in this header to control logging at compile time:
  * NOTE: wolfProvider needs to be built with --debug to enable the logging first
  * before we can set the log level and components.
- * 
+ *
  * WOLFPROV_LOG_LEVEL_FILTER Sets the log level. Use WP_LOG_* constants from enum below.
  *                        Examples:
  *                        - WP_LOG_ERROR (only errors)
@@ -114,6 +114,8 @@ enum wolfProv_LogType {
     WP_LOG_LEAVE   = 0x0004,   /* logs function leave */
     WP_LOG_INFO    = 0x0008,   /* logs informative messages */
     WP_LOG_VERBOSE = 0x0010,   /* logs encrypted/decrypted/digested data */
+    /* To see the return code from wolfssl, you must add WP_LOG_DEBUG to the
+     * WOLFPROV_LOG_LEVEL_FILTER */
     WP_LOG_DEBUG   = 0x0020,   /* logs debug-level detailed information */
     WP_LOG_TRACE   = 0x0040,   /* logs trace-level ultra-detailed information */
 
@@ -140,7 +142,7 @@ enum wolfProv_LogComponents {
     WP_LOG_KE       = 0x0020,   /* key agreement (DH, ECDH) */
     WP_LOG_KDF      = 0x0040,   /* password base key derivation algorithms */
     WP_LOG_PROVIDER = 0x0080,   /* all provider specific logs */
-    
+
     /* Granular algorithm family categories */
     WP_LOG_RSA      = 0x0001,   /* RSA operations */
     WP_LOG_ECC      = 0x0002,   /* ECC operations */
@@ -257,6 +259,7 @@ void WOLFPROV_LEAVE_SILENT_EX(int type, const char* func, const char* msg,
 void WOLFPROV_MSG(int type, const char* fmt, ...);
 void WOLFPROV_MSG_VERBOSE(int type, const char* fmt, ...);
 void WOLFPROV_MSG_DEBUG(int type, const char* fmt, ...);
+void WOLFPROV_MSG_DEBUG_RETCODE(int type, const char* func_name, int rc);
 void WOLFPROV_MSG_TRACE(int type, const char* fmt, ...);
 void WOLFPROV_ERROR_LINE(int type, int err, const char* file, int line);
 void WOLFPROV_ERROR_MSG_LINE(int type, const char* msg, const char* file,
