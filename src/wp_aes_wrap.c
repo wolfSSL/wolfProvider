@@ -269,6 +269,7 @@ static int wp_aes_wrap_init(wp_AesWrapCtx *ctx, const unsigned char *key,
             int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
                 wrap ? AES_ENCRYPTION : AES_DECRYPTION);
             if (rc != 0) {
+                WOLFPROV_MSG(WP_LOG_AES, "wc_AesSetKey failed with rc=%d", rc);
                 ok = 0;
             }
         #else
@@ -365,6 +366,7 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
         if (ctx->wrap) {
             rc = wc_AesKeyWrap_ex(&ctx->aes, in, (word32)inLen, out, outSz, iv);
             if (rc <= 0) {
+                WOLFPROV_MSG(WP_LOG_AES, "wc_AesKeyWrap_ex failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -372,6 +374,7 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
             rc = wc_AesKeyUnWrap_ex(&ctx->aes, in, (word32)inLen, out, outSz,
                 iv);
             if (rc <= 0) {
+                WOLFPROV_MSG(WP_LOG_AES, "wc_AesKeyUnWrap_ex failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -380,6 +383,7 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
             rc = wc_AesKeyWrap(ctx->key, ctx->keyLen, in, inLen, out, outSz,
                 iv);
             if (rc <= 0) {
+                WOLFPROV_MSG(WP_LOG_AES, "wc_AesKeyWrap failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -387,6 +391,7 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
             rc = wc_AesKeyUnWrap(ctx->key, ctx->keyLen, in, inLen, out, outSz,
                 iv);
             if (rc <= 0) {
+                WOLFPROV_MSG(WP_LOG_AES, "wc_AesKeyUnWrap failed with rc=%d", rc);
                 ok = 0;
             }
     #endif

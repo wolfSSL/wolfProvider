@@ -130,6 +130,7 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
     if (ok) {                                                                  \
         int rc = init(ctx, NULL, -1);                                          \
         if (rc != 0) {                                                         \
+            WOLFPROV_MSG(WP_LOG_DIGEST, #init " failed with rc=%d", rc);      \
             ok = 0;                                                            \
         }                                                                      \
     }                                                                          \
@@ -154,6 +155,7 @@ static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
     WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_update");                           \
     int rc = upd(ctx, in, (word32)inLen);                                      \
     if (rc != 0) {                                                             \
+        WOLFPROV_MSG(WP_LOG_DIGEST, #upd " failed with rc=%d", rc);            \
         ok = 0;                                                                \
     }                                                                          \
     WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
@@ -186,6 +188,7 @@ static int name##_final(void* ctx, unsigned char* out, size_t* outLen,         \
     if (ok) {                                                                  \
         int rc = fin(ctx, out);                                                \
         if (rc != 0) {                                                         \
+            WOLFPROV_MSG(WP_LOG_DIGEST, #fin " failed with rc=%d", rc);        \
             ok = 0;                                                            \
         }                                                                      \
         else {                                                                 \

@@ -252,6 +252,7 @@ static int wp_des3_init_iv(wp_Des3BlockCtx *ctx, const unsigned char *iv,
         XMEMCPY(ctx->oiv, iv, ivLen);
         rc = wc_Des3_SetIV(&ctx->des3, iv);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_DES, "wc_Des3_SetIV failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -305,6 +306,7 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
             int rc = wc_Des3_SetKey(&ctx->des3, key, iv,
                 enc ? DES_ENCRYPTION : DES_DECRYPTION);
             if (rc != 0) {
+                WOLFPROV_MSG(WP_LOG_DES, "wc_Des3_SetKey failed with rc=%d", rc);
                 ok = 0;
             }
         }

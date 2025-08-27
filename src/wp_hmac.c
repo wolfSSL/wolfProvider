@@ -77,6 +77,7 @@ static wp_HmacCtx* wp_hmac_new(WOLFPROV_CTX* provCtx)
     if (macCtx != NULL) {
         rc = wc_HmacInit(&macCtx->hmac, NULL, INVALID_DEVID);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_MAC, "wc_HmacInit failed with rc=%d", rc);
             OPENSSL_free(macCtx);
             macCtx = NULL;
         }
@@ -156,6 +157,7 @@ static int wp_hmac_set_key(wp_HmacCtx* macCtx, const unsigned char* key,
             int rc = wc_HmacSetKey(&macCtx->hmac, macCtx->type, macCtx->key,
                 (word32)macCtx->keyLen);
             if (rc != 0) {
+                WOLFPROV_MSG(WP_LOG_MAC, "wc_HmacSetKey failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -250,6 +252,7 @@ static int wp_hmac_update(wp_HmacCtx* macCtx, const unsigned char* data,
 
     rc = wc_HmacUpdate(&macCtx->hmac, data, (word32)dataLen);
     if (rc != 0) {
+        WOLFPROV_MSG(WP_LOG_MAC, "wc_HmacUpdate failed with rc=%d", rc);
         ok = 0;
     }
 
@@ -285,6 +288,7 @@ static int wp_hmac_final(wp_HmacCtx* macCtx, unsigned char* out, size_t* outl,
     if (ok) {
         rc = wc_HmacFinal(&macCtx->hmac, out);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_MAC, "wc_HmacFinal failed with rc=%d", rc);
             ok = 0;
         }
     }

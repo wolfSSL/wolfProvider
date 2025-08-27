@@ -388,11 +388,13 @@ static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
 
             rc = wc_ed25519_make_public(ed25519, pubKey, sizeof(pubKey));
             if (rc != 0) {
+                WOLFPROV_MSG(WP_LOG_KE, "wc_ed25519_make_public failed with rc=%d", rc);
                 ok = 0;
             }
             if (ok) {
                 rc = wc_ed25519_import_public(pubKey, sizeof(pubKey), ed25519);
                 if (rc != 0) {
+                    WOLFPROV_MSG(WP_LOG_KE, "wc_ed25519_import_public failed with rc=%d", rc);
                     ok = 0;
                 }
             }
@@ -405,6 +407,7 @@ static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
                 rc = wc_ed25519_sign_msg(tbs, (word32)tbsLen, sig, &len, ed25519);
                 wp_unlock(wp_ecx_get_mutex(ctx->ecx));
                 if (rc != 0) {
+                    WOLFPROV_MSG(WP_LOG_KE, "wc_ed25519_sign_msg failed with rc=%d", rc);
                     ok = 0;
                 }
                 else {
@@ -464,9 +467,11 @@ static int wp_ed25519_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
         int rc = wc_ed25519_verify_msg(sig, (word32)sigLen, tbs, (word32)tbsLen,
                 &res, wp_ecx_get_key(ctx->ecx));
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_KE, "wc_ed25519_verify_msg failed with rc=%d", rc);
             ok = 0;
         }
         if (res == 0) {
+            WOLFPROV_MSG(WP_LOG_KE, "Signature verification failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -590,11 +595,13 @@ static int wp_ed448_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
 
             rc = wc_ed448_make_public(ed448, pubKey, sizeof(pubKey));
             if (rc != 0) {
+                WOLFPROV_MSG(WP_LOG_KE, "wc_ed448_make_public failed with rc=%d", rc);
                 ok = 0;
             }
             if (ok) {
                 rc = wc_ed448_import_public(pubKey, sizeof(pubKey), ed448);
                 if (rc != 0) {
+                    WOLFPROV_MSG(WP_LOG_KE, "wc_ed448_import_public failed with rc=%d", rc);
                     ok = 0;
                 }
             }
@@ -608,6 +615,7 @@ static int wp_ed448_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
                     (ed448_key*)wp_ecx_get_key(ctx->ecx), NULL, 0);
                 wp_unlock(wp_ecx_get_mutex(ctx->ecx));
                 if (rc != 0) {
+                    WOLFPROV_MSG(WP_LOG_KE, "wc_ed448_sign_msg failed with rc=%d", rc);
                     ok = 0;
                 }
                 else {
@@ -672,9 +680,11 @@ static int wp_ed448_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
         int rc = wc_ed448_verify_msg(sig, (word32)sigLen, tbs, (word32)tbsLen,
                 &res, wp_ecx_get_key(ctx->ecx), NULL, 0);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_KE, "wc_ed448_verify_msg failed with rc=%d", rc);
             ok = 0;
         }
         if (res == 0) {
+            WOLFPROV_MSG(WP_LOG_KE, "Signature verification failed with rc=%d", rc);
             ok = 0;
         }
     }

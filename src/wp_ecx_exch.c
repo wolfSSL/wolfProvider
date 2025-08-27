@@ -242,6 +242,7 @@ static int wp_x25519_derive(wp_EcxCtx* ctx, unsigned char* secret,
         rc = wc_curve25519_shared_secret(wp_ecx_get_key(ctx->key),
             wp_ecx_get_key(ctx->peer), secret, &len);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_X25519, "wc_curve25519_shared_secret failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -329,6 +330,7 @@ static int wp_x448_derive(wp_EcxCtx* ctx, unsigned char* secret,
         rc = wc_curve448_shared_secret(wp_ecx_get_key(ctx->key),
             wp_ecx_get_key(ctx->peer), secret, &len);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_X448, "wc_curve448_shared_secret failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {

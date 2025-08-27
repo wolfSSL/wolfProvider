@@ -296,6 +296,7 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
                 PRIVATE_KEY_LOCK();
                 wp_unlock(wp_ecc_get_mutex(ctx->ecc));
                 if (rc != 0) {
+                    WOLFPROV_MSG(WP_LOG_ECDSA, "wc_ecc_sign_hash failed with rc=%d", rc);
                     ok = 0;
                 }
                 else {
@@ -362,9 +363,11 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
         int rc = wc_ecc_verify_hash(sig, (word32)sigLen, tbs, (word32)tbsLen,
             &res, wp_ecc_get_key(ctx->ecc));
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_ECDSA, "wc_ecc_verify_hash failed with rc=%d", rc);
             ok = 0;
         }
         if (res == 0) {
+            WOLFPROV_MSG(WP_LOG_ECDSA, "Signature verification failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -481,6 +484,7 @@ static int wp_ecdsa_setup_md(wp_EcdsaSigCtx *ctx, const char *mdName,
             rc = wc_HashInit_ex(&ctx->hash, ctx->hashType, NULL, INVALID_DEVID);
 #endif
             if (rc != 0) {
+                WOLFPROV_MSG(WP_LOG_ECDSA, "wc_HashInit_ex failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -547,6 +551,7 @@ static int wp_ecdsa_digest_signverify_update(wp_EcdsaSigCtx *ctx,
 #endif
             data, (word32)dataLen);
     if (rc != 0) {
+        WOLFPROV_MSG(WP_LOG_ECDSA, "wc_HashUpdate failed with rc=%d", rc);
         ok = 0;
     }
     WOLFPROV_LEAVE(WP_LOG_ECDSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -615,6 +620,7 @@ static int wp_ecdsa_digest_sign_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
 #endif
                 digest);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_ECDSA, "wc_HashFinal failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -692,6 +698,7 @@ static int wp_ecdsa_digest_verify_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
 #endif
                 digest);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_ECDSA, "wc_HashFinal failed with rc=%d", rc);
             ok = 0;
         }
     }

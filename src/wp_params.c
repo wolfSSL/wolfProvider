@@ -53,6 +53,7 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
     /* Read big-endian data in. */
     rc = mp_read_unsigned_bin(mp, rdata, (word32)len);
     if (rc != 0) {
+        WOLFPROV_MSG(WP_LOG_PROVIDER, "mp_read_unsigned_bin failed with rc=%d", rc);
         ok = 0;
     }
 
@@ -79,6 +80,7 @@ int wp_mp_to_unsigned_bin_le(mp_int* mp, unsigned char* data, size_t len)
 
     rc = mp_to_unsigned_bin(mp, data);
     if (rc != 0) {
+        WOLFPROV_MSG(WP_LOG_PROVIDER, "mp_to_unsigned_bin failed with rc=%d", rc);
         ok = 0;
     }
 #ifdef LITTLE_ENDIAN_ORDER
