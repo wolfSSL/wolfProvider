@@ -4056,21 +4056,17 @@ static int wp_rsa_text_enc_does_selection(WOLFPROV_CTX* provCtx, int selection)
 /**
  * Encode a portion of the RSA key as hexadecimal.
  *
+ * @param [out]     out        BIO to write data out onto.
  * @param [in]      num        An mp_int to convert to hexadecimal.
- * @param [out]     textData   Buffer to store hex in.
- * @param [in]      textLen    Size of buffer.
- * @param [in, out] pos        Current position in buffer.
  * @param [in]      label      String describing section being encoded.
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
-        size_t textLen, size_t* pos, const char* label)
+static int wp_rsa_encode_text_format_hex(BIO *out, const mp_int* num,
+        const char* label)
 {
     unsigned char* binData = NULL;
     size_t binLen = 0;
-    size_t printAmt = 0;
-    size_t dPos = *pos;
     int bytes = 0;
     int i;
 
@@ -4086,19 +4082,15 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
         binData = NULL;
     }
     else {
-        if ((printAmt = XSNPRINTF(textData + dPos, textLen - dPos,
-                "%s:\n    ", label)) <= 0) {
+        if (BIO_printf(out, "%s:\n    ", label) <= 0) {
             ok = 0;
         }
-        dPos += printAmt;
 
         /* OSSL adds a leading 00 if MSB is set */
         if (ok && *binData > 127) {
-            if ((printAmt = XSNPRINTF(textData + dPos, textLen - dPos,
-                    "00:")) <= 0) {
+            if (BIO_printf(out, "00:") <= 0) {
                 ok = 0;
             }
-            dPos += printAmt;
             bytes++;
         }
 
@@ -4106,36 +4098,27 @@ static int wp_rsa_encode_text_format_hex(const mp_int* num, char* textData,
         if (ok) {
             for (i = 0; i < (int)binLen - 1; i++) {
                 if (bytes >= 14) {
-                    if ((printAmt = XSNPRINTF(textData + dPos,
-                            textLen - dPos, "%02x:\n    ", binData[i])) <= 0) {
+                    if (BIO_printf(out, "%02x:\n    ", binData[i]) <= 0) {
                         ok = 0;
                         break;
                     }
                     bytes = 0;
                 }
                 else {
-                    if ((printAmt = XSNPRINTF(textData + dPos,
-                            textLen - dPos, "%02x:", binData[i])) <= 0) {
+                    if (BIO_printf(out, "%02x:", binData[i]) <= 0) {
                         ok = 0;
                         break;
                     }
                     bytes++;
                 }
-                dPos += printAmt;
             }
-            if (ok && (printAmt = XSNPRINTF(textData + dPos,
-                    textLen - dPos, "%02x\n", binData[i])) <= 0) {
+            if (ok && BIO_printf(out, "%02x\n", binData[i]) <= 0) {
                 ok = 0;
             }
-            dPos += printAmt;
         }
 
         OPENSSL_free(binData);
         binData = NULL;
-    }
-
-    if (ok) {
-        *pos = dPos;
     }
 
     return ok;
@@ -4166,10 +4149,6 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
     int hasPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
     int hasPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
-    char* textData = NULL;
-    size_t textLen = 0;
-    size_t pos = 0;
-    size_t printAmt = 0;
     char* expStr;
     int expLen;
 
@@ -4183,52 +4162,27 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         ok = 0;
     }
 
-    /* Calculate total size needed for text output */
-    if (ok) {
-        /* 128 bytes provides space for labels: 'modulus:', 'prime1:', etc. */
-        textLen = 128;
-        if (hasPriv) {
-            /* displaying modulus and private exponent requires roughly 3 bytes
-             * per byte in key.
-             * prime1, prime2, exponent1, exponent2, and coefficient requires
-             * roughly 1.5 bytes per byte inkey.
-             * This is then 13.5 bytes per bytes in key + indents, which should
-             * be less than bits * 2.*/
-            textLen += key->bits << 1;
-        }
-        else if (hasPub) {
-            /* displaying modulus requires roughly 3 bytes per byte in key + a
-             * small amount for indents. This should be less than bits / 2 */
-            textLen += key->bits >> 1;
-        }
-
-        if ((textData = OPENSSL_malloc(textLen)) == NULL) {
-            ok = 0;
-        }
-    }
-
     if (ok) {
         /* OSSL uses nested macros to determine the number of primes, not sure
          * when there wouldn't be two primes */
-        if (hasPriv && (printAmt = XSNPRINTF(textData + pos, textLen - pos,
-                "Private-Key: (%d bit, 2 primes)\n", key->bits)) <= 0) {
+        if (hasPriv && BIO_printf(out, "Private-Key: (%d bit, 2 primes)\n",
+                key->bits) <= 0) {
             ok = 0;
         }
-        else if (hasPub && (printAmt = XSNPRINTF(textData + pos,
-                textLen - pos, "Public-Key: (%d bit)\n", key->bits)) <= 0) {
+        else if (hasPub && BIO_printf(out, "Public-Key: (%d bit)\n",
+                key->bits) <= 0) {
             ok = 0;
         }
-        pos += printAmt;
     }
 
     /* OSSL uses 'modulus' and 'Modulus' */
-    if (hasPriv) {
-        ok = wp_rsa_encode_text_format_hex(&key->key.n, textData, textLen, &pos,
-            "modulus");
-    }
-    else if (hasPub) {
-        ok = wp_rsa_encode_text_format_hex(&key->key.n, textData, textLen, &pos,
-            "Modulus");
+    if (ok) {
+        if (hasPriv) {
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.n, "modulus");
+        }
+        else if (hasPub) {
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.n, "Modulus");
+        }
     }
 
     /* OSSL uses 'publicExponent' and 'Exponent' */
@@ -4243,15 +4197,13 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             expStr = NULL;
         }
         else {
-            if (hasPriv && (printAmt = XSNPRINTF(textData + pos,
-                    textLen - pos, "publicExponent: %s ", expStr)) <= 0) {
+            if (hasPriv && BIO_printf(out, "publicExponent: %s ",
+                    expStr) <= 0) {
                 ok = 0;
             }
-            else if (hasPub && (printAmt = XSNPRINTF(textData + pos,
-                    textLen - pos, "Exponent: %s ", expStr)) <= 0) {
+            else if (hasPub && BIO_printf(out, "Exponent: %s ", expStr) <= 0) {
                 ok = 0;
             }
-            pos += printAmt;
 
             OPENSSL_free(expStr);
             expStr = NULL;
@@ -4270,12 +4222,10 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         }
         else {
             /* OSSL does not print a leading zero for the hex part */
-            if ((printAmt = XSNPRINTF(textData + pos,
-                    textLen - pos, "(0x%s)\n",
-                    (*expStr == '0') ? (expStr + 1) : (expStr))) <= 0) {
+            if (BIO_printf(out, "(0x%s)\n",
+                    (*expStr == '0') ? (expStr + 1) : (expStr)) <= 0) {
                 ok = 0;
             }
-            pos += printAmt;
 
             OPENSSL_free(expStr);
             expStr = NULL;
@@ -4285,43 +4235,33 @@ static int wp_rsa_encode_text(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     /* Write private key components */
     if (ok && hasPriv) {
         if (ok) {
-            ok = wp_rsa_encode_text_format_hex(&key->key.d, textData, textLen,
-                &pos, "privateExponent");
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.d,
+                "privateExponent");
         }
 
         if (ok) {
-            ok = wp_rsa_encode_text_format_hex(&key->key.p, textData, textLen,
-                &pos, "prime1");
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.p, "prime1");
         }
 
         if (ok) {
-            ok = wp_rsa_encode_text_format_hex(&key->key.q, textData, textLen,
-                &pos, "prime2");
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.q, "prime2");
         }
 
         if (ok) {
-            ok = wp_rsa_encode_text_format_hex(&key->key.dP, textData, textLen,
-                &pos, "exponent1");
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.dP, "exponent1");
         }
 
         if (ok) {
-            ok = wp_rsa_encode_text_format_hex(&key->key.dQ, textData, textLen,
-                &pos, "exponent2");
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.dQ, "exponent2");
         }
 
         if (ok) {
-            ok = wp_rsa_encode_text_format_hex(&key->key.u, textData, textLen,
-                &pos, "coefficient");
+            ok = wp_rsa_encode_text_format_hex(out, &key->key.u, "coefficient");
         }
     }
 
     /* TODO: display RSAPSS info */
 
-    if (ok && (BIO_write(out, textData, (int)pos) <= 0)) {
-        ok = 0;
-    }
-
-    OPENSSL_free(textData);
     BIO_free(out);
 
     WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
