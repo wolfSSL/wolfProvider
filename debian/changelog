@@ -1,3 +1,9 @@
+libwolfprov (1.0.2-2) unstable; urgency=medium
+
+  * Release version 1.0.2-2
+
+ -- WolfSSL Developer <support@wolfssl.com>  Fri, 29 Aug 2025 14:21:38 -0700
+
 libwolfprov (1.0.2-1) unstable; urgency=medium
 
   * Initial release.
