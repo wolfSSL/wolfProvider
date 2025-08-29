@@ -144,7 +144,7 @@ make check
 
 ## Building with FIPS
 
-To build and test with our prebuilt FIPS bundle, use the following command to build wolfProvider with FIPS enabled. You can refer to `.github/workflows/fips-ready-test.yml` for the workflow that does this.
+To build and test with our prebuilt FIPS bundle, use the following command to build wolfProvider with FIPS enabled. You can refer to `.github/workflows/fips-ready.yml` for the workflow that does this.
 
 Go to our website to download the FIPS bundle. [here](https://www.wolfssl.com/download/) and select  wolfssl-5.8.2-gplv3-fips-ready.zip.
 
