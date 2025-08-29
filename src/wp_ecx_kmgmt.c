@@ -544,8 +544,10 @@ static int wp_ecx_get_params_priv_key(wp_Ecx* ecx, OSSL_PARAM params[])
             outLen = ecx->data->len;
         }
         else {
+            PRIVATE_KEY_UNLOCK();
             int rc = (*ecx->data->exportPriv)((void*)&ecx->key, p->data,
                 &outLen);
+            PRIVATE_KEY_LOCK();
             if (rc != 0) {
                 ok = 0;
             }
@@ -662,14 +664,18 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     ok &= ecx1->hasPriv && ecx2->hasPriv;
     if (ok) {
         len1 = ecx1->data->len;
+        PRIVATE_KEY_UNLOCK();
         rc = (*ecx1->data->exportPriv)((void*)&ecx1->key, key1, &len1);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
              ok = 0;
         }
     }
     if (ok) {
         len2 = ecx2->data->len;
+        PRIVATE_KEY_UNLOCK();
         rc = (*ecx2->data->exportPriv)((void*)&ecx2->key, key2, &len2);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             ok = 0;
         }
@@ -1066,7 +1072,12 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
     }
     if (ok && priv) {
         outLen = ecx->data->len;
+        PRIVATE_KEY_UNLOCK();
         rc = (*ecx->data->exportPriv)((void*)&ecx->key, data + *idx, &outLen);
+        PRIVATE_KEY_LOCK();
+        if (rc != 0) {
+            ok = 0;
+        }
         if (ok) {
             if (ecx->clamped) {
                 data[*idx + 0         ] = ecx->unclamped[0];

@@ -36,6 +36,12 @@
 
 #ifdef WP_HAVE_RSA
 
+/* In 5.8.2 RSA_MIN_SIZE was changed from 1024 to 2048. We still need to
+ * allow 1024 in some cases, and have extended logic in place for it already.
+ * For FIPS 1024 bit keys, use existing checks and let wolfssl throw us back */
+#define WP_RSA_MIN_SIZE 1024
+#define WP_RSA_MAX_SIZE RSA_MAX_SIZE
+
 /** Supported selections (key parts) in this key manager for RSA. */
 #define WP_RSA_POSSIBLE_SELECTIONS                                             \
     (OSSL_KEYMGMT_SELECT_KEYPAIR | OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS)
@@ -357,7 +363,7 @@ static int wp_rsa_check_key_size_int(int keySize, int allow1024)
 
     WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_check_key_size_int");
 
-    if ((keySize < RSA_MIN_SIZE) || (keySize > RSA_MAX_SIZE)) {
+    if ((keySize < WP_RSA_MIN_SIZE) || (keySize > WP_RSA_MAX_SIZE)) {
         WOLFPROV_MSG(WP_LOG_RSA, "RSA key size invalid: %d\n", keySize);
         ok = 0;
     }
