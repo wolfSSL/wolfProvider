@@ -475,6 +475,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
         rc = wc_AesSetKey(&aes, ctx->key, (word32)ctx->keySz, NULL,
             AES_ENCRYPTION);
         if (rc != 0) {
+            WOLFPROV_MSG(WP_LOG_KRB5KDF, "wc_AesSetKey failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -485,6 +486,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
         for (osize = 0; ok && osize < keyLen; osize += cipherLen) {
             rc = wc_AesCbcEncrypt(&aes, cipher, plain, AES_BLOCK_SIZE);
             if (rc != 0) {
+                WOLFPROV_MSG(WP_LOG_KRB5KDF, "wc_AesCbcEncrypt failed with rc=%d", rc);
                 ok = 0;
             }
 
@@ -497,6 +499,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
                 rc = wc_AesSetKey(&aes, ctx->key, (word32)ctx->keySz, NULL,
                     AES_ENCRYPTION);
                 if (rc != 0) {
+                    WOLFPROV_MSG(WP_LOG_KRB5KDF, "wc_AesSetKey failed with rc=%d", rc);
                     ok = 0;
                 }
 
