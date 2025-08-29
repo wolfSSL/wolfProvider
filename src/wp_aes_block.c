@@ -267,7 +267,7 @@ static int wp_aes_init_iv(wp_AesBlockCtx *ctx, const unsigned char *iv,
         XMEMCPY(ctx->oiv, iv, ivLen);
         rc = wc_AesSetIV(&ctx->aes, iv);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesSetIV failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesSetIV failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -331,7 +331,7 @@ static int wp_aes_block_init(wp_AesBlockCtx *ctx, const unsigned char *key,
             int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, ctx->iv,
                 enc ? AES_ENCRYPTION : AES_DECRYPTION);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_AES, "wc_AesSetKey failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesSetKey failed with rc=%d", rc);
                 ok = 0;
             }
         }

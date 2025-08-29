@@ -115,7 +115,7 @@ static wp_RsaAsymCtx* wp_rsaa_ctx_new(WOLFPROV_CTX* provCtx)
     if (ctx != NULL) {
         int rc = wc_InitRng(&ctx->rng);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_RSA, "wc_InitRng failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitRng failed with rc=%d", rc);
             OPENSSL_free(ctx);
             ctx = NULL;
         }
@@ -311,7 +311,7 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
             rc = wc_RsaPublicEncrypt(in, (word32)inLen, out, (word32)outSize,
                 wp_rsa_get_key(ctx->rsa), &ctx->rng);
             if (rc < 0) {
-                WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaPublicEncrypt failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaPublicEncrypt failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -329,7 +329,7 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 wp_rsa_get_key(ctx->rsa), &ctx->rng, WC_RSA_OAEP_PAD,
                 ctx->oaepHashType, ctx->mgf, ctx->label, (word32)ctx->labelLen);
             if (rc < 0) {
-                WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaPublicEncrypt_ex failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaPublicEncrypt_ex failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -338,7 +338,7 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
             rc = wc_RsaDirect((byte*)in, (word32)inLen, out, &sz,
                 wp_rsa_get_key(ctx->rsa), RSA_PUBLIC_ENCRYPT, &ctx->rng);
             if (rc < 0) {
-                WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaDirect failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaDirect failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -425,7 +425,7 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
         /* TODO: not thread safe */
         rc = wc_RsaSetRNG(wp_rsa_get_key(ctx->rsa), &ctx->rng);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaSetRNG failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaSetRNG failed with rc=%d", rc);
             ok = 0;
         }
         if (!ok) {
@@ -438,7 +438,7 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 wp_rsa_get_key(ctx->rsa));
             PRIVATE_KEY_LOCK();
             if (rc < 0) {
-                WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaPrivateDecrypt failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaPrivateDecrypt failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -453,7 +453,7 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 ctx->oaepHashType, ctx->mgf, ctx->label, (word32)ctx->labelLen);
             PRIVATE_KEY_LOCK();
             if (rc < 0) {
-                WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaPrivateDecrypt_ex failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaPrivateDecrypt_ex failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -483,7 +483,7 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 rc &= (int)(char)mask;
 
                 if (rc <= 0) {
-                    WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaPrivateDecrypt TLS padding failed with rc=%d", rc);
+                    WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaPrivateDecrypt TLS padding failed with rc=%d", rc);
                     ok = 0;
                 }
             }
@@ -495,7 +495,7 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
                 wp_rsa_get_key(ctx->rsa), RSA_PRIVATE_DECRYPT, &ctx->rng);
             PRIVATE_KEY_LOCK();
             if (rc < 0) {
-                WOLFPROV_MSG(WP_LOG_RSA, "wc_RsaDirect decrypt failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RsaDirect decrypt failed with rc=%d", rc);
                 ok = 0;
             }
         }

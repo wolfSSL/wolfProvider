@@ -336,7 +336,7 @@ static wp_Ecc* wp_ecc_new(WOLFPROV_CTX *provCtx)
 
         rc = wc_ecc_init_ex(&ecc->key, NULL, INVALID_DEVID);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_init_ex failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_init_ex failed with rc=%d", rc);
             ok = 0;
         }
 
@@ -344,7 +344,7 @@ static wp_Ecc* wp_ecc_new(WOLFPROV_CTX *provCtx)
             /* RNG's tied to lifecycle of key in wolfSSL. */
             rc = wc_InitRng(&ecc->rng);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_ECC, "wc_InitRng failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitRng failed with rc=%d", rc);
                 wc_ecc_free(&ecc->key);
                 ok = 0;
             }
@@ -354,7 +354,7 @@ static wp_Ecc* wp_ecc_new(WOLFPROV_CTX *provCtx)
         if (ok) {
             rc = wc_InitMutex(&ecc->mutex);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_ECC, "wc_InitMutex failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitMutex failed with rc=%d", rc);
                 wc_FreeRng(&ecc->rng);
                 wc_ecc_free(&ecc->key);
                 ok = 0;
@@ -397,7 +397,7 @@ void wp_ecc_free(wp_Ecc* ecc)
 
         rc = wc_LockMutex(&ecc->mutex);
         if (rc < 0) {
-            WOLFPROV_MSG(WP_LOG_ECC, "wc_LockMutex failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_LockMutex failed with rc=%d", rc);
         }
         cnt = --ecc->refCnt;
         if (rc == 0) {
@@ -442,7 +442,7 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
         if ((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) {
             rc = wc_ecc_set_curve(&dst->key, (src->bits + 7) / 8, src->curveId);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_set_curve failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_set_curve failed with rc=%d", rc);
                 ok = 0;
             }
             if (ok) {
@@ -457,7 +457,7 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
             rc = wc_ecc_copy_point((ecc_point*)&src->key.pubkey,
                 &dst->key.pubkey);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_copy_point failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_copy_point failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -472,7 +472,7 @@ static wp_Ecc* wp_ecc_dup(const wp_Ecc *src, int selection)
             rc = mp_copy(&(src->key.k), &(dst->key.k));
 #endif
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_ECC, "mp_copy failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "mp_copy failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -559,7 +559,7 @@ static int wp_ecc_set_params_enc_pub_key(wp_Ecc *ecc, const OSSL_PARAM params[],
         int rc = wc_ecc_import_x963_ex(data, (word32)len, &ecc->key,
             ecc->curveId);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_import_x963_ex failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_import_x963_ex failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -747,7 +747,7 @@ static int wp_ecc_get_params_enc_pub_key(wp_Ecc* ecc, OSSL_PARAM params[],
             else {
                 rc = wc_ecc_export_x963_ex(&ecc->key, p->data, &outLen, 0);
                 if (rc != 0) {
-                    WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_export_x963_ex failed with rc=%d", rc);
+                    WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_export_x963_ex failed with rc=%d", rc);
                     ok = 0;
                 }
             }
@@ -1053,7 +1053,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
             rc = wc_ecc_check_key((ecc_key*)&ecc->key);
             ((wp_Ecc*)ecc)->key.type = origType;
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_check_key failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_check_key failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -1065,7 +1065,7 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
     if ((ok && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         rc = wc_ecc_check_key((ecc_key*)&ecc->key);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_check_key failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_check_key failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -1451,7 +1451,7 @@ static int wp_ecc_export_keypair(wp_Ecc* ecc, OSSL_PARAM* params, int* pIdx,
     outLen = WP_ECC_PUBLIC_KEY_SIZE(ecc);
     rc = wc_ecc_export_x963_ex(&ecc->key, data + *idx, &outLen, 0);
     if (rc != 0) {
-        WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_export_x963_ex failed with rc=%d", rc);
+        WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_export_x963_ex failed with rc=%d", rc);
         ok = 0;
     }
     if (ok) {
@@ -1766,7 +1766,7 @@ static wp_Ecc* wp_ecc_gen(wp_EccGenCtx *ctx, OSSL_CALLBACK *cb, void *cbArg)
             #endif
                 PRIVATE_KEY_LOCK();
                 if (rc != 0) {
-                    WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_make_key_ex/wc_ecc_make_key_ex2 failed with rc=%d", rc);
+                    WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_make_key_ex/wc_ecc_make_key_ex2 failed with rc=%d", rc);
                     ok = 0;
                 }
                 else {
@@ -1779,7 +1779,7 @@ static wp_Ecc* wp_ecc_gen(wp_EccGenCtx *ctx, OSSL_CALLBACK *cb, void *cbArg)
         if (ok && ((ctx->selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0)) {
             rc = wc_ecc_set_curve(&ecc->key, 0, ecc->curveId);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_set_curve failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_set_curve failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -1998,7 +1998,7 @@ static int wp_ecc_get_curve_id_from_oid(unsigned char* oid, int len)
          rc = wc_ecc_get_oid(wp_oid_sum_to_curve_id[i].oidSum, &wcOid,
              &wcOidSz);
          if (rc < 0) {
-             WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_get_oid failed with rc=%d", rc);
+             WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_get_oid failed with rc=%d", rc);
              break;
          }
 
@@ -2414,7 +2414,7 @@ static int wp_ecc_encode_pub_size(const wp_Ecc *ecc, size_t* keyLen)
 
     rc = wc_ecc_export_x963_ex((ecc_key*)&ecc->key, NULL, &len, 0);
     if (rc != LENGTH_ONLY_E) {
-        WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_export_x963_ex failed with rc=%d", rc);
+        WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_export_x963_ex failed with rc=%d", rc);
         ok = 0;
     }
     if (ok) {
@@ -2446,7 +2446,7 @@ static int wp_ecc_encode_pub(const wp_Ecc *ecc, unsigned char* keyData,
 
     rc = wc_ecc_export_x963_ex((ecc_key*)&ecc->key, keyData, &len, 0);
     if (rc != 0) {
-        WOLFPROV_MSG(WP_LOG_ECC, "wc_ecc_export_x963_ex failed with rc=%d", rc);
+        WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_export_x963_ex failed with rc=%d", rc);
         ok = 0;
     }
     if (ok) {

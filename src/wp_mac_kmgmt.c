@@ -99,7 +99,7 @@ int wp_mac_up_ref(wp_Mac* mac)
 
     rc = wc_LockMutex(&mac->mutex);
     if (rc < 0) {
-        WOLFPROV_MSG(WP_LOG_MAC, "wc_LockMutex failed with rc=%d", rc);
+        WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_LockMutex failed with rc=%d", rc);
         ok = 0;
     }
     if (ok) {
@@ -193,7 +193,7 @@ static wp_Mac* wp_mac_new(WOLFPROV_CTX *provCtx, int type)
     #ifndef SINGLE_THREADED
         int rc = wc_InitMutex(&mac->mutex);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_MAC, "wc_InitMutex failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitMutex failed with rc=%d", rc);
             OPENSSL_free(mac);
             mac = NULL;
         }

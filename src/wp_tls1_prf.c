@@ -176,7 +176,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
                 (word32)(ctx->seedSz), NULL, INVALID_DEVID);
             PRIVATE_KEY_LOCK();
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_KDF, "wc_PRF_TLSv1 failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_PRF_TLSv1 failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -190,7 +190,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
                 INVALID_DEVID);
             PRIVATE_KEY_LOCK();
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_KDF, "wc_PRF_TLS failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_PRF_TLS failed with rc=%d", rc);
                 ok = 0;
             }
         }

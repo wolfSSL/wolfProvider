@@ -230,7 +230,7 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
         rc = wc_X963_KDF(ctx->kdfMd, secret, (word32)secLen, ctx->ukm,
             (word32)ctx->ukmLen, key, (word32)ctx->keyLen);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_ECDH, "wc_X963_KDF failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_X963_KDF failed with rc=%d", rc);
             ok = 0;
         }
         else {
@@ -280,7 +280,7 @@ static int wp_ecdh_derive_secret(wp_EcdhCtx* ctx, unsigned char* secret,
             wp_ecc_get_key(ctx->peer), secret, &len);
         PRIVATE_KEY_LOCK();
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_ECDH, "wc_ecc_shared_secret failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_ecc_shared_secret failed with rc=%d", rc);
             ok = 0;
         }
     }

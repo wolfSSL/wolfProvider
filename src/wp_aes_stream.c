@@ -322,7 +322,7 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
             int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
                 dir);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_AES, "wc_AesSetKey failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesSetKey failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -405,7 +405,7 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         rc = wc_AesCbcEncrypt(&ctx->aes, out, in, blocks * AES_BLOCK_SIZE);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesCbcEncrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesCbcEncrypt failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -420,7 +420,7 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         rc = wc_AesCbcEncrypt(&ctx->aes, ctsBlock, ctsBlock,
             AES_BLOCK_SIZE * 2);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesCbcEncrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesCbcEncrypt failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -463,7 +463,7 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         rc = wc_AesCbcDecrypt(&ctx->aes, out, in, blocks * AES_BLOCK_SIZE);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesCbcDecrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesCbcDecrypt failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -478,7 +478,7 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         XMEMCPY(&ctx->aes.reg, ctsBlock + AES_BLOCK_SIZE, AES_BLOCK_SIZE);
         rc = wc_AesCbcDecrypt(&ctx->aes, tmp, ctsBlock, AES_BLOCK_SIZE);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesCbcDecrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesCbcDecrypt failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -490,7 +490,7 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         rc = wc_AesCbcDecrypt(&ctx->aes, out, ctsBlock + AES_BLOCK_SIZE,
             AES_BLOCK_SIZE);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesCbcDecrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesCbcDecrypt failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -531,7 +531,7 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         rc = wc_AesCtrEncrypt(&ctx->aes, out, in, (word32)inLen);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesCtrEncrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesCtrEncrypt failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -551,7 +551,7 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
             rc = wc_AesCfbDecrypt(&ctx->aes, out, in, (word32)inLen);
         }
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_AES, "wc_AesCfbEncrypt/wc_AesCfbDecrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_AesCfbEncrypt/wc_AesCfbDecrypt failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {

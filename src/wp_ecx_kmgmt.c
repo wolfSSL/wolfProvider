@@ -278,7 +278,7 @@ static wp_Ecx* wp_ecx_new(WOLFPROV_CTX* provCtx, const wp_EcxData* data)
 
         rc = (*data->initKey)((void*)&ecx->key);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "initKey failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "initKey failed with rc=%d", rc);
             ok = 0;
         }
 
@@ -286,7 +286,7 @@ static wp_Ecx* wp_ecx_new(WOLFPROV_CTX* provCtx, const wp_EcxData* data)
         if (ok) {
             rc = wc_InitMutex(&ecx->mutex);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_KE, "wc_InitMutex failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitMutex failed with rc=%d", rc);
                 (*data->freeKey)(&ecx->key);
                 ok = 0;
             }
@@ -323,7 +323,7 @@ void wp_ecx_free(wp_Ecx* ecx)
 
         rc = wc_LockMutex(&ecx->mutex);
         if (rc < 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "wc_LockMutex failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_LockMutex failed with rc=%d", rc);
         }
         cnt = --ecx->refCnt;
         if (rc == 0) {
@@ -433,7 +433,7 @@ static int wp_ecx_set_params(wp_Ecx* ecx, const OSSL_PARAM params[])
         int rc = (*ecx->data->importPub)(data, (word32)len, (void*)&ecx->key,
             ECX_LITTLE_ENDIAN);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "importPub failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "importPub failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -517,7 +517,7 @@ static int wp_ecx_get_params_enc_pub_key(wp_Ecx* ecx, OSSL_PARAM params[],
             int rc = (*ecx->data->exportPub)((void*)&ecx->key, p->data,
                 &outLen, ECX_LITTLE_ENDIAN);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_KE, "exportPub failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPub failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -554,7 +554,7 @@ static int wp_ecx_get_params_priv_key(wp_Ecx* ecx, OSSL_PARAM params[])
             int rc = (*ecx->data->exportPriv)((void*)&ecx->key, p->data,
                 &outLen);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_KE, "exportPriv failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPriv failed with rc=%d", rc);
                 ok = 0;
             }
         }
@@ -672,7 +672,7 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
         len1 = ecx1->data->len;
         rc = (*ecx1->data->exportPriv)((void*)&ecx1->key, key1, &len1);
         if (rc != 0) {
-             WOLFPROV_MSG(WP_LOG_KE, "exportPriv failed with rc=%d", rc);
+             WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPriv failed with rc=%d", rc);
              ok = 0;
         }
     }
@@ -680,7 +680,7 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
         len2 = ecx2->data->len;
         rc = (*ecx2->data->exportPriv)((void*)&ecx2->key, key2, &len2);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "exportPriv failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPriv failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -722,7 +722,7 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
         rc = (*ecx1->data->exportPub)((void*)&ecx1->key, key1, &len1,
             ECX_LITTLE_ENDIAN);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "exportPub failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPub failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -731,7 +731,7 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
         rc = (*ecx2->data->exportPub)((void*)&ecx2->key, key2, &len2,
             ECX_LITTLE_ENDIAN);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "exportPub failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPub failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -804,7 +804,7 @@ static int wp_ecx_validate_pub_key(const wp_Ecx* ecx)
         rc = (*ecx->data->exportPub)((void*)&ecx->key, key, &len,
             ECX_LITTLE_ENDIAN);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "exportPub failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPub failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -812,7 +812,7 @@ static int wp_ecx_validate_pub_key(const wp_Ecx* ecx)
         /* Check the public key is valid. */
         rc = (*ecx->data->checkPub)(key, len, ECX_LITTLE_ENDIAN);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "checkPub failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "checkPub failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -886,7 +886,7 @@ static int wp_ecx_ed_validate(const wp_Ecx* ecx, int selection, int checkType)
             OSSL_KEYMGMT_SELECT_KEYPAIR)) {
         int rc = (*ecx->data->checkKey)((void*)&ecx->key);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "checkKey failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "checkKey failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -932,7 +932,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             rc = (*ecx->data->importPriv)(privData, (word32)len, (void*)&ecx->key,
                 ECX_LITTLE_ENDIAN);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_KE, "importPriv failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "importPriv failed with rc=%d", rc);
                 ok = 0;
             }
             if (ok) {
@@ -951,7 +951,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             rc = (*ecx->data->importPub)(pubData, (word32)len, (void*)&ecx->key,
                 ECX_LITTLE_ENDIAN);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_KE, "importPub failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "importPub failed with rc=%d", rc);
                 ok = 0;
             }
             if (ok) {
@@ -1074,7 +1074,7 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
     rc = (*ecx->data->exportPub)((void*)&ecx->key, data + *idx, &outLen,
         ECX_LITTLE_ENDIAN);
     if (rc != 0) {
-        WOLFPROV_MSG(WP_LOG_KE, "exportPub failed with rc=%d", rc);
+        WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPub failed with rc=%d", rc);
         ok = 0;
     }
     if (ok) {
@@ -1086,7 +1086,7 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
         outLen = ecx->data->len;
         rc = (*ecx->data->exportPriv)((void*)&ecx->key, data + *idx, &outLen);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "exportPriv failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "exportPriv failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -1195,7 +1195,7 @@ static wp_EcxGenCtx* wp_ecx_gen_init(WOLFPROV_CTX* provCtx,
 
         rc = wc_InitRng(&ctx->rng);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "wc_InitRng failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitRng failed with rc=%d", rc);
             ok = 0;
         }
         if (ok) {
@@ -1294,7 +1294,7 @@ static wp_Ecx* wp_ecx_gen(wp_EcxGenCtx* ctx, OSSL_CALLBACK* osslcb, void* cbarg)
         int rc = (*ctx->data->makeKey)(&ctx->rng, ctx->data->len,
             (void*)&ecx->key);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "makeKey failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "makeKey failed with rc=%d", rc);
             wp_ecx_free(ecx);
             ecx = NULL;
         }
@@ -2049,7 +2049,7 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (ok) {
         rc = ctx->decode(data, &idx, (void*)&ecx->key, len);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "decode failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "decode failed with rc=%d", rc);
             ok = 0;
             decoded = 0;
         }

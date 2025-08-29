@@ -456,7 +456,7 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
 
         rc = wc_InitRsaKey(&rsa->key, NULL);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_RSA, "wc_InitRsaKey failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitRsaKey failed with rc=%d", rc);
             ok = 0;
         }
 
@@ -464,7 +464,7 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
         if (ok) {
             rc = wc_InitMutex(&rsa->mutex);
             if (rc != 0) {
-                WOLFPROV_MSG(WP_LOG_RSA, "wc_InitMutex failed with rc=%d", rc);
+                WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_InitMutex failed with rc=%d", rc);
                 wc_FreeRsaKey(&rsa->key);
                 ok = 0;
             }
@@ -1513,7 +1513,7 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
                     /* retry */
                 }
                 else if (rc != 0) {
-                    WOLFPROV_MSG(WP_LOG_RSA, "wc_MakeRsaKey failed with rc=%d", rc);
+                    WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_MakeRsaKey failed with rc=%d", rc);
                     wp_rsa_free(rsa);
                     rsa = NULL;
                     break;

@@ -58,7 +58,7 @@ int wp_provctx_lock_rng(WOLFPROV_CTX* provCtx)
 
     rc = wc_LockMutex(&provCtx->rng_mutex);
     if (rc != 0) {
-        WOLFPROV_MSG(WP_LOG_PROVIDER, "wc_LockMutex failed with rc=%d", rc);
+        WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_LockMutex failed with rc=%d", rc);
         ok = 0;
     }
 
@@ -101,7 +101,7 @@ int wp_lock(wolfSSL_Mutex *mutex)
     else {
         rc = wc_LockMutex(mutex);
         if (rc < 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "wc_LockMutex failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_LockMutex failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -139,7 +139,7 @@ int wp_unlock(wolfSSL_Mutex* mutex)
     else {
         rc = wc_UnLockMutex(mutex);
         if (rc < 0) {
-            WOLFPROV_MSG(WP_LOG_KE, "wc_UnLockMutex failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_UnLockMutex failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -493,7 +493,7 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         break;
     }
     if (rc != 0) {
-        WOLFPROV_MSG(WP_LOG_PROVIDER, "wp_hash_copy failed with rc=%d", rc);
+        WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wp_hash_copy failed with rc=%d", rc);
         ok = 0;
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
     } else {
@@ -765,7 +765,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         rc = wp_EncryptedInfoGet(info, info->name);
     #endif
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_PROVIDER, "EncryptedInfoGet failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "EncryptedInfoGet failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -781,7 +781,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         wp_provctx_unlock_rng(provCtx);
     #endif
         if (rc < 0) {
-            WOLFPROV_MSG(WP_LOG_PROVIDER, "wc_RNG_GenerateBlock failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "wc_RNG_GenerateBlock failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -798,7 +798,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
             (int)passwordSz, WC_MD5);
     #endif
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_PROVIDER, "BufferKeyEncrypt failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "BufferKeyEncrypt failed with rc=%d", rc);
             ok = 0;
         }
     }
@@ -819,7 +819,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         rc = Base16_Encode(info->iv, info->ivSz, *cipherInfo + idx,
             &cipherInfoSz);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_PROVIDER, "Base16_Encode failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG(WP_LOG_DEBUG, "Base16_Encode failed with rc=%d", rc);
             ok = 0;
         }
     }
