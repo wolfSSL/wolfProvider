@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  remove|purge)
+    rm -rf /usr/share/openssl-defaults
+    rm -f /usr/lib/ssl/libdefault.so*
+    ;;
+esac
+
+#DEBHELPER#
+exit 0

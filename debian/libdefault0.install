@@ -1,0 +1,2 @@
+# dh-exec
+libdefault-stub-install/lib/libdefault.so.*  usr/lib/${DEB_HOST_MULTIARCH}/

@@ -29,6 +29,12 @@ AC_LANG(C)
 # OpenSSL
 AC_CHECK_HEADERS([openssl/core.h])
 
+# Add libdefault-stub-install to LDFLAGS if replace-default will be enabled
+# (This needs to happen before OpenSSL check)
+if test "x$enable_replace_default" = "xyes"; then
+    LDFLAGS="$LDFLAGS -L./libdefault-stub-install/lib -ldefault"
+fi
+
 AX_CHECK_OPENSSL(
     [have_openssl=yes],
     AC_MSG_FAILURE([could not locate OpenSSL])
@@ -129,6 +135,11 @@ AC_ARG_ENABLE([replace-default],
     [ ENABLED_REPLACE_DEFAULT=$enableval ],
     [ ENABLED_REPLACE_DEFAULT=no ]
     )
+
+# Add libdefault-stub-install to LDFLAGS when replace-default is enabled
+if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then
+    LDFLAGS="$LDFLAGS -L./libdefault-stub-install/lib"
+fi
 
 AM_CONDITIONAL([BUILD_REPLACE_DEFAULT], [test "x$ENABLED_REPLACE_DEFAULT" = "xyes"])
 

@@ -58,37 +58,32 @@ jobs:
 
     - name: Install wolfssl debian package
       run: |
-        mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
-        cd "$RUNNER_TEMP/wolfssl-pkg"
+        mkdir -p "/tmp/wolfssl-pkg"
+        cd "/tmp/wolfssl-pkg"
         
-        echo "Using standard wolfSSL package"
-        tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
+        # Install wolfssl packages
+        chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
+        $GITHUB_WORKSPACE/debian/install-wolfssl.sh \
+          $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz \
+          "/tmp/wolfssl-pkg"
 
-        # Get current architecture
-        CURRENT_ARCH=$(dpkg --print-architecture)
-        echo "Current architecture: $CURRENT_ARCH"
+        # Create wolfprov-packages directory and move wolfssl files there
+        mkdir -p "/tmp/wolfprov-packages"
+        echo "Moving wolfssl files to artifacts directory..."
         
-        # Look for existing .deb files that match the current architecture
-        cd debian-packages
-        MATCHING_DEB_FILES=$(find . -name "*_${CURRENT_ARCH}.deb" -o -name "*_${CURRENT_ARCH}_*.deb" 2>/dev/null || true)
+        # Copy all wolfssl-related files (source and binary packages)
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.deb" -exec cp {} /tmp/wolfprov-packages/ \;
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.dsc" -exec cp {} /tmp/wolfprov-packages/ \;
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
+        find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.orig.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
         
-        if [ -n "$MATCHING_DEB_FILES" ]; then
-          echo "Found matching .deb files for architecture $CURRENT_ARCH:"
-          echo "$MATCHING_DEB_FILES"
-          echo "Installing existing .deb files..."
-          dpkg -i $MATCHING_DEB_FILES
-        else
-          echo "No matching .deb files found for architecture $CURRENT_ARCH, rebuilding from source..."
-          dpkg-source -x wolfssl*.dsc
-          cd wolfssl*/
-          dpkg-buildpackage -b -us -uc
-          dpkg -i ../libwolfssl*.deb
-        fi
+        echo "WolfSSL files in artifacts directory:"
+        ls -la /tmp/wolfprov-packages/*wolfssl* || true
 
     - name: Build Debian package
       run: |
         # Bypass the warning prompt with 'yes Y' 
-        yes Y | ./scripts/build-wolfprovider.sh --debian
+        yes Y | ./scripts/build-wolfprovider.sh --debian $FIPS_FLAG
 
         # List generated packages
         echo "Generated Packages:"
@@ -114,7 +109,7 @@ jobs:
 
     - name: Test OpenSSL provider functionality
       run: |
-        PROVIDER_CONF="/etc/ssl/openssl.cnf.d/wolfprovider.conf"
+        PROVIDER_CONF="/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
         PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
 
         # Temporarily move wolfprovider config so we can toggle between providers
@@ -156,9 +151,9 @@ jobs:
         fi
 
         # Check if the config file is removed
-        if [ -f /etc/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+        if [ -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf ]; then
           echo "wolfprovider.conf still exists after package removal"
-          ls -la /etc/ssl/openssl.cnf.d/
+          ls -la /usr/lib/ssl/openssl.cnf.d/
           exit 1
         else
           echo "wolfprovider.conf successfully removed"
@@ -194,10 +189,12 @@ jobs:
 
     - name: Move package artifacts
       run: |
-        # Move the generated packages to the temp directory
-        mv ../*.deb $RUNNER_TEMP/ || true
-        mv ../*.dsc $RUNNER_TEMP/ || true
-        mv ../*.tar.gz $RUNNER_TEMP/ || true
+        # Create a clean artifacts directory
+        mkdir -p "/tmp/wolfprov-packages"
+        # Move the generated packages to the artifacts directory
+        mv ../*.deb /tmp/wolfprov-packages/ || true
+        mv ../*.dsc /tmp/wolfprov-packages/ || true
+        mv ../*.tar.gz /tmp/wolfprov-packages/ || true
 
     # Save the build outputs which for use in release packages
     - name: Upload package artifacts
@@ -206,7 +203,7 @@ jobs:
       with:
         name: wolfprovider-debian-packages
         path: |
-          ${{ runner.temp }}/*.deb
-          ${{ runner.temp }}/*.dsc
-          ${{ runner.temp }}/*.tar.gz
+          /tmp/wolfprov-packages/*.deb
+          /tmp/wolfprov-packages/*.dsc
+          /tmp/wolfprov-packages/*.tar.gz
         retention-days: 7
