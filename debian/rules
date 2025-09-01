@@ -56,9 +56,9 @@ override_dh_auto_install:
 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/
 
 	# Install OpenSSL headers and dev files for libssl-dev package
-	install -d $(DESTDIR)/usr/include
-	find ./openssl-install/include/openssl -type d -exec install -d "$(DESTDIR)/usr/include/openssl/{}" \;
-	find ./openssl-install/include/openssl -type f -exec install -m644 "{}" "$(DESTDIR)/usr/include/openssl/{}" \;
+	# Copy directly to the destination directory
+	install -d $(DESTDIR)/usr/include/openssl
+	cp -a $(CURDIR)/openssl-install/include/openssl/. $(DESTDIR)/usr/include/openssl
 
 	# Install wolfProvider library
 	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
