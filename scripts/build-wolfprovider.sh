@@ -160,10 +160,6 @@ source ${SCRIPT_DIR}/utils-wolfprovider.sh
 
 echo "Using openssl: $OPENSSL_TAG, wolfssl: $WOLFSSL_TAG"
 
-if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
-    build_default_stub
-fi
-
 init_wolfprov
 
 exit $?

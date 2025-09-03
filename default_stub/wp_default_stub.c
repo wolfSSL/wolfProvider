@@ -17,24 +17,22 @@
  * along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <openssl/provider.h>
+/* Note: to simplify the build process, we are not using the OpenSSL headers.
+ *       Instead, we are using functions that don't specify parameters. This
+ *       allows us to build the stub without having to clone OpenSSL first,
+ *       nor use the system OpenSSL headers.
+ */
 
 /* Prototype of public function that initializes the wolfSSL provider. */
-OSSL_provider_init_fn wolfssl_provider_init;
+int wolfssl_provider_init();
 
 /* Prototype for the wolfprov_provider_init function */
-int wolfprov_provider_init(const OSSL_CORE_HANDLE* handle,
-                          const OSSL_DISPATCH* in,
-                          const OSSL_DISPATCH** out,
-                          void** provCtx);
+int wolfprov_provider_init();
 
 /*
  * Provider implementation stub
  */
-int wolfprov_provider_init(const OSSL_CORE_HANDLE* handle,
-                          const OSSL_DISPATCH* in,
-                          const OSSL_DISPATCH** out,
-                          void** provCtx)
+int wolfprov_provider_init()
 {
     return 0;
 }
