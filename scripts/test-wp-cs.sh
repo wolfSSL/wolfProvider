@@ -285,8 +285,6 @@ if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
     popd > /dev/null
 fi
 
-init_wolfprov
-
 if [ "${AM_BWRAPPED-}" != "yes" ]; then
     bwrap_path="$(command -v bwrap)"
     if [ -n "$bwrap_path" ]; then
@@ -295,6 +293,8 @@ if [ "${AM_BWRAPPED-}" != "yes" ]; then
     fi
     unset AM_BWRAPPED
 fi
+
+init_wolfprov
 
 printf "Client testing\n" | tee $LOG_FILE
 start_openssl_server
