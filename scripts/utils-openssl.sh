@@ -64,7 +64,11 @@ clone_openssl() {
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tOpenSSL source directory not found: ${OPENSSL_SOURCE_DIR}\n"
         printf "\tParent directory:\n"
-        tree -L 2 $(dirname ${OPENSSL_SOURCE_DIR}/..) || true
+        if command -v tree >/dev/null 2>&1; then
+            tree -L 2 "$(dirname "${OPENSSL_SOURCE_DIR}")" || true
+        else
+            ls -R "$(dirname "${OPENSSL_SOURCE_DIR}")" || true
+        fi
         CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
         CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
 
@@ -235,6 +239,7 @@ init_openssl() {
         OSSL_VER=`LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS} $OPENSSL_BIN version | tail -n1`
         case $OSSL_VER in
             OpenSSL\ 3.*) ;;
+            OpenSSL\ 4.*) ;;
             *)
                 echo "OpenSSL ($OPENSSL_BIN) has wrong version: $OSSL_VER"
                 echo "Set: OPENSSL_DIR"
