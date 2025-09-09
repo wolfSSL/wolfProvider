@@ -25,6 +25,10 @@ jobs:
 
   test_libssh2:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 20
     strategy:
@@ -34,6 +38,11 @@ jobs:
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -55,6 +64,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev python3-impacket
 

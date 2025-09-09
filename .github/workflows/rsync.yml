@@ -22,6 +22,10 @@ jobs:
 
   test_rsync:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 15
     strategy:
@@ -34,6 +38,11 @@ jobs:
           - rsync_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -54,6 +63,7 @@ jobs:
 
       - name: Install rsync dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y gcc g++ gawk autoconf automake python3-cmarkgfm \
             acl libacl1-dev attr libattr1-dev libxxhash-dev \

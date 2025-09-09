@@ -25,6 +25,10 @@ jobs:
 
   test_pam_pkcs11:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -38,6 +42,11 @@ jobs:
           - pam_pkcs11_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
         uses: actions/checkout@v4

@@ -25,6 +25,10 @@ jobs:
 
   test_iperf:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -35,6 +39,11 @@ jobs:
         iperf_ref: [ 'master', '3.12' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -56,8 +65,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install build-essential autoconf libtool pkg-config clang libc++-dev
+          sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev
 
       - name: Checkout iperf
         uses: actions/checkout@v4
@@ -68,7 +78,13 @@ jobs:
 
       - name: Build iperf
         working-directory: iperf
+        shell: bash
         run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export LDFLAGS="-L${OPENSSL_INSTALL}/lib64"
+          export CPPFLAGS="-I${OPENSSL_INSTALL}/include"
+
           # Configure with OpenSSL
           ./configure --with-openssl=$GITHUB_WORKSPACE/openssl-install
 
@@ -90,9 +106,8 @@ jobs:
 
       - name: Run tests
         working-directory: iperf
+        shell: bash
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
           # Test variables for iperf

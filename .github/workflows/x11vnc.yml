@@ -25,6 +25,10 @@ jobs:
 
   test_x11vnc:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 10
     strategy:
@@ -35,6 +39,11 @@ jobs:
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
 
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -56,6 +65,7 @@ jobs:
 
       - name: Install x11vnc dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
 
           # common build dependencies

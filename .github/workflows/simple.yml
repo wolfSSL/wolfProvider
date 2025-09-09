@@ -83,7 +83,7 @@ jobs:
 
       - name: Build and test wolfProvider
         # Only run the test for a cache miss. On hit, we've already run the test.
-        if: steps.wolfprov-cache-restore.cache-hit != 'true'
+        if: steps.wolfprov-cache-restore.outputs.cache-hit != 'true'
         run: |
           ${{ matrix.debug }} \
             OPENSSL_TAG=${{ matrix.openssl_ref }} \

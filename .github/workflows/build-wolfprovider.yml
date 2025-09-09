@@ -9,6 +9,11 @@ on:
       openssl_ref:
         required: true
         type: string
+      replace_default:
+        required: false
+        type: boolean
+        default: false
+        description: "Build with --replace-default flag"
     outputs:
       cache_key:
         description: "Cache key for the build artifacts"
@@ -20,7 +25,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     outputs:
-      cache_key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+      cache_key: wolfprov${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -52,7 +57,8 @@ jobs:
         with:
           path: |
             openssl-install
-          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
+            ${{ inputs.replace_default && 'libdefault-stub-install' || '' }}
+          key: ossl${{ inputs.replace_default && '-replace-default' || '' }}-depends-${{ steps.openssl-ref.outputs.ref }}
           lookup-only: false
 
       # Look for a cached version of WolfSSL
@@ -67,7 +73,12 @@ jobs:
 
       - name: Build wolfProvider
         run: |
-          OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          # Clean if there's a build mode mismatch
+          if ! OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} ./scripts/build-wolfprovider.sh ${{ inputs.replace_default && '--replace-default' || '' }}; then
+            echo "Build failed, attempting distclean and rebuild..."
+            ./scripts/build-wolfprovider.sh --distclean
+            OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} ./scripts/build-wolfprovider.sh ${{ inputs.replace_default && '--replace-default' || '' }}
+          fi
 
       # Save the wolfProvider outputs for use by the parent jobs.
       # Note that we don't try to restore since it will likely always 
@@ -81,7 +92,8 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+            ${{ inputs.replace_default && 'libdefault-stub-install' || '' }}
+          key: wolfprov${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
 
       # If openssl cache miss, save it to the cache
       - name: Save OpenSSL into cache
@@ -90,7 +102,8 @@ jobs:
         with: 
           path: |
             openssl-install
-          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
+            ${{ inputs.replace_default && 'libdefault-stub-install' || '' }}
+          key: ossl${{ inputs.replace_default && '-replace-default' || '' }}-depends-${{ steps.openssl-ref.outputs.ref }}
 
       - name: Save WolfSSL into cache
         if: steps.wolfssl-cache.outputs.cache-hit != 'true'

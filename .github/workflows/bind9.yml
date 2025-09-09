@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_bind:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -34,8 +40,14 @@ jobs:
         bind_ref: [ 'v9.18.28' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -51,8 +63,9 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
+            ${{ matrix.replace_default && 'libdefault-stub-install' || '' }}
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install bind9 test dependencies
@@ -62,7 +75,7 @@ jobs:
           sudo apt install -y build-essential automake libtool gnutls-bin \
           pkg-config make libidn2-dev libuv1-dev libnghttp2-dev libcap-dev \
           libjemalloc-dev zlib1g-dev libxml2-dev libjson-c-dev libcmocka-dev \
-          python3-pytest python3-dnspython python3-hypothesis
+          python3-pytest python3-dnspython python3-hypothesis net-tools iproute2
           sudo PERL_MM_USE_DEFAULT=1 cpan -i Net::DNS
 
       - name: Checkout bind9
@@ -85,6 +98,7 @@ jobs:
 
       - name: Build and test bind9 with wolfProvider
         working-directory: bind9
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

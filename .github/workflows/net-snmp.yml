@@ -25,6 +25,10 @@ jobs:
 
   test_net_snmp:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -36,6 +40,11 @@ jobs:
         openssl_ref: ['openssl-3.5.0']
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -57,6 +66,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y libperl-dev
 

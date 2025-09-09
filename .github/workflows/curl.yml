@@ -25,6 +25,10 @@ jobs:
 
   test_curl:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -38,6 +42,11 @@ jobs:
           - curl_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -59,8 +68,20 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
+          sudo apt-get install -y build-essential autoconf automake libtool \
+              pkg-config nghttp2 libpsl5 libpsl-dev python3-impacket 
+
+      - name: Set up environment for curl build
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          echo "OPENSSL_INSTALL=$OPENSSL_INSTALL" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          echo "CPPFLAGS=$CPPFLAGS" >> $GITHUB_ENV
+          echo "LDFLAGS=$LDFLAGS" >> $GITHUB_ENV
 
       - name: Build curl
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -68,7 +89,7 @@ jobs:
           repository: curl/curl
           path: curl
           ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl
+          configure: --with-openssl=$OPENSSL_INSTALL
           check: false
 
       - name: Generate certificates for curl master force-fail tests

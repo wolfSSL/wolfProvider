@@ -25,6 +25,10 @@ jobs:
 
   test_nginx:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -38,6 +42,11 @@ jobs:
           - nginx_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -59,6 +68,10 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool \
+              pkg-config libpcre3-dev zlib1g-dev
           sudo cpan -iT Proc::Find Net::SSLeay IO::Socket::SSL
 
       - name: Checkout nginx
@@ -83,6 +96,7 @@ jobs:
 
       - name: Run nginx-tests with wolfProvider
         working-directory: nginx-tests
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

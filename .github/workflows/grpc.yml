@@ -25,6 +25,10 @@ jobs:
 
   test_grpc:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 30
@@ -42,6 +46,11 @@ jobs:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -68,8 +77,10 @@ jobs:
 
       - name: Install prerequisites
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev
+          sudo apt-get install -y build-essential autoconf libtool pkg-config \
+            clang libc++-dev iproute2 net-tools
 
       - name: Setup cmake version
         uses: jwlawson/actions-setup-cmake@v2
