@@ -105,33 +105,6 @@ is_openssl_patched() {
     return $patch_applied
 }
 
-check_openssl_replace_default_mismatch() {
-    local openssl_is_patched=0
-
-    # Check if the source was patched for --replace-default
-    if is_openssl_patched; then
-        openssl_is_patched=1
-        printf "INFO: OpenSSL source modified - wolfProvider integrated as default provider (non-stock build).\n"
-    fi
-
-    # Check for mismatch
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$openssl_is_patched" = "0" ]; then
-        printf "ERROR: --replace-default build mode mismatch!\n"
-        printf "Existing OpenSSL was built WITHOUT --replace-default patch\n"
-        printf "Current request: --replace-default build\n\n"
-        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
-        printf "Then rebuild with desired configuration.\n"
-        exit 1
-    elif [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ] && [ "$openssl_is_patched" = "1" ]; then
-        printf "ERROR: Standard build mode mismatch!\n"
-        printf "Existing OpenSSL was built WITH --replace-default patch\n"
-        printf "Current request: standard build\n\n"
-        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
-        printf "Then rebuild with desired configuration.\n"
-        exit 1
-    fi
-}
-
 patch_openssl_version() {
     # Patch the OpenSSL version (wolfProvider/openssl-source/VERSION.dat) 
     # with our BUILD_METADATA, depending on the FIPS flag. Either "wolfProvider" or "wolfProvider-fips".
@@ -145,16 +118,22 @@ patch_openssl_version() {
     sed -i "s/RELEASE_DATE=.*/RELEASE_DATE=$(date '+%d %b %Y')/g" ${OPENSSL_SOURCE_DIR}/VERSION.dat
 }
 
-patch_openssl() {
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+patch_openssl_version_revert() {
+    # Revert the OpenSSL version (wolfProvider/openssl-source/VERSION.dat) 
+    # to remove our BUILD_METADATA.
+    git checkout -- ${OPENSSL_SOURCE_DIR}/VERSION.dat
+}
 
-        if [ -d "${OPENSSL_INSTALL_DIR}" ]; then
-            # If openssl is already installed, patching makes no sense as
-            # it will not be rebuilt. It may already be built as patched,
-            # just return and let check_openssl_replace_default_mismatch
-            # check for the mismatch.
-            return 0
-        fi
+patch_openssl() {
+    if [ -d "${OPENSSL_INSTALL_DIR}" ]; then
+        # If openssl is already installed, patching makes no sense as
+        # it will not be rebuilt. It may already be built as patched,
+        # just return and let check_openssl_replace_default_mismatch
+        # check for the mismatch.
+        return 0
+    fi
+
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
 
         printf "\tApplying OpenSSL default provider patch ... "
         pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
@@ -179,6 +158,25 @@ patch_openssl() {
         printf "Done.\n"
 
         popd &> /dev/null
+    else
+        if is_openssl_patched; then
+            printf "\tReverting OpenSSL default provider patch ... "
+            pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
+
+            # Revert the patch
+            patch -R -p1 < ${SCRIPT_DIR}/../patches/openssl3-replace-default.patch >>$LOG_FILE 2>&1
+            if [ $? != 0 ]; then
+                printf "ERROR.\n"
+                printf "\n\nPatch revert failed. Last 40 lines of log:\n"
+                tail -n 40 $LOG_FILE
+                do_cleanup
+                exit 1
+            fi
+            patch_openssl_version_revert
+            printf "Done.\n"
+
+            popd &> /dev/null
+        fi
     fi
 }
 
@@ -253,7 +251,6 @@ install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
     patch_openssl
-    check_openssl_replace_default_mismatch
 
     pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
 

@@ -79,6 +79,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }} automake libtool
 

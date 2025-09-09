@@ -21,8 +21,14 @@ jobs:
       matrix:
         openssl_ref: [ 'master', 'openssl-3.5.0' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        # Command line tests require comparison between wolfSSL and OpenSSL, 
+        # so only test with replace_default false.
+        replace_default: [ false ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         debug: ['WOLFPROV_DEBUG=1', '']
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -43,7 +49,7 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
                     # Normally we would fail on cache miss, but we rebuild below 
           # for the DEBUG build.
           fail-on-cache-miss: false
@@ -51,10 +57,12 @@ jobs:
       # If not yet built this version, build it now
       - name: Build wolfProvider
         # Only run the test for a cache miss. On hit, we've already run the test.
-        if: steps.wolfprov-cache-restore.cache-hit != 'true'
+        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
-          ${{ matrix.debug }} OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          ${{ matrix.debug }} OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh ${{ matrix.replace_default && '--replace-default' || '' }}
 
       - name: Run tests
+        shell: bash
         run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
           ${{ matrix.force_fail }} ${{ matrix.debug }} ./scripts/cmd_test/do-cmd-tests.sh

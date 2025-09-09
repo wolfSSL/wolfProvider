@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: ['v5.8.0-stable', 'master']
         openssl_ref: ['openssl-3.5.0']
+        replace_default: [ false, true ]
 
   test_cryptsetup:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -34,7 +40,11 @@ jobs:
         cryptsetup_ref: ['v2.6.1']
         wolfssl_ref: ['v5.8.0-stable', 'master']
         openssl_ref: ['openssl-3.5.0']
+        replace_default: [ false, true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
 
     steps:
       - name: Checkout wolfProvider
@@ -53,16 +63,17 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && \
+          apt-get install -y \
             build-essential autoconf asciidoctor gettext autopoint libtool \
             pkg-config uuid-dev libdevmapper-dev libpopt-dev libjson-c-dev \
-            libargon2-dev
+            libargon2-dev libblkid-dev
 
       - name: Checkout cryptsetup
         uses: actions/checkout@v4
@@ -83,17 +94,20 @@ jobs:
 
       - name: Build cryptsetup
         working-directory: cryptsetup
+        shell: bash
         run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
           ./autogen.sh
           ./configure --enable-static \
             --with-crypto-backend=openssl \
             --disable-ssh-token \
-            --with-openssl-includes=$GITHUB_WORKSPACE/openssl-install/include \
-            --with-openssl-libs=$GITHUB_WORKSPACE/openssl-install/lib64
+            --with-openssl-includes=$OPENSSL_LIB_PATH/../include \
+            --with-openssl-libs=$OPENSSL_LIB_PATH
           make -j$(nproc)
 
       - name: Run cryptsetup tests
         working-directory: cryptsetup
+        shell: bash
         run: |
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}

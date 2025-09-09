@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_libhashkit2:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -33,11 +39,19 @@ jobs:
         libhashkit2_ref: [ 'v1.x', '1.1.4' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - libhashkit2_ref: 'v1.x'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -54,13 +68,14 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install libmemcached dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install cmake build-essential bison flex memcached libc6
+          sudo apt-get install -y cmake build-essential bison flex memcached libc6
 
       - name: Download libmemcached
         uses: actions/checkout@v4
@@ -83,6 +98,7 @@ jobs:
 
       - name: Run libhashkit2 tests
         working-directory: libmemcached/build
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

@@ -16,19 +16,26 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_ppp:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 15
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         # Switched to v2.5.2 due to significant limitations with v2.4.9,
         # specifically the lack of a test suite, necessary configure options,
         # and compatibility with newer versions of openssl
@@ -37,6 +44,8 @@ jobs:
         exclude:
           - ppp_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
 
     steps:
       # Checkout the source so we can run the check-workflow-result script
@@ -55,7 +64,7 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Checkout PPP
@@ -65,6 +74,10 @@ jobs:
           path: ppp_repo
           ref: ${{ matrix.ppp_ref }}
           fetch-depth: 1
+
+      - name: Install PPP dependencies
+        run: |
+          apt-get install -y build-essential autoconf libtool pkg-config patch
 
       - name: Apply PPP compatibility fixes for OpenSSL 3.x
         working-directory: ppp_repo
@@ -90,6 +103,7 @@ jobs:
 
       - name: Run PPP tests
         working-directory: ppp_repo
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

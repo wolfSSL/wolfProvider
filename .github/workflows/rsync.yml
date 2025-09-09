@@ -15,25 +15,39 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_rsync:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 15
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         rsync_ref: [ 'master', 'v3.2.7' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - rsync_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -49,11 +63,12 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install rsync dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y gcc g++ gawk autoconf automake python3-cmarkgfm \
             acl libacl1-dev attr libattr1-dev libxxhash-dev \
@@ -69,6 +84,7 @@ jobs:
 
       - name: Build and install rsync
         working-directory: rsync_repo
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
@@ -84,6 +100,7 @@ jobs:
 
       - name: Run rsync tests
         working-directory: rsync_repo
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

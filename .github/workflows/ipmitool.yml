@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_ipmitool:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -34,6 +40,10 @@ jobs:
         ipmitool_ref: [ 'master', 'IPMITOOL_1_8_19' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -51,14 +61,15 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install dependencies
         run: |
           export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update
-          sudo apt-get install -y libreadline-dev
+          apt-get update && \
+          apt-get install -y build-essential autoconf automake libtool \
+              pkg-config libreadline-dev wget
 
       - name: Build ipmitool with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -70,6 +81,7 @@ jobs:
 
       - name: Confirm built with OpenSSL and test with wolfProvider
         working-directory: ipmitool
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

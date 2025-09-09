@@ -293,6 +293,23 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "Error: $IPERF_TEST_LOG not found"
             exit 1
         fi
+    # ----- BIND9 -----
+    elif [ "$TEST_SUITE" = "bind9" ]; then
+        if [ -f "bind9-test.log" ]; then
+            # Check for expected error count (12 errors) and non-zero exit code
+            if grep -q "ERROR: 12" bind9-test.log; then
+                echo "PASS: BIND9 tests failed as expected with force fail enabled (12 errors)"
+                exit 0
+            else
+                echo "FAIL: BIND9 tests did not fail as expected with force fail enabled"
+                echo "  Expected: 12 errors and non-zero exit code"
+                echo "  Got: $(grep 'ERROR:' bind9-test.log | tail -1)"
+                exit 1
+            fi
+        else
+            echo "Error: bind9-test.log not found"
+            exit 1
+        fi
     else
         if [ $TEST_RESULT -eq 0 ]; then
             echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"

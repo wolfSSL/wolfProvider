@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_krb5:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 30
@@ -33,8 +39,17 @@ jobs:
         krb5_ref: [ 'krb5-1.20.1-final' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -50,11 +65,12 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install KRB5 dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y \
             build-essential autoconf automake libtool \
@@ -83,6 +99,7 @@ jobs:
 
       - name: Build and test KRB5 with wolfProvider
         working-directory: krb5
+        shell: bash
         run: |
           # Build KRB5
           cd src
@@ -102,7 +119,7 @@ jobs:
           export ${{ matrix.force_fail }}
 
           # Run tests and save output
-          make check 2>&1 | tee krb5-test.log
-          TEST_RESULT=${PIPESTATUS[0]}
+          # Don't use pipe status since it will exit on the first error when pipefail is set
+          { make check 2>&1 | tee krb5-test.log; TEST_RESULT=${PIPESTATUS[0]}; } || true
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} krb5
 

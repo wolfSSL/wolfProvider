@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_x11vnc:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 10
     strategy:
@@ -32,9 +38,18 @@ jobs:
         x11vnc_ref: [ 'master', '0.9.17' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
 
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -51,11 +66,12 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install x11vnc dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
 
           # common build dependencies
@@ -80,6 +96,7 @@ jobs:
 
       - name: Build x11vnc
         working-directory: x11vnc
+        shell: bash
         run: |
           # force x11vnc to use the openssl binary in wolfProvider
           sudo ln -sf $GITHUB_WORKSPACE/openssl-install/bin/openssl /usr/bin/openssl
@@ -100,6 +117,8 @@ jobs:
           sudo make install
 
       - name: Run x11vnc tests
+        working-directory: x11vnc
+        shell: bash
         run: |
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}

@@ -26,7 +26,6 @@ source ${SCRIPT_DIR}/utils-general.sh
 WOLFPROV_SOURCE_DIR=${SCRIPT_DIR}/..
 WOLFPROV_INSTALL_DIR=${SCRIPT_DIR}/../wolfprov-install
 LIBDEFAULT_INSTALL_DIR=${WOLFPROV_INSTALL_DIR}
-LIBDEFAULT_STUB_INSTALL_DIR=${SCRIPT_DIR}/../libdefault-stub-install
 WOLFPROV_WITH_WOLFSSL=--with-wolfssl=${WOLFSSL_INSTALL_DIR}
 
 # Check if using system wolfSSL installation
