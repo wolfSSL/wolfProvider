@@ -1,0 +1,92 @@
+name: libnice Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_libnice:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        libnice_ref: [ '0.1.21' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfSSL/wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential pkg-config meson ninja-build libglib2.0-dev \
+            libgstreamer1.0-dev libunwind-dev gstreamer1.0-plugins-base-apps
+
+      - name: Download libnice
+        uses: actions/checkout@v4
+        with:
+          repository: libnice/libnice
+          ref: ${{ matrix.libnice_ref }}
+          path: libnice
+
+      - name: Build libnice
+        working-directory: libnice
+        run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
+
+          # force libnice to use the openssl binary in wolfProvider
+          sudo ln -sf $GITHUB_WORKSPACE/openssl-install/bin/openssl /usr/bin/openssl
+
+          meson setup builddir -Dcrypto-library=openssl
+
+      - name: Test libnice with wolfProvider
+        working-directory: libnice
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          export ${{ matrix.force_fail }}
+
+          # Run tests and save output to test.log
+          ninja -C builddir test 2>&1 | tee libnice_test.log
+
+          # Capture the test result using PIPESTATUS (Bash only)
+          TEST_RESULT=${PIPESTATUS[0]}
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libnice
