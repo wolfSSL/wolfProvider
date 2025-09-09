@@ -63,12 +63,6 @@ clone_openssl() {
 
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tOpenSSL source directory not found: ${OPENSSL_SOURCE_DIR}\n"
-        printf "\tParent directory:\n"
-        if command -v tree >/dev/null 2>&1; then
-            tree -L 2 "$(dirname "${OPENSSL_SOURCE_DIR}")" || true
-        else
-            ls -R "$(dirname "${OPENSSL_SOURCE_DIR}")" || true
-        fi
         CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
         CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
 
