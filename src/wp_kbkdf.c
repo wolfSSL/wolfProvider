@@ -399,6 +399,7 @@ static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
         rc = wc_HmacSetKey(&ctx->hmacCtx, ctx->hashType, localKey,
             localKeyLen);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HmacSetKey", rc);
             ok = 0;
         }
     }
@@ -431,6 +432,9 @@ static int wp_kbkdf_init_mac(wp_KbkdfCtx* ctx, unsigned char* key,
     #else
             rc = wc_InitCmac_ex(&ctx->cmacCtx, key, (word32)keyLen, WC_CMAC_AES, NULL);
     #endif
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitCmac_ex", rc);
+            }
             break;
 #endif
         default:
@@ -490,6 +494,7 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
     }
 
     if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HmacUpdate/wc_CmacUpdate", rc);
         ok = 0;
     }
 
@@ -534,6 +539,7 @@ static int wp_kbkdf_mac_final(wp_KbkdfCtx* ctx, unsigned char *out,
         case WP_MAC_TYPE_HMAC:
             rc = wc_HmacFinal(&ctx->hmacCtx, out);
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HmacFinal", rc);
                 ok = 0;
             }
             if (ok) {
@@ -546,6 +552,7 @@ static int wp_kbkdf_mac_final(wp_KbkdfCtx* ctx, unsigned char *out,
             outSz = (word32)outSize;
             rc = wc_CmacFinal(&ctx->cmacCtx, out, &outSz);
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_CmacFinal", rc);
                 ok = 0;
             }
             if (ok) {

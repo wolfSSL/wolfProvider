@@ -462,6 +462,7 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
 
         rc = wc_InitRsaKey(&rsa->key, NULL);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitRsaKey", rc);
             ok = 0;
         }
 
@@ -469,6 +470,7 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
         if (ok) {
             rc = wc_InitMutex(&rsa->mutex);
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMutex", rc);
                 wc_FreeRsaKey(&rsa->key);
                 ok = 0;
             }
@@ -559,6 +561,7 @@ static wp_Rsa* wp_rsa_dup(const wp_Rsa* src, int selection)
 
             rc = mp_copy(src_mp, dst_mp);
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_copy", rc);
                 ok = 0;
                 break;
             }
@@ -1092,6 +1095,7 @@ static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
     if (checkPub && checkPriv) {
         int rc = wc_CheckRsaKey((RsaKey*)&rsa->key);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_CheckRsaKey", rc);
             ok = 0;
         }
     }
@@ -1457,6 +1461,7 @@ static wp_RsaGenCtx* wp_rsa_base_gen_init(WOLFPROV_CTX* provCtx,
 
         rc = wc_InitRng_ex(&ctx->rng, NULL, INVALID_DEVID);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitRng_ex", rc);
             ok = 0;
         }
         if (ok) {
@@ -1517,6 +1522,7 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
                     /* retry */
                 }
                 else if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_MakeRsaKey", rc);
                     wp_rsa_free(rsa);
                     rsa = NULL;
                     break;

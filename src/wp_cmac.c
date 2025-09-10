@@ -134,6 +134,7 @@ static int wp_cmac_set_key(wp_CmacCtx* macCtx, const unsigned char* key,
                 (word32)macCtx->keyLen, macCtx->type, NULL);
         #endif
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitCmac/wc_InitCmac_ex", rc);
                 ok = 0;
             }
         }
@@ -227,6 +228,7 @@ static int wp_cmac_update(wp_CmacCtx* macCtx, const unsigned char* data,
 
     rc = wc_CmacUpdate(&macCtx->cmac, data, (word32)dataLen);
     if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_CmacUpdate", rc);
         ok = 0;
     }
 
@@ -264,6 +266,7 @@ static int wp_cmac_final(wp_CmacCtx* macCtx, unsigned char* out, size_t* outl,
         outSz = (word32)outSize;
         rc = wc_CmacFinal(&macCtx->cmac, out, &outSz);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_CmacFinal", rc);
             ok = 0;
         }
     }

@@ -76,6 +76,7 @@ static wp_RsaKemCtx* wp_rsakem_ctx_new(WOLFPROV_CTX* provCtx)
     if (ctx != NULL) {
         int rc = wc_InitRng(&ctx->rng);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitRng", rc);
             OPENSSL_free(ctx);
             ctx = NULL;
         }
@@ -231,12 +232,14 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
 
     rc = mp_init_multi(&r, &mod, NULL, NULL, NULL, NULL);
     if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_init_multi", rc);
         ok = 0;
     }
     if (ok) {
         /* mod = n - 3 */
         rc = mp_sub_d(&key->n, 3, &mod);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_sub_d", rc);
             ok = 0;
         }
     }
@@ -244,6 +247,7 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
         /* r = random number with all words filled. */
         rc = wp_mp_rand(&r, mod.used, &ctx->rng);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wp_mp_rand", rc);
             ok = 0;
         }
         /* Done when random is less than modulus. */
@@ -255,6 +259,7 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
         /* r in range 0..n-4. Add 2 and r in range 2..n-2. */
         rc = mp_add_d(&r, 2, &r);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_add_d", rc);
             ok = 0;
         }
     }
@@ -262,6 +267,7 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
         /* Encode random number as a zero padded, big-endian array of bytes. */
         rc = mp_to_unsigned_bin_len(&r, out, mp_unsigned_bin_size(&key->n));
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_to_unsigned_bin_len", rc);
             ok = 0;
         }
     }
@@ -320,6 +326,7 @@ static int wp_rsasve_generate(wp_RsaKemCtx* ctx, unsigned char* out,
         rc = wc_RsaDirect(secret, nLen, out, &oLen, rsa, RSA_PUBLIC_ENCRYPT,
             &ctx->rng);
         if (rc < 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_RsaDirect", rc);
             OPENSSL_cleanse(secret, nLen);
             ok = 0;
         }
@@ -422,6 +429,7 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
             RSA_PRIVATE_DECRYPT, &ctx->rng);
         PRIVATE_KEY_LOCK();
         if (rc < 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_RsaDirect decrypt", rc);
             ok = 0;
         }
         /* Front pad output with zeros if required. */

@@ -132,6 +132,7 @@ static int wp_gmac_set_key(wp_GmacCtx* macCtx, const unsigned char *key,
             int rc = wc_GmacSetKey(&macCtx->gmac, macCtx->key,
                 (word32)macCtx->keyLen);
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_GmacSetKey", rc);
                 ok = 0;
             }
         }
@@ -270,6 +271,7 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
         rc = wc_GmacUpdate(&macCtx->gmac, macCtx->iv, (word32)macCtx->ivLen,
             macCtx->data, (word32)macCtx->dataLen, out, (word32)outSize);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_GmacUpdate", rc);
             ok = 0;
         }
     }
