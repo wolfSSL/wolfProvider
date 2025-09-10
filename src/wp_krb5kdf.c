@@ -475,7 +475,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
         rc = wc_AesSetKey(&aes, ctx->key, (word32)ctx->keySz, NULL,
             AES_ENCRYPTION);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_KRB5KDF, "wc_AesSetKey failed with rc=%d", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_AesSetKey", rc);
             ok = 0;
         }
     }

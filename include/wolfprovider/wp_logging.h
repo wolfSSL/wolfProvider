@@ -280,6 +280,7 @@ void WOLFPROV_BUFFER(int type, const unsigned char* buffer,
 #define WOLFPROV_MSG(t, m, ...)
 #define WOLFPROV_MSG_VERBOSE(t, m, ...)
 #define WOLFPROV_MSG_DEBUG(t, m, ...)
+#define WOLFPROV_MSG_DEBUG_RETCODE(t, f, r)
 #define WOLFPROV_MSG_TRACE(t, m, ...)
 #define WOLFPROV_ERROR(t, e)
 #define WOLFPROV_ERROR_MSG(t, e)

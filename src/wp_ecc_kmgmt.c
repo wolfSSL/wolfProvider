@@ -2060,7 +2060,7 @@ static int wp_ecc_decode_params(wp_Ecc* ecc, unsigned char* data, word32 len)
     if (ok) {
         rc = wc_ecc_set_curve(&ecc->key, 0, ecc->curveId);
         if (rc != 0) {
-            WOLFPROV_MSG(WP_LOG_ECC, "Can't set curve: %d", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_ecc_set_curve", rc);
             ok = 0;
         }
     }
