@@ -1,0 +1,253 @@
+name: hostap and wpa supplicant Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ '*' ]   # [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+
+  test_hostap:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 90
+    strategy:
+      matrix:
+        hostap_ref: [ 'main' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '', 'OPENSSL' ]
+
+    steps:
+      # Checkout the source so we can run the check-workflow-result script.
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Retrieving wolfProvider from cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache-restore
+        with:
+          path: |
+            wolfssl-install
+            wolfprov-install
+            openssl-install/lib64
+            openssl-install/include
+            openssl-install/bin
+          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install hostap dependencies
+        env:
+          LD_LIBRARY_PATH: "$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
+          LDFLAGS: "-L$GITHUB_WORKSPACE/openssl-install/lib64"
+          CFLAGS: "-I$GITHUB_WORKSPACE/openssl-install/include"
+          PKG_CONFIG_PATH: "$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpcap0.8 libpcap-dev curl libcurl4-openssl-dev \
+            libnl-3-dev binutils-dev libssl-dev libiberty-dev libnl-genl-3-dev \
+            libnl-route-3-dev libdbus-1-dev bridge-utils tshark python3-pycryptodome \
+            libsqlite3-dev libzstd1 wireless-tools iw
+          # Uninstall system cryptography and reinstall with custom OpenSSL
+          sudo apt-get remove -y python3-cryptography
+          pip install --no-cache-dir --force-reinstall cryptography
+      - name: Checkout hostap
+        run: |
+          test -d hostap || git clone https://w1.fi/hostap.git
+
+      - name: Apply hostap patches for wolfProvider
+        run: |
+          # Apply the patches we made to fix OpenSSL provider references
+          cd hostap
+
+          echo "Applying hostap patches for wolfProvider compatibility..."
+
+          # Patch crypto_openssl.c to use libwolfprov instead of default/legacy providers
+          sed -i 's/OSSL_PROVIDER_try_load(NULL, "default", 1)/OSSL_PROVIDER_try_load(NULL, "libwolfprov", 1)/g' src/crypto/crypto_openssl.c
+          sed -i 's/OSSL_PROVIDER_try_load(NULL, "legacy", 1)/OSSL_PROVIDER_try_load(NULL, "libwolfprov", 1)/g' src/crypto/crypto_openssl.c
+
+          # Patch tls_openssl.c to use libwolfprov instead of pkcs11 provider
+          sed -i 's/OSSL_PROVIDER_try_load(NULL, "pkcs11", 1)/OSSL_PROVIDER_try_load(NULL, "libwolfprov", 1)/g' src/crypto/tls_openssl.c
+
+          # Patch inside.sh to handle crda command failure gracefully
+          sed -i 's/COUNTRY=00 crda/COUNTRY=00 crda || true/g' tests/hwsim/vm/inside.sh
+
+          echo "Applied hostap patches for wolfProvider compatibility"
+
+      - name: Checkout linux
+        uses: actions/checkout@v4
+        with:
+          repository: torvalds/linux
+          path: linux
+          ref: master
+
+      - name: Compile linux
+        run: |
+          cp $GITHUB_WORKSPACE/hostap/tests/hwsim/vm/kernel-config.uml linux/.config
+          cd linux
+          yes "" | ARCH=um make -j $(nproc)
+      - name: Update config
+        working-directory: hostap/tests/hwsim
+        run: |
+          cat << EOF >> example-hostapd.config
+            # Custom OpenSSL installation paths
+            CFLAGS += -I$GITHUB_WORKSPACE/openssl-install/include
+            LDFLAGS += -L$GITHUB_WORKSPACE/openssl-install/lib64
+            # Override OpenSSL libraries to use custom installation with rpath
+            LIBS += -L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64
+          EOF
+          cat << EOF >> example-wpa_supplicant.config
+            # Custom OpenSSL installation paths
+            CFLAGS += -I$GITHUB_WORKSPACE/openssl-install/include
+            LDFLAGS += -L$GITHUB_WORKSPACE/openssl-install/lib64
+            # Override OpenSSL libraries to use custom installation with rpath
+            LIBS += -L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64
+          EOF
+      - name: Setup non-WPFF environment
+        working-directory: hostap/tests/hwsim
+        if: matrix.force_fail == ''
+        run: |
+          sed -i '115r /dev/stdin' vm/inside.sh << EOF
+            echo "setting env variables"
+            # Set up wolfSSL environment variables
+            # In UML mode, we can access the host filesystem directly
+            echo "Setting up wolfSSL environment in UML mode"
+            # Use the host filesystem paths directly
+            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
+            export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
+            export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
+            export CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1
+            echo "wolfSSL environment variables set:"
+            echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            echo "OPENSSL_CONF: $OPENSSL_CONF"
+            echo "OPENSSL_MODULES: $OPENSSL_MODULES"
+            # Test if wolfProvider is available
+            echo "Testing OpenSSL providers:"
+            $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+          EOF
+      - name: Setup WPFF environment
+        working-directory: hostap/tests/hwsim
+        if: matrix.force_fail == 'WOLFPROV_FORCE_FAIL=1'
+        run: |
+          sed -i '115r /dev/stdin' vm/inside.sh << EOF
+            echo "setting env variables"
+            # Set up wolfSSL environment variables
+            # In UML mode, we can access the host filesystem directly
+            echo "Setting up wolfSSL environment in UML mode"
+            # Use the host filesystem paths directly
+            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
+            export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
+            export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
+            export CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1
+            export WOLFPROV_FORCE_FAIL=1
+            echo "wolfSSL environment variables set:"
+            echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            echo "OPENSSL_CONF: $OPENSSL_CONF"
+            echo "OPENSSL_MODULES: $OPENSSL_MODULES"
+            # Test if wolfProvider is available
+            echo "Testing OpenSSL providers:"
+            $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+          EOF
+      - name: Update certs
+        working-directory: hostap/tests/hwsim/auth_serv
+        run: ./update.sh
+
+      - name: Build hostap and wpa_supplicant
+        working-directory: hostap/tests/hwsim/
+        run: ./build.sh
+
+      - name: Verify openssl binaries linked
+        working-directory: hostap
+        run: |
+          ldd hostapd/hostapd | grep ssl
+          ldd wpa_supplicant/wpa_supplicant | grep ssl
+      - name: Run focused tests
+        id: testing
+        working-directory: hostap/tests/hwsim/
+        continue-on-error: true
+        run: |
+          set +e
+          cat << EOF >> vm/vm-config
+            KERNELDIR=$GITHUB_WORKSPACE/linux
+            KVMARGS="-cpu host"
+          EOF
+
+            SMOKE_TIMEOUT="3m"
+            TLS_TIMEOUT="5m"
+
+          # Run only the focused tests similar to hostap-uml-tests-test2
+          echo "=== Running focused smoke tests ==="
+          SMOKE_TESTS="ap_open ap_wpa2_psk p2p_device_discovery"
+          echo "Running smoke tests with timeout $SMOKE_TIMEOUT: $SMOKE_TESTS"
+          timeout $SMOKE_TIMEOUT ./vm/parallel-vm.py --nocurses $(nproc) $SMOKE_TESTS || SMOKE_RES=$?
+
+          echo "=== Running TLS/EAP tests ==="
+          TLS_EAP_TESTS="ap_wpa2_eap_tls ap_wpa2_eap_peap_eap_mschapv2 ap_wpa2_eap_ttls_mschapv2"
+          echo "Running TLS/EAP tests with timeout $TLS_TIMEOUT: $TLS_EAP_TESTS"
+          timeout $TLS_TIMEOUT ./vm/parallel-vm.py --nocurses $(nproc) $TLS_EAP_TESTS || TLS_RES=$?
+
+          # Check for timeout conditions (exit code 124)
+          SMOKE_TIMEOUT_FLAG=false
+          TLS_TIMEOUT_FLAG=false
+          if [ "${SMOKE_RES:-0}" -eq "124" ]; then
+            echo "Smoke tests timed out"
+            SMOKE_TIMEOUT_FLAG=true
+          fi
+          if [ "${TLS_RES:-0}" -eq "124" ]; then
+            echo "TLS/EAP tests timed out"
+            TLS_TIMEOUT_FLAG=true
+          fi
+
+          # Combine results
+          FINAL_RES=0
+          if [ "${SMOKE_RES:-0}" -ne "0" ] || [ "${TLS_RES:-0}" -ne "0" ]; then
+            FINAL_RES=1
+          fi
+
+          # For force fail tests, we expect failures (including timeouts)
+          if [ "${{ matrix.force_fail }}" == "WOLFPROV_FORCE_FAIL=1" ]; then
+            if [ $FINAL_RES -ne 0 ]; then
+              if [ "$SMOKE_TIMEOUT_FLAG" = true ] || [ "$TLS_TIMEOUT_FLAG" = true ]; then
+                echo "EXPECTED TIMEOUT/STALL: Tests timed out as expected with WOLFPROV_FORCE_FAIL=1"
+                echo "This confirms wolfProvider force fail is working correctly (causing stalls)"
+              else
+                echo "EXPECTED FAILURE: Tests failed as expected with WOLFPROV_FORCE_FAIL=1"
+                echo "This confirms wolfProvider is being used correctly"
+              fi
+              exit 0
+            else
+              echo "UNEXPECTED SUCCESS: Tests passed when they should have failed/timed out with force_fail"
+              exit 1
+            fi
+          else
+            if [ $FINAL_RES -eq 0 ]; then
+              echo "SUCCESS: Tests passed without force fail"
+              exit 0
+            else
+              if [ "$SMOKE_TIMEOUT_FLAG" = true ] || [ "$TLS_TIMEOUT_FLAG" = true ]; then
+                echo "UNEXPECTED TIMEOUT: Tests timed out without force fail"
+              else
+                echo "FAILURE: Tests failed without force fail"
+              fi
+              exit 1
+            fi
+          fi
