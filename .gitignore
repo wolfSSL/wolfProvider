@@ -112,20 +112,9 @@ debian/libwolfprov*
 debian/libssl-dev*
 debian/openssl*
 debian/libssl3*
-!debian/libwolfprov.install
-!debian/libwolfprov.postinst
-!debian/libwolfprov.postrm
-!debian/libwolfprov-dev.docs
-!debian/libwolfprov-dev.install
-!debian/openssl.cnf
-!debian/openssl.install
-!debian/openssl.postinst
-!debian/openssl.postrm
-!debian/libssl3.postinst
-!debian/libssl3.postrm
-!debian/libssl3.install
-!debian/libssl3.docs
-!debian/libssl3.install
-!debian/libssl3.postinst
-!debian/libssl3.postrm
+!debian/*.install
+!debian/*.postinst
+!debian/*.postrm
+!debian/*.docs
+!debian/*.links
 
