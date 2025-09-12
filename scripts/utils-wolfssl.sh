@@ -114,7 +114,7 @@ install_wolfssl() {
             printf "\nSkipping wolfSSL installation - libwolfssl and libwolfssl-dev packages are already installed.\n"
             # Set WOLFSSL_INSTALL_DIR to system installation directory
             WOLFSSL_INSTALL_DIR="/usr"
-            return 0
+            return
         fi
     fi
 

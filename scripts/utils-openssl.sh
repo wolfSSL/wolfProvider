@@ -46,6 +46,7 @@ clean_openssl() {
             make -C "${OPENSSL_SOURCE_DIR}" clean >>$LOG_FILE 2>&1
         fi
         rm -rf "${OPENSSL_INSTALL_DIR}"
+        rm -rf "${OPENSSL_STUB_INSTALL_DIR}"
     fi
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing OpenSSL source ...\n"
