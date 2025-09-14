@@ -2,8 +2,8 @@ name: qtbase Network Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**', 'qt5network5' ]
-  pull_request:
-    branches: [ '*' ]
+  #pull_request:
+    #branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

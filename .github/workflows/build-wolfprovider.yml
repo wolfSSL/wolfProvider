@@ -18,87 +18,103 @@ jobs:
   build_wolfprovider_common:
     name: Build wolfProvider
     runs-on: ubuntu-22.04
+    # Run inside Debian Bookworm to match packaging environment
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     timeout-minutes: 20
     outputs:
       cache_key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
     steps:
+      - name: Set up environment
+        run: |
+          apt-get update
+          apt-get install -y \
+            build-essential \
+            devscripts \
+            debhelper \
+            dh-autoreconf \
+            libtool \
+            pkg-config \
+            git \
+            wget \
+            curl \
+            ca-certificates \
+            openssl \
+            dpkg-dev \
+            lintian \
+            fakeroot \
+            dh-exec \
+            equivs \
+            expect \
+            xxd
+
+      - name: Ensure the working directory safe
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Get OpenSSL commit hash
-        id: openssl-ref
+      - name: Fetch tags (for Debian versioning)
         run: |
-          sha=$(./scripts/resolve-ref.sh "${{ inputs.openssl_ref }}" "openssl/openssl")
-          echo "ref=$sha" >> "$GITHUB_OUTPUT"
-        env:
-          # Used token to bypass rate limits
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git fetch --tags --force --prune
 
-      - name: Get WolfSSL commit hash
-        id: wolfssl-ref
+      - name: Install wolfSSL Debian packages from repo tarball
         run: |
-          sha=$(./scripts/resolve-ref.sh "${{ inputs.wolfssl_ref }}" "wolfssl/wolfssl")
-          echo "ref=$sha" >> "$GITHUB_OUTPUT"
-        env:
-          # Used token to bypass rate limits
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          mkdir -p "/tmp/wolfssl-pkg"
+          chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
+          $GITHUB_WORKSPACE/debian/install-wolfssl.sh \
+            $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz \
+            "/tmp/wolfssl-pkg"
 
-      # Look for a cached version of OpenSSL
-      - name: Checking OpenSSL in cache
-        uses: actions/cache/restore@v4
-        id: openssl-cache
+          # Stage wolfSSL debs into artifacts directory
+          mkdir -p "/tmp/wolfprov-packages"
+          echo "Moving wolfssl files to artifacts directory..."
+
+          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.deb" -exec cp {} /tmp/wolfprov-packages/ \;
+          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.dsc" -exec cp {} /tmp/wolfprov-packages/ \;
+          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
+          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.orig.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
+
+      - name: Build Debian packages (wolfProvider + OpenSSL)
+        run: |
+          yes Y | ./scripts/build-wolfprovider.sh --debian
+
+          echo "Generated packages in parent dir:"
+          ls -la ../ || true
+          ls -la ../*.deb ../*.dsc ../*.tar.gz 2>/dev/null || true
+
+      - name: Collect package artifacts
+        run: |
+          mkdir -p "/tmp/wolfprov-packages"
+          mv ../*.deb /tmp/wolfprov-packages/ 2>/dev/null || true
+          mv ../*.dsc /tmp/wolfprov-packages/ 2>/dev/null || true
+          mv ../*.tar.gz /tmp/wolfprov-packages/ 2>/dev/null || true
+          echo "Artifacts to upload:"
+          ls -la /tmp/wolfprov-packages || true
+
+      - name: Upload wolfSSL packages
+        uses: actions/upload-artifact@v4
         with:
+          name: wolfssl-debian-packages-${{ github.sha }}
           path: |
-            openssl-install
-          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
-          lookup-only: false
+            /tmp/wolfprov-packages/*wolfssl*.deb
+          retention-days: 7
 
-      # Look for a cached version of WolfSSL
-      - name: Checking WolfSSL in cache
-        uses: actions/cache/restore@v4
-        id: wolfssl-cache
+      - name: Upload OpenSSL/wolfProvider packages
+        uses: actions/upload-artifact@v4
         with:
+          name: openssl-wolfprov-debian-packages-${{ github.sha }}
           path: |
-            wolfssl-install
-          key: wolfssl-depends-${{ steps.wolfssl-ref.outputs.ref }}
-          lookup-only: false
-
-      - name: Build wolfProvider
-        run: |
-          OPENSSL_TAG=${{ inputs.openssl_ref }} WOLFSSL_TAG=${{ inputs.wolfssl_ref }} ./scripts/build-wolfprovider.sh
-
-      # Save the wolfProvider outputs for use by the parent jobs.
-      # Note that we don't try to restore since it will likely always 
-      # be a cache miss.
-      - name: Save wolfProvider into cache
-        uses: actions/cache/save@v4
-        with: 
-          path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-          key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
-
-      # If openssl cache miss, save it to the cache
-      - name: Save OpenSSL into cache
-        if: steps.openssl-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with: 
-          path: |
-            openssl-install
-          key: ossl-depends-${{ steps.openssl-ref.outputs.ref }}
-
-      - name: Save WolfSSL into cache
-        if: steps.wolfssl-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with: 
-          path: |
-            wolfssl-install
-          key: wolfssl-depends-${{ steps.wolfssl-ref.outputs.ref }}
+            /tmp/wolfprov-packages/*openssl*.deb
+            /tmp/wolfprov-packages/*libssl3*.deb
+            /tmp/wolfprov-packages/*libssl-dev*.deb
+            /tmp/wolfprov-packages/*libwolfprov*.deb
+          retention-days: 7
 
       - name: Print errors
         if: ${{ failure() }}
