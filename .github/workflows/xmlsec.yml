@@ -3,9 +3,9 @@ name: xmlsec Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+    branches: [ '**' ] # 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,50 +18,79 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_xmlsec:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
+    # Run inside Debian Bookworm to match packaging environment
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        xmlsec_ref: [ 'master', 'xmlsec-1_2_37' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        xmlsec_ref: [ 'xmlsec-1_2_37' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - xmlsec_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
+      - name: Install xmlsec dependencies
+        run: |
+          apt-get update
+          apt-get install -y automake autoconf libtool libtool-bin \
+              libltdl-dev libltdl7 libxml2-dev patch build-essential \
+              pkg-config libxml2-dev
+
       # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
-        id: wolfprov-cache-restore
+        id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
 
-      - name: Install xmlsec dependencies
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y automake autoconf libtool libtool-bin \
-              libltdl-dev libltdl7 libxml2-dev
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Checkout OSP
         uses: actions/checkout@v4
@@ -88,16 +117,16 @@ jobs:
               --without-gnutls --without-gcrypt --disable-xmldsig \
               --disable-crypto-dl --disable-apps-crypto-dl \
               --disable-concatkdf --disable-tmpl-tests
-          make
-          cp $GITHUB_WORKSPACE/provider.conf tests/openssl3.cnf
+          make -j$(nproc)
+          # Remove the bundled openssl3.cnf since we use the default
+          rm -f tests/openssl3.cnf
 
       - name: Run xmlsec tests
         working-directory: xmlsec
+        shell: bash
         run: |
-          echo "Setting environment variables..."
-          source $GITHUB_WORKSPACE/scripts/env-setup
+          set +o pipefail # ignore errors from make check
           export ${{ matrix.force_fail }}
-          export OPENSSL_CONF=$PWD/tests/openssl3.cnf
           make check-keys | tee xmlsec-keys.log
           make check-enc | tee xmlsec-enc.log
           if grep -q "TOTAL FAILED: 0" xmlsec-enc.log && grep -q "TOTAL FAILED: 0" xmlsec-keys.log; then

@@ -9,10 +9,10 @@ on:
       openssl_ref:
         required: true
         type: string
-    outputs:
-      cache_key:
-        description: "Cache key for the build artifacts"
-        value: ${{ jobs.build_wolfprovider_common.outputs.cache_key }}
+      replace_default:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build_wolfprovider_common:
@@ -24,14 +24,18 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
     timeout-minutes: 20
-    outputs:
-      cache_key: wolfprov-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ github.sha }}
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-      - name: Set up environment
+      # Install git prior to cloning to ensure we have the full repo
+      # TODO: create a docker with these pre-installed
+      - name: Install common dependencies
         run: |
-          apt-get update
-          apt-get install -y \
+          apt-get update && apt-get install -y --no-install-recommends \
             build-essential \
+            ccache \
             devscripts \
             debhelper \
             dh-autoreconf \
@@ -50,75 +54,182 @@ jobs:
             expect \
             xxd
 
-      - name: Ensure the working directory safe
+      # Experimental: use ccache
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        id: cc
+        with:
+          create-symlink: true
+
+      - name: Setup ccache environment variables
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo CC=ccache\ gcc >> "$GITHUB_ENV"
+          echo CXX=ccache\ g++ >> "$GITHUB_ENV"
+          echo CCACHE_BASEDIR=${GITHUB_WORKSPACE} >> "$GITHUB_ENV"
+          echo CCACHE_NOHASHDIR=true >> "$GITHUB_ENV"
+          echo CCACHE_COMPILERCHECK=content >> "$GITHUB_ENV"
+          echo "CCACHE_DIR=${XDG_CACHE_HOME:-$HOME/.cache}/ccache" >> "$GITHUB_ENV"
+          mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/ccache"
+
+      - name: Sanity check ccache routing
+        run: |
+          set -x
+          which -a gcc || true
+          gcc --version | head -1
+          ccache --zero-stats
+          printf 'int main(){return 0;}\n' > t.c
+          $CC -c t.c
+          ccache -s
 
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          fetch-tags: true
 
-      - name: Fetch tags (for Debian versioning)
+      # Avoid "detected dubious ownership" warning
+      - name: Ensure the working directory safe
         run: |
-          git fetch --tags --force --prune
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Install wolfSSL Debian packages from repo tarball
+      # When running on a fork the upstream tags are not present, so fetch them explicitly
+      - name: Fetch tags from upstream(for Debian versioning)
+        run: |
+          git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
+          git fetch upstream --tags --no-recurse-submodules
+
+      # Cache wolfSSL to speed up builds:
+      # - Git repository cache: Avoids re-cloning wolfSSL repo
+      # - Complete build cache: Includes source, built packages, and artifacts
+      # Cache keys include script hash to invalidate when install script changes
+      - name: Cache wolfSSL git repository
+        uses: actions/cache@v4
+        with:
+          path: /tmp/wolfssl-pkg/wolfssl/.git
+          key: wolfssl-git-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-${{ github.sha }}
+          restore-keys: |
+            wolfssl-git-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-
+            wolfssl-git-${{ env.wolfssl_ref }}-
+
+      - name: Cache wolfSSL source and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/wolfssl
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.dsc
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.tar.gz
+          key: wolfssl-complete-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-${{ github.sha }}
+          restore-keys: |
+            wolfssl-complete-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-
+
+      - name: Install wolfssl debian package
         run: |
           mkdir -p "/tmp/wolfssl-pkg"
-          chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
-          $GITHUB_WORKSPACE/debian/install-wolfssl.sh \
-            $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz \
-            "/tmp/wolfssl-pkg"
-
-          # Stage wolfSSL debs into artifacts directory
-          mkdir -p "/tmp/wolfprov-packages"
-          echo "Moving wolfssl files to artifacts directory..."
-
-          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.deb" -exec cp {} /tmp/wolfprov-packages/ \;
-          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.dsc" -exec cp {} /tmp/wolfprov-packages/ \;
-          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
-          find /tmp/wolfssl-pkg -name "*wolfssl*" -type f -name "*.orig.tar.gz" -exec cp {} /tmp/wolfprov-packages/ \;
-
-      - name: Build Debian packages (wolfProvider + OpenSSL)
-        run: |
-          yes Y | ./scripts/build-wolfprovider.sh --debian
-
-          echo "Generated packages in parent dir:"
-          ls -la ../ || true
-          ls -la ../*.deb ../*.dsc ../*.tar.gz 2>/dev/null || true
-
-      - name: Collect package artifacts
-        run: |
-          mkdir -p "/tmp/wolfprov-packages"
-          mv ../*.deb /tmp/wolfprov-packages/ 2>/dev/null || true
-          mv ../*.dsc /tmp/wolfprov-packages/ 2>/dev/null || true
-          mv ../*.tar.gz /tmp/wolfprov-packages/ 2>/dev/null || true
-          echo "Artifacts to upload:"
-          ls -la /tmp/wolfprov-packages || true
-
-      - name: Upload wolfSSL packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: wolfssl-debian-packages-${{ github.sha }}
-          path: |
-            /tmp/wolfprov-packages/*wolfssl*.deb
-          retention-days: 7
-
-      - name: Upload OpenSSL/wolfProvider packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: openssl-wolfprov-debian-packages-${{ github.sha }}
-          path: |
-            /tmp/wolfprov-packages/*openssl*.deb
-            /tmp/wolfprov-packages/*libssl3*.deb
-            /tmp/wolfprov-packages/*libssl-dev*.deb
-            /tmp/wolfprov-packages/*libwolfprov*.deb
-          retention-days: 7
-
-      - name: Print errors
-        if: ${{ failure() }}
-        run: |
-          if [ -f test-suite.log ] ; then
-            cat test-suite.log
+          cd "/tmp/wolfssl-pkg"
+          
+          # Check if cached packages exist
+          if ls *.deb 1> /dev/null 2>&1; then
+            echo "Found cached wolfSSL packages, installing them..."
+            dpkg -i *.deb || apt-get install -f -y
+          else
+            echo "No cached packages found, building from source..."
+            # Install wolfssl packages with specified version
+            chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
+            if [ "$wolfssl_ref" != "master" ]; then
+              $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag "$WOLFSSL_VERSION" "/tmp/wolfssl-pkg"
+            else
+              $GITHUB_WORKSPACE/debian/install-wolfssl.sh "/tmp/wolfssl-pkg"
+            fi
           fi
+
+      - name: Install wolfSSL packages from cache
+        run: |
+          printf "Installing wolfSSL packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          apt install --reinstall -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*wolfssl*.deb
+  
+      # Check for cached OpenSSL packages
+      - name: Checking OpenSSL packages in cache
+        uses: actions/cache@v4
+        id: openssl-cache
+        continue-on-error: true
+        with:
+          path: |
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+          key: openssl-debian-packages-${{ inputs.openssl_ref }}${{ inputs.replace_default && '-replace-default' || '' }}
+          lookup-only: false
+
+      # Install OpenSSL packages from cache if available
+      - name: Install OpenSSL packages from cache
+        if: steps.openssl-cache.outputs.cache-hit == 'true'
+        run: |
+          printf "Installing OpenSSL packages from cache:\n"
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+      - name: Build wolfProvider
+        run: |
+          WOLFSSL_TAG=${{ inputs.wolfssl_ref }} OPENSSL_TAG=${{ inputs.openssl_ref }} \
+            yes "Y" | $GITHUB_WORKSPACE/scripts/build-wolfprovider.sh --debian \
+            ${{ inputs.replace_default && '--replace-default' || '' }}
+
+      - name: Setup packages directory
+        run: |
+          mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../openssl*.deb        ${{ env.OPENSSL_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../libssl*.deb         ${{ env.OPENSSL_PACKAGES_PATH }}
+
+          mkdir -p ${{ env.WOLFPROV_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../libwolfprov*.deb    ${{ env.WOLFPROV_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../libwolfprov*.dsc    ${{ env.WOLFPROV_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../libwolfprov*.tar.gz ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          printf "Listing packages directory:\n"
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+
+      - name: Save to cache
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ inputs.replace_default && '-replace-default' || '' }}
+
+      # Save all packages in a single artifact for consumers
+      # TODO: support debug builds
+      - name: Upload wolfProvider artifacts
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: openssl-wolfprov-debian-packages-${{ github.sha }}${{ inputs.replace_default && '-replace-default' || '' }}
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.dsc
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.tar.gz
+            ${{ env.OPENSSL_PACKAGES_PATH }}/*.deb
+            ${{ env.OPENSSL_PACKAGES_PATH }}/*.dsc
+            ${{ env.OPENSSL_PACKAGES_PATH }}/*.tar.gz
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.deb
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.dsc
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.tar.gz
+          retention-days: 1
+
+      # TODO: upload wolfSSL artifacts, after building
+      # - name: Upload wolfSSL artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: wolfssl-debian-packages-${{ inputs.wolfssl_ref }}
+      #     path: |
+      #       ${{ env.WOLFPROV_PACKAGES_PATH }}/*wolfssl*.deb
+      #       ${{ env.WOLFPROV_PACKAGES_PATH }}/*wolfssl*.dsc
+      #       ${{ env.WOLFPROV_PACKAGES_PATH }}/*wolfssl*.tar.gz
+      #     retention-days: 1
+

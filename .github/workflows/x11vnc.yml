@@ -4,8 +4,8 @@ name: x11vnc Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,58 +18,84 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
-
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
+      
   test_x11vnc:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 10
     strategy:
       matrix:
         x11vnc_ref: [ 'master', '0.9.17' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
 
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Retrieving wolfSSL/wolfProvider from cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          fail-on-cache-miss: true
-
       - name: Install x11vnc dependencies
         run: |
-          sudo apt-get update
+          apt-get update
 
           # common build dependencies
-          sudo apt-get install -y build-essential autoconf automake libtool \
+          apt-get install -y build-essential autoconf automake libtool \
               pkg-config gcc make ca-certificates
 
           # x11vnc dependencies
-          sudo apt-get install -y libc6-dev libjpeg-dev x11proto-core-dev \
+          apt-get install -y libc6-dev libjpeg-dev x11proto-core-dev \
               libxss-dev zlib1g-dev libavahi-client-dev libvncserver-dev \
               libx11-dev libxdamage-dev libxext-dev libxfixes-dev libxi-dev \
               libxinerama-dev libxrandr-dev libxtst-dev
 
           # packages for testing script
-          sudo apt-get install -y xvfb tigervnc-viewer psmisc expect curl
+          apt-get install -y xvfb tigervnc-viewer psmisc expect curl
+
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Download x11vnc
         uses: actions/checkout@v4
@@ -81,28 +107,19 @@ jobs:
       - name: Build x11vnc
         working-directory: x11vnc
         run: |
-          # force x11vnc to use the openssl binary in wolfProvider
-          sudo ln -sf $GITHUB_WORKSPACE/openssl-install/bin/openssl /usr/bin/openssl
-
           # change certs from being hashed with MD5 to SHA256
           perl -pi -e 's/default_md\s*=\s*md5/default_md = SHA256/' src/ssltools.h
 
           # change encryption for cert keys from des3 to aes256
           perl -pi -e 's/-des3/-aes256/' src/ssltools.h
 
-          source $GITHUB_WORKSPACE/scripts/env-setup
-
           autoreconf -vfi
-          ./configure --with-ssl="$GITHUB_WORKSPACE/openssl-install/lib64" \
-              CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" \
-              LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64"
+          ./configure
           make -j $(nproc)
-          sudo make install
+          make install
 
       - name: Run x11vnc tests
         run: |
-          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
           export WOLFPROV_FORCE_FAIL_STR="${{ matrix.force_fail }}"
-
           $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh

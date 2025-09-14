@@ -3,8 +3,8 @@ name: PPP Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,27 +16,38 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_ppp:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 15
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         # Switched to v2.5.2 due to significant limitations with v2.4.9,
         # specifically the lack of a test suite, necessary configure options,
         # and compatibility with newer versions of openssl
         ppp_ref: [ 'master', 'v2.5.2' ]
+        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - ppp_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
 
     steps:
       # Checkout the source so we can run the check-workflow-result script
@@ -45,18 +56,39 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache-restore
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential autoconf libtool patch
 
       - name: Checkout PPP
         uses: actions/checkout@v4
@@ -66,6 +98,7 @@ jobs:
           ref: ${{ matrix.ppp_ref }}
           fetch-depth: 1
 
+      # TODO: use patch from OSP repo
       - name: Apply PPP compatibility fixes for OpenSSL 3.x
         working-directory: ppp_repo
         run: |
@@ -84,15 +117,15 @@ jobs:
           elif [ ! -f ./configure ]; then
             autoreconf -fiv
           fi
-          CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" ./configure --prefix=$GITHUB_WORKSPACE/ppp-install --with-openssl=$GITHUB_WORKSPACE/openssl-install --disable-microsoft-extensions
+          ./configure --prefix=$GITHUB_WORKSPACE/ppp-install --disable-microsoft-extensions
           make -j$(nproc)
           make install
 
       - name: Run PPP tests
         working-directory: ppp_repo
+        shell: bash
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
+          set +o pipefail # ignore errors from make check
           export ${{ matrix.force_fail }}
 
           # Run tests

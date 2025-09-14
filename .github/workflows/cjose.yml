@@ -18,33 +18,40 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
-      matrix: 
-        # Test 5.8.2 since our .deb is based on that version
+      matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_cjose:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    # Run inside Debian Bookworm to match packaging environment
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
     strategy:
       matrix:
         # Dont test osp master since it might be unstable
         cjose_ref: [ 'v0.6.2.1' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-      - name: Set up environment
+      - name: Install cjose dependencies
         run: |
           apt-get update
-          apt-get install -y git sudo build-essential autoconf automake \
+          apt-get install -y git build-essential autoconf automake \
             libtool pkg-config libjansson-dev check ca-certificates dpkg-dev
 
       - name: Checkout wolfProvider
@@ -52,21 +59,34 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download wolfSSL packages
-        uses: actions/download-artifact@v4
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
         with:
-          name: wolfssl-debian-packages-${{ github.sha }}
-          path: /tmp/wolfssl-artifacts
-
-      - name: Download OpenSSL/wolfProvider packages
-        uses: actions/download-artifact@v4
-        with:
-          name: openssl-wolfprov-debian-packages-${{ github.sha }}
-          path: /tmp/openssl-wolfprov-artifacts
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          $GITHUB_WORKSPACE/.github/scripts/install-packages.sh
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Download cjose
         uses: actions/checkout@v4

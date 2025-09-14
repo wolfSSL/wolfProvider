@@ -4,8 +4,8 @@ name: Command Line Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         openssl_ref: [ 'master', 'openssl-3.5.0' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         debug: ['WOLFPROV_DEBUG=1', '']
     steps:

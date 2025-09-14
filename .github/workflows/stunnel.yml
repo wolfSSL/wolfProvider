@@ -4,8 +4,8 @@ name: Stunnel Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,67 +18,89 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_stunnel:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 10
     strategy:
       matrix:
         stunnel_ref: [ 'master', 'stunnel-5.67' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         exclude:
           - stunnel_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwrap0-dev autoconf-archive autotools-dev m4
-
-      # - name: Set up Python 3.12
-      #   if : ${{ matrix.stunnel_ref == 'master' }}
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version: '3.12'
-
-      # - name: Set up Python 3.10
-      #   if : ${{ matrix.stunnel_ref != 'master' }}
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version: '3.10'
+          apt-get update
+          apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            autoconf-archive \
+            libtool \
+            libwrap0-dev \
+            pkg-config \
+            python3-venv \
+            python3-cryptography \
+            patch \
+            git
 
       - name: Check Python version
-        run: python --version
-
-      - name: Replace system openssl with wolfProvider build
-        run: sudo ln -sf $GITHUB_WORKSPACE/openssl-install/bin/openssl /usr/bin/openssl
+        run: python3 --version
 
       - name: Checkout Stunnel
         uses: actions/checkout@v4
@@ -106,16 +128,13 @@ jobs:
         working-directory: ./stunnel
         run: |
           autoreconf -ivf
-          ./configure --with-ssl=$GITHUB_WORKSPACE/openssl-install/
+          ./configure
           make -j
 
       - name: Update python cryptography module
         working-directory: ./stunnel
+        shell: bash
         run: |
-          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/openssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64"
-          export CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include"
-          export LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib -L$GITHUB_WORKSPACE/openssl-install/lib64"
-
           python3 -m venv myenv
           source myenv/bin/activate
           pip install cryptography  # will use your OpenSSL if built from source
@@ -129,14 +148,9 @@ jobs:
 
       - name: Verify stunnel with wolfProvider
         working-directory: ./stunnel
+        shell: bash
         run: |
-          # Unset LD_LIBRARY_PATH after python setup
-          unset LD_LIBRARY_PATH
-          unset PKG_CONFIG_PATH
-          unset OPENSSL_MODULES
-
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
+          set +o pipefail # ignore errors from make check
           export ${{ matrix.force_fail }}
 
           # enter venv
@@ -149,8 +163,6 @@ jobs:
           export CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1
 
           # Verify stunnel
-          ldd src/stunnel
-          ldd src/stunnel | grep -E '(libssl|libcrypto)' | grep wolfProvider
           ./src/stunnel -version
 
           # Run tests

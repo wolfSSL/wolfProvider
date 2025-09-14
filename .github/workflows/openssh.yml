@@ -4,8 +4,8 @@ name: openssh Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,51 +18,101 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_openssh:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      # Extra permissions needed for Debian Bookworm
+      options: >-
+        --privileged
+        --cap-add=SYS_ADMIN
+        --device=/dev/mapper/control
+        --device=/dev/loop-control
+        --device=/dev/loop0
+        --device=/dev/loop1
+        --device=/dev/loop2
+        -v /lib/modules:/lib/modules:ro
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         openssh_ref: [ 'master', 'V_10_0_P2', 'V_9_9_P1' ]
+        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - openssh_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
 
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/osp
-          path: osp
-          fetch-depth: 1
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential autoconf automake libtool \
+            pkg-config patch zlib1g-dev
+
+      - name: Install test deps
+        run: |
+          apt-get update
+          apt-get install -y kmod util-linux cryptsetup-bin
+
+      - name: Ensure kernel modules are present
+        run: |
+          # loop + device-mapper (dm-crypt); scsi_debug is optional and may still be unavailable on the host kernel
+          modprobe loop || true
+          modprobe dm_mod || true
+          modprobe dm_crypt || true
+          modprobe scsi_debug || true
+          losetup -f || true
+          ls -l /dev/loop* /dev/mapper || true
 
       - name: Checkout openssh
         uses: actions/checkout@v4
@@ -72,14 +122,15 @@ jobs:
           ref: ${{ matrix.openssh_ref }}
           fetch-depth: 1
 
-      - name: Build and Test openssh-portable
-        working-directory: openssh-portable
-        run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
-          export ${{ matrix.force_fail }}
-
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
           # Apply the patch for the correct version of OpenSSH
+          cd openssh-portable
           if [ "${{ matrix.openssh_ref }}" != "master" ]; then
             patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-${{ matrix.openssh_ref }}-wolfprov.patch
           else
@@ -87,17 +138,45 @@ jobs:
             patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-V_10_0_P2-wolfprov.patch
           fi
 
+      - name: Build and Test openssh-portable
+        working-directory: openssh-portable
+        shell: bash
+        run: |
+          set +o pipefail # ignore errors from make check
+          export ${{ matrix.force_fail }}
+
+          # Enable unsafe permissions for testing
+          export TEST_SSH_UNSAFE_PERMISSIONS=1
+
+          # Priv-sep user/group (idempotent)
+          getent group sshd >/dev/null || addgroup --system sshd
+          id -u sshd >/dev/null 2>&1 || adduser --system --no-create-home \
+            --ingroup sshd --home /nonexistent --shell /usr/sbin/nologin sshd
+
+          # Priv-sep runtime dirs
+          install -d -m 0755 /run/sshd
+
+          # The required chroot for privilege separation
+          # Must exist, be owned by root, and not be writable by group/world.
+          install -d -o root -g root -m 0755 /var/empty          
+
+          # Ensure the privsep user/group exist (idempotent)
+          if ! getent group sshd >/dev/null; then
+            addgroup --system sshd
+          fi
+          if ! id -u sshd >/dev/null 2>&1; then
+            adduser --system --no-create-home --ingroup sshd \
+                    --home /nonexistent --shell /usr/sbin/nologin sshd
+          fi
+
           autoreconf -ivf
-          ./configure --with-ssl-dir=$GITHUB_WORKSPACE/openssl-install \
-                     --with-rpath=-Wl,-rpath=$GITHUB_WORKSPACE/openssl-install/lib64 \
-                     --with-prngd-socket=/tmp/prngd \
+          ./configure --with-prngd-socket=/tmp/prngd \
                      --with-ldflags=-Wl,--export-dynamic
           make -j
 
           export LD_LIBRARY_PATH=".:openbsd-compat:$LD_LIBRARY_PATH"  # Include build dirs for symbol resolution
 
           # Run all the tests except (t-exec) as it takes too long
-          export ${{ matrix.force_fail }}
           make file-tests interop-tests extra-tests unit 2>&1 | tee openssh-test.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openssh

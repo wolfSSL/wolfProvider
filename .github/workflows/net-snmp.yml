@@ -4,8 +4,8 @@ name: Net-SNMP Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_net_snmp:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -32,33 +38,54 @@ jobs:
       fail-fast: false
       matrix:
         net_snmp_ref: ['v5.9.3']
-        wolfssl_ref: ['master', 'v5.8.0-stable']
+        wolfssl_ref: ['master', 'v5.8.2-stable']
         openssl_ref: ['openssl-3.5.0']
+        replace_default: [ true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libperl-dev
+          apt-get update
+          apt-get install -y libperl-dev build-essential autoconf \
+            libtool pkg-config gettext
 
       - name: Build net-snmp with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -67,7 +94,7 @@ jobs:
           ref: ${{ matrix.net_snmp_ref }}
           path: net-snmp
           configure: >-
-            --disable-shared --with-openssl=$GITHUB_WORKSPACE/openssl-install
+            --disable-shared
             --with-default-snmp-version="3" --with-sys-contact="@@no.where"
             --with-sys-location="Unknown" --with-logfile="/var/log/snmpd.log"
             --with-persistent-directory="/var/net-snmp" LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lcrypto -lssl"
@@ -77,8 +104,6 @@ jobs:
       - name: Run tests
         working-directory: net-snmp
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
           autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version

@@ -1,14 +1,4 @@
 #!/bin/sh
 set -e
-
-case "$1" in
-  remove|purge)
-    DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
-    rm -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
-    rm -f /usr/lib/${DEB_HOST_MULTIARCH}/ossl-modules/libwolfprov.so*
-    rm -f /usr/lib/${DEB_HOST_MULTIARCH}/libwolfprov.so*
-    ;;
-esac
-
 #DEBHELPER#
 exit 0
