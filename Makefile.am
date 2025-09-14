@@ -14,9 +14,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libwolfprov.la
 
-# Create only libwolfprov.so, and not .so.X.Y.Z
-libwolfprov_la_LDFLAGS = -avoid-version
-
 EXTRA_DIST+=ChangeLog.md
 EXTRA_DIST+=README.md
 EXTRA_DIST+=IDE

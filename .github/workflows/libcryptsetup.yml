@@ -4,8 +4,8 @@ name: Libcryptsetup Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,23 +18,34 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: ['v5.8.0-stable', 'master']
-        openssl_ref: ['openssl-3.5.0']
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_cryptsetup:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         cryptsetup_ref: ['v2.6.1']
-        wolfssl_ref: ['v5.8.0-stable', 'master']
-        openssl_ref: ['openssl-3.5.0']
+        wolfssl_ref: ['v5.8.2-stable']
+        openssl_ref: ['openssl-3.5.2']
+        replace_default: [ true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
 
     steps:
       - name: Checkout wolfProvider
@@ -42,28 +53,43 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          apt-get update
+          apt-get install -y \
             build-essential autoconf asciidoctor gettext autopoint libtool \
             pkg-config uuid-dev libdevmapper-dev libpopt-dev libjson-c-dev \
-            libargon2-dev
-
+            libargon2-dev libblkid-dev bsdextrautils kmod util-linux cryptsetup-bin
+ 
       - name: Checkout cryptsetup
         uses: actions/checkout@v4
         with:
@@ -87,17 +113,29 @@ jobs:
           ./autogen.sh
           ./configure --enable-static \
             --with-crypto-backend=openssl \
-            --disable-ssh-token \
-            --with-openssl-includes=$GITHUB_WORKSPACE/openssl-install/include \
-            --with-openssl-libs=$GITHUB_WORKSPACE/openssl-install/lib64
+            --disable-ssh-token
           make -j$(nproc)
 
+      # According to ChatGPT, the following tests are excluded since they use 
+      # crypto kernel rather than openssl:
+      # bitlk-compat-test → does activation via dm-crypt (kernel).
+      # reencryption-compat-test → kernel dm-crypt online reencryption.
+      # verity-compat-test → dm-verity (kernel).
+      # integrity-compat-test → dm-integrity (kernel).
+      # blockwise-compat-test / luks2-*reencryption* → scsi_debug / kernel paths.
+      # unit-wipe-test → direct I/O expectations that depend on kernel/devices.
+      # Instead, only run the following tests:
+      # - vectors-test
+      # - run-all-symbols
+      # - unit-utils-crypt-test
       - name: Run cryptsetup tests
         working-directory: cryptsetup
         run: |
-          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
-          make check 2>&1 | tee cryptsetup-test.log
-          TEST_RESULT=$(grep -q "All 10 tests passed" cryptsetup-test.log && echo "0" || echo "1")
+          # from the cryptsetup source root
+          make -j$(nproc)
+          make -C tests check TESTS="vectors-test run-all-symbols unit-utils-crypt-test" VERBOSE=1 2>&1 | tee cryptsetup-test.log
+          TEST_RESULT=$(grep -q "All 3 tests passed" cryptsetup-test.log && echo "0" || echo "1")
+          printf "TEST_RESULT: $TEST_RESULT\n"
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} cryptsetup

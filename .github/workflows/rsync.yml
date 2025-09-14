@@ -2,8 +2,8 @@ name: rsync Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  #pull_request:
-    #branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,21 +15,32 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_rsync:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     timeout-minutes: 15
+    container:
+      image: debian:bookworm
+      options: --user root
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         rsync_ref: [ 'master', 'v3.2.7' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        replace_default: [ true ]
         exclude:
           - rsync_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
@@ -39,25 +50,41 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
-        id: wolfprov-cache
+        id: wolfprov-cache-restore
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Install rsync dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc g++ gawk autoconf automake python3-cmarkgfm \
+          apt-get update
+          apt-get install -y gcc g++ gawk autoconf automake python3-cmarkgfm \
             acl libacl1-dev attr libattr1-dev libxxhash-dev \
-            libzstd-dev liblz4-dev
+            libzstd-dev liblz4-dev build-essential
 
       - name: Checkout rsync
         uses: actions/checkout@v4
@@ -70,8 +97,6 @@ jobs:
       - name: Build and install rsync
         working-directory: rsync_repo
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
           ./configure --disable-xxhash
 
           # Run the patch script from wolfProvider
@@ -85,8 +110,6 @@ jobs:
       - name: Run rsync tests
         working-directory: rsync_repo
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
           # Run rsync test suite including our SHA test

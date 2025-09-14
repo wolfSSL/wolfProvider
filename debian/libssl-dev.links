@@ -1,7 +1,5 @@
 #!/usr/bin/dh-exec
+# Make unversioned .so link to the soname .so.3 (normal Debian split: libssl3 ships *.so.3, -dev ships headers + unversioned symlinks)
 
-# Create symlinks for the shared libs rather than pulling in the full versioned files
-# This avoids issues with soname mismatches for applications linking against
-# libssl and libcrypto.
-usr/lib/$(DEB_HOST_MULTIARCH)/libssl.so    usr/lib/$(DEB_HOST_MULTIARCH)/libssl.so.3
-usr/lib/$(DEB_HOST_MULTIARCH)/libcrypto.so usr/lib/$(DEB_HOST_MULTIARCH)/libcrypto.so.3
+usr/lib/${DEB_HOST_MULTIARCH}/libssl.so.3    usr/lib/${DEB_HOST_MULTIARCH}/libssl.so
+usr/lib/${DEB_HOST_MULTIARCH}/libcrypto.so.3 usr/lib/${DEB_HOST_MULTIARCH}/libcrypto.so

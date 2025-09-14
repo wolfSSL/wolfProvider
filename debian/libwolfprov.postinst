@@ -24,19 +24,5 @@ else
     sed -i "/^openssl_conf/ a $INCLUDE_LINE" "$CONF_FILE"
 fi
 
-# Link /usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/libwolfprov.so to /usr/lib/$(DEB_HOST_MULTIARCH)/
-# This is needed for the custom openssl build where libwolfprov is a normal module
-# Todo: this could possibly be done with a .links file in debian/
-DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
-# Loop through /usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/libwolfprov.so* and create the link
-for file in "/usr/lib/${DEB_HOST_MULTIARCH}/ossl-modules/libwolfprov.so"*; do
-    # use the same extension as the original file
-    extension="${file##*.}"
-    if [ -f "$file" ]; then
-        echo "Linking $file to /usr/lib/${DEB_HOST_MULTIARCH}/ossl-modules/libwolfprov.$extension"
-        ln -sf "$file" "/usr/lib/${DEB_HOST_MULTIARCH}/libwolfprov.$extension"
-    fi
-done
-
 #DEBHELPER#
 exit 0
