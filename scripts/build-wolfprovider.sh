@@ -144,7 +144,7 @@ fi
 
 if [ -n "$build_debian" ]; then
     echo "Building Debian package..."
-    WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0} ./scripts/build-debian.sh
+    WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0} WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0} ./scripts/build-debian.sh
     exit $?
 fi
 

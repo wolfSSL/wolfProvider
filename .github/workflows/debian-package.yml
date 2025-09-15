@@ -14,6 +14,9 @@ jobs:
       image: debian:bookworm   # or debian:bookworm-slim
       env:
         DEBIAN_FRONTEND: noninteractive
+    strategy:
+      matrix:
+        debug_flag: [ '', '--debug' ]
     steps:
     - name: Set up environment
       run: |
@@ -84,7 +87,7 @@ jobs:
     - name: Build Debian package
       run: |
         # Bypass the warning prompt with 'yes Y' 
-        yes Y | ./scripts/build-wolfprovider.sh --debian $FIPS_FLAG
+        yes Y | ./scripts/build-wolfprovider.sh --debian ${{ matrix.debug_flag }}
 
         # List generated packages
         echo "Generated Packages:"
@@ -202,12 +205,12 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: wolfprovider-debian-packages
+        name: wolfprovider-debian-packages${{ matrix.debug_flag }}
         path: |
           /tmp/wolfprov-packages/*.deb
           /tmp/wolfprov-packages/*.dsc
           /tmp/wolfprov-packages/*.tar.gz
-        retention-days: 7
+        retention-days: 2
 
   libwolfprov-with-openssl:
     runs-on: ubuntu-22.04

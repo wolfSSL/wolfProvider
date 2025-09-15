@@ -21,7 +21,7 @@ ifeq ($(WOLFSSL_ISFIPS),1)
   VARIANT           := fips
   VARIANT_DESC      := FIPS build
   VARIANT_PROVIDES  := libwolfprov-fips
-  VERSION           := $(BASEVER)+fips
+  VERSION           := $(BASEVER)-fips
   FIPS_FLAG         := --enable-fips
   PROVIDER_CONF     := provider-fips.conf
 else
@@ -33,12 +33,21 @@ else
   FIPS_FLAG         :=
 endif
 
+# Debug build flag
+WOLFPROV_DEBUG?=0
+ifeq ($(WOLFPROV_DEBUG),1)
+  VARIANT           := $(VARIANT)-debug
+  VARIANT_DESC      := $(VARIANT_DESC) with debug logs
+  VERSION           := $(VERSION)-debug
+endif
+
 override_dh_auto_configure:
 	# None, handled below
 
 override_dh_auto_build:
-	# Always build OpenSSL with wolfProvider as the default provider
-	WOLFPROV_BUILD_DEBIAN=1 ./scripts/build-wolfprovider.sh --replace-default $(FIPS_FLAG)
+	# Always build OpenSSL with wolfProvider as the default provider even 
+	# if we choose not to use it.
+	WOLFPROV_BUILD_DEBIAN=1 WOLFPROV_DEBUG=$(WOLFPROV_DEBUG) ./scripts/build-wolfprovider.sh --replace-default $(FIPS_FLAG)
 
 override_dh_auto_install:
 	# Detect OpenSSL library directory (lib or lib64)
@@ -51,8 +60,8 @@ override_dh_auto_install:
 
 	# Install OpenSSL shared libraries for libssl3 package
 	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)
-	install -m755 ./openssl-install/$(OPENSSL_LIB_DIR)/libssl.so* \
-		./openssl-install/$(OPENSSL_LIB_DIR)/libcrypto.so* \
+	install -m755 ./openssl-install/$(OPENSSL_LIB_DIR)/libssl.so.3 \
+		./openssl-install/$(OPENSSL_LIB_DIR)/libcrypto.so.3 \
 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/
 
 	# Install OpenSSL headers and dev files for libssl-dev package
