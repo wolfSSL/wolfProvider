@@ -64,9 +64,7 @@ jobs:
         
         # Install wolfssl packages
         chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
-        $GITHUB_WORKSPACE/debian/install-wolfssl.sh \
-          $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz \
-          "/tmp/wolfssl-pkg"
+        $GITHUB_WORKSPACE/debian/install-wolfssl.sh "/tmp/wolfssl-pkg"
 
         # Create wolfprov-packages directory and move wolfssl files there
         mkdir -p "/tmp/wolfprov-packages"

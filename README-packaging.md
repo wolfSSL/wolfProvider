@@ -22,9 +22,14 @@ To use a build from CI for local install, download the artifacts from the Debian
 
 ## Install
 
-If not already done, install the WolfSSL Debian package. The non-FIPS version is available in this repo and is installed by the script below. This step is only needed once, and can be done prior to the `build-wolfprovider.sh` step above.
+If not already done, install the WolfSSL Debian package. The script below will clone the wolfSSL repository and build packages from source. This step is only needed once, and can be done prior to the `build-wolfprovider.sh` step above.
 ```
-./debian/install-wolfssl.sh ./.github/packages/debian-wolfssl.tar.gz
+./debian/install-wolfssl.sh
+```
+
+Optionally, you can specify a working directory:
+```
+./debian/install-wolfssl.sh /path/to/working/directory
 ```
 
 For the script above, some systems may require additional packages:

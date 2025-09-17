@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Script to install wolfSSL packages for Debian
-# Checks if packages are already installed and installs appropriate architecture-specific packages
+# Clones from git repository and builds from source
 
 set -e
 
-# Function to check if packages are installed
+# Function to check if packages are already installed
 check_packages_installed() {
     if dpkg -l | grep -q "^ii.*libwolfssl " && dpkg -l | grep -q "^ii.*libwolfssl-dev "; then
         echo "libwolfssl and libwolfssl-dev packages are already installed"
@@ -16,109 +16,74 @@ check_packages_installed() {
     fi
 }
 
-# Function to install wolfSSL packages
-install_wolfssl_packages() {
-    local wolfssl_tar_path="$1"
-    local dest_dir="$2"
-    
-    if [ ! -f "$wolfssl_tar_path" ]; then
-        echo "Error: wolfSSL package archive not found at $wolfssl_tar_path"
-        exit 1
-    fi
-    
-    # If no destination directory specified, create one using mktemp
-    if [ -z "$dest_dir" ]; then
-        dest_dir=$(mktemp -d)
-        echo "No destination directory specified, created temporary directory: $dest_dir"
-    else
-        echo "Using specified destination directory: $dest_dir"
-        # Create the directory if it doesn't exist
-        mkdir -p "$dest_dir"
-    fi
-    
-    echo "Extracting wolfSSL package to: $dest_dir"
-    tar -xvf "$wolfssl_tar_path" -C "$dest_dir"
+# Function to install wolfSSL packages from git
+install_wolfssl_from_git() {
+    local work_dir="$1"
 
-    # Get current architecture
-    CURRENT_ARCH=$(dpkg --print-architecture)
-    echo "Current architecture: $CURRENT_ARCH"
-    
-    # Look for existing .deb files that match the current architecture
-    cd "$dest_dir/debian-packages"
-    MATCHING_DEB_FILES=$(find . -name "*_${CURRENT_ARCH}.deb" -o -name "*_${CURRENT_ARCH}_*.deb" 2>/dev/null || true)
-    
-    if [ -n "$MATCHING_DEB_FILES" ]; then
-        echo "Found matching .deb files for architecture $CURRENT_ARCH:"
-        echo "$MATCHING_DEB_FILES"
-        echo "Installing existing .deb files..."
-        
-        # Install both libwolfssl and libwolfssl-dev packages for the current architecture
-        LIBWOLFSSL_DEB=$(echo "$MATCHING_DEB_FILES" | grep "libwolfssl_[^-]" | head -n1)
-        LIBWOLFSSL_DEV_DEB=$(echo "$MATCHING_DEB_FILES" | grep "libwolfssl-dev_" | head -n1)
-        
-        if [ -n "$LIBWOLFSSL_DEB" ]; then
-            echo "Installing libwolfssl package: $LIBWOLFSSL_DEB"
-            dpkg -i "$LIBWOLFSSL_DEB"
-        else
-            echo "No libwolfssl package found for architecture $CURRENT_ARCH"
-            exit 1
-        fi
-        
-        if [ -n "$LIBWOLFSSL_DEV_DEB" ]; then
-            echo "Installing libwolfssl-dev package: $LIBWOLFSSL_DEV_DEB"
-            dpkg -i "$LIBWOLFSSL_DEV_DEB"
-        else
-            echo "No libwolfssl-dev package found for architecture $CURRENT_ARCH"
-            exit 1
-        fi
+    # If no working directory specified, create one using mktemp
+    if [ -z "$work_dir" ]; then
+        work_dir=$(mktemp -d)
+        echo "No working directory specified, created temporary directory: $work_dir"
     else
-        echo "No matching .deb files found for architecture $CURRENT_ARCH, rebuilding from source..."
-        dpkg-source -x wolfssl*.dsc
-        cd wolfssl*/
-        dpkg-buildpackage -b -us -uc
-        
-        # Install both libwolfssl and libwolfssl-dev packages
-        LIBWOLFSSL_DEB=$(find .. -name "libwolfssl_*${CURRENT_ARCH}.deb" | grep -v "dev" | head -n1)
-        LIBWOLFSSL_DEV_DEB=$(find .. -name "libwolfssl-dev*_${CURRENT_ARCH}.deb" | head -n1)
-        
-        if [ -n "$LIBWOLFSSL_DEB" ]; then
-            echo "Installing libwolfssl package: $LIBWOLFSSL_DEB"
-            dpkg -i "$LIBWOLFSSL_DEB"
-        else
-            echo "No libwolfssl package found after building for architecture $CURRENT_ARCH"
-            exit 1
-        fi
-        
-        if [ -n "$LIBWOLFSSL_DEV_DEB" ]; then
-            echo "Installing libwolfssl-dev package: $LIBWOLFSSL_DEV_DEB"
-            dpkg -i "$LIBWOLFSSL_DEV_DEB"
-        else
-            echo "No libwolfssl-dev package found after building for architecture $CURRENT_ARCH"
-            exit 1
-        fi
+        echo "Using specified working directory: $work_dir"
+        # Create the directory if it doesn't exist
+        mkdir -p "$work_dir"
     fi
+
+    echo "Working directory: $work_dir"
+    cd "$work_dir"
+
+    # Clone wolfSSL repository with depth 1 for faster clone
+    echo "Cloning wolfSSL repository..."
+    git clone https://github.com/wolfSSL/wolfssl --depth 1
+
+    # Enter wolfssl directory
+    cd wolfssl
+
+    # Run autogen.sh
+    echo "Running autogen.sh..."
+    ./autogen.sh
+
+    # Comment out part of test that fails with option -DACVP_VECTOR_TESTING
+    echo "Fixing test.c for DACVP_VECTOR_TESTING compatibility..."
+    sed -i "/^[[:space:]]*if (XMEMCMP(p2, c2, sizeof(p2)))/{ s/^[[:space:]]*/&\/\/ /; n; s/^[[:space:]]*/&\/\/ /; }" wolfcrypt/test/test.c
+
+    # Configure with the specified options
+    echo "Configuring wolfSSL with specified options..."
+    ./configure --enable-opensslcoexist --enable-cmac --with-eccminsz=192 --enable-ed25519 --enable-ed448 --enable-md5 --enable-curve25519 --enable-curve448 --enable-aesccm --enable-aesxts --enable-aescfb --enable-keygen --enable-shake128 --enable-shake256 --enable-wolfprovider --enable-rsapss --enable-scrypt CFLAGS="-DWOLFSSL_OLD_OID_SUM -DWOLFSSL_PUBLIC_ASN -DHAVE_FFDHE_3072 -DHAVE_FFDHE_4096 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DWOLFSSL_PUBLIC_MP -DWOLFSSL_RSA_KEY_CHECK -DHAVE_FFDHE_Q -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_ECDSA_DETERMINISTIC_K -DWOLFSSL_VALIDATE_ECC_IMPORT -DRSA_MIN_SIZE=1024 -DHAVE_AES_ECB -DWC_RSA_DIRECT -DWC_RSA_NO_PADDING -DACVP_VECTOR_TESTING -DWOLFSSL_ECDSA_SET_K"
+
+    # Build Debian packages
+    echo "Building Debian packages..."
+    make deb
+
+    # Install the generated packages
+    echo "Installing generated .deb packages..."
+    dpkg -i ../*.deb
+
+    echo "WolfSSL installation from git completed successfully"
 }
 
 # Main execution
 main() {
-    local wolfssl_tar_path="$1"
-    local dest_dir="$2"
-    
-    if [ -z "$wolfssl_tar_path" ]; then
-        echo "Usage: $0 <path-to-wolfssl-tar.gz> [destination-directory]"
-        echo "  If destination-directory is not specified, a temporary directory will be created using mktemp"
-        exit 1
+    local work_dir="$1"
+
+    # Show usage if help is requested
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+        echo "Usage: $0 [working-directory]"
+        echo "  Installs wolfSSL from git repository by cloning, configuring, and building .deb packages"
+        echo "  If working-directory is not specified, a temporary directory will be created using mktemp"
+        exit 0
     fi
-    
+
     echo "Checking if wolfSSL packages are already installed..."
     if check_packages_installed; then
         echo "Packages already installed, exiting successfully"
         exit 0
     fi
-    
-    echo "Installing wolfSSL packages..."
-    install_wolfssl_packages "$wolfssl_tar_path" "$dest_dir"
-    
+
+    echo "Installing wolfSSL packages from git repository..."
+    install_wolfssl_from_git "$work_dir"
+
     echo "WolfSSL installation completed successfully"
 }
 
