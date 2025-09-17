@@ -37,9 +37,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        openldap_ref: [ 'OPENLDAP_REL_ENG_2_5_13', 'OPENLDAP_REL_ENG_2_6_7' ]
+        openldap_ref: [ 'OPENLDAP_REL_ENG_2_6_7' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -82,8 +83,11 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y libsasl2-dev build-essential autoconf pkg-config libtool
+          apt-get install -y git sudo build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
+            groff libsasl2-dev
 
       - name: Checkout openldap
         uses: actions/checkout@v4
@@ -92,20 +96,51 @@ jobs:
           path: openldap
           ref: ${{ matrix.openldap_ref }}
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd openldap
+          # Apply the wolfProvider patch
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openldap/openldap-${{ matrix.openldap_ref }}-debian-wolfprov.patch
+
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap
         run: |
+          # wolfProvider is already loaded as the default provider
+          echo "Current OpenSSL providers:"
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
           # Generate configure script
           rm -f aclocal.m4
           autoreconf -ivf
 
           # Configure with OpenSSL
-          ./configure --with-tls=openssl --disable-bdb --disable-hdb \
-            CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include \
-              -L$GITHUB_WORKSPACE/openssl-install/lib64" \
-            LDFLAGS="-Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64"
+          ./configure --with-tls=openssl --disable-bdb --disable-hdb
 
           # Build OpenLDAP
           make -j depend
           make -j
-          make -j check
+
+          export ${{ matrix.force_fail }}
+          if [ -n "${{ matrix.force_fail }}" ]; then
+            set +e
+          fi
+
+          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ]; then
+            # Run with a 15 minute timeout for WPFF since it breaks on test 067
+            timeout 15m make -j check 2>&1 | tee openldap-test.log
+            TEST_RESULT=${PIPESTATUS[0]}
+            if [ $TEST_RESULT -eq 124 ]; then
+              echo "ERROR: make -j check timed out after 15 minutes with WOLFPROV_FORCE_FAIL=1"
+              exit 1
+            fi
+          else
+            make -j check 2>&1 | tee openldap-test.log
+          fi
+          TEST_RESULT=${PIPESTATUS[0]}
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openldap

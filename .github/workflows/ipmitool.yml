@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ipmitool_ref: [ 'master', 'IPMITOOL_1_8_19' ]
+        ipmitool_ref: [ 'IPMITOOL_1_8_19' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]

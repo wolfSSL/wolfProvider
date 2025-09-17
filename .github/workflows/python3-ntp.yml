@@ -45,9 +45,6 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        exclude:
-          - python3-ntp_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4

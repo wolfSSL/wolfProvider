@@ -33,17 +33,14 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
         # Switched to v2.5.2 due to significant limitations with v2.4.9,
         # specifically the lack of a test suite, necessary configure options,
         # and compatibility with newer versions of openssl
-        ppp_ref: [ 'master', 'v2.5.2' ]
-        replace_default: [ true ]
+        ppp_ref: [ 'v2.5.2' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - ppp_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages

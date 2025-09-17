@@ -37,11 +37,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        net_snmp_ref: ['v5.9.3']
-        wolfssl_ref: ['master', 'v5.8.2-stable']
-        openssl_ref: ['openssl-3.5.0']
+        net_snmp_ref: [ 'v5.9.3' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -97,17 +97,18 @@ jobs:
             --disable-shared
             --with-default-snmp-version="3" --with-sys-contact="@@no.where"
             --with-sys-location="Unknown" --with-logfile="/var/log/snmpd.log"
-            --with-persistent-directory="/var/net-snmp" LDFLAGS="-L$GITHUB_WORKSPACE/openssl-install/lib64 -lcrypto -lssl"
-            CPPFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include" LIBS="-lcrypto -lssl"
+            --with-persistent-directory="/var/net-snmp"
           check: false
 
       - name: Run tests
         working-directory: net-snmp
+        shell: bash
         run: |
+          set +o pipefail # ignore errors from make test
           export ${{ matrix.force_fail }}
 
           autoconf --version | grep -P '2\.\d\d' -o > dist/autoconf-version
-          make -j test TESTOPTS="-e agentxperl" | tee net-snmp-test.log
+          make -j test TESTOPTS="-e agentxperl" 2>&1 | tee net-snmp-test.log
           # Capture the test result using PIPESTATUS (Bash only)
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} net-snmp

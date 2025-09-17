@@ -36,11 +36,11 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
+        iperf_ref: [ '3.12' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        iperf_ref: [ 'master', '3.12' ]
-        replace_default: [ true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages

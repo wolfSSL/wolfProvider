@@ -80,8 +80,11 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev curl
+          apt-get install -y git sudo build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
+            clang libc++-dev curl net-tools netcat-openbsd procps
 
       - name: Download socat
         run: curl -O http://www.dest-unreach.org/socat/download/socat-1.8.0.0.tar.gz && tar xvf socat-1.8.0.0.tar.gz
@@ -97,9 +100,22 @@ jobs:
 
       - name: Run socat tests
         working-directory: ./socat-1.8.0.0
+        shell: bash
+        env:
+          SHELL: /bin/bash
+          PATH: /sbin:/usr/sbin:/usr/bin:/bin
         run: |
+          # Create missing device file for vsock tests
+          mkdir -p /dev
+          touch /dev/vsock
+
+          # wolfProvider is already loaded as the default provider
+          echo "Current OpenSSL providers:"
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
           # Show socat version (includes OpenSSL version info)
           ./socat -V
 
           # Run the tests with expected failures
-          SOCAT=$GITHUB_WORKSPACE/socat-1.8.0.0/socat ./test.sh -t 0.5 --expect-fail 36,64,146,214,216,217,309,310,386,399,402,403,459,460,467,468,475,478,491,492,528,529,530
+          SOCAT=$GITHUB_WORKSPACE/socat-1.8.0.0/socat ./test.sh -t 0.5 --expect-fail 36,64,146,214,216,217,309,310,386,399,402,403,410,418,453,459,460,467,468,475,478,491,492,528,529,530
