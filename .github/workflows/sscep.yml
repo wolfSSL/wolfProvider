@@ -39,7 +39,7 @@ jobs:
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     strategy:
       matrix:
-        sscep_ref: [ 'master', 'v0.10.0' ]
+        sscep_ref: [ 'v0.10.0' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]

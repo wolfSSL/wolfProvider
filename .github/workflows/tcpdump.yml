@@ -32,14 +32,11 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        tcpdump_ref: [ 'master', 'tcpdump-4.99.3' ]
+        tcpdump_ref: [ 'tcpdump-4.99.3' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - tcpdump_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages

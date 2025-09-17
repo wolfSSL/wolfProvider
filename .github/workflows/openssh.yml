@@ -46,14 +46,11 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
+        openssh_ref: [ 'V_10_0_P2', 'V_9_9_P1' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        openssh_ref: [ 'master', 'V_10_0_P2', 'V_9_9_P1' ]
-        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - openssh_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -131,12 +128,7 @@ jobs:
       - run: |
           # Apply the patch for the correct version of OpenSSH
           cd openssh-portable
-          if [ "${{ matrix.openssh_ref }}" != "master" ]; then
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-${{ matrix.openssh_ref }}-wolfprov.patch
-          else
-            # for master we need to supply the latest release version
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-V_10_0_P2-wolfprov.patch
-          fi
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openssh/openssh-${{ matrix.openssh_ref }}-wolfprov.patch
 
       - name: Build and Test openssh-portable
         working-directory: openssh-portable

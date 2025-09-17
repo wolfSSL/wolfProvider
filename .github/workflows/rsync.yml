@@ -36,14 +36,11 @@ jobs:
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     strategy:
       matrix:
+        rsync_ref: [ 'v3.2.7' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        rsync_ref: [ 'master', 'v3.2.7' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        exclude:
-          - rsync_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4

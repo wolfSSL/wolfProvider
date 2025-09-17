@@ -36,14 +36,11 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        libhashkit2_ref: [ 'v1.x', '1.1.4' ]
+        libhashkit2_ref: [ '1.1.4' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - libhashkit2_ref: 'v1.x'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages

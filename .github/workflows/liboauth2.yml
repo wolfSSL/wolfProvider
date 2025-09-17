@@ -35,11 +35,11 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        liboauth2_ref: [ 'v1.4.5.4' ] # No master with patch
+        liboauth2_ref: [ 'v1.4.5.4' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages

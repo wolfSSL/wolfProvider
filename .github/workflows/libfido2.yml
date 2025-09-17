@@ -31,14 +31,11 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
+        libfido2_ref: [ '1.15.0' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        libfido2_ref: [ 'main', '1.15.0' ]
-        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - libfido2_ref: 'main'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages

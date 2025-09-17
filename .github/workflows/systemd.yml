@@ -32,7 +32,6 @@ jobs:
     timeout-minutes: 20
     container:
       image: debian:bookworm
-      options: --user root
     env:
       DEBIAN_FRONTEND: noninteractive
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -83,12 +82,16 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y build-essential meson ninja-build \
-            libmount-dev gperf python3-pytest libuv1-dev libnghttp2-dev \
-            libcap-dev uuid-dev libdevmapper-dev libpopt-dev libjson-c-dev \
-            libargon2-dev libblkid-dev asciidoctor pkgconf zlib1g-dev \
-            python3-ninja
+            libmount-dev gperf python3-pytest python3-jinja2 python3-pip \
+            libuv1-dev libnghttp2-dev libcap-dev uuid-dev libdevmapper-dev \
+            libpopt-dev libjson-c-dev libargon2-dev libblkid-dev asciidoctor \
+            pkgconf zlib1g-dev libgcrypt20-dev libgpg-error-dev libgnutls28-dev \
+            libp11-kit-dev libfido2-dev libtss2-dev libdw-dev libbz2-dev \
+            liblzma-dev liblz4-dev libzstd-dev libxkbcommon-dev libglib2.0-dev \
+            libdbus-1-dev python3-setuptools python3-wheel
 
       - name: Checkout systemd
         uses: actions/checkout@v4
@@ -108,7 +111,11 @@ jobs:
         working-directory: systemd
         shell: bash
         run: |
-          set -o pipefail
+          set +e
+          # wolfProvider is already loaded as the default provider
+          echo "Current OpenSSL providers:"
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
           # The following test cases link directly to libcrypto.
           TEST_CASES="fuzz-dns-packet fuzz-etc-hosts fuzz-resource-record \
                       resolvectl systemd-resolved test-cryptolib \
@@ -116,7 +123,6 @@ jobs:
                       test-resolved-etc-hosts test-resolved-packet \
                       test-resolved-stream"
           export ${{ matrix.force_fail }}
-          meson test -C build $TEST_CASES 2>&1 | tee systemd-test.log
+          meson test -C build $TEST_CASES
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} systemd
-          cat systemd-test.log

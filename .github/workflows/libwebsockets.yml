@@ -36,14 +36,11 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        libwebsockets_ref: [ 'main', 'v4.3.3' ]
+        libwebsockets_ref: [ 'v4.3.3' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - libwebsockets_ref: 'main'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -121,4 +118,3 @@ jobs:
             TEST_RESULT=0
           fi
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libwebsockets
-

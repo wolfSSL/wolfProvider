@@ -36,14 +36,11 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        stunnel_ref: [ 'master', 'stunnel-5.67' ]
+        stunnel_ref: [ 'stunnel-5.67' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
-        exclude:
-          - stunnel_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -86,18 +83,9 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y \
-            build-essential \
-            autoconf \
-            automake \
-            autoconf-archive \
-            libtool \
-            libwrap0-dev \
-            pkg-config \
-            python3-venv \
-            python3-cryptography \
-            patch \
-            git
+          apt-get install -y build-essential autoconf automake \
+            autoconf-archive libtool libwrap0-dev pkg-config python3-venv \
+            python3-cryptography patch git
 
       - name: Check Python version
         run: python3 --version

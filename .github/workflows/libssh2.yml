@@ -38,8 +38,8 @@ jobs:
         libssh2_ref: [ 'libssh2-1.10.0' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -81,8 +81,11 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev python3-impacket
+          apt-get install -y git sudo build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
+            clang libc++-dev python3-impacket openssh-client openssh-server
 
       - name: Download libssh2
         uses: actions/checkout@v4
@@ -100,7 +103,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd libssh2
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libssh2/${{ matrix.libssh2_ref }}-wolfprov.patch
+          # Apply the wolfProvider patch
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libssh2/libssh2-${{ matrix.libssh2_ref }}-debian-wolfprov.patch
 
       - name: Build libssh2
         working-directory: libssh2
@@ -113,10 +117,16 @@ jobs:
         working-directory: libssh2
         shell: bash
         run: |
-          set +o pipefail # ignore errors from make check
+          # wolfProvider is already loaded as the default provider
+          echo "Current OpenSSL providers:"
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
           export ${{ matrix.force_fail }}
+          # Always continue on errors to ensure we show test results
+          set +e
 
           # Run the tests and capture the result
+          set -o pipefail
           make check 2>&1 | tee libssh2-test.log
-          TEST_RESULT=$(grep -q "FAIL: ssh2.sh" libssh2-test.log && echo "1" || echo "0")
+          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libssh2
