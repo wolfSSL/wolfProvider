@@ -23,14 +23,31 @@ To use a build from CI for local install, download the artifacts from the Debian
 ## Install
 
 If not already done, install the WolfSSL Debian package. The script below will clone the wolfSSL repository and build packages from source. This step is only needed once, and can be done prior to the `build-wolfprovider.sh` step above.
+
+Basic usage (builds master branch in temporary directory):
 ```
 ./debian/install-wolfssl.sh
 ```
 
-Optionally, you can specify a working directory:
+Build master branch in specific directory:
 ```
 ./debian/install-wolfssl.sh /path/to/working/directory
 ```
+
+Build specific tag or branch:
+```
+./debian/install-wolfssl.sh --tag v5.6.4
+./debian/install-wolfssl.sh --tag v5.6.4 /path/to/working/directory
+```
+
+Build with debug mode enabled:
+```
+./debian/install-wolfssl.sh --debug
+./debian/install-wolfssl.sh --debug --tag v5.6.4
+./debian/install-wolfssl.sh --debug --tag v5.6.4 /path/to/working/directory
+```
+
+The script will automatically detect if wolfSSL is already cloned in the working directory and reuse it. For older tags that don't include debian packaging files, the script will automatically backport the packaging from master.
 
 For the script above, some systems may require additional packages:
 ```
