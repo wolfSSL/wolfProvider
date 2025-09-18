@@ -125,7 +125,6 @@ jobs:
         run: |
           python3 -m venv myenv
           source myenv/bin/activate
-          pip install cryptography  # will use your OpenSSL if built from source
 
       - name: Apply patch to disable pkcs12 test
         if : ${{ matrix.stunnel_ref == 'master' }}

@@ -88,7 +88,7 @@ jobs:
             pkg-config make libidn2-dev libuv1-dev libnghttp2-dev libcap-dev \
             libjemalloc-dev zlib1g-dev libxml2-dev libjson-c-dev libcmocka-dev \
             python3-pytest python3-dnspython python3-hypothesis patch iproute2 \
-            net-tools
+            net-tools git
           PERL_MM_USE_DEFAULT=1 cpan -i Net::DNS
 
       - name: Checkout bind9

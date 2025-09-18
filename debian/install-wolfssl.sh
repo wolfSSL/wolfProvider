@@ -21,6 +21,7 @@ install_wolfssl_from_git() {
     local work_dir="$1"
     local git_tag="$2"
     local debug_mode="$3"
+    local reinstall_mode="$4"
 
     # If no working directory specified, create one using mktemp
     if [ -z "$work_dir" ]; then
@@ -114,6 +115,12 @@ AC_CONFIG_FILES([debian/rules],[chmod +x debian/rules])' configure.ac
         else
             echo "configure.ac already contains required patches"
         fi
+
+        # Patch debian/rules.in to disable dh_strip
+        echo "Patching debian/rules.in to disable dh_strip..."
+        sed -i 's/^[[:space:]]*dh_strip.*/:/' debian/rules.in
+        echo "debian/rules.in patched successfully"
+        
     else
         echo "debian/rules.in found, using existing debian packaging"
     fi
@@ -130,14 +137,50 @@ AC_CONFIG_FILES([debian/rules],[chmod +x debian/rules])' configure.ac
 
     # Configure with the specified options
     echo "Configuring wolfSSL with specified options..."
-    configure_opts="--enable-opensslcoexist --enable-cmac --with-eccminsz=192 --enable-ed25519 --enable-ed448 --enable-md5 --enable-curve25519 --enable-curve448 --enable-aesccm --enable-aesxts --enable-aescfb --enable-keygen --enable-shake128 --enable-shake256 --enable-wolfprovider --enable-rsapss --enable-scrypt"
+    configure_opts="--enable-opensslcoexist \
+        --enable-cmac \
+        --with-eccminsz=192 \
+        --enable-ed25519 \
+        --enable-ed448 \
+        --enable-md5 \
+        --enable-curve25519 \
+        --enable-curve448 \
+        --enable-aesccm \
+        --enable-aesxts \
+        --enable-aescfb \
+        --enable-keygen \
+        --enable-shake128 \
+        --enable-shake256 \
+        --enable-wolfprovider \
+        --enable-rsapss \
+        --enable-scrypt"
 
     if [ "$debug_mode" = "true" ]; then
         configure_opts="$configure_opts --enable-debug"
         echo "Debug mode enabled"
     fi
 
-    ./configure $configure_opts CFLAGS="-DWOLFSSL_OLD_OID_SUM -DWOLFSSL_PUBLIC_ASN -DHAVE_FFDHE_3072 -DHAVE_FFDHE_4096 -DWOLFSSL_DH_EXTRA -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DWOLFSSL_PUBLIC_MP -DWOLFSSL_RSA_KEY_CHECK -DHAVE_FFDHE_Q -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_ECDSA_DETERMINISTIC_K -DWOLFSSL_VALIDATE_ECC_IMPORT -DRSA_MIN_SIZE=1024 -DHAVE_AES_ECB -DWC_RSA_DIRECT -DWC_RSA_NO_PADDING -DACVP_VECTOR_TESTING -DWOLFSSL_ECDSA_SET_K" LIBS="-lm"
+    ./configure $configure_opts \
+        CFLAGS="-DWOLFSSL_OLD_OID_SUM \
+            -DWOLFSSL_PUBLIC_ASN \
+            -DHAVE_FFDHE_3072 \
+            -DHAVE_FFDHE_4096 \
+            -DWOLFSSL_DH_EXTRA \
+            -DWOLFSSL_PSS_SALT_LEN_DISCOVER \
+            -DWOLFSSL_PUBLIC_MP \
+            -DWOLFSSL_RSA_KEY_CHECK \
+            -DHAVE_FFDHE_Q \
+            -DHAVE_FFDHE_6144 \
+            -DHAVE_FFDHE_8192 \
+            -DWOLFSSL_ECDSA_DETERMINISTIC_K \
+            -DWOLFSSL_VALIDATE_ECC_IMPORT \
+            -DRSA_MIN_SIZE=1024 \
+            -DHAVE_AES_ECB \
+            -DWC_RSA_DIRECT \
+            -DWC_RSA_NO_PADDING \
+            -DACVP_VECTOR_TESTING \
+            -DWOLFSSL_ECDSA_SET_K" \
+            LIBS="-lm"
 
     # Build Debian packages
     echo "Building Debian packages..."
@@ -145,7 +188,12 @@ AC_CONFIG_FILES([debian/rules],[chmod +x debian/rules])' configure.ac
 
     # Install the generated packages
     echo "Installing generated .deb packages..."
-    dpkg -i ../*.deb
+    if [ "$reinstall_mode" = "true" ]; then
+        echo "Reinstall mode: forcing package reinstallation..."
+        dpkg -i --force-overwrite --force-confnew ../*.deb
+    else
+        dpkg -i ../*.deb
+    fi
 
     echo "WolfSSL installation from git completed successfully"
 }
@@ -155,6 +203,7 @@ main() {
     local work_dir=""
     local git_tag=""
     local debug_mode="false"
+    local reinstall_mode="false"
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -166,6 +215,7 @@ main() {
                 echo "Options:"
                 echo "  -t, --tag TAG        Clone and build specific tag or branch (default: master)"
                 echo "  -d, --debug          Enable debug build mode (adds --enable-debug)"
+                echo "  -r, --reinstall      Force reinstall even if packages are already installed"
                 echo "  -h, --help          Show this help message"
                 echo ""
                 echo "Arguments:"
@@ -178,6 +228,7 @@ main() {
                 echo "  $0 --tag v5.6.4 /tmp/build # Build tag v5.6.4 in /tmp/build"
                 echo "  $0 --debug                 # Build master with debug enabled"
                 echo "  $0 --debug --tag v5.6.4    # Build tag v5.6.4 with debug enabled"
+                echo "  $0 --reinstall             # Force reinstall even if packages exist"
                 exit 0
                 ;;
             -t|--tag)
@@ -186,6 +237,10 @@ main() {
                 ;;
             -d|--debug)
                 debug_mode="true"
+                shift
+                ;;
+            -r|--reinstall)
+                reinstall_mode="true"
                 shift
                 ;;
             -*)
@@ -206,10 +261,15 @@ main() {
         esac
     done
 
-    echo "Checking if wolfSSL packages are already installed..."
-    if check_packages_installed; then
-        echo "Packages already installed, exiting successfully"
-        exit 0
+    # Only check if packages are installed if not in reinstall mode
+    if [ "$reinstall_mode" = "false" ]; then
+        echo "Checking if wolfSSL packages are already installed..."
+        if check_packages_installed; then
+            echo "Packages already installed, exiting successfully"
+            exit 0
+        fi
+    else
+        echo "Reinstall mode enabled, bypassing package check..."
     fi
 
     echo "Installing wolfSSL packages from git repository..."
@@ -219,7 +279,7 @@ main() {
         echo "Building wolfSSL master branch"
     fi
 
-    install_wolfssl_from_git "$work_dir" "$git_tag" "$debug_mode"
+    install_wolfssl_from_git "$work_dir" "$git_tag" "$debug_mode" "$reinstall_mode"
 
     echo "WolfSSL installation completed successfully"
 }
