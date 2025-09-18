@@ -98,61 +98,43 @@ jobs:
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
-      # Cache wolfSSL to speed up builds:
-      # - Git repository cache: Avoids re-cloning wolfSSL repo
-      # - Complete build cache: Includes source, built packages, and artifacts
-      # Cache keys include script hash to invalidate when install script changes
-      - name: Cache wolfSSL git repository
-        uses: actions/cache@v4
-        with:
-          path: /tmp/wolfssl-pkg/wolfssl/.git
-          key: wolfssl-git-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-${{ github.sha }}
-          restore-keys: |
-            wolfssl-git-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-
-            wolfssl-git-${{ env.wolfssl_ref }}-
+      # - name: Restore wolfSSL packages
+      #   uses: actions/cache@v4
+      #   id: wolfssl_cache
+      #   with:
+      #     path: |
+      #       ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+      #       ${{ env.WOLFSSL_PACKAGES_PATH }}/*.dsc
+      #       ${{ env.WOLFSSL_PACKAGES_PATH }}/*.tar.gz
+      #     key: wolfssl-debian-packages-${{ inputs.wolfssl_ref }}
 
-      - name: Cache wolfSSL source and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/wolfssl
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.dsc
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.tar.gz
-          key: wolfssl-complete-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-${{ github.sha }}
-          restore-keys: |
-            wolfssl-complete-${{ env.wolfssl_ref }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-
+      # - name: Install wolfSSL packages from cache
+      #   if: steps.wolfssl_cache.outputs.cache-hit == 'true'
+      #   run: |
+      #     printf "Installing wolfSSL packages from cache:\n"
+      #     ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+      #     apt install --reinstall -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*wolfssl*.deb
 
-      - name: Install wolfssl debian package
+      # # TODO: roll this step into utils-wolfssl.sh
+      # # TODO: specify tag below
+      # - name: Build wolfSSL packages and install
+      #   if: steps.wolfssl_cache.outputs.cache-hit != 'true'
+      #   run: | 
+      #     # $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag ${{ inputs.wolfssl_ref }} ${{ env.WOLFSSL_PACKAGES_PATH }}
+      #     $GITHUB_WORKSPACE/debian/install-wolfssl.sh ${{ env.WOLFSSL_PACKAGES_PATH }}
+
+      # Unpack and install wolfSSL packages
+      - name: Unpack and install wolfSSL packages
         run: |
-          mkdir -p "/tmp/wolfssl-pkg"
-          cd "/tmp/wolfssl-pkg"
-          
-          # Check if cached packages exist
-          if ls *.deb 1> /dev/null 2>&1; then
-            echo "Found cached wolfSSL packages, installing them..."
-            dpkg -i *.deb || apt-get install -f -y
-          else
-            echo "No cached packages found, building from source..."
-            # Install wolfssl packages with specified version
-            chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
-            if [ "$wolfssl_ref" != "master" ]; then
-              $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag "$WOLFSSL_VERSION" "/tmp/wolfssl-pkg"
-            else
-              $GITHUB_WORKSPACE/debian/install-wolfssl.sh "/tmp/wolfssl-pkg"
-            fi
-          fi
+          mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
+          tar -xzf .github/packages/debian-wolfssl.tar.gz -C ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mv ${{ env.WOLFSSL_PACKAGES_PATH }}/debian-packages/* ${{ env.WOLFSSL_PACKAGES_PATH }}
+          apt install -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
 
-      - name: Install wolfSSL packages from cache
-        run: |
-          printf "Installing wolfSSL packages:\n"
-          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
-          apt install --reinstall -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*wolfssl*.deb
-  
       # Check for cached OpenSSL packages
       - name: Checking OpenSSL packages in cache
         uses: actions/cache@v4
-        id: openssl-cache
+        id: openssl_cache
         continue-on-error: true
         with:
           path: |
@@ -162,7 +144,7 @@ jobs:
 
       # Install OpenSSL packages from cache if available
       - name: Install OpenSSL packages from cache
-        if: steps.openssl-cache.outputs.cache-hit == 'true'
+        if: steps.openssl_cache.outputs.cache-hit == 'true'
         run: |
           printf "Installing OpenSSL packages from cache:\n"
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
