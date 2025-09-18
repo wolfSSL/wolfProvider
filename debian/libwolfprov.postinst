@@ -1,28 +1,35 @@
 #!/bin/sh
 set -e
 
-INCLUDE_LINE=".include /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
-CONF_FILE="/usr/lib/ssl/openssl.cnf"
-CONF_DEFAULT="/usr/share/openssl-defaults/openssl.cnf"
+# We currently only support "replace default" mode.
+# In this mode, we don't need to modify the system openssl.cnf file 
+# since our modified openssl references libwolfprov.so explicitly.
+# In the future, we should add scripting here to find the system openssl.cnf file
+# and add the include line to it. Note that the code below 
+# references a hardcoded path which may not be correct for all systems.
 
-# Copy from our template if it doesn't exist
-if [ ! -f "$CONF_FILE" ]; then
-    echo "Config file does not exist: $CONF_FILE"
-    if [ -f "$CONF_DEFAULT" ]; then
-        install -Dm644 "$CONF_DEFAULT" "$CONF_FILE"
-    else
-        echo "Default config file does not exist: $CONF_DEFAULT"
-        exit 1
-    fi
-fi
+# INCLUDE_LINE=".include /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
+# CONF_FILE="/usr/lib/ssl/openssl.cnf"
+# CONF_DEFAULT="/usr/share/openssl-defaults/openssl.cnf"
 
-# Add include for wolfprovider config file if not already present
-if grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
-    echo "Include line already exists in $CONF_FILE"
-else 
-    echo "Adding include for wolfprovider to $CONF_FILE..."
-    sed -i "/^openssl_conf/ a $INCLUDE_LINE" "$CONF_FILE"
-fi
+# # Copy from our template if it doesn't exist
+# if [ ! -f "$CONF_FILE" ]; then
+#     echo "Config file does not exist: $CONF_FILE"
+#     if [ -f "$CONF_DEFAULT" ]; then
+#         install -Dm644 "$CONF_DEFAULT" "$CONF_FILE"
+#     else
+#         echo "Default config file does not exist: $CONF_DEFAULT"
+#         exit 1
+#     fi
+# fi
+
+# # Add include for wolfprovider config file if not already present
+# if grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
+#     echo "Include line already exists in $CONF_FILE"
+# else 
+#     echo "Adding include for wolfprovider to $CONF_FILE..."
+#     sed -i "/^openssl_conf/ a $INCLUDE_LINE" "$CONF_FILE"
+# fi
 
 #DEBHELPER#
 exit 0
