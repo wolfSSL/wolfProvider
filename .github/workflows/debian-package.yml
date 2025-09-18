@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ '*' ]
 
+env:
+  WOLFSSL_VERSION: master  # Can be changed to specific tag like v5.6.4
+  
 jobs:
   libwolfprov-standalone:
     runs-on: ubuntu-22.04
@@ -60,16 +63,50 @@ jobs:
         # List all tags
         git tag -l
 
+    # Cache wolfSSL to speed up builds:
+    # - Git repository cache: Avoids re-cloning wolfSSL repo
+    # - Complete build cache: Includes source, built packages, and artifacts
+    # Cache keys include script hash to invalidate when install script changes
+    - name: Cache wolfSSL git repository
+      uses: actions/cache@v4
+      with:
+        path: /tmp/wolfssl-pkg/wolfssl/.git
+        key: wolfssl-git-${{ env.WOLFSSL_VERSION }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-${{ github.sha }}
+        restore-keys: |
+          wolfssl-git-${{ env.WOLFSSL_VERSION }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-
+          wolfssl-git-${{ env.WOLFSSL_VERSION }}-
+
+    - name: Cache wolfSSL source and build
+      uses: actions/cache@v4
+      with:
+        path: |
+          /tmp/wolfssl-pkg/wolfssl
+          /tmp/wolfssl-pkg/*.deb
+          /tmp/wolfssl-pkg/*.dsc
+          /tmp/wolfssl-pkg/*.tar.gz
+        key: wolfssl-complete-${{ env.WOLFSSL_VERSION }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-${{ github.sha }}
+        restore-keys: |
+          wolfssl-complete-${{ env.WOLFSSL_VERSION }}-${{ hashFiles('wolfProvider/debian/install-wolfssl.sh') }}-
+
     - name: Install wolfssl debian package
       run: |
         mkdir -p "/tmp/wolfssl-pkg"
         cd "/tmp/wolfssl-pkg"
         
-        # Install wolfssl packages
-        chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
-        $GITHUB_WORKSPACE/debian/install-wolfssl.sh \
-          $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz \
-          "/tmp/wolfssl-pkg"
+        # Check if cached packages exist
+        if ls *.deb 1> /dev/null 2>&1; then
+          echo "Found cached wolfSSL packages, installing them..."
+          dpkg -i *.deb || apt-get install -f -y
+        else
+          echo "No cached packages found, building from source..."
+          # Install wolfssl packages with specified version
+          chmod +x $GITHUB_WORKSPACE/debian/install-wolfssl.sh
+          if [ "$WOLFSSL_VERSION" != "master" ]; then
+            $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag "$WOLFSSL_VERSION" "/tmp/wolfssl-pkg"
+          else
+            $GITHUB_WORKSPACE/debian/install-wolfssl.sh "/tmp/wolfssl-pkg"
+          fi
+        fi
 
         # Create wolfprov-packages directory and move wolfssl files there
         mkdir -p "/tmp/wolfprov-packages"
