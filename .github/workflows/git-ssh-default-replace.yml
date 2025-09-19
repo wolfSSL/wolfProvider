@@ -79,11 +79,6 @@ jobs:
         apt-get update
         apt-get install -y openssh-client openssh-server expect xxd
 
-    - name: Check wolfProvider is installed
-      run: |
-        openssl list -providers
-        openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
-
     - name: Test OpenSSL provider functionality with default replace
       run: |
         PROVIDER_CONF="/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
@@ -102,7 +97,7 @@ jobs:
         echo "Verifying wolfProvider is active:"
         openssl list -providers
         
-        if openssl list -providers | grep -i "wolfprov"; then
+        if openssl list -providers | grep -i "wolfSSL Provider"; then
           echo "SUCCESS: wolfProvider is loaded"
         else
           echo "ERROR: wolfProvider not found in provider list"
