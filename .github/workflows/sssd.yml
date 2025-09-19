@@ -24,8 +24,8 @@ jobs:
       fail-fast: false
       matrix:
         sssd_ref: [ 'master', '2.9.1' ]
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
+        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         exclude:
           - sssd_ref: 'master'
@@ -36,25 +36,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          lookup-only: true
-
-      # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
@@ -101,10 +83,14 @@ jobs:
         working-directory: sssd
         shell: bash
         run: |
+          # Set environment variables
+          export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64
+          export OPENSSL_CONF=$GITHUB_WORKSPACE/provider.conf
+          export OPENSSL_MODULES=$GITHUB_WORKSPACE/wolfprov-install/lib
           export ${{ matrix.force_fail }}
 
           echo "Checking OpenSSL providers:"
-          openssl list -providers | tee provider-list.log
+          $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers | tee provider-list.log
           grep -q libwolfprov provider-list.log || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # If force fail is enabled dont exit with error

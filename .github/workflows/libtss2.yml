@@ -9,25 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_wolfprovider:
-    uses: ./.github/workflows/build-wolfprovider.yml
-    with:
-      wolfssl_ref: ${{ matrix.wolfssl_ref }}
-      openssl_ref: ${{ matrix.openssl_ref }}
-      replace_default: ${{ matrix.replace_default }}
-    strategy:
-      matrix:
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
-
   test_tpm2_tss:
     runs-on: ubuntu-22.04
-    container:
-      image: debian:bookworm
-      env:
-        DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
     timeout-minutes: 30
     strategy:
       matrix:
@@ -43,45 +26,30 @@ jobs:
     steps:
       - name: Install test dependencies
         run: |
-          apt-get update
-          apt-get install -y pkg-config libcunit1-dev autoconf-archive \
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libcunit1-dev autoconf-archive \
             gettext libcmocka-dev build-essential autoconf automake libtool \
             libjson-c-dev libcurl4-openssl-dev acl libusb-1.0-0-dev git \
             pkg-config uuid-dev
+
+      # ensure libssl-dev is not installed
+      - name: Ensure libssl-dev is not installed
+        run: |
+          if dpkg -l | grep -q libssl-dev; then
+            echo "libssl-dev is installed, removing it to avoid conflicts"
+            sudo apt-get remove -y libssl-dev
+          else
+            echo "libssl-dev is not installed, no action needed"
+          fi
 
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
-
-      - name: Install wolfSSL/OpenSSL/wolfprov packages
+      - name: Build wolfProvider
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
-          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
-          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
-          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
-
-          apt install --reinstall -y \
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
-
-          apt install --reinstall -y \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
-
-          apt install --reinstall -y \
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
       - name: Checkout tpm2-tss
         uses: actions/checkout@v4
@@ -102,6 +70,7 @@ jobs:
       - name: Build and install tpm2-tss
         working-directory: tpm2_tss_repo
         run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
           ./bootstrap
           ./configure --prefix=$PWD/tpm2-tss-install --with-crypto=ossl \
             --enable-unit
@@ -111,6 +80,7 @@ jobs:
       - name: Run tpm2-tss tests
         working-directory: tpm2_tss_repo
         run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
           make check 2>&1 || true
           if $(grep -q "FAIL: test/unit" test-suite.log); then
