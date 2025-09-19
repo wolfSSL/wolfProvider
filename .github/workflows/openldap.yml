@@ -109,7 +109,9 @@ jobs:
 
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap
+        shell: bash
         run: |
+          set -o pipefail
           # wolfProvider is already loaded as the default provider
           echo "Current OpenSSL providers:"
           openssl list -providers
