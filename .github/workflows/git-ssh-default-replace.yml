@@ -77,7 +77,7 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
-        apt-get install -y openssh-client openssh-server expect xxd git
+        apt-get install -y openssh-client openssh-server expect xxd git net-tools
 
     - name: Test OpenSSL provider functionality with default replace
       run: |
@@ -136,8 +136,10 @@ jobs:
         sleep 3
         
         # Verify SSH server is running
-        ps aux | grep sshd
-        netstat -tlnp | grep 2222 || ss -tlnp | grep 2222
+        ps aux | grep sshd | grep -v grep
+        netstat -tlnp | grep 2222 || echo "Port 2222 not found in netstat, trying alternative check"
+        # Alternative port check using /proc/net/tcp
+        cat /proc/net/tcp | grep :08AE || echo "Port 2222 (0x08AE) not found in /proc/net/tcp"
 
     - name: Generate SSH keys for testing
       run: |
@@ -207,7 +209,8 @@ jobs:
         # Debug: Check SSH server status
         echo "=== SSH Server Status ==="
         ps aux | grep sshd | grep -v grep
-        netstat -tlnp | grep 2222 || ss -tlnp | grep 2222
+        netstat -tlnp | grep 2222 || echo "Port 2222 not found in netstat"
+        cat /proc/net/tcp | grep :08AE || echo "Port 2222 (0x08AE) not found in /proc/net/tcp"
         
         # Debug: Check SSH keys
         echo "=== SSH Keys ==="
