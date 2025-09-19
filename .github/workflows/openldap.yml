@@ -136,11 +136,12 @@ jobs:
             timeout 15m make -j check 2>&1 | tee openldap-test.log
             TEST_RESULT=${PIPESTATUS[0]}
             if [ $TEST_RESULT -eq 124 ]; then
-              echo "ERROR: make -j check timed out after 15 minutes with WOLFPROV_FORCE_FAIL=1"
-              exit 1
+              echo "make -j check timed out after 15 minutes with WOLFPROV_FORCE_FAIL=1"
+              echo "Tests failed to complete as expected"
+              TEST_RESULT=1
             fi
           else
             make -j check 2>&1 | tee openldap-test.log
+            TEST_RESULT=${PIPESTATUS[0]}
           fi
-          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openldap
