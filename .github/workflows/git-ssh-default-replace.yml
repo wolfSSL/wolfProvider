@@ -39,21 +39,10 @@ jobs:
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
 
     steps:
-    - name: Set up environment
-      run: |
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y openssh-client openssh-server expect xxd
-
     - name: Checkout wolfProvider
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
-
-    - name: Fetch tags for versioning
-      run: |
-        git fetch --tags
-        git tag -l
 
     - name: Checking OpenSSL/wolfProvider packages in cache
       uses: actions/cache/restore@v4
@@ -83,6 +72,12 @@ jobs:
 
         apt install --reinstall -y \
           ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+    - name: Set up environment
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y openssh-client openssh-server expect xxd
 
     - name: Check wolfProvider is installed
       run: |
