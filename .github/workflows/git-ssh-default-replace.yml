@@ -117,14 +117,27 @@ jobs:
         mkdir -p /var/run/sshd
         ssh-keygen -A
         
-        echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
-        echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
-        echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
-        echo "AuthorizedKeysFile .ssh/authorized_keys" >> /etc/ssh/sshd_config
-        echo "Port 2222" >> /etc/ssh/sshd_config
+        # Backup original config
+        cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
         
+        # Create new config
+        cat > /etc/ssh/sshd_config << 'EOF'
+        Port 2222
+        PermitRootLogin yes
+        PasswordAuthentication no
+        PubkeyAuthentication yes
+        AuthorizedKeysFile .ssh/authorized_keys
+        StrictModes no
+        LogLevel ERROR
+        EOF
+        
+        # Start SSH server
         /usr/sbin/sshd -D -p 2222 &
-        sleep 2
+        sleep 3
+        
+        # Verify SSH server is running
+        ps aux | grep sshd
+        netstat -tlnp | grep 2222 || ss -tlnp | grep 2222
 
     - name: Generate SSH keys for testing
       run: |
@@ -190,6 +203,20 @@ jobs:
       shell: bash
       run: |
         echo "Testing git operations with ${{ matrix.key_type }} key..."
+        
+        # Debug: Check SSH server status
+        echo "=== SSH Server Status ==="
+        ps aux | grep sshd | grep -v grep
+        netstat -tlnp | grep 2222 || ss -tlnp | grep 2222
+        
+        # Debug: Check SSH keys
+        echo "=== SSH Keys ==="
+        ls -la ~/.ssh/
+        cat ~/.ssh/config
+        
+        # Debug: Test SSH connection
+        echo "=== Testing SSH Connection ==="
+        ssh -o ConnectTimeout=5 -o BatchMode=yes root@localhost -p 2222 "echo 'SSH connection successful'" || echo "SSH connection failed"
         
         SUCCESS_COUNT=0
         FAILURE_COUNT=0
