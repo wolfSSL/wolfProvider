@@ -11,12 +11,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: 'openssl-3.5.0'
+      replace_default: true
+    strategy:
+      matrix:
+        wolfssl_ref: ['master', 'v5.8.2-stable']
+
   git-ssh-default-replace-test:
     runs-on: ubuntu-22.04
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+    needs: build_wolfprovider
     strategy:
       matrix:
         wolfssl_ref: ['master', 'v5.8.2-stable']
@@ -43,14 +54,6 @@ jobs:
       run: |
         git fetch --tags
         git tag -l
-
-    - name: Build wolfProvider with default replace
-      uses: ./.github/workflows/build-wolfprovider.yml
-      with:
-        wolfssl_ref: ${{ matrix.wolfssl_ref }}
-        openssl_ref: 'openssl-3.5.0'
-        replace_default: true
-        debug_build: false
 
     - name: Checking OpenSSL/wolfProvider packages in cache
       uses: actions/cache/restore@v4
