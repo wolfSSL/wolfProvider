@@ -112,8 +112,13 @@ jobs:
           exit 1
         fi
 
-    - name: Set up SSH server for testing
+    - name: Test git operations with SSH keys
+      shell: bash
       run: |
+        echo "Testing git operations with ${{ matrix.key_type }} key..."
+        
+        # Set up SSH server
+        echo "=== Setting up SSH server ==="
         mkdir -p /var/run/sshd
         ssh-keygen -A
         
@@ -137,12 +142,10 @@ jobs:
         
         # Verify SSH server is running
         ps aux | grep sshd | grep -v grep
-        netstat -tlnp | grep 2222 || echo "Port 2222 not found in netstat, trying alternative check"
-        # Alternative port check using /proc/net/tcp
-        cat /proc/net/tcp | grep :08AE || echo "Port 2222 (0x08AE) not found in /proc/net/tcp"
-
-    - name: Generate SSH keys for testing
-      run: |
+        netstat -tlnp | grep 2222 || echo "Port 2222 not found in netstat"
+        
+        # Generate SSH keys
+        echo "=== Generating SSH keys ==="
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
         
@@ -166,9 +169,22 @@ jobs:
         
         cp ~/.ssh/test_key.pub ~/.ssh/authorized_keys
         chmod 600 ~/.ssh/authorized_keys
-
-    - name: Set up git test environment
-      run: |
+        
+        # Configure SSH for git testing
+        cat > ~/.ssh/config << EOF
+        Host localhost
+            HostName localhost
+            Port 2222
+            User root
+            IdentityFile ~/.ssh/test_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
+        EOF
+        chmod 600 ~/.ssh/config
+        
+        # Set up git test environment
+        echo "=== Setting up git test environment ==="
         git config --global user.name "Test User"
         git config --global user.email "test@example.com"
         git config --global init.defaultBranch main
@@ -186,38 +202,8 @@ jobs:
         git commit -m "Initial commit"
         git remote add origin /tmp/git-test/test-repo.git
         git push origin main
-
-    - name: Configure SSH for git testing
-      run: |
-        cat > ~/.ssh/config << EOF
-        Host localhost
-            HostName localhost
-            Port 2222
-            User root
-            IdentityFile ~/.ssh/test_key
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            LogLevel ERROR
-        EOF
-        chmod 600 ~/.ssh/config
-
-    - name: Test git operations with SSH keys
-      shell: bash
-      run: |
-        echo "Testing git operations with ${{ matrix.key_type }} key..."
         
-        # Debug: Check SSH server status
-        echo "=== SSH Server Status ==="
-        ps aux | grep sshd | grep -v grep
-        netstat -tlnp | grep 2222 || echo "Port 2222 not found in netstat"
-        cat /proc/net/tcp | grep :08AE || echo "Port 2222 (0x08AE) not found in /proc/net/tcp"
-        
-        # Debug: Check SSH keys
-        echo "=== SSH Keys ==="
-        ls -la ~/.ssh/
-        cat ~/.ssh/config
-        
-        # Debug: Test SSH connection
+        # Test SSH connection
         echo "=== Testing SSH Connection ==="
         ssh -o ConnectTimeout=5 -o BatchMode=yes root@localhost -p 2222 "echo 'SSH connection successful'" || echo "SSH connection failed"
         
