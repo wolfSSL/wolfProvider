@@ -1,0 +1,410 @@
+name: Git SSH Default Replace Tests
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**', ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  git-ssh-default-replace-test:
+    runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    strategy:
+      matrix:
+        wolfssl_ref: ['master', 'v5.8.2-stable']
+        key_type: ['rsa', 'ecdsa', 'ed25519']
+        iterations: [10]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+
+    steps:
+    - name: Set up environment
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y openssh-client openssh-server expect xxd
+
+    - name: Checkout wolfProvider
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Fetch tags for versioning
+      run: |
+        git fetch --tags
+        git tag -l
+
+    - name: Build wolfProvider with default replace
+      uses: ./.github/workflows/build-wolfprovider.yml
+      with:
+        wolfssl_ref: ${{ matrix.wolfssl_ref }}
+        openssl_ref: 'openssl-3.5.0'
+        replace_default: true
+        debug_build: false
+
+    - name: Checking OpenSSL/wolfProvider packages in cache
+      uses: actions/cache/restore@v4
+      id: wolfprov-cache
+      with:
+        path: |
+          ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ${{ env.OPENSSL_PACKAGES_PATH }}
+          ${{ env.WOLFPROV_PACKAGES_PATH }}
+        key: openssl-wolfprov-debian-packages-${{ github.sha }}-replace-default
+        fail-on-cache-miss: true
+
+    - name: Install wolfSSL/OpenSSL/wolfprov packages
+      run: |
+        printf "Installing OpenSSL/wolfProvider packages:\n"
+        ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+        ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+        ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+        apt install --reinstall -y \
+          ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+        apt install --reinstall -y \
+          ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+          ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+          ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+        apt install --reinstall -y \
+          ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+    - name: Check wolfProvider is installed
+      run: |
+        openssl list -providers
+        openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+
+    - name: Test OpenSSL provider functionality with default replace
+      run: |
+        PROVIDER_CONF="/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
+        PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
+
+        # Test with wolfProvider enabled (default replace)
+        echo "Testing with wolfProvider enabled (default replace):"
+        if [ -f $PROVIDER_CONF ]; then
+          echo "   - wolfProvider configuration found at $PROVIDER_CONF"
+          cat $PROVIDER_CONF
+        else
+          echo "ERROR: $PROVIDER_CONF not found!"
+          exit 1
+        fi
+        
+        echo "Verifying wolfProvider is active:"
+        openssl list -providers
+        
+        if openssl list -providers | grep -i "wolfprov"; then
+          echo "SUCCESS: wolfProvider is loaded"
+        else
+          echo "ERROR: wolfProvider not found in provider list"
+          exit 1
+        fi
+
+        # Test that wolfProvider is the default provider
+        echo "Testing that wolfProvider is the default provider:"
+        echo "Testing RSA key generation with wolfProvider as default:"
+        openssl genpkey -algorithm RSA -out /tmp/test_rsa_key.pem -pkcs8 -pass pass:testpass
+        if [ $? -eq 0 ]; then
+          echo "SUCCESS: RSA key generation works with wolfProvider as default"
+        else
+          echo "ERROR: RSA key generation failed with wolfProvider as default"
+          exit 1
+        fi
+
+        # Temporarily disable wolfProvider to test default provider
+        echo "Temporarily disabling wolfProvider for comparison testing:"
+        if [ -f $PROVIDER_CONF ]; then
+          mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
+          echo "   - Moved $PROVIDER_CONF to $PROVIDER_CONF_BACKUP"
+        fi
+        
+        echo "Verifying Default Provider is Active:"
+        openssl list -providers
+        
+        # Test that default provider works
+        echo "Testing RSA key generation with default provider:"
+        openssl genpkey -algorithm RSA -out /tmp/test_rsa_key_default.pem -pkcs8 -pass pass:testpass
+        if [ $? -eq 0 ]; then
+          echo "SUCCESS: RSA key generation works with default provider"
+        else
+          echo "ERROR: RSA key generation failed with default provider"
+        fi
+        
+        # Restore wolfProvider configuration
+        echo "Restoring wolfProvider configuration:"
+        if [ -f $PROVIDER_CONF_BACKUP ]; then
+          mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
+          echo "   - Restored $PROVIDER_CONF from $PROVIDER_CONF_BACKUP"
+        fi
+        
+        echo "Final verification - wolfProvider restored:"
+        openssl list -providers
+
+    - name: Set up SSH server for testing
+      run: |
+        mkdir -p /var/run/sshd
+        ssh-keygen -A
+        
+        echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+        echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+        echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
+        echo "AuthorizedKeysFile .ssh/authorized_keys" >> /etc/ssh/sshd_config
+        echo "Port 2222" >> /etc/ssh/sshd_config
+        
+        /usr/sbin/sshd -D -p 2222 &
+        sleep 2
+
+    - name: Generate SSH keys for testing
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        case "${{ matrix.key_type }}" in
+          "rsa")
+            echo "Generating RSA key..."
+            ssh-keygen -t rsa -b 2048 -f ~/.ssh/test_key -N "" -C "test-rsa-key"
+            ;;
+          "ecdsa")
+            echo "Generating ECDSA key..."
+            ssh-keygen -t ecdsa -b 256 -f ~/.ssh/test_key -N "" -C "test-ecdsa-key"
+            ;;
+          "ed25519")
+            echo "Generating ED25519 key..."
+            ssh-keygen -t ed25519 -f ~/.ssh/test_key -N "" -C "test-ed25519-key"
+            ;;
+        esac
+        
+        echo "Generated key info:"
+        ssh-keygen -l -f ~/.ssh/test_key.pub
+        
+        cp ~/.ssh/test_key.pub ~/.ssh/authorized_keys
+        chmod 600 ~/.ssh/authorized_keys
+
+    - name: Set up git test environment
+      run: |
+        git config --global user.name "Test User"
+        git config --global user.email "test@example.com"
+        git config --global init.defaultBranch main
+        
+        mkdir -p /tmp/git-test
+        cd /tmp/git-test
+        
+        git init --bare test-repo.git
+        
+        mkdir test-workspace
+        cd test-workspace
+        git init
+        echo "# Test Repository" > README.md
+        git add README.md
+        git commit -m "Initial commit"
+        git remote add origin /tmp/git-test/test-repo.git
+        git push origin main
+
+    - name: Configure SSH for git testing
+      run: |
+        cat > ~/.ssh/config << EOF
+        Host localhost
+            HostName localhost
+            Port 2222
+            User root
+            IdentityFile ~/.ssh/test_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
+        EOF
+        chmod 600 ~/.ssh/config
+
+    - name: Test git operations with SSH keys
+      run: |
+        # Source environment setup as recommended in notes
+        source ./scripts/utils-wolfprovider.sh
+        
+        echo "Testing git operations with ${{ matrix.key_type }} key..."
+        
+        SUCCESS_COUNT=0
+        FAILURE_COUNT=0
+        TIMING_LOG="/tmp/git-timing-${{ matrix.key_type }}.log"
+        ERROR_LOG="/tmp/git-errors-${{ matrix.key_type }}.log"
+        
+        echo "Iteration,Operation,Status,Duration,Error" > "$TIMING_LOG"
+        
+        for attempt in $(seq 1 ${{ matrix.iterations }}); do
+          echo "=== Attempt $attempt for ${{ matrix.key_type }} ==="
+          
+          TEST_DIR="/tmp/git-test-$attempt"
+          mkdir -p "$TEST_DIR"
+          cd "$TEST_DIR"
+          
+          for operation in "clone" "push" "pull" "fetch"; do
+            echo "Testing $operation operation..."
+            START_TIME=$(date +%s.%N)
+            
+            case "$operation" in
+              "clone")
+                if timeout 30 git clone root@localhost:/tmp/git-test/test-repo.git cloned-repo 2>>"$ERROR_LOG"; then
+                  STATUS="SUCCESS"
+                  ((SUCCESS_COUNT++))
+                else
+                  STATUS="FAILURE"
+                  ((FAILURE_COUNT++))
+                  echo "Clone failed on attempt $attempt" >> "$ERROR_LOG"
+                fi
+                ;;
+              "push")
+                if [ -d "cloned-repo" ]; then
+                  cd cloned-repo
+                  echo "Test change $attempt" >> test-file.txt
+                  git add test-file.txt
+                  git commit -m "Test commit $attempt" || true
+                  if timeout 30 git push origin main 2>>"$ERROR_LOG"; then
+                    STATUS="SUCCESS"
+                    ((SUCCESS_COUNT++))
+                  else
+                    STATUS="FAILURE"
+                    ((FAILURE_COUNT++))
+                    echo "Push failed on attempt $attempt" >> "$ERROR_LOG"
+                  fi
+                  cd ..
+                else
+                  STATUS="SKIPPED"
+                  echo "Skipping push - clone failed" >> "$ERROR_LOG"
+                fi
+                ;;
+              "pull")
+                if [ -d "cloned-repo" ]; then
+                  cd cloned-repo
+                  if timeout 30 git pull origin main 2>>"$ERROR_LOG"; then
+                    STATUS="SUCCESS"
+                    ((SUCCESS_COUNT++))
+                  else
+                    STATUS="FAILURE"
+                    ((FAILURE_COUNT++))
+                    echo "Pull failed on attempt $attempt" >> "$ERROR_LOG"
+                  fi
+                  cd ..
+                else
+                  STATUS="SKIPPED"
+                  echo "Skipping pull - clone failed" >> "$ERROR_LOG"
+                fi
+                ;;
+              "fetch")
+                if [ -d "cloned-repo" ]; then
+                  cd cloned-repo
+                  if timeout 30 git fetch origin 2>>"$ERROR_LOG"; then
+                    STATUS="SUCCESS"
+                    ((SUCCESS_COUNT++))
+                  else
+                    STATUS="FAILURE"
+                    ((FAILURE_COUNT++))
+                    echo "Fetch failed on attempt $attempt" >> "$ERROR_LOG"
+                  fi
+                  cd ..
+                else
+                  STATUS="SKIPPED"
+                  echo "Skipping fetch - clone failed" >> "$ERROR_LOG"
+                fi
+                ;;
+            esac
+            
+            END_TIME=$(date +%s.%N)
+            DURATION=$(echo "$END_TIME - $START_TIME" | bc -l 2>/dev/null || echo "0")
+            
+            echo "$attempt,$operation,$STATUS,$DURATION," >> "$TIMING_LOG"
+            echo "  $operation: $STATUS (${DURATION}s)"
+          done
+          
+          rm -rf "$TEST_DIR"
+        done
+        
+        echo ""
+        echo "=== SUMMARY FOR ${{ matrix.key_type }} KEY ==="
+        echo "Total operations: $((SUCCESS_COUNT + FAILURE_COUNT))"
+        echo "Successful operations: $SUCCESS_COUNT"
+        echo "Failed operations: $FAILURE_COUNT"
+        
+        if [ $FAILURE_COUNT -gt 0 ]; then
+          FAILURE_RATE=$(echo "scale=2; $FAILURE_COUNT * 100 / ($SUCCESS_COUNT + $FAILURE_COUNT)" | bc -l)
+          echo "Failure rate: ${FAILURE_RATE}%"
+          
+          if [ "${{ matrix.key_type }}" = "ed25519" ] && [ $FAILURE_COUNT -gt 2 ]; then
+            echo "WARNING: High failure rate detected for ED25519 keys - potential intermittent issue!"
+          fi
+        else
+          echo "Failure rate: 0%"
+        fi
+        
+        echo ""
+        echo "Timing data saved to: $TIMING_LOG"
+        echo "Error log saved to: $ERROR_LOG"
+        
+        if [ -f "$ERROR_LOG" ] && [ -s "$ERROR_LOG" ]; then
+          echo ""
+          echo "=== ERROR LOG SUMMARY ==="
+          tail -20 "$ERROR_LOG"
+        fi
+
+    - name: Analyze results and generate report
+      run: |
+        echo "=== FINAL ANALYSIS FOR ${{ matrix.key_type }} KEY TYPE ==="
+        
+        TIMING_LOG="/tmp/git-timing-${{ matrix.key_type }}.log"
+        ERROR_LOG="/tmp/git-errors-${{ matrix.key_type }}.log"
+        
+        if [ -f "$TIMING_LOG" ]; then
+          echo ""
+          echo "Operation success rates:"
+          for op in clone push pull fetch; do
+            TOTAL=$(grep ",$op," "$TIMING_LOG" | wc -l)
+            SUCCESS=$(grep ",$op,SUCCESS," "$TIMING_LOG" | wc -l)
+            if [ $TOTAL -gt 0 ]; then
+              RATE=$(echo "scale=1; $SUCCESS * 100 / $TOTAL" | bc -l 2>/dev/null || echo "0")
+              echo "  $op: $SUCCESS/$TOTAL (${RATE}%)"
+            fi
+          done
+          
+          echo ""
+          echo "Average operation times:"
+          for op in clone push pull fetch; do
+            AVG_TIME=$(grep ",$op,SUCCESS," "$TIMING_LOG" | cut -d',' -f4 | awk '{sum+=$1; count++} END {if(count>0) printf "%.3f", sum/count; else print "N/A"}')
+            echo "  $op: ${AVG_TIME}s"
+          done
+        fi
+        
+        if [ "${{ matrix.key_type }}" = "ed25519" ]; then
+          echo ""
+          echo "=== ED25519 SPECIFIC ANALYSIS ==="
+          if [ -f "$ERROR_LOG" ] && [ -s "$ERROR_LOG" ]; then
+            echo "Detected errors with ED25519 keys:"
+            grep -i "ed25519\|connection\|timeout\|refused" "$ERROR_LOG" | head -10 || echo "No specific ED25519 errors found"
+          else
+            echo "No errors detected with ED25519 keys"
+          fi
+        fi
+
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: git-ssh-test-results-${{ matrix.wolfssl_ref }}-${{ matrix.key_type }}
+        path: |
+          /tmp/git-timing-*.log
+          /tmp/git-errors-*.log
+        retention-days: 7
+
+    - name: Cleanup test environment
+      if: always()
+      run: |
+        pkill sshd || true
+        rm -rf /tmp/git-test* || true
+        rm -rf ~/.ssh/test_key* || true
