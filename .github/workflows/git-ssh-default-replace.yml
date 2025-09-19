@@ -188,9 +188,6 @@ jobs:
 
     - name: Test git operations with SSH keys
       run: |
-        # Source environment setup as recommended in notes
-        source ./scripts/utils-wolfprovider.sh
-        
         echo "Testing git operations with ${{ matrix.key_type }} key..."
         
         SUCCESS_COUNT=0
