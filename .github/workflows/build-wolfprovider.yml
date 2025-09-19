@@ -132,6 +132,7 @@ jobs:
           apt install -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
 
       # Check for cached OpenSSL packages
+      # WARNING: for Debian, openssl_ref is ignored since we build from Debian baseline
       - name: Checking OpenSSL packages in cache
         uses: actions/cache@v4
         id: openssl_cache
@@ -144,7 +145,7 @@ jobs:
 
       # Install OpenSSL packages from cache if available
       - name: Install OpenSSL packages from cache
-        if: steps.openssl_cache.outputs.cache-hit == 'true'
+        if: ${{ steps.openssl_cache.outputs.cache-hit == 'true' }}
         run: |
           printf "Installing OpenSSL packages from cache:\n"
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
