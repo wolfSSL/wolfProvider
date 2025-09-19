@@ -35,6 +35,7 @@ OPENSSL_LIB_DIRS="${OPENSSL_INSTALL_DIR}/lib:${OPENSSL_INSTALL_DIR}/lib64"
 
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+WOLFPROV_BUILD_DEBIAN=${WOLFPROV_BUILD_DEBIAN:-0}
 USE_CUR_TAG=${USE_CUR_TAG:-0}
 
 clean_openssl() {
@@ -56,21 +57,46 @@ clean_openssl() {
 }
 
 clone_openssl() {
-    if [ -d ${OPENSSL_SOURCE_DIR} ] && [ "$USE_CUR_TAG" != "1" ]; then
+    # Check if the source directory exists and is a git repository
+    if [ -d ${OPENSSL_SOURCE_DIR} ] && [ "$USE_CUR_TAG" != "1" ] && [ "$WOLFPROV_BUILD_DEBIAN" != "1" ]; then
         check_git_match "${OPENSSL_TAG}" "${OPENSSL_SOURCE_DIR}"
     fi
 
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tOpenSSL source directory not found: ${OPENSSL_SOURCE_DIR}\n"
-        CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
-        CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
 
-        DEPTH_ARG=${WOLFPROV_DEBUG:+""}
-        DEPTH_ARG=${DEPTH_ARG:---depth=1}
+        # If building for Debian, build from Debian baseline
+        if [ $WOLFPROV_BUILD_DEBIAN -eq 1 ]; then
+            printf "\tDownloading OpenSSL from Debian ... \n"
+            # Check if "deb-src" is in the sources.list, which allows us to 
+            # grab the source from Debian.
+            if [ -f /etc/apt/sources.list ] && grep -q "deb-src" /etc/apt/sources.list; then
+                printf "\tDebian sources.list already contains deb-src\n"
+            else
+                printf "\tAdding deb-src to sources.list\n"
+                echo "deb-src http://deb.debian.org/debian bookworm main" >> /etc/apt/sources.list
+                echo "deb-src http://deb.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list
+                echo "deb-src http://deb.debian.org/debian bookworm-updates main" >> /etc/apt/sources.list
+            fi
 
-        printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
-        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-        RET=$?
+            pushd $(mktemp -d) 2>&1 > /dev/null
+            apt update >>$LOG_FILE 2>&1
+            apt-get source -t bookworm openssl >>$LOG_FILE 2>&1
+            RET=$?
+            # Move the source to the correct directory
+            mv openssl-* ${OPENSSL_SOURCE_DIR}
+            popd 2>&1 > /dev/null
+        else 
+            CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
+            CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
+
+            DEPTH_ARG=${WOLFPROV_DEBUG:+""}
+            DEPTH_ARG=${DEPTH_ARG:---depth=1}
+
+            printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
+            git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        fi
 
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
@@ -86,7 +112,7 @@ clone_openssl() {
         fi
     else
         printf "\tOpenSSL source directory exists: ${OPENSSL_SOURCE_DIR}\n"
-        if [ ! -d ${OPENSSL_SOURCE_DIR}/.git ]; then
+        if [ ! -d ${OPENSSL_SOURCE_DIR}/.git ] && [ "$is_debian_host" != "1" ]; then
             printf "ERROR: OpenSSL source directory is not a git repository: ${OPENSSL_SOURCE_DIR}\n"
             do_cleanup
             exit 1
@@ -99,9 +125,15 @@ is_openssl_patched() {
         return 0
     fi
 
-    pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
-    patch_applied=$(git diff --quiet "crypto/provider_predefined.c" 2>/dev/null && echo 1 || echo 0)
-    popd &> /dev/null
+    # Check if $OPENSSL_SOURCE_DIR is a git repository
+    if [ -d ${OPENSSL_SOURCE_DIR}/.git ]; then
+        pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
+        patch_applied=$(git diff --quiet "crypto/provider_predefined.c" 2>/dev/null && echo 1 || echo 0)
+        popd &> /dev/null
+    else
+        # Not a git repo, may have been downloaded separately (from Debian sources)
+        patch_applied=$(grep -q "libwolfprov" "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" && echo 1 || echo 0)
+    fi
     return $patch_applied
 }
 
@@ -310,7 +342,7 @@ install_openssl() {
 }
 
 init_openssl() {
-    if [ "${WOLFPROV_BUILD_DEBIAN:-0}" -eq 1 ]; then
+    if [ $WOLFPROV_BUILD_DEBIAN -eq 1 ]; then
         install_openssl_deb
     else
         install_openssl
