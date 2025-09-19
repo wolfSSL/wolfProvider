@@ -187,6 +187,7 @@ jobs:
         chmod 600 ~/.ssh/config
 
     - name: Test git operations with SSH keys
+      shell: bash
       run: |
         echo "Testing git operations with ${{ matrix.key_type }} key..."
         
@@ -209,70 +210,70 @@ jobs:
             START_TIME=$(date +%s.%N)
             
             case "$operation" in
-              "clone")
-                if timeout 30 git clone root@localhost:/tmp/git-test/test-repo.git cloned-repo 2>>"$ERROR_LOG"; then
-                  STATUS="SUCCESS"
-                  ((SUCCESS_COUNT++))
-                else
-                  STATUS="FAILURE"
-                  ((FAILURE_COUNT++))
-                  echo "Clone failed on attempt $attempt" >> "$ERROR_LOG"
-                fi
-                ;;
-              "push")
-                if [ -d "cloned-repo" ]; then
-                  cd cloned-repo
-                  echo "Test change $attempt" >> test-file.txt
-                  git add test-file.txt
-                  git commit -m "Test commit $attempt" || true
-                  if timeout 30 git push origin main 2>>"$ERROR_LOG"; then
-                    STATUS="SUCCESS"
-                    ((SUCCESS_COUNT++))
-                  else
-                    STATUS="FAILURE"
-                    ((FAILURE_COUNT++))
-                    echo "Push failed on attempt $attempt" >> "$ERROR_LOG"
-                  fi
-                  cd ..
-                else
-                  STATUS="SKIPPED"
-                  echo "Skipping push - clone failed" >> "$ERROR_LOG"
-                fi
-                ;;
-              "pull")
-                if [ -d "cloned-repo" ]; then
-                  cd cloned-repo
-                  if timeout 30 git pull origin main 2>>"$ERROR_LOG"; then
-                    STATUS="SUCCESS"
-                    ((SUCCESS_COUNT++))
-                  else
-                    STATUS="FAILURE"
-                    ((FAILURE_COUNT++))
-                    echo "Pull failed on attempt $attempt" >> "$ERROR_LOG"
-                  fi
-                  cd ..
-                else
-                  STATUS="SKIPPED"
-                  echo "Skipping pull - clone failed" >> "$ERROR_LOG"
-                fi
-                ;;
-              "fetch")
-                if [ -d "cloned-repo" ]; then
-                  cd cloned-repo
-                  if timeout 30 git fetch origin 2>>"$ERROR_LOG"; then
-                    STATUS="SUCCESS"
-                    ((SUCCESS_COUNT++))
-                  else
-                    STATUS="FAILURE"
-                    ((FAILURE_COUNT++))
-                    echo "Fetch failed on attempt $attempt" >> "$ERROR_LOG"
-                  fi
-                  cd ..
-                else
-                  STATUS="SKIPPED"
-                  echo "Skipping fetch - clone failed" >> "$ERROR_LOG"
-                fi
-                ;;
+        "clone")
+          if timeout 30 git clone root@localhost:/tmp/git-test/test-repo.git cloned-repo 2>>"$ERROR_LOG"; then
+            STATUS="SUCCESS"
+            ((SUCCESS_COUNT++))
+          else
+            STATUS="FAILURE"
+            ((FAILURE_COUNT++))
+            echo "Clone failed on attempt $attempt" >> "$ERROR_LOG"
+          fi
+          ;;
+        "push")
+          if [ -d "cloned-repo" ]; then
+            cd cloned-repo
+            echo "Test change $attempt" >> test-file.txt
+            git add test-file.txt
+            git commit -m "Test commit $attempt" || true
+            if timeout 30 git push origin main 2>>"$ERROR_LOG"; then
+              STATUS="SUCCESS"
+              ((SUCCESS_COUNT++))
+            else
+              STATUS="FAILURE"
+              ((FAILURE_COUNT++))
+              echo "Push failed on attempt $attempt" >> "$ERROR_LOG"
+            fi
+            cd ..
+          else
+            STATUS="SKIPPED"
+            echo "Skipping push - clone failed" >> "$ERROR_LOG"
+          fi
+          ;;
+        "pull")
+          if [ -d "cloned-repo" ]; then
+            cd cloned-repo
+            if timeout 30 git pull origin main 2>>"$ERROR_LOG"; then
+              STATUS="SUCCESS"
+              ((SUCCESS_COUNT++))
+            else
+              STATUS="FAILURE"
+              ((FAILURE_COUNT++))
+              echo "Pull failed on attempt $attempt" >> "$ERROR_LOG"
+            fi
+            cd ..
+          else
+            STATUS="SKIPPED"
+            echo "Skipping pull - clone failed" >> "$ERROR_LOG"
+          fi
+          ;;
+        "fetch")
+          if [ -d "cloned-repo" ]; then
+            cd cloned-repo
+            if timeout 30 git fetch origin 2>>"$ERROR_LOG"; then
+              STATUS="SUCCESS"
+              ((SUCCESS_COUNT++))
+            else
+              STATUS="FAILURE"
+              ((FAILURE_COUNT++))
+              echo "Fetch failed on attempt $attempt" >> "$ERROR_LOG"
+            fi
+            cd ..
+          else
+            STATUS="SKIPPED"
+            echo "Skipping fetch - clone failed" >> "$ERROR_LOG"
+          fi
+          ;;
             esac
             
             END_TIME=$(date +%s.%N)
