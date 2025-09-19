@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_net_snmp:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -34,7 +40,11 @@ jobs:
         net_snmp_ref: ['v5.9.3']
         wolfssl_ref: ['master', 'v5.8.0-stable']
         openssl_ref: ['openssl-3.5.0']
+        replace_default: [ false, true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -52,13 +62,14 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libperl-dev
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && \
+          apt-get install -y libperl-dev
 
       - name: Build net-snmp with wolfProvider
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -76,6 +87,7 @@ jobs:
 
       - name: Run tests
         working-directory: net-snmp
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

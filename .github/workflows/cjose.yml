@@ -18,23 +18,42 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
 
   test_cjose:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        cjose_ref: [ 'master', 'v0.6.2.1' ]
+        cjose_ref: [ 'v0.6.2.1' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        replace_default: [ false, true ]
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
+      - name: Install dependencies (needed for Debian)
+        if: ${{ matrix.replace_default }}
+        run: |
+          apt-get update && \
+          apt-get install -y curl jq
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -51,12 +70,15 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install cjose dependencies
         run: |
-          sudo apt-get install -y libjansson-dev check
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && \
+          apt-get install -y build-essential autoconf automake libtool \
+              pkg-config gcc make libjansson-dev check
 
       - name: Download cjose
         uses: actions/checkout@v4
@@ -68,18 +90,27 @@ jobs:
 
       - name: Build cjose
         working-directory: cjose
+        shell: bash
         run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          
+          # Set additional environment variables for OpenSSL
+          export OPENSSL_INSTALL=$GITHUB_WORKSPACE/openssl-install
+          export LDFLAGS="-L${OPENSSL_INSTALL}/lib64 -L${OPENSSL_INSTALL}/lib"
+          export CPPFLAGS="-I${OPENSSL_INSTALL}/include"
+          export PKG_CONFIG_PATH="${OPENSSL_INSTALL}/lib64/pkgconfig:${OPENSSL_INSTALL}/lib/pkgconfig:${PKG_CONFIG_PATH}"
+
           # Configure with OpenSSL
-          ./configure CFLAGS="-Wno-error=deprecated-declarations" --with-openssl=$GITHUB_WORKSPACE/openssl-install
+          ./configure CFLAGS="-Wno-error=deprecated-declarations" --with-openssl=$OPENSSL_INSTALL
 
           # Build cjose
           make
 
       - name: Run cjose tests
         working-directory: cjose
+        shell: bash
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
           # Run tests

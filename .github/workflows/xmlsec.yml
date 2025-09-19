@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_xmlsec:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -33,10 +39,13 @@ jobs:
         xmlsec_ref: [ 'master', 'xmlsec-1_2_37' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - xmlsec_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
@@ -54,14 +63,15 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install xmlsec dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y automake autoconf libtool libtool-bin \
-              libltdl-dev libltdl7 libxml2-dev
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y automake autoconf libtool libtool-bin \
+              libltdl-dev libltdl7 libxml2-dev build-essential patch pkg-config
 
       - name: Checkout OSP
         uses: actions/checkout@v4
@@ -93,6 +103,7 @@ jobs:
 
       - name: Run xmlsec tests
         working-directory: xmlsec
+        shell: bash
         run: |
           echo "Setting environment variables..."
           source $GITHUB_WORKSPACE/scripts/env-setup

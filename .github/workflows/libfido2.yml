@@ -14,24 +14,33 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_libfido2:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 15
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         libfido2_ref: [ 'main', '1.15.0' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - libfido2_ref: 'main'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -48,13 +57,14 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install test dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config libudev-dev \
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && \
+          apt-get install -y build-essential cmake pkg-config libudev-dev \
             zlib1g-dev libcbor-dev libpcsclite-dev pcscd
 
       - name: Checkout libfido2
@@ -67,6 +77,7 @@ jobs:
 
       - name: Build and install libfido2
         working-directory: libfido2_repo
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
@@ -78,13 +89,14 @@ jobs:
 
       - name: Run libfido2 tests
         working-directory: libfido2_repo/build
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
 
           # Run tests, excluding regress_dev which requires hardware/fails in CI
-          ctest --exclude-regex "regress_dev" 2>&1 | tee libfido2-test.log
+          ctest --exclude-regex "regress_dev" 2>&1 | tee libfido2-test.log || true
 
           # Check test results directly in YAML
           if grep -q "100% tests passed" libfido2-test.log; then

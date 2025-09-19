@@ -15,13 +15,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_tcpdump:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 15
     strategy:
@@ -29,10 +35,13 @@ jobs:
         tcpdump_ref: [ 'master', 'tcpdump-4.99.3' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - tcpdump_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -49,13 +58,14 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install test dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential flex bison autoconf libtool
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && \
+          apt-get install -y build-essential flex bison autoconf libtool
 
       - name: Checkout libpcap
         uses: actions/checkout@v4
@@ -80,7 +90,9 @@ jobs:
 
       - name: Build and install tcpdump
         working-directory: tcpdump_repo
+        shell: bash
         run: |
+          source $GITHUB_WORKSPACE/scripts/env-setup
           if [ -f ./autogen.sh ]; then
             ./autogen.sh
           elif [ ! -f ./configure ]; then
@@ -93,6 +105,7 @@ jobs:
 
       - name: Run tcpdump tests
         working-directory: tcpdump_repo
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup

@@ -14,25 +14,39 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_tpm2_tss:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 30
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         tpm2_tss_ref: [ 'master', '4.1.3']
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         exclude:
           - tpm2_tss_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
+      - name: Install sudo
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -47,7 +61,7 @@ jobs:
             openssl-install/lib64
             openssl-install/include
             openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       # Replace system openssl with our version
@@ -58,6 +72,7 @@ jobs:
           sudo ln -s $GITHUB_WORKSPACE/openssl-install/bin/openssl ${OPENSSL_SYSTEM}
       - name: Install test dependencies
         run: |
+          export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y pkg-config libcunit1-dev autoconf-archive \
             gettext libcmocka-dev build-essential autoconf automake libtool \
@@ -85,8 +100,10 @@ jobs:
         if: ${{ matrix.tpm2_tss_ref }} == '4.1.3'
         run: |
           perl -pi -e 's|(#include <cmocka\.h>)|#include <stdint.h>\n$1|' ./test/unit/*.c
+
       - name: Build and install tpm2-tss
         working-directory: tpm2_tss_repo
+        shell: bash
         run: |
           source $GITHUB_WORKSPACE/scripts/env-setup
           ./bootstrap
@@ -94,8 +111,10 @@ jobs:
             --enable-unit --includedir=$GITHUB_WORKSPACE/openssl-install/include
           make -j$(nproc)
           make install
+
       - name: Run tpm2-tss tests
         working-directory: tpm2_tss_repo
+        shell: bash
         run: |
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}

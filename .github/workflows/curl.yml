@@ -18,13 +18,19 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
 
   test_curl:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
@@ -33,10 +39,13 @@ jobs:
         curl_ref: [ 'master', 'curl-8_4_0', 'curl-7_88_1' ]
         wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
         openssl_ref: [ 'openssl-3.5.0' ]
+        replace_default: [ false, true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         exclude:
           - curl_ref: 'master'
             force_fail: 'WOLFPROV_FORCE_FAIL=1'
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -54,13 +63,26 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install nghttp2 libpsl5 libpsl-dev python3-impacket
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y build-essential autoconf automake libtool \
+              pkg-config nghttp2 libpsl5 libpsl-dev python3-impacket 
+
+      - name: Set up environment for curl build
+        shell: bash
+        run: |
+          # Set up the environment for wolfProvider
+          source $GITHUB_WORKSPACE/scripts/env-setup
+          echo "OPENSSL_LIB_PATH=$OPENSSL_LIB_PATH" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"   >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"   >> $GITHUB_ENV
+          echo "CPPFLAGS=$CPPFLAGS" >> $GITHUB_ENV
+          echo "LDFLAGS=$LDFLAGS" >> $GITHUB_ENV
 
       - name: Build curl
         uses: wolfSSL/actions-build-autotools-project@v1
@@ -68,7 +90,7 @@ jobs:
           repository: curl/curl
           path: curl
           ref: ${{ matrix.curl_ref }}
-          configure: --with-openssl
+          configure: --with-openssl=$GITHUB_WORKSPACE/openssl-install/
           check: false
 
       - name: Generate certificates for curl master force-fail tests
@@ -79,8 +101,10 @@ jobs:
             make test-ca.cacert
             cd ../..
           fi
+
       - name: Test curl with wolfProvider
         working-directory: curl
+        shell: bash
         run: |
           # Set up the environment for wolfProvider
           source $GITHUB_WORKSPACE/scripts/env-setup
@@ -88,7 +112,6 @@ jobs:
           export CURL_REF=${{ matrix.curl_ref }}
 
           # Run tests and save output to test.log
-          make -j$(nproc) test-ci 2>&1 | tee curl-test.log
-          # Capture the test result using PIPESTATUS (Bash only)
-          TEST_RESULT=${PIPESTATUS[0]}
+          # Don't use pipe status since it will exit on the first error when pipefail is set
+          { make -j$(nproc) test-ci 2>&1 | tee curl-test.log; TEST_RESULT=${PIPESTATUS[0]}; } || true
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl

@@ -18,6 +18,7 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default || false }}
     strategy:
       matrix:
         wolfssl_ref: [ 
@@ -32,6 +33,7 @@ jobs:
           'openssl-3.2.5',
           'openssl-3.1.8',
           'openssl-3.0.17']
+        replace_default: [ false, true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         debug: ['WOLFPROV_DEBUG=1', '']
 
@@ -54,8 +56,12 @@ jobs:
           'openssl-3.2.5',
           'openssl-3.1.8',
           'openssl-3.0.17']
+        replace_default: [ false, true ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         debug: ['WOLFPROV_DEBUG=1', '']
+        exclude:
+          - wolfssl_ref: 'master'
+            replace_default: true
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -76,14 +82,14 @@ jobs:
             openssl-install/include
             openssl-install/bin
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+          key: wolfprov${{ matrix.replace_default && '-replace-default' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
           # Normally we would fail on cache miss, but we rebuild below 
           # for the DEBUG build.
           fail-on-cache-miss: false
 
       - name: Build and test wolfProvider
         # Only run the test for a cache miss. On hit, we've already run the test.
-        if: steps.wolfprov-cache-restore.cache-hit != 'true'
+        if: steps.wolfprov-cache-restore.outputs.cache-hit != 'true'
         run: |
           ${{ matrix.debug }} \
             OPENSSL_TAG=${{ matrix.openssl_ref }} \

@@ -67,7 +67,7 @@ fi
 export OPENSSL_CONF="${OPENSSL_CONF:=$DEFAULT_PROVIDER_CONF}"
 
 export OPENSSL_MODULES="${OPENSSL_MODULES:=$WOLFPROV_LIB_PATH}"
-export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig:$REPO_ROOT/libdefault-stub-install/lib}"
+export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
 
 # Other variables used by test scripts
 export WOLFPROV_PATH="${WOLFPROV_LIB_PATH}"
