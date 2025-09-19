@@ -81,9 +81,6 @@ jobs:
 
     - name: Test OpenSSL provider functionality with default replace
       run: |
-        PROVIDER_CONF="/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
-        PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
-
         # Test with wolfProvider enabled (default replace)
         echo "Testing with wolfProvider enabled (default replace):"
         if [ -f $PROVIDER_CONF ]; then
@@ -107,42 +104,13 @@ jobs:
         # Test that wolfProvider is the default provider
         echo "Testing that wolfProvider is the default provider:"
         echo "Testing RSA key generation with wolfProvider as default:"
-        openssl genpkey -algorithm RSA -out /tmp/test_rsa_key.pem -pkcs8 -pass pass:testpass
+        openssl genpkey -algorithm RSA -out /tmp/test_rsa_key.pem -pass pass:testpass
         if [ $? -eq 0 ]; then
           echo "SUCCESS: RSA key generation works with wolfProvider as default"
         else
           echo "ERROR: RSA key generation failed with wolfProvider as default"
           exit 1
         fi
-
-        # Temporarily disable wolfProvider to test default provider
-        echo "Temporarily disabling wolfProvider for comparison testing:"
-        if [ -f $PROVIDER_CONF ]; then
-          mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
-          echo "   - Moved $PROVIDER_CONF to $PROVIDER_CONF_BACKUP"
-        fi
-        
-        echo "Verifying Default Provider is Active:"
-        openssl list -providers
-        
-        # Test that default provider works
-        echo "Testing RSA key generation with default provider:"
-        openssl genpkey -algorithm RSA -out /tmp/test_rsa_key_default.pem -pkcs8 -pass pass:testpass
-        if [ $? -eq 0 ]; then
-          echo "SUCCESS: RSA key generation works with default provider"
-        else
-          echo "ERROR: RSA key generation failed with default provider"
-        fi
-        
-        # Restore wolfProvider configuration
-        echo "Restoring wolfProvider configuration:"
-        if [ -f $PROVIDER_CONF_BACKUP ]; then
-          mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
-          echo "   - Restored $PROVIDER_CONF from $PROVIDER_CONF_BACKUP"
-        fi
-        
-        echo "Final verification - wolfProvider restored:"
-        openssl list -providers
 
     - name: Set up SSH server for testing
       run: |
