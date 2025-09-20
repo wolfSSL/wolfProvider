@@ -1,3 +1,3 @@
-usr/lib/*/ossl-modules/libwolfprov.so*
+usr/lib/*/ossl-modules/libwolfprov.so.0.0.0
 usr/lib/ssl/openssl.cnf.d
 usr/lib/ssl/openssl.cnf.d/wolfprovider.conf

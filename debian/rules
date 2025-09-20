@@ -71,7 +71,7 @@ override_dh_auto_install:
 
 	# Install wolfProvider library
 	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
-	install -m755 ./.libs/libwolfprov.so* \
+	install -m755 ./.libs/libwolfprov.so.0.0.0 \
 		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
 
 	# Install wolfProvider headers

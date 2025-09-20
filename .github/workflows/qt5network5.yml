@@ -1,7 +1,7 @@
 name: qtbase Network Tests
 on:
   push:
-    branches: [ 'master', 'main', 'release/**', 'qt5network5' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -15,48 +15,73 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_qtbase_network:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
-        qt_ref: [ 'dev', 'v5.15.8-lts-lgpl' ]
+        qt_ref: [ 'v5.15.8-lts-lgpl' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - qt_ref: 'dev'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
+      - name: Install Qt dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential pkg-config dpkg-dev \
+            python3 perl libpcre2-dev zlib1g-dev cmake ninja-build \
+            bison flex libpng-dev libjpeg-dev git ca-certificates
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
 
-      - name: Install Qt dependencies
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config \
-            python3 perl libpcre2-dev zlib1g-dev cmake ninja-build
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Checkout OSP
         uses: actions/checkout@v4
@@ -64,7 +89,7 @@ jobs:
           repository: wolfssl/osp
           path: osp
           fetch-depth: 1
-      
+
       - name: Checkout Qt
         uses: actions/checkout@v4
         with:
@@ -76,9 +101,6 @@ jobs:
       - name: Configure Qt
         working-directory: qt5_repo
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
-          
           # Configure Qt with GUI support to avoid test dependency issues
           # Build with GUI support but skip examples and DBus
           ./configure -opensource -confirm-license -developer-build \
@@ -91,39 +113,39 @@ jobs:
         run: |
           # Apply patch from OSP repo
           patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/qtbase/qtbase-v6.10-wolfprov.patch
-         
+
           # Build the OpenSSL TLS backend plugin first
           ninja QTlsBackendOpenSSLPlugin
-          
+
           # Build only the SSL test and its dependencies
           cmake --build . --target tst_qsslsocket --parallel $(nproc)
 
           #disable tests that both openssl and wolfprovider fail
           cp $GITHUB_WORKSPACE/.github/scripts/qtbase/BLACKLIST tests/auto/network/ssl/qsslsocket/BLACKLIST
-      
+
       - name: Build Qt (v5.15.8 - qmake)
         if: matrix.qt_ref != 'dev'
         working-directory: qt5_repo
         run: |
           # Force C++14 to avoid C++17 compatibility issues
           echo 'QMAKE_CXXFLAGS += -std=c++14' >> mkspecs/linux-g++/qmake.conf
-          
+
           make -k -j$(nproc)
 
       - name: Add test server to hosts
         run: |
-          sudo sh -c 'echo "127.0.0.1 qt-test-server.qt-test-net" >> /etc/hosts'
+          sh -c 'echo "127.0.0.1 qt-test-server.qt-test-net" >> /etc/hosts'
 
       - name: Run QSSLSocket test
         working-directory: qt5_repo
+        shell: bash
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
+          set +e
           export ${{ matrix.force_fail }}
-          
+
           # Run the QSSLSocket test, the make check takes too long
           QTEST_ENVIRONMENT=ci ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
-          
+
           # Check test results based on qt_ref
           if [[ "${{ matrix.qt_ref }}" == "dev" ]]; then
             if grep -q "0 failed" qsslsocket-test.log; then
@@ -136,6 +158,7 @@ jobs:
             #No easy way to disable tests in v5.15.8. Both openssl and wolfprovider should always pass 521 tests on this version though
             if grep -q "521 passed" qsslsocket-test.log; then
               TEST_RESULT=0
+              echo "SUCCESS: Found 521 passed tests as expected"
             else
               TEST_RESULT=1
               echo "Tests failed unexpectedly for 'v5.15.8-lts-lgpl' branch."

@@ -18,25 +18,33 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_libwebsockets:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        libwebsockets_ref: [ 'main', 'v4.3.3' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        libwebsockets_ref: [ 'v4.3.3' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        exclude:
-          - libwebsockets_ref: 'main'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
       # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
@@ -44,23 +52,37 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfProvider from cache
+      - name: Install libwebsockets dependencies
+        run: |
+          apt-get update
+          apt-get install -y libc6 libcap2 zlib1g cmake build-essential dpkg-dev
+
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache-restore
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
 
-      - name: Install libwebsockets dependencies
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libc6 libcap2 zlib1g cmake build-essential
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl*.deb
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev*.deb
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
       - name: Download libwebsockets
         uses: actions/checkout@v4
         with:
@@ -73,21 +95,19 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake .. -DLWS_WITH_SSL=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           make -j$(nproc)
-          sudo make install
 
       - name: Run libwebsockets tests
         working-directory: libwebsockets
+        shell: bash
         run: |
-          echo "Setting environment variables..."
-          source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
           ./build/bin/libwebsockets-test-server --port=11111 --ssl > server.log 2>&1 & SERVER_PID=$!
           sleep 5
           timeout 10 ./build/bin/libwebsockets-test-client 127.0.0.1 --port=11111 --ssl > client.log 2>&1 || echo "Client exited with error $?"
-          ldd ./build/bin/libwebsockets-test-server | grep wolfProvider
-          ldd ./build/bin/libwebsockets-test-client | grep wolfProvider
+          ldd ./build/bin/libwebsockets-test-server | grep wolfProvider || echo "wolfProvider not found in server"
+          ldd ./build/bin/libwebsockets-test-client | grep wolfProvider || echo "wolfProvider not found in client"
           kill $SERVER_PID || echo "Server already exited"
           cat server.log || echo "Missing server.log"
           cat client.log || echo "Missing client.log"

@@ -9,8 +9,7 @@ Build-Depends:
  devscripts,
  dh-exec,
  git,
- pkgconf,
- libwolfssl-dev
+ pkgconf
 
 Package: libwolfprov
 Architecture: any

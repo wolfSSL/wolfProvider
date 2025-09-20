@@ -26,7 +26,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-general.sh
 
 OPENSSL_GIT_URL="https://github.com/openssl/openssl.git"
-OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.5.0"}
+OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.5.2"}
 OPENSSL_SOURCE_DIR=${SCRIPT_DIR}/../openssl-source
 OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
@@ -232,18 +232,24 @@ install_openssl_deb() {
     fi
     printf "Done.\n"
 
-    # Manually set up the install directory rather than running 'make install'
-    # so that we don't modify the system OpenSSL installation
+    printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
+    make -j$NUMCPU install DESTDIR=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
+    if [ $? != 0 ]; then
+        printf "ERROR.\n"
+        rm -rf ${OPENSSL_INSTALL_DIR}
+        do_cleanup
+        exit 1
+    fi
+    printf "Done.\n"
+
+    # We use a different install path for Debian, which places the outputs in $OPENSSL_INSTALL_DIR/usr/lib/${DEB_HOST_MULTIARCH}
+    # rather than $OPENSSL_INSTALL_DIR. So manually copy the outputs to the correct path.
     printf "\tCopying outputs to ${OPENSSL_INSTALL_DIR} for OpenSSL ${OPENSSL_TAG} ... "
-    mkdir -p ${OPENSSL_INSTALL_DIR}/bin
-    mkdir -p ${OPENSSL_INSTALL_DIR}/lib
-    mkdir -p ${OPENSSL_INSTALL_DIR}/include/openssl
-    mkdir -p ${OPENSSL_INSTALL_DIR}/lib/pkgconfig
-    cp -r apps/openssl ${OPENSSL_INSTALL_DIR}/bin/openssl
-    cp -r libcrypto.so* libcrypto.a ${OPENSSL_INSTALL_DIR}/lib/
-    cp -r libssl.so* libssl.a ${OPENSSL_INSTALL_DIR}/lib/
-    cp -r include/openssl/* ${OPENSSL_INSTALL_DIR}/include/openssl/
-    cp -r *.pc ${OPENSSL_INSTALL_DIR}/lib/pkgconfig/
+    mkdir -p $OPENSSL_INSTALL_DIR/lib
+    cp -r $OPENSSL_INSTALL_DIR/usr/lib/${DEB_HOST_MULTIARCH}/* $OPENSSL_INSTALL_DIR/lib
+    cp -r $OPENSSL_INSTALL_DIR/usr/bin $OPENSSL_INSTALL_DIR/bin
+    cp -r $OPENSSL_INSTALL_DIR/usr/include $OPENSSL_INSTALL_DIR/include
+    cp -r $OPENSSL_INSTALL_DIR/usr/lib/pkgconfig $OPENSSL_INSTALL_DIR/lib/pkgconfig
     printf "Done.\n"
 
     popd &> /dev/null
@@ -304,7 +310,11 @@ install_openssl() {
 }
 
 init_openssl() {
-    install_openssl
+    if [ $WOLFPROV_BUILD_DEBIAN -eq 1 ]; then
+        install_openssl_deb
+    else
+        install_openssl
+    fi
     printf "\tOpenSSL ${OPENSSL_TAG} installed in: ${OPENSSL_INSTALL_DIR}\n"
 
     if [ -z $LD_LIBRARY_PATH ]; then

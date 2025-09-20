@@ -18,45 +18,82 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_cjose:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
+    # Run inside Debian Bookworm to match packaging environment
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       matrix:
-        cjose_ref: [ 'master', 'v0.6.2.1' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        # Dont test osp master since it might be unstable
+        cjose_ref: [ 'v0.6.2.1' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
+      - name: Install cjose dependencies
+        run: |
+          apt-get update
+          apt-get install -y git build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
-        id: wolfprov-cache-restore
+        id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
 
-      - name: Install cjose dependencies
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          sudo apt-get install -y libjansson-dev check
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+
+
+      - name: Check wolfProvider is installed
+        run: |
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
       - name: Download cjose
         uses: actions/checkout@v4
@@ -69,8 +106,7 @@ jobs:
       - name: Build cjose
         working-directory: cjose
         run: |
-          # Configure with OpenSSL
-          ./configure CFLAGS="-Wno-error=deprecated-declarations" --with-openssl=$GITHUB_WORKSPACE/openssl-install
+          ./configure CFLAGS="-Wno-error=deprecated-declarations"
 
           # Build cjose
           make
@@ -78,13 +114,13 @@ jobs:
       - name: Run cjose tests
         working-directory: cjose
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
+          # wolfProvider is already loaded as the default provider
+          echo "Current OpenSSL providers:"
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
           export ${{ matrix.force_fail }}
 
-          # Run tests
-          make test || true
-
-          # Capture result
-          TEST_RESULT=$(tail -1 ./test/check_cjose.log | grep PASS; echo $?)
+          make test 2>&1 | tee cjose-test.log
+          TEST_RESULT=$(grep -q "FAIL: check_cjose" cjose-test.log && echo "1" || echo "0")
+          echo "TEST_RESULT = $TEST_RESULT"
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} cjose
