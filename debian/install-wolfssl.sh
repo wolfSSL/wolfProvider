@@ -117,9 +117,9 @@ AC_CONFIG_FILES([debian/rules],[chmod +x debian/rules])' configure.ac
         fi
 
         # Patch debian/rules.in to disable dh_strip
-        echo "Patching debian/rules.in to disable dh_strip..."
-        sed -i 's/^[[:space:]]*dh_strip.*/:/' debian/rules.in
-        echo "debian/rules.in patched successfully"
+        # echo "Patching debian/rules.in to disable dh_strip..."
+        # sed -i 's/^[[:space:]]*dh_strip.*/:/' debian/rules.in
+        # echo "debian/rules.in patched successfully"
         
     else
         echo "debian/rules.in found, using existing debian packaging"
