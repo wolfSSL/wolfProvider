@@ -117,19 +117,19 @@ jobs:
 
       # # TODO: roll this step into utils-wolfssl.sh
       # # TODO: specify tag below
-      # - name: Build wolfSSL packages and install
+      - name: Build wolfSSL packages and install
       #   # if: steps.wolfssl_cache.outputs.cache-hit != 'true'
-      #   run: | 
-      #     # $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag ${{ inputs.wolfssl_ref }} ${{ env.WOLFSSL_PACKAGES_PATH }}
-      #     $GITHUB_WORKSPACE/debian/install-wolfssl.sh ${{ env.WOLFSSL_PACKAGES_PATH }}
+        run: |
+          $GITHUB_WORKSPACE/debian/install-wolfssl.sh ${{ env.WOLFSSL_PACKAGES_PATH }}
+#   
 
       # Unpack and install wolfSSL packages
-      - name: Unpack and install wolfSSL packages
-        run: |
-          mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
-          tar -xzf .github/packages/debian-wolfssl.tar.gz -C ${{ env.WOLFSSL_PACKAGES_PATH }}
-          mv ${{ env.WOLFSSL_PACKAGES_PATH }}/debian-packages/* ${{ env.WOLFSSL_PACKAGES_PATH }}
-          apt install -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+      #- name: Unpack and install wolfSSL packages
+      #  run: |
+      #    mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
+      #    tar -xzf .github/packages/debian-wolfssl.tar.gz -C ${{ env.WOLFSSL_PACKAGES_PATH }}
+      #    mv ${{ env.WOLFSSL_PACKAGES_PATH }}/debian-packages/* ${{ env.WOLFSSL_PACKAGES_PATH }}
+      #    apt install -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
 
       # Check for cached OpenSSL packages
       - name: Checking OpenSSL packages in cache
