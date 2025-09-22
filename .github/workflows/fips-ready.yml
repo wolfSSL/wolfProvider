@@ -1,0 +1,61 @@
+name: FIPS Ready Bundle Test
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  fips_ready_test:
+    name: FIPS Ready Bundle Test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_bundle_ref: [ '5.8.2' ]
+        openssl_ref: [ 'openssl-3.5.0' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download FIPS Ready Bundle
+        run: |
+          # Download FIPS ready bundle from wolfSSL website
+          BUNDLE_URL="https://www.wolfssl.com/wolfssl-${{matrix.wolfssl_bundle_ref}}-gplv3-fips-ready.zip"
+          
+          wget -O wolfssl-fips-ready.zip "$BUNDLE_URL"
+          unzip wolfssl-fips-ready.zip
+
+          # Find the extracted directory (build script requires directory, not zip)
+          BUNDLE_DIR=$(find . -maxdepth 1 -type d -name "*fips-ready*" | head -n 1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            echo "ERROR: Could not find FIPS ready bundle directory after extraction"
+            ls -la
+            exit 1
+          fi
+
+          echo "FIPS_BUNDLE_PATH=$(pwd)/$BUNDLE_DIR" >> $GITHUB_ENV
+          echo "Found FIPS bundle directory at: $BUNDLE_DIR"
+
+      - name: Build wolfProvider with FIPS Ready Bundle
+        run: |
+          ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
+          --fips-version=ready --wolfssl-ver=v${{matrix.wolfssl_bundle_ref}}-stable
+
+      - name: Run FIPS Command Tests
+        run: |
+          # Run cmd tests to verify functionality
+          export WOLFSSL_ISFIPS=1
+          export ${{matrix.force_fail}}
+
+          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
