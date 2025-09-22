@@ -54,9 +54,10 @@ install_wolfssl_from_git() {
         echo "Cloning wolfSSL repository..."
         if [ -n "$git_tag" ]; then
             echo "Cloning specific tag/branch: $git_tag"
-            git clone https://github.com/wolfSSL/wolfssl
+            git clone https://github.com/LinuxJedi/wolfssl
             cd wolfssl
-            git checkout "$git_tag"
+            #git checkout "$git_tag"
+            git checkout fix-deb-builds
         else
             echo "Cloning master branch with depth 1"
             git clone https://github.com/wolfSSL/wolfssl --depth 1
