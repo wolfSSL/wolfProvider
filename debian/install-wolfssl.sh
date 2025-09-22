@@ -60,9 +60,9 @@ install_wolfssl_from_git() {
             git checkout fix-deb-builds
         else
             echo "Cloning master branch with depth 1"
-            git clone https://github.com/LinuxJedi/wolfssl
+            git clone https://github.com/wolfssl/wolfssl
             cd wolfssl
-            git checkout fix-deb-builds
+            git checkout v5.8.2-stable
         fi
     fi
 
