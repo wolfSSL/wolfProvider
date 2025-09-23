@@ -85,8 +85,8 @@ jobs:
       - name: Install libeac3 dependencies
         run: |
           apt-get update
-          apt-get install -y autoconf automake libtool libc6 help2man gengetopt pkg-config m4 patch\
-             autoconf automake libtool pkg-config build-essential
+          apt-get install -y autoconf automake libtool libc6 help2man gengetopt \
+            pkg-config m4 patch autoconf automake libtool pkg-config build-essential
 
       - name: Checkout openpace
         uses: actions/checkout@v4
@@ -117,6 +117,8 @@ jobs:
       - name: Run libeac3 tests
         working-directory: openpace
         run: |
+          # Verify wolfProvider is properly installed
+          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
           ./src/eactest > libeac3-test.log || echo "eactest failed with exit code $?"
           cat libeac3-test.log

@@ -126,18 +126,13 @@ jobs:
           python3 -m venv myenv
           source myenv/bin/activate
 
-      - name: Apply patch to disable pkcs12 test
-        if : ${{ matrix.stunnel_ref == 'master' }}
-        working-directory: ./stunnel
-        run: |
-          # Bypass the Certp12Test test
-          perl -pe 's/^( \s*)stunnel = Certp12Test\(cfg, logger\)/$1return\n$1stunnel = Certp12Test(cfg, logger)/' -i tests/plugins/p07_p12cert.py
-
       - name: Verify stunnel with wolfProvider
         working-directory: ./stunnel
         shell: bash
         run: |
           set +o pipefail # ignore errors from make check
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # enter venv

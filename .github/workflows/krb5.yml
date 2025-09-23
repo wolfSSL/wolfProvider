@@ -112,6 +112,9 @@ jobs:
         working-directory: krb5
         shell: bash
         run: |
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
+
           set +o pipefail # ignore errors from make check
           # Build KRB5
           cd src
@@ -132,4 +135,3 @@ jobs:
           make check 2>&1 | tee krb5-test.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} krb5
-

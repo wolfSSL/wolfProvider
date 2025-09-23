@@ -97,7 +97,9 @@ jobs:
       - name: Build nginx
         working-directory: nginx
         run: |
-          ./auto/configure --with-http_ssl_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module --with-mail --with-mail_ssl_module
+          ./auto/configure --with-http_ssl_module --with-stream \
+            --with-stream_ssl_module --with-stream_ssl_preread_module \
+            --with-http_v2_module --with-mail --with-mail_ssl_module
           make -j
 
       - name: Checkout nginx-tests
@@ -110,6 +112,8 @@ jobs:
       - name: Run nginx-tests with wolfProvider
         working-directory: nginx-tests
         run: |
+          # Verify wolfProvider is properly installed
+          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Run tests and save result

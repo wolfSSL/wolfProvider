@@ -1,0 +1,103 @@
+name: Git SSH Default Replace Tests
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**', ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: 'openssl-3.5.0'
+      replace_default: true
+    strategy:
+      matrix:
+        wolfssl_ref: ['master', 'v5.8.2-stable']
+
+  git-ssh-default-replace-test:
+    runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: ['master', 'v5.8.2-stable']
+        key_type: ['rsa', 'ecdsa', 'ed25519']
+        iterations: [10] # Total of 50 runs
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+
+    steps:
+    - name: Checkout wolfProvider
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Checking OpenSSL/wolfProvider packages in cache
+      uses: actions/cache/restore@v4
+      id: wolfprov-cache
+      with:
+        path: |
+          ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ${{ env.OPENSSL_PACKAGES_PATH }}
+          ${{ env.WOLFPROV_PACKAGES_PATH }}
+        key: openssl-wolfprov-debian-packages-${{ github.sha }}-replace-default
+        fail-on-cache-miss: true
+
+    - name: Install wolfSSL/OpenSSL/wolfprov packages
+      run: |
+        printf "Installing OpenSSL/wolfProvider packages:\n"
+        ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+        ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+        ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+        apt install --reinstall -y \
+          ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+        apt install --reinstall -y \
+          ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+          ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+          ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+        apt install --reinstall -y \
+          ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+    - name: Set up environment
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y openssh-client openssh-server expect xxd git \
+          net-tools git-all
+
+    - name: Run git + replace default + ssh test
+      shell: bash
+      run: |
+        # Verify wolfProvider is properly installed
+        source scripts/verify-debian.sh
+
+        echo "=== Running Git + replace default + ssh Test ==="
+        echo "Using the local test script for consistent testing"
+        # Run the test with the matrix parameters
+        echo "Testing with key type: ${{ matrix.key_type }}"
+        echo "Running ${{ matrix.iterations }} iterations"
+
+        # Run the scripts test
+        ./scripts/test-git-ssh-dr.sh \
+          --key-types "${{ matrix.key_type }}" \
+          --iterations "${{ matrix.iterations }}" \
+          --verbose
+
+        echo "=== Test completed for ${{ matrix.key_type }} ==="

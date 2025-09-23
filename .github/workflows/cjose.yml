@@ -88,13 +88,6 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
-
-
-      - name: Check wolfProvider is installed
-        run: |
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
-
       - name: Download cjose
         uses: actions/checkout@v4
         with:
@@ -114,10 +107,8 @@ jobs:
       - name: Run cjose tests
         working-directory: cjose
         run: |
-          # wolfProvider is already loaded as the default provider
-          echo "Current OpenSSL providers:"
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          # Verify wolfProvider is properly installed
+          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           make test 2>&1 | tee cjose-test.log

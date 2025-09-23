@@ -97,6 +97,9 @@ jobs:
       - name: Confirm built with OpenSSL and test with wolfProvider
         working-directory: ipmitool
         run: |
+          # Verify wolfProvider is properly installed
+          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
+
           # Verify ipmitool was built and linked correctly with OpenSSL
           ldd src/ipmitool | grep -E '(libssl|libcrypto)'
           ldd src/ipmievd | grep -E '(libssl|libcrypto)'

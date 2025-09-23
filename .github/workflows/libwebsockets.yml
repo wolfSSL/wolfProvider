@@ -52,11 +52,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install libwebsockets dependencies
-        run: |
-          apt-get update
-          apt-get install -y libc6 libcap2 zlib1g cmake build-essential dpkg-dev
-
       - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache-restore
@@ -74,14 +69,22 @@ jobs:
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
           apt install --reinstall -y \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl*.deb
+
           apt install --reinstall -y \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev*.deb
+
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+            
+      - name: Install libwebsockets dependencies
+        run: |
+          apt-get update
+          apt-get install -y libc6 libcap2 zlib1g cmake build-essential dpkg-dev
 
       - name: Download libwebsockets
         uses: actions/checkout@v4
@@ -102,7 +105,10 @@ jobs:
         working-directory: libwebsockets
         shell: bash
         run: |
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
+
           ./build/bin/libwebsockets-test-server --port=11111 --ssl > server.log 2>&1 & SERVER_PID=$!
           sleep 5
           timeout 10 ./build/bin/libwebsockets-test-client 127.0.0.1 --port=11111 --ssl > client.log 2>&1 || echo "Client exited with error $?"

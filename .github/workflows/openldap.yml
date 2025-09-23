@@ -112,10 +112,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # wolfProvider is already loaded as the default provider
-          echo "Current OpenSSL providers:"
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
 
           # Generate configure script
           rm -f aclocal.m4

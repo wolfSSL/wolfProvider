@@ -47,14 +47,6 @@ jobs:
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-      - name: Install xmlsec dependencies
-        run: |
-          apt-get update
-          apt-get install -y automake autoconf libtool libtool-bin \
-              libltdl-dev libltdl7 libxml2-dev patch build-essential \
-              pkg-config libxml2-dev
-
-      # Checkout the source so we can run the check-workflow-result script
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -88,6 +80,13 @@ jobs:
 
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Install xmlsec dependencies
+        run: |
+          apt-get update
+          apt-get install -y automake autoconf libtool libtool-bin \
+              libltdl-dev libltdl7 libxml2-dev patch build-essential \
+              pkg-config libxml2-dev
 
       - name: Checkout OSP
         uses: actions/checkout@v4
@@ -123,6 +122,8 @@ jobs:
         shell: bash
         run: |
           set +o pipefail # ignore errors from make check
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
           make check-keys | tee xmlsec-keys.log
           make check-enc | tee xmlsec-enc.log

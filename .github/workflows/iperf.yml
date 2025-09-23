@@ -83,7 +83,8 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev
+          apt-get install -y build-essential autoconf libtool pkg-config clang \
+            libc++-dev
 
       - name: Checkout iperf
         uses: actions/checkout@v4
@@ -117,6 +118,8 @@ jobs:
       - name: Run tests
         working-directory: iperf
         run: |
+          # Verify wolfProvider is properly installed
+          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Test variables for iperf

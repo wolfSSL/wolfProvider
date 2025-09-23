@@ -3,9 +3,9 @@ name: Asan Test
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ "*" ]
+    branches: [ '*' ]
   pull_request:
-    branches: [ "*" ]
+    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

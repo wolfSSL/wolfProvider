@@ -94,12 +94,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y build-essential autoconf automake libtool \
-            pkg-config patch zlib1g-dev
-
-      - name: Install test deps
-        run: |
-          apt-get update
-          apt-get install -y kmod util-linux cryptsetup-bin
+            pkg-config patch zlib1g-dev kmod util-linux cryptsetup-bin
 
       - name: Ensure kernel modules are present
         run: |
@@ -135,6 +130,8 @@ jobs:
         shell: bash
         run: |
           set +o pipefail # ignore errors from make check
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Enable unsafe permissions for testing

@@ -49,17 +49,6 @@ jobs:
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     
     steps:
-      - name: Set up environment
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y git sudo build-essential autoconf automake \
-            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
-            liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
-            linux-libc-dev man2html libcmocka-dev python3-docutils \
-            iproute2 libtool automake autoconf libnl-genl-3-dev \
-            libnl-genl-3-200
-
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -93,6 +82,17 @@ jobs:
 
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Set up environment
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y git sudo build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
+            liblzo2-dev libpam0g-dev liblz4-dev libcap-ng-dev \
+            linux-libc-dev man2html libcmocka-dev python3-docutils \
+            iproute2 libtool automake autoconf libnl-genl-3-dev \
+            libnl-genl-3-200
 
       - name: Find ossl headers
         run: |
@@ -128,10 +128,8 @@ jobs:
         shell: bash
         run: |
           set +o pipefail # ignore errors from make check
-          # wolfProvider is already loaded as the default provider
-          echo "Current OpenSSL providers:"
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
           if [ -n "${{ matrix.force_fail }}" ]; then
             set +e

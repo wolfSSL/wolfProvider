@@ -113,6 +113,9 @@ jobs:
         working-directory: bind9
         shell: bash
         run: |
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
+
           set +o pipefail # ignore errors from make check
           autoreconf -ivf
           ./configure

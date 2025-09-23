@@ -104,5 +104,7 @@ jobs:
         run: |
           export ${{ matrix.force_fail }}
           export WOLFPROV_FORCE_FAIL_STR="${{ matrix.force_fail }}"
+          # Verify wolfProvider is properly installed
+          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
 
           cd sscep && $GITHUB_WORKSPACE/.github/scripts/test_sscep.sh

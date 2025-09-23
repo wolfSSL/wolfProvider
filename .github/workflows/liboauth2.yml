@@ -116,6 +116,8 @@ jobs:
         shell: bash
         run: |
           set +o pipefail # ignore errors from make check
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Build and run tests

@@ -107,6 +107,8 @@ jobs:
       - name: Run rsync tests
         working-directory: rsync_repo
         run: |
+          # Verify wolfProvider is properly installed
+          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Run rsync test suite including our SHA test

@@ -112,10 +112,8 @@ jobs:
         shell: bash
         run: |
           set +e
-          # wolfProvider is already loaded as the default provider
-          echo "Current OpenSSL providers:"
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           # The following test cases link directly to libcrypto.
           TEST_CASES="fuzz-dns-packet fuzz-etc-hosts fuzz-resource-record \
                       resolvectl systemd-resolved test-cryptolib \

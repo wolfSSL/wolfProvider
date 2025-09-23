@@ -103,6 +103,8 @@ jobs:
         shell: bash
         run: |
           set +o pipefail # ignore errors from ninja test
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Run tests and save output to test.log

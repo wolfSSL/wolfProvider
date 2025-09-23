@@ -41,9 +41,6 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
-        exclude:
-          - curl_ref: 'master'
-            force_fail: 'WOLFPROV_FORCE_FAIL=1'
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -110,6 +107,8 @@ jobs:
         working-directory: curl
         shell: bash
         run: |
+          # Verify wolfProvider is properly installed
+          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
           set +o pipefail # ignore errors from make check
           export ${{ matrix.force_fail }}
           export CURL_REF=${{ matrix.curl_ref }}
