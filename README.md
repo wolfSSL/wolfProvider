@@ -136,6 +136,23 @@ export LD_LIBRARY_PATH=/usr/local/ssl/lib
 make check
 ```
 
+## Building with FIPS
+
+To build and test with our prebuilt FIPS bundle, use the following command to build wolfProvider with FIPS enabled. You can refer to `.github/workflows/fips-ready.yml` for the workflow that does this.
+
+Go to our website to download the FIPS bundle. [here](https://www.wolfssl.com/download/) and select  wolfssl-5.8.2-gplv3-fips-ready.zip.
+
+or you can use wget to download the FIPS bundle like so:
+```
+wget -O wolfssl-fips-ready.zip https://www.wolfssl.com/wolfssl-5.8.2-gplv3-fips-ready.zip
+unzip wolfssl-fips-ready.zip
+```
+
+Then use the following command to build wolfProvider with FIPS enabled.
+```
+./scripts/build-wolfprovider.sh --fips-bundle="path/to/fips-bundle" --fips-version=ready --distclean
+```
+
 ## Testing
 
 ### Unit Tests
@@ -153,8 +170,6 @@ To run the command tests:
 To run the cipher suite testing:
 * `./scripts/test-wp-cs.sh`
 
-
 ## Debugging
 
 To enable wolfProvider debug logging, build with `--debug` which enables exit messages, error messages, and informational messages. If you want to filter logging a certain way or increase detail level, set `WOLFPROV_LOG_LEVEL_FILTER` and `WOLFPROV_LOG_COMPONENTS_FILTER` in `include/wolfprovider/wp_logging.h` as needed. See comments in that file for examples.
-
