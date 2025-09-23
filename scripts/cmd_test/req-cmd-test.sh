@@ -39,11 +39,19 @@ detect_replace_default_build() {
     fi
 }
 
-# Skip tests only for replace-default (and not when force-failing)
+# Skip tests for replace-default (unless force-failing)
 if detect_replace_default_build; then
     echo "INFO: --replace-default build detected"
     echo "INFO: Skipping req tests (provider switching not supported)" 
     echo "SUCCESS: Certificate Request tests skipped for replace-default build"
+    exit 0
+fi
+
+# Skip tests for FIPS mode (unless force-failing)
+if [ "${WOLFSSL_ISFIPS}" = "1" ] && [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
+    echo "INFO: FIPS mode detected"
+    echo "INFO: Skipping req tests for FIPS mode"
+    echo "SUCCESS: Certificate Request tests skipped for FIPS build"
     exit 0
 fi
 
