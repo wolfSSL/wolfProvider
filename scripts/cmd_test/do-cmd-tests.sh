@@ -84,8 +84,13 @@ echo -e "\n=== Running ECC Key Generation Test ==="
 "${REPO_ROOT}/scripts/cmd_test/ecc-cmd-test.sh"
 ECC_RESULT=$?
 
+# Run the Certificate Request test
+echo -e "\n=== Running Certificate Request Test ==="
+"${REPO_ROOT}/scripts/cmd_test/req-cmd-test.sh"
+REQ_RESULT=$?
+
 # Check results
-if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ] && [ $ECC_RESULT -eq 0 ]; then
+if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ] && [ $ECC_RESULT -eq 0 ] && [ $REQ_RESULT -eq 0 ]; then
     echo -e "\n=== All Command-Line Tests Passed ==="
     if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
         echo "Force fail mode was enabled"
@@ -97,6 +102,7 @@ if [ $HASH_RESULT -eq 0 ] && [ $AES_RESULT -eq 0 ] && [ $RSA_RESULT -eq 0 ] && [
     echo "AES Test Result: $AES_RESULT (0=success)"
     echo "RSA Test Result: $RSA_RESULT (0=success)"
     echo "ECC Test Result: $ECC_RESULT (0=success)"
+    echo "REQ Test Result: $REQ_RESULT (0=success)"
     exit 0
 else
     echo -e "\n=== Command-Line Tests Failed ==="
@@ -110,5 +116,6 @@ else
     echo "AES Test Result: $AES_RESULT (0=success)"
     echo "RSA Test Result: $RSA_RESULT (0=success)"
     echo "ECC Test Result: $ECC_RESULT (0=success)"
+    echo "REQ Test Result: $REQ_RESULT (0=success)"
     exit 1
 fi
