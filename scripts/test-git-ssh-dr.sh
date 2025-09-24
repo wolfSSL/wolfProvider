@@ -1,10 +1,25 @@
 #!/bin/bash
-
+#
+# Copyright (C) 2006-2024 wolfSSL Inc.
+#
+# This file is part of wolfProvider.
+#
+# wolfProvider is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# wolfProvider is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
+#
 # Local test script for wolfProvider git operations
 # This script tests git operations with wolfProvider
 # as the default replace provider
-
-set -e
 
 echo "=== wolfProvider Git Operations Local Test ==="
 echo "Testing git operations with wolfProvider default replace functionality"
@@ -163,9 +178,15 @@ test_git_operations() {
                             ls -la cloned-repo/
                             echo "Git status in cloned repo:"
                             cd cloned-repo
-                            git status || echo "Git status failed (this may be normal)"
+                            if ! git status 2>/dev/null; then
+                                echo "WARNING: Git status failed - potential wolfProvider interference"
+                                print_status "WARNING" "Git status failed in cloned repo"
+                            fi
                             echo "Git log in cloned repo:"
-                            git log --oneline | head -${MAX_LOG_LINES} || echo "Git log failed"
+                            if ! git log --oneline | head -${MAX_LOG_LINES} 2>/dev/null; then
+                                echo "WARNING: Git log failed - potential wolfProvider interference"
+                                print_status "WARNING" "Git log failed in cloned repo"
+                            fi
                             cd ..
                         else
                             print_status "FAILURE" "cloned-repo directory not found after successful clone"
