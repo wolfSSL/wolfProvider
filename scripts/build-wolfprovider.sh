@@ -10,6 +10,7 @@ show_help() {
   echo "  --clean                    Run make clean in OpenSSL, wolfSSL, and wolfProvider"
   echo "  --distclean                Remove source and install directories of OpenSSL, wolfSSL, and wolfProvider"
   echo "  --debug                    Builds OpenSSL, wolfSSL, and WolfProvider with debugging enabled. This is the same as setting WOLFPROV_DEBUG=1"
+  echo "  --debug-log=FILE           Force all wolfProvider debug output to specified log file instead of stderr/stdout (FILE = path to log file you want to use)"
   echo "  --debug-asn-template       Enable debug information for asn within wolfSSL"
   echo "  --disable-err-trace        No debug trace messages from library errors in wolfSSL"
   echo "  --openssl-ver=VER          Which version of OpenSSL to clone"
@@ -33,6 +34,7 @@ show_help() {
   echo "  WOLFPROV_CLEAN             If set to 1, run make clean in OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DISTCLEAN         If set to 1, remove the source and install directories of OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DEBUG             If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"
+  echo "  WOLFPROV_LOG_FILE          Path to log file for wolfProvider debug output (alternative to stderr)"
   echo "  WOLFPROV_QUICKTEST         If set to 1, disables some tests in the test suite to increase test speed"
   echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
@@ -56,6 +58,14 @@ for arg in "$@"; do
             ;;
         --debug)
             WOLFPROV_DEBUG=1
+            ;;
+        --debug-log=*)
+            IFS='=' read -r trash log_file <<< "$arg"
+            if [ -z "$log_file" ]; then
+                echo "No file path given for --debug-log"
+                args_wrong+="$arg, "
+            fi
+            WOLFPROV_LOG_FILE="$log_file"
             ;;
         --debug-asn-template)
             WOLFSSL_DEBUG_ASN_TEMPLATE=1
