@@ -118,7 +118,7 @@ jobs:
         shell: bash
         run: |
           # Verify wolfProvider is properly installed
-          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
+          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
           # Always continue on errors to ensure we show test results
           set +e

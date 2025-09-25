@@ -113,7 +113,7 @@ jobs:
         shell: bash
         run: |
           # Verify wolfProvider is properly installed
-          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
+          $GITHUB_WORKSPACE/scripts/verify-debian.sh
 
           set +o pipefail # ignore errors from make check
           # Build KRB5

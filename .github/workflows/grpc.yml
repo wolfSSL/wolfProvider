@@ -130,7 +130,7 @@ jobs:
         working-directory: ./grpc
         run: |
           # Verify wolfProvider is properly installed
-          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
+          $GITHUB_WORKSPACE/scripts/verify-debian.sh
 
           # Start the port server
           ./tools/run_tests/start_port_server.py

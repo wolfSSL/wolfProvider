@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
           # Verify wolfProvider is properly installed
-          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
+          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           set +o pipefail # ignore errors from make check
           export ${{ matrix.force_fail }}
           export CURL_REF=${{ matrix.curl_ref }}
