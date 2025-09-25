@@ -143,6 +143,6 @@ jobs:
           exit $X11VNC_TEST_STATUS
 
           # Verify wolfProvider is properly installed
-          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
+          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
 
           $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh

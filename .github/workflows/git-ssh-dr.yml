@@ -32,9 +32,10 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: ['master', 'v5.8.2-stable']
-        key_type: ['rsa', 'ecdsa', 'ed25519']
-        iterations: [10] # Total of 50 runs
+        wolfssl_ref: [ 'master', 'v5.8.2-stable' ]
+        key_type: [ 'rsa', 'ecdsa', 'ed25519', 'chacha20-poly1305' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        iterations: [ 10 ] # Total of 50 runs
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -86,7 +87,7 @@ jobs:
       shell: bash
       run: |
         # Verify wolfProvider is properly installed
-        source scripts/verify-debian.sh
+        ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
 
         echo "=== Running Git + replace default + ssh Test ==="
         echo "Using the local test script for consistent testing"
@@ -95,7 +96,7 @@ jobs:
         echo "Running ${{ matrix.iterations }} iterations"
 
         # Run the scripts test
-        ./scripts/test-git-ssh-dr.sh \
+        ${{ matrix.force_fail }} ./scripts/test-git-ssh-dr.sh \
           --key-types "${{ matrix.key_type }}" \
           --iterations "${{ matrix.iterations }}" \
           --verbose

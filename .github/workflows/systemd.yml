@@ -113,7 +113,7 @@ jobs:
         run: |
           set +e
           # Verify wolfProvider is properly installed
-          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
+          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
           # The following test cases link directly to libcrypto.
           TEST_CASES="fuzz-dns-packet fuzz-etc-hosts fuzz-resource-record \
                       resolvectl systemd-resolved test-cryptolib \
