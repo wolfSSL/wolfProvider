@@ -33,5 +33,6 @@ clean_all_cmd_tests() {
     clean_cmd_test "aes"
     clean_cmd_test "ecc"
     clean_cmd_test "hash"
+    clean_cmd_test "req"
     clean_cmd_test "rsa"
 }
