@@ -121,20 +121,20 @@ clone_openssl() {
 }
 
 is_openssl_patched() {
-    if [ ! -f "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" ]; then
+    # Return 0 if patched, 1 if not
+    local dir="${OPENSSL_SOURCE_DIR:?OPENSSL_SOURCE_DIR not set}"
+    local file="${dir%/}/crypto/provider_predefined.c"
+
+    # File must exist to be patched
+    [[ -f "$file" ]] || return 1
+
+    # Any time we see libwolfprov, we're patched
+    if grep -q 'libwolfprov' -- "$file"; then
         return 0
     fi
 
-    # Check if $OPENSSL_SOURCE_DIR is a git repository
-    if [ -d ${OPENSSL_SOURCE_DIR}/.git ]; then
-        pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
-        patch_applied=$(git diff --quiet "crypto/provider_predefined.c" 2>/dev/null && echo 1 || echo 0)
-        popd &> /dev/null
-    else
-        # Not a git repo, may have been downloaded separately (from Debian sources)
-        patch_applied=$(grep -q "libwolfprov" "${OPENSSL_SOURCE_DIR}/crypto/provider_predefined.c" && echo 1 || echo 0)
-    fi
-    return $patch_applied
+    # Not patched
+    return 1
 }
 
 check_openssl_replace_default_mismatch() {
