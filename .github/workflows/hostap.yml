@@ -18,22 +18,34 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_hostap:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
+    # Run inside Debian Bookworm to match packaging environment
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
     timeout-minutes: 90
     strategy:
       matrix:
         hostap_ref: [ 'main' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '', 'OPENSSL' ]
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
 
     steps:
       # Checkout the source so we can run the check-workflow-result script.
@@ -42,34 +54,54 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
-        id: wolfprov-cache-restore
+        id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
 
-      - name: Install hostap dependencies
-        env:
-          LD_LIBRARY_PATH: "$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
-          LDFLAGS: "-L$GITHUB_WORKSPACE/openssl-install/lib64"
-          CFLAGS: "-I$GITHUB_WORKSPACE/openssl-install/include"
-          PKG_CONFIG_PATH: "$GITHUB_WORKSPACE/openssl-install/lib64/pkgconfig"
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libpcap0.8 libpcap-dev curl libcurl4-openssl-dev \
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Show OpenSSL version
+        run: |
+          echo "OpenSSL version:"
+          openssl version -a || true
+
+      - name: Test OpenSSL providers before hostap installation
+        run: |
+          echo "Testing OpenSSL providers before hostap installation..."
+          openssl list -providers
+
+      - name: Install hostap dependencies
+        run: |
+          apt-get update
+          apt-get install -y libpcap0.8 libpcap-dev curl libcurl4-openssl-dev \
             libnl-3-dev binutils-dev libiberty-dev libnl-genl-3-dev \
             libnl-route-3-dev libdbus-1-dev bridge-utils tshark python3-pycryptodome \
-            libsqlite3-dev libzstd1 wireless-tools iw
-          # Uninstall system cryptography and reinstall with custom OpenSSL
-          sudo apt-get remove -y python3-cryptography
-          pip install --no-cache-dir --force-reinstall cryptography
+            libsqlite3-dev libzstd1 wireless-tools iw build-essential autoconf automake \
+            libtool pkg-config git wget ca-certificates flex bison bc lixml2-dev\
+            zlib1g-dev
       - name: Checkout hostap
         run: |
           test -d hostap || git clone https://w1.fi/hostap.git
@@ -81,15 +113,8 @@ jobs:
 
           echo "Applying hostap patches for wolfProvider compatibility..."
 
-          # Patch crypto_openssl.c to use libwolfprov instead of default/legacy providers
-          sed -i 's/OSSL_PROVIDER_try_load(NULL, "default", 1)/OSSL_PROVIDER_try_load(NULL, "libwolfprov", 1)/g' src/crypto/crypto_openssl.c
-          sed -i 's/OSSL_PROVIDER_try_load(NULL, "legacy", 1)/OSSL_PROVIDER_try_load(NULL, "libwolfprov", 1)/g' src/crypto/crypto_openssl.c
-
-          # Patch tls_openssl.c to use libwolfprov instead of pkcs11 provider
-          sed -i 's/OSSL_PROVIDER_try_load(NULL, "pkcs11", 1)/OSSL_PROVIDER_try_load(NULL, "libwolfprov", 1)/g' src/crypto/tls_openssl.c
-
-          # Patch inside.sh to handle crda command failure gracefully
-          sed -i 's/COUNTRY=00 crda/COUNTRY=00 crda || true/g' tests/hwsim/vm/inside.sh
+          # Apply patch for testing
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov.patch
 
           echo "Applied hostap patches for wolfProvider compatibility"
 
@@ -109,18 +134,16 @@ jobs:
         working-directory: hostap/tests/hwsim
         run: |
           cat << EOF >> example-hostapd.config
-            # Custom OpenSSL installation paths
-            CFLAGS += -I$GITHUB_WORKSPACE/openssl-install/include
-            LDFLAGS += -L$GITHUB_WORKSPACE/openssl-install/lib64
-            # Override OpenSSL libraries to use custom installation with rpath
-            LIBS += -L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64
+            # Use system-installed OpenSSL/wolfSSL packages
+            CFLAGS += -I/usr/include/openssl
+            LDFLAGS += -L/usr/lib/x86_64-linux-gnu
+            LIBS += -lssl -lcrypto
           EOF
           cat << EOF >> example-wpa_supplicant.config
-            # Custom OpenSSL installation paths
-            CFLAGS += -I$GITHUB_WORKSPACE/openssl-install/include
-            LDFLAGS += -L$GITHUB_WORKSPACE/openssl-install/lib64
-            # Override OpenSSL libraries to use custom installation with rpath
-            LIBS += -L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64
+            # Use system-installed OpenSSL/wolfSSL packages
+            CFLAGS += -I/usr/include/openssl
+            LDFLAGS += -L/usr/lib/x86_64-linux-gnu
+            LIBS += -lssl -lcrypto
           EOF
       - name: Setup non-WPFF environment
         working-directory: hostap/tests/hwsim
@@ -131,18 +154,14 @@ jobs:
             # Set up wolfSSL environment variables
             # In UML mode, we can access the host filesystem directly
             echo "Setting up wolfSSL environment in UML mode"
-            # Use the host filesystem paths directly
-            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
-            export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
-            export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
+            # Use system-installed packages
+            export OPENSSL_CONF="/etc/ssl/openssl.cnf"
             export CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1
             echo "wolfSSL environment variables set:"
-            echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
             echo "OPENSSL_CONF: $OPENSSL_CONF"
-            echo "OPENSSL_MODULES: $OPENSSL_MODULES"
             # Test if wolfProvider is available
             echo "Testing OpenSSL providers:"
-            $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+            openssl list -providers
           EOF
       - name: Setup WPFF environment
         working-directory: hostap/tests/hwsim
@@ -153,19 +172,15 @@ jobs:
             # Set up wolfSSL environment variables
             # In UML mode, we can access the host filesystem directly
             echo "Setting up wolfSSL environment in UML mode"
-            # Use the host filesystem paths directly
-            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/openssl-install/lib64:$GITHUB_WORKSPACE/wolfprov-install/lib:$LD_LIBRARY_PATH"
-            export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
-            export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
+            # Use system-installed packages
+            export OPENSSL_CONF="/etc/ssl/openssl.cnf"
             export CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1
             export WOLFPROV_FORCE_FAIL=1
             echo "wolfSSL environment variables set:"
-            echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
             echo "OPENSSL_CONF: $OPENSSL_CONF"
-            echo "OPENSSL_MODULES: $OPENSSL_MODULES"
             # Test if wolfProvider is available
             echo "Testing OpenSSL providers:"
-            $GITHUB_WORKSPACE/openssl-install/bin/openssl list -providers
+            openssl list -providers
           EOF
       - name: Update certs
         working-directory: hostap/tests/hwsim/auth_serv
