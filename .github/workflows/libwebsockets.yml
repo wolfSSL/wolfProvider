@@ -106,7 +106,7 @@ jobs:
         shell: bash
         run: |
           # Verify wolfProvider is properly installed
-          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
+          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           ./build/bin/libwebsockets-test-server --port=11111 --ssl > server.log 2>&1 & SERVER_PID=$!

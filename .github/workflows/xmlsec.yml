@@ -123,7 +123,7 @@ jobs:
         run: |
           set +o pipefail # ignore errors from make check
           # Verify wolfProvider is properly installed
-          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
+          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
           make check-keys | tee xmlsec-keys.log
           make check-enc | tee xmlsec-enc.log

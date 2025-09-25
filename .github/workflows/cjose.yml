@@ -108,7 +108,7 @@ jobs:
         working-directory: cjose
         run: |
           # Verify wolfProvider is properly installed
-          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
+          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           make test 2>&1 | tee cjose-test.log
