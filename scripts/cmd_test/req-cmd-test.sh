@@ -42,7 +42,11 @@ test_cert_creation() {
     if $OPENSSL_BIN ecparam -genkey -name ${curve} -out "$key_file" \
         -provider default 2>/dev/null; then
         echo "[PASS] EC key generation successful"
-        check_force_fail
+        # Don't call check_force_fail for default provider operations in force fail mode
+        # as default provider operations are expected to succeed
+        if [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
+            check_force_fail
+        fi
     else
         echo "[FAIL] EC key generation failed"
         FAIL=1
@@ -61,7 +65,10 @@ test_cert_creation() {
     if $OPENSSL_BIN req -x509 -new -key "$key_file" -${hash_alg} -days 365 \
         -out "$cert_file" -subj "/CN=test-${curve}-${hash_alg}" ${req_provider_args} 2>/dev/null; then
         echo "[PASS] Certificate creation successful"
-        check_force_fail
+        # Only call check_force_fail for wolfProvider operations, or when not in force fail mode
+        if [[ "$req_provider_args" == *"libwolfprov"* ]] || [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
+            check_force_fail
+        fi
     else
         echo "[FAIL] Certificate creation failed"
         FAIL=1
@@ -71,7 +78,10 @@ test_cert_creation() {
     # Check if certificate file exists and is non-empty
     if [ -s "$cert_file" ]; then
         echo "[PASS] Certificate file exists and is non-empty"
-        check_force_fail
+        # Only call check_force_fail for wolfProvider operations, or when not in force fail mode
+        if [[ "$req_provider_args" == *"libwolfprov"* ]] || [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
+            check_force_fail
+        fi
     else
         echo "[FAIL] Certificate file does not exist or is empty"
         FAIL=1
