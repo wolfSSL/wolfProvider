@@ -16,37 +16,6 @@ PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider 
 
 echo "=== Running Certificate Request (X.509) Tests ==="
 
-# Function to check if replace-default build (but not during force-fail)
-detect_replace_default_build() {
-    # If force-fail is enabled, don't skip tests - let force-fail mechanism work
-    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        return 1  # Don't skip tests in force-fail mode
-    fi
-    
-    local libcrypto_path=""
-    if [ -f "${REPO_ROOT:-}/openssl-install/lib64/libcrypto.so" ]; then
-        libcrypto_path="${REPO_ROOT}/openssl-install/lib64/libcrypto.so"
-    elif [ -f "${REPO_ROOT:-}/openssl-install/lib/libcrypto.so" ]; then
-        libcrypto_path="${REPO_ROOT}/openssl-install/lib/libcrypto.so"
-    else
-        return 1  # Can't find libcrypto, assume standard
-    fi
-    
-    if strings "$libcrypto_path" 2>/dev/null | grep -q "load_wolfprov_and_init"; then
-        return 0  # Replace-default detected
-    else
-        return 1  # Standard build
-    fi
-}
-
-# Skip tests for replace-default (unless force-failing)
-if detect_replace_default_build; then
-    echo "INFO: --replace-default build detected"
-    echo "INFO: Skipping req tests (provider switching not supported)" 
-    echo "SUCCESS: Certificate Request tests skipped for replace-default build"
-    exit 0
-fi
-
 # Skip tests for FIPS mode (unless force-failing)
 if [ "${WOLFSSL_ISFIPS}" = "1" ] && [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
     echo "INFO: FIPS mode detected"
