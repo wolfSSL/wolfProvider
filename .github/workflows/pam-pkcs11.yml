@@ -100,7 +100,7 @@ jobs:
         run: |
           set +o pipefail # ignore errors from make check
           # Verify wolfProvider is properly installed
-          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
+          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
           export PAM_PKCS11_REF=${{ matrix.pam_pkcs11_ref }}
 

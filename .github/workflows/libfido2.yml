@@ -102,7 +102,7 @@ jobs:
         working-directory: libfido2_repo/build
         run: |
           # Verify wolfProvider is properly installed
-          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
+          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Run tests, excluding regress_dev which requires hardware/fails in CI

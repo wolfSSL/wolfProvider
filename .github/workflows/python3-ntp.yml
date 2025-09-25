@@ -115,7 +115,7 @@ jobs:
         run: |
           export ${{ matrix.force_fail }}
           # Verify wolfProvider is properly installed
-          . $GITHUB_WORKSPACE/scripts/verify-debian.sh
+          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
 
           # Run tests
           ./waf check | tee python3-ntp-test.log

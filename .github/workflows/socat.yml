@@ -110,7 +110,7 @@ jobs:
           touch /dev/vsock
 
           # Verify wolfProvider is properly installed
-          source $GITHUB_WORKSPACE/scripts/verify-debian.sh
+          ./$GITHUB_WORKSPACE/scripts/verify-debian.sh
 
           # Show socat version (includes OpenSSL version info)
           ./socat -V
