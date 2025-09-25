@@ -113,6 +113,17 @@ static int test_krb5kdf_error_cases(OSSL_LIB_CTX* libCtx)
     }
     PRINT_MSG("Negative test passed - KRB5KDF correctly rejected wrong key size for AES-256-CBC");
 
+    PRINT_MSG("Testing KRB5KDF error case - 0 length constant");
+    /* This should fail since AES-256 key size is 32 bytes */
+    err = test_krb5kdf_calc(libCtx, key, sizeof(key), "AES-256-CBC",
+        inKey16, sizeof(inKey16), constant, 0);
+    if (err == 0) {
+        /* If we get here, the test failed because it should have errored */
+        PRINT_MSG("FAILED: KRB5KDF accepted 0 length constant");
+        return 1;
+    }
+    PRINT_MSG("Negative test passed - KRB5KDF correctly rejected 0 length constant");
+
     return 0;
 }
 
@@ -120,6 +131,7 @@ static int test_krb5kdf_error_cases(OSSL_LIB_CTX* libCtx)
 static int test_krb5kdf_vector(void)
 {
     int err = 0;
+    int i;
     unsigned char oKey[32];
     unsigned char wKey[32];
     /* Test vector - AES-128-CBC */
@@ -135,51 +147,55 @@ static int test_krb5kdf_vector(void)
         0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
     };
     unsigned char constant[] = {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
     };
 
-    /* Test AES-128-CBC */
-    PRINT_MSG("Testing KRB5KDF with OpenSSL - AES-128-CBC");
-    err = test_krb5kdf_calc(osslLibCtx, oKey, 16, "AES-128-CBC",
-        inKey128, sizeof(inKey128), constant, sizeof(constant));
-    if (err == 1) {
-        PRINT_MSG("FAILED OpenSSL - AES-128-CBC");
-        return err;
-    }
-    PRINT_MSG("Testing KRB5KDF with wolfSSL - AES-128-CBC");
-    err = test_krb5kdf_calc(wpLibCtx, wKey, 16, "AES-128-CBC",
-        inKey128, sizeof(inKey128), constant, sizeof(constant));
-    if (err == 1) {
-        PRINT_MSG("FAILED wolfSSL - AES-128-CBC");
-        return err;
-    }
-    if (memcmp(oKey, wKey, 16) != 0) {
-        PRINT_MSG("FAILED, wolfSSL and OpenSSL derived different keys");
-        PRINT_BUFFER("OpenSSL key", oKey, 16);
-        PRINT_BUFFER("wolfSSL key", wKey, 16);
-        return 1;
-    }
+    for (i = 1; i < (int)sizeof(constant); i++) {
+       PRINT_MSG("Constant Length: %d", i);
+       /* Test AES-128-CBC */
+       PRINT_MSG("Testing KRB5KDF with OpenSSL - AES-128-CBC");
+       err = test_krb5kdf_calc(osslLibCtx, oKey, 16, "AES-128-CBC",
+           inKey128, sizeof(inKey128), constant, i);
+       if (err == 1) {
+           PRINT_MSG("FAILED OpenSSL - AES-128-CBC");
+           return err;
+       }
+       PRINT_MSG("Testing KRB5KDF with wolfSSL - AES-128-CBC");
+       err = test_krb5kdf_calc(wpLibCtx, wKey, 16, "AES-128-CBC",
+           inKey128, sizeof(inKey128), constant, i);
+       if (err == 1) {
+           PRINT_MSG("FAILED wolfSSL - AES-128-CBC");
+           return err;
+       }
+       if (memcmp(oKey, wKey, 16) != 0) {
+           PRINT_MSG("FAILED, wolfSSL and OpenSSL derived different keys");
+           PRINT_BUFFER("OpenSSL key", oKey, 16);
+           PRINT_BUFFER("wolfSSL key", wKey, 16);
+           return 1;
+       }
 
-    /* Test AES-256-CBC */
-    PRINT_MSG("Testing KRB5KDF with OpenSSL - AES-256-CBC");
-    err = test_krb5kdf_calc(osslLibCtx, oKey, 32, "AES-256-CBC",
-        inKey256, sizeof(inKey256), constant, sizeof(constant));
-    if (err == 1) {
-        PRINT_MSG("FAILED OpenSSL - AES-256-CBC");
-        return err;
-    }
-    PRINT_MSG("Testing KRB5KDF with wolfSSL - AES-256-CBC");
-    err = test_krb5kdf_calc(wpLibCtx, wKey, 32, "AES-256-CBC",
-        inKey256, sizeof(inKey256), constant, sizeof(constant));
-    if (err == 1) {
-        PRINT_MSG("FAILED wolfSSL - AES-256-CBC");
-        return err;
-    }
-    if (memcmp(oKey, wKey, 32) != 0) {
-        PRINT_MSG("FAILED, wolfSSL and OpenSSL derived different keys");
-        PRINT_BUFFER("OpenSSL key", oKey, 32);
-        PRINT_BUFFER("wolfSSL key", wKey, 32);
-        return 1;
+       /* Test AES-256-CBC */
+       PRINT_MSG("Testing KRB5KDF with OpenSSL - AES-256-CBC");
+       err = test_krb5kdf_calc(osslLibCtx, oKey, 32, "AES-256-CBC",
+           inKey256, sizeof(inKey256), constant, i);
+       if (err == 1) {
+           PRINT_MSG("FAILED OpenSSL - AES-256-CBC");
+           return err;
+       }
+       PRINT_MSG("Testing KRB5KDF with wolfSSL - AES-256-CBC");
+       err = test_krb5kdf_calc(wpLibCtx, wKey, 32, "AES-256-CBC",
+           inKey256, sizeof(inKey256), constant, i);
+       if (err == 1) {
+           PRINT_MSG("FAILED wolfSSL - AES-256-CBC");
+           return err;
+       }
+       if (memcmp(oKey, wKey, 32) != 0) {
+           PRINT_MSG("FAILED, wolfSSL and OpenSSL derived different keys");
+           PRINT_BUFFER("OpenSSL key", oKey, 32);
+           PRINT_BUFFER("wolfSSL key", wKey, 32);
+           return 1;
+       }
     }
 
     return err;

@@ -19,77 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-# Set up environment
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
-UTILS_DIR="${REPO_ROOT}/scripts"
-export LOG_FILE="${SCRIPT_DIR}/ecc-test.log"
-touch "$LOG_FILE"
+source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${SCRIPT_DIR}/clean-cmd-test.sh"
+cmd_test_env_setup "ecc-test.log"
+clean_cmd_test "ecc"
 
-# Source wolfProvider utilities
-source "${UTILS_DIR}/utils-general.sh"
-source "${UTILS_DIR}/utils-openssl.sh"
-source "${UTILS_DIR}/utils-wolfssl.sh"
-source "${UTILS_DIR}/utils-wolfprovider.sh"
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-# Initialize wolfProvider
-init_wolfprov
-
-# Fail flags
-FAIL=0
-FORCE_FAIL_PASSED=0
-
-# Get the force fail parameter
-if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-    echo "Force fail mode enabled for ECC tests"
-fi
-if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
-    echo "FIPS mode enabled for ECC tests"
-fi
-
-# Verify wolfProvider is properly loaded
-echo -e "\nVerifying wolfProvider configuration:"
-if ! $OPENSSL_BIN list -providers | grep -q "libwolfprov"; then
-    echo "[FAIL] wolfProvider not found in OpenSSL providers!"
-    echo "Current provider list:"
-    $OPENSSL_BIN list -providers
-    FAIL=1
-fi
-echo "wolfProvider is properly configured"
-
-# Print environment for verification
-echo "Environment variables:"
-echo "OPENSSL_MODULES: ${OPENSSL_MODULES}"
-echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
-echo "OPENSSL_BIN: ${OPENSSL_BIN}"
-
-# Create test directories
+# Create test data and output directories
 mkdir -p ecc_outputs
-
-# Create test data for signing
 echo "This is test data for ECC signing and verification." > ecc_outputs/test_data.txt
-
-# Function to use default provider only
-use_default_provider() {
-    unset OPENSSL_MODULES
-    unset OPENSSL_CONF
-    echo "Switched to default provider"
-}
-
-# Function to use wolf provider only
-use_wolf_provider() {
-    export OPENSSL_MODULES=$WOLFPROV_PATH
-    export OPENSSL_CONF=${WOLFPROV_CONFIG}
-    echo "Switched to wolfProvider"
-}
-
-# Helper function to handle force fail checks
-check_force_fail() {
-    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        echo "[PASS] Test passed when force fail was enabled"
-        FORCE_FAIL_PASSED=1
-    fi
-}
 
 # Array of ECC curves and providers to test
 CURVES=("prime256v1" "secp384r1" "secp521r1")
@@ -168,12 +109,8 @@ test_sign_verify_pkeyutl() {
     local curve=$1
     local provider_args=$2
     
-    # Print the provider args
-    if [ "$provider_args" = "-provider default" ]; then
-        provider_name="default"
-    else
-        provider_name="wolfProvider"
-    fi
+    # Get the provider name
+    provider_name=$(get_provider_name "$provider_args")
     
     local key_file="ecc_outputs/ecc_${curve}.pem"
     local pub_key_file="ecc_outputs/ecc_${curve}_pub.pem"
@@ -251,8 +188,11 @@ generate_and_test_key() {
     local curve=$1
     local provider_args=$2
     local output_file="ecc_outputs/ecc_${curve}.pem"
+
+    # Get the provider name
+    provider_name=$(get_provider_name "$provider_args")
     
-    echo -e "\n=== Testing ECC Key Generation (${curve}) with provider default ==="
+    echo -e "\n=== Testing ECC Key Generation (${curve}) with ${provider_name} ==="
     echo "Generating ECC key (${curve})..."
     
     if $OPENSSL_BIN genpkey -algorithm EC \
@@ -278,29 +218,28 @@ generate_and_test_key() {
     # Validate key
     validate_key "$curve" "$output_file" "$provider_args"
 
-    # Try to use the key with provider default
-    echo -e "\n=== Testing ECC Key (${curve}) with provider default ==="
-    echo "Checking if provider default can use the key..."
+    # Try to use the key with different providers
+    echo -e "\n=== Testing ECC Key (${curve}) with ${provider_name} ==="
+    echo "Checking if ${provider_name} can use the key..."
     
     # Try to use the key with wolfProvider (just check if it loads)
     if $OPENSSL_BIN pkey -in "$output_file" -check \
         ${provider_args} -passin pass: >/dev/null; then
-        echo "[PASS] provider default can use ECC key (${curve})"
+        echo "[PASS] ${provider_name} can use ECC key (${curve})"
         check_force_fail
     else
-        echo "[FAIL] provider default cannot use ECC key (${curve})"
+        echo "[FAIL] ${provider_name} cannot use ECC key (${curve})"
         FAIL=1
     fi
 }
 
 # Test key generation for each curve and provider
 for curve in "${CURVES[@]}"; do
-    # Generate with default provider
-    test_provider="-provider default"
-    generate_and_test_key "$curve" "$test_provider"
-
-    # Test sign/verify interoperability with appropriate function
     for test_provider in "${PROVIDER_ARGS[@]}"; do
+        # Generate key with current provider
+        generate_and_test_key "$curve" "$test_provider"
+
+        # Test sign/verify interoperability
         test_sign_verify_pkeyutl "$curve" "$test_provider"
     done
 done

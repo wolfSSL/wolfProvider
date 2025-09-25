@@ -19,42 +19,31 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        openssl_ref: [ 'master', 'openssl-3.5.0' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
-        debug: ['WOLFPROV_DEBUG=1', '']
+        wolfssl_ref: [ 
+          'master', 
+          'v5.8.2-stable']
+        # Test against the newest of each minor version
+        openssl_ref: [
+          'openssl-3.5.2',
+          'openssl-3.4.2',
+          'openssl-3.3.4',
+          'openssl-3.2.5',
+          'openssl-3.1.8',
+          'openssl-3.0.17']
+        debug: ['', 'WOLFPROV_DEBUG=1']
+
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
-
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
         with:
-          path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
+          fetch-depth: 1
 
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          lookup-only: true
-
-      # If not yet built this version, build it now
-      - name: Build wolfProvider
-        if: steps.wolfprov-${{ matrix.wolfssl_ref }}-cache.hit != 'true'
+      - name: Build and test wolfProvider
         run: |
-          ${{ matrix.debug }} OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+             OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ${{ matrix.debug }} ./scripts/build-wolfprovider.sh
 
-      - name: Run simple tests
-        run: |
-          ${{ matrix.force_fail }} ${{ matrix.debug }} ./scripts/cmd_test/do-cmd-tests.sh
-
-      - name: Print test logs
-        if: always()
+      - name: Print errors
+        if: ${{ failure() }}
         run: |
           if [ -f test-suite.log ] ; then
             cat test-suite.log

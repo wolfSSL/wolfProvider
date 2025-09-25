@@ -271,23 +271,30 @@ CURVES=prime256v1
 OPENSSL_ALL_CIPHERS="-cipher ALL -ciphersuites $TLS13_ALL_CIPHERS"
 OPENSSL_PORT=$(generate_port)
 
-# ensure we are doing a clean build
-printf "Cleaning up previous builds\n"
-rm -rf ${SCRIPT_DIR}/../*-install
-if [ -d ${OPENSSL_SOURCE_DIR} ]; then
-    pushd ${OPENSSL_SOURCE_DIR} > /dev/null
-    git clean -xdf > /dev/null 2>&1
-    popd > /dev/null
-fi
-if [ -d ${WOLFSSL_SOURCE_DIR} ]; then
-    pushd ${WOLFSSL_SOURCE_DIR} > /dev/null
-    git clean -xdf > /dev/null 2>&1
-    popd > /dev/null
-fi
+# Debug git and openssl versions
+printf "Environment variables:\n"
+env | sort
 
-init_wolfprov
+printf "Git and OpenSSL versions:\n"
+which git
+git --version || true
+which openssl
+openssl version -a || true
 
 if [ "${AM_BWRAPPED-}" != "yes" ]; then
+    # Perform the build only if not in the bubble
+    printf "Cleaning up previous builds\n"
+    ${SCRIPT_DIR}/build-wolfprovider.sh --clean --distclean
+    printf "Building wolfProvider\n"
+    ${SCRIPT_DIR}/build-wolfprovider.sh
+
+    printf "OPENSSL_BIN: $OPENSSL_BIN\n"
+    $OPENSSL_BIN version -a || true
+
+    source ${SCRIPT_DIR}/env-setup
+    printf "Updated environment variables:\n"
+    env | sort
+
     bwrap_path="$(command -v bwrap)"
     if [ -n "$bwrap_path" ]; then
         export AM_BWRAPPED=yes

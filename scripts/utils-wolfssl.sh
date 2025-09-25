@@ -22,7 +22,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-general.sh
 
 WOLFSSL_GIT=${WOLFSSL_GIT:-"https://github.com/wolfSSL/wolfssl.git"}
-WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.8.0-stable"}
+WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.8.2-stable"}
 WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
 WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
@@ -49,6 +49,8 @@ clean_wolfssl() {
     if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
         printf "Removing wolfSSL source ...\n"
         rm -rf "${WOLFSSL_SOURCE_DIR}"
+        printf "Removing wolfSSL install ...\n"
+        rm -rf "${WOLFSSL_INSTALL_DIR}"
     fi
 }
 
@@ -72,7 +74,10 @@ clone_wolfssl() {
             DEPTH_ARG=${WOLFPROV_DEBUG:+""}
             DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
-            git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${WOLFSSL_GIT} ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            # If we are replacing default provider, our current built openssl still
+            # links to the default stub and is non-functional. Run the clone with
+            # no explicitly LD_LIBRARY_PATH to ensure use of global openssl for clone
+            LD_LIBRARY_PATH="" git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${WOLFSSL_GIT} ${WOLFSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
             RET=$?
 
             if [ $RET != 0 ]; then
@@ -88,6 +93,31 @@ clone_wolfssl() {
 }
 
 install_wolfssl() {
+    # Check if libwolfssl and libwolfssl-dev packages are already installed
+    # This is allowed only for wolfSSL, but not for OpenSSL because we want to
+    # use the custom OpenSSL built with wolfProvider.
+    if command -v dpkg >/dev/null 2>&1; then
+        if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then
+            # Check if there is a FIPS mismatch
+            # If the system wolfSSL is FIPS, we need to be doing a FIPS build
+            dpkg -l | grep "^ii.*libwolfssl[[:space:]]" | grep -q "fips"
+            if [ $? -eq 0 ] && [ "$WOLFSSL_ISFIPS" != "1" ]; then
+                printf "ERROR: System wolfSSL is FIPS, but WOLFSSL_ISFIPS is not set to 1\n"
+                do_cleanup
+                exit 1
+            elif [ $? -eq 0 ] && [ "$WOLFSSL_ISFIPS" != "0" ]; then
+                printf "ERROR: System wolfSSL is non-FIPS, but WOLFSSL_ISFIPS is set to 1\n"
+                do_cleanup
+                exit 1
+            fi
+            
+            printf "\nSkipping wolfSSL installation - libwolfssl and libwolfssl-dev packages are already installed.\n"
+            # Set WOLFSSL_INSTALL_DIR to system installation directory
+            WOLFSSL_INSTALL_DIR="/usr"
+            return 0
+        fi
+    fi
+
     printf "\nInstalling wolfSSL ${WOLFSSL_TAG} ...\n"
     clone_wolfssl
     cd ${WOLFSSL_SOURCE_DIR}

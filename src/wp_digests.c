@@ -123,12 +123,14 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 {                                                                              \
     int ok = 1;                                                                \
     (void)params;                                                              \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_init");                             \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \
         int rc = init(ctx, NULL, -1);                                          \
         if (rc != 0) {                                                         \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #init, rc);      \
             ok = 0;                                                            \
         }                                                                      \
     }                                                                          \
@@ -150,8 +152,10 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_update");                           \
     int rc = upd(ctx, in, (word32)inLen);                                      \
     if (rc != 0) {                                                             \
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #upd, rc);            \
         ok = 0;                                                                \
     }                                                                          \
     WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
@@ -174,6 +178,7 @@ static int name##_final(void* ctx, unsigned char* out, size_t* outLen,         \
     size_t outSize)                                                            \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_final");                            \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -183,6 +188,7 @@ static int name##_final(void* ctx, unsigned char* out, size_t* outLen,         \
     if (ok) {                                                                  \
         int rc = fin(ctx, out);                                                \
         if (rc != 0) {                                                         \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #fin, rc);        \
             ok = 0;                                                            \
         }                                                                      \
         else {                                                                 \
@@ -220,6 +226,21 @@ const OSSL_DISPATCH name##_functions[] = {                                     \
     { 0,                                NULL                                }  \
 };
 
+#define IMPLEMENT_DIGEST_NULL(name)                                            \
+/** Dispatch table for digest_null algorithms. */                              \
+static int name##_digest_null(void) { return 0; }                              \
+static void name##_digest_void(void) {}                                        \
+const OSSL_DISPATCH name##_functions[] = {                                     \
+    { OSSL_FUNC_DIGEST_NEWCTX,          (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_INIT,            (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_UPDATE,          (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_FINAL,           (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_FREECTX,         (DFUNC)name##_digest_void           }, \
+    { OSSL_FUNC_DIGEST_DUPCTX,          (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_GET_PARAMS,      (DFUNC)name##_digest_null           }, \
+    { OSSL_FUNC_DIGEST_GETTABLE_PARAMS, (DFUNC)name##_digest_null           }, \
+    { 0,                                NULL                                }  \
+};
 
 /**
  * Get parameters of a digest algorithm.
@@ -236,6 +257,8 @@ static int wp_digest_get_params(OSSL_PARAM params[], size_t blkSize,
 {
     OSSL_PARAM* p = NULL;
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DIGEST, "wp_digest_get_params");
 
     p = OSSL_PARAM_locate(params, OSSL_DIGEST_PARAM_BLOCK_SIZE);
     if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, blkSize))) {
@@ -292,11 +315,15 @@ static const OSSL_PARAM* wp_digest_gettable_params(void* provCtx)
  ******************************************************************************/
 
 #ifdef WP_HAVE_MD5
+#if defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS)
+IMPLEMENT_DIGEST_NULL(wp_md5)
+#else
 IMPLEMENT_DIGEST(wp_md5, wc_Md5,
                  WC_MD5_BLOCK_SIZE, WC_MD5_DIGEST_SIZE,
                  0,
                  wc_InitMd5_ex, wc_Md5Update, wc_Md5Final,
                  wc_Md5Copy, wc_Md5Free)
+#endif
 #endif
 
 /*******************************************************************************
@@ -304,6 +331,7 @@ IMPLEMENT_DIGEST(wp_md5, wc_Md5,
  ******************************************************************************/
 
 #ifdef WP_HAVE_MD5_SHA1
+#if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
 /**
  * Combined MD5 and SHA-1 digest.
  */
@@ -326,10 +354,15 @@ typedef struct wp_Md5Sha {
 static int wp_InitMd5Sha_ex(wp_Md5Sha* dgst, void* heap, int devId)
 {
     int rc;
-
     rc = wc_InitMd5_ex(&dgst->md5, heap, devId);
+    if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMd5_ex", rc);
+    }
     if (rc == 0) {
         rc = wc_InitSha_ex(&dgst->sha, heap, devId);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitSha_ex", rc);
+        }
     }
 
     return rc;
@@ -349,8 +382,14 @@ static int wp_Md5ShaUpdate(wp_Md5Sha* dgst, const byte* data, word32 len)
     int rc;
 
     rc = wc_Md5Update(&dgst->md5, data, len);
+    if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Md5Update", rc);
+    }
     if (rc == 0) {
         rc = wc_ShaUpdate(&dgst->sha, data, len);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_ShaUpdate", rc);
+        }
     }
 
     return rc;
@@ -370,8 +409,14 @@ static int wp_Md5ShaFinal(wp_Md5Sha* dgst, byte* hash)
     int rc;
 
     rc = wc_Md5Final(&dgst->md5, hash);
+    if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Md5Final", rc);
+    }
     if (rc == 0) {
         rc = wc_ShaFinal(&dgst->sha, hash + WC_MD5_DIGEST_SIZE);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_ShaFinal", rc);
+        }
     }
 
     return rc;
@@ -390,8 +435,14 @@ static int wp_Md5ShaCopy(wp_Md5Sha* src, wp_Md5Sha* dst)
     int rc;
 
     rc = wc_Md5Copy(&src->md5, &dst->md5);
+    if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Md5Copy", rc);
+    }
     if (rc == 0) {
         rc = wc_ShaCopy(&src->sha, &dst->sha);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_ShaCopy", rc);
+        }
     }
 
     return rc;
@@ -411,12 +462,14 @@ static void wp_Md5ShaFree(wp_Md5Sha* d)
         wc_ShaFree(&d->sha);
     }
 }
-
 IMPLEMENT_DIGEST(wp_md5_sha1, wp_Md5Sha,
                  WC_MD5_BLOCK_SIZE, WC_MD5_DIGEST_SIZE + WC_SHA_DIGEST_SIZE,
                  0,
                  wp_InitMd5Sha_ex, wp_Md5ShaUpdate, wp_Md5ShaFinal,
                  wp_Md5ShaCopy, wp_Md5ShaFree)
+#else   /* defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS) */
+IMPLEMENT_DIGEST_NULL(wp_md5_sha1)
+#endif
 #endif
 
 /*******************************************************************************
@@ -544,12 +597,14 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 {                                                                              \
     int ok = 1;                                                                \
     (void)params;                                                              \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_init");                             \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \
         int rc = init(&ctx->obj, NULL, -1);                                    \
         if (rc != 0) {                                                         \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #init, rc); \
             ok = 0;                                                            \
         }                                                                      \
     }                                                                          \
@@ -576,6 +631,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     size_t outSize)                                                            \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_final");                            \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -585,6 +641,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     if (ok) {                                                                  \
         int rc = fin(&ctx->obj, out, (word32)ctx->outLen);                     \
         if (rc != 0) {                                                         \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #fin, rc);   \
             ok = 0;                                                            \
         }                                                                      \
         else {                                                                 \
@@ -630,6 +687,7 @@ static CTX* name##_dupctx(CTX* src)                                            \
         int rc;                                                                \
         rc = copy(&src->obj, &dst->obj);                                       \
         if (rc != 0) {                                                         \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #copy, rc);  \
             OPENSSL_free(dst);                                                 \
             dst = NULL;                                                        \
         }                                                                      \
@@ -653,6 +711,7 @@ static CTX* name##_dupctx(CTX* src)                                            \
 static int name##_set_ctx_params(CTX* ctx, const OSSL_PARAM params[])          \
 {                                                                              \
     int ok = 1;                                                                \
+    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_set_ctx_params");                   \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \

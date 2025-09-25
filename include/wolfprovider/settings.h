@@ -120,7 +120,7 @@
 #ifndef NO_RSA
     #define WP_HAVE_RSA
     #if defined(WC_RSA_PSS) && LIBWOLFSSL_VERSION_HEX >= 0x05005000
-        #define WOLFSSL_RSA_PSS_ENCODING
+        #define WP_RSA_PSS_ENCODING
     #endif
 #endif
 
@@ -162,6 +162,9 @@
 #endif
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
+#endif
+#if !defined(NO_AES_CBC) && (defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC))
+    #define WP_HAVE_KBKDF
 #endif
 #ifndef WP_NO_FORCE_FAIL
     #define WP_CHECK_FORCE_FAIL

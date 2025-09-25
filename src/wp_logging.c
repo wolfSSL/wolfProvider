@@ -150,13 +150,20 @@ int wolfProv_SetLogComponents(int componentMask)
 static void wolfprovider_log(const int logLevel, const int component,
                            const char *const logMessage)
 {
-    /* Don't log messages that do not match our current logging level */
-    if ((providerLogLevel & logLevel) != logLevel)
+    /* Check compile-time configuration first */
+    if (!WOLFPROV_COMPILE_TIME_CHECK(component, logLevel)) {
         return;
+    }
+
+    /* Don't log messages that do not match our current logging level */
+    if ((providerLogLevel & logLevel) != logLevel) {
+        return;
+    }
 
     /* Don't log messages from components that do not match enabled list */
-    if ((providerLogComponents & component) != component)
+    if ((providerLogComponents & component) != component) {
         return;
+    }
 
     if (log_function) {
         log_function(logLevel, component, logMessage);
@@ -226,6 +233,51 @@ void WOLFPROV_MSG_VERBOSE(int component, const char* fmt, ...)
 }
 
 /**
+ * Log function for debug messages, prints to WP_LOG_DEBUG level.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param fmt   [IN] Log message format string.
+ * @param vargs [IN] Variable arguments, used with format string, fmt.
+ */
+WP_PRINTF_FUNC(2, 3)
+void WOLFPROV_MSG_DEBUG(int component, const char* fmt, ...)
+{
+    va_list vlist;
+    va_start(vlist, fmt);
+    wolfprovider_msg_internal(component, WP_LOG_DEBUG, fmt, vlist);
+    va_end(vlist);
+}
+
+/**
+ * Log function for trace messages, prints to WP_LOG_TRACE level.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param fmt   [IN] Log message format string.
+ * @param vargs [IN] Variable arguments, used with format string, fmt.
+ */
+WP_PRINTF_FUNC(2, 3)
+void WOLFPROV_MSG_TRACE(int component, const char* fmt, ...)
+{
+    va_list vlist;
+    va_start(vlist, fmt);
+    wolfprovider_msg_internal(component, WP_LOG_TRACE, fmt, vlist);
+    va_end(vlist);
+}
+
+/**
+ * Log function for debug messages with return code, prints to WP_LOG_DEBUG level.
+ * Unified function to reduce code duplication for common "function failed with rc=%d" pattern.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param func_name [IN] Name of the function that failed.
+ * @param rc       [IN] Return code value.
+ */
+void WOLFPROV_MSG_DEBUG_RETCODE(int component, const char* func_name, int rc)
+{
+    WOLFPROV_MSG_DEBUG(component, "%s failed with rc=%d", func_name, rc);
+}
+
+/**
  * Log function used to record function entry.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
@@ -235,9 +287,32 @@ void WOLFPROV_ENTER(int component, const char* msg)
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), "wolfProv Entering %s", msg);
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "wolfProv Entering %s", msg);
         wolfprovider_log(WP_LOG_ENTER, component, buffer);
     }
+}
+
+/**
+ * Log function used to record function entry for check functions.
+ * These functions use WOLFPROV_LEAVE_SILENT and may not show up in logs.
+ * The "[leaving silently]" prefix indicates that exit logging may be suppressed.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param msg  [IN] Log message.
+ */
+void WOLFPROV_ENTER_SILENT(int component, const char* msg)
+{
+#ifdef WOLFPROV_LEAVE_SILENT_MODE
+    if (loggingEnabled) {
+        char buffer[WOLFPROV_MAX_LOG_WIDTH];
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "wolfProv Entering [leaving silently] %s", msg);
+        wolfprovider_log(WP_LOG_ENTER, component, buffer);
+    }
+#else
+    WOLFPROV_ENTER(component, msg);
+#endif
 }
 
 /**
@@ -249,14 +324,41 @@ void WOLFPROV_ENTER(int component, const char* msg)
  * @param ret  [IN] Value that function will be returning.
  */
 void WOLFPROV_LEAVE_EX(int component, const char* func, const char* msg,
-    int ret)
+                         int ret)
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), "wolfProv Leaving %s, return %d (%s)",
-                  msg, ret, func);
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "wolfProv Leaving %s, return %d (%s)", msg, ret, func);
         wolfprovider_log(WP_LOG_LEAVE, component, buffer);
     }
+}
+
+/**
+ * Log function to suppress LEAVE messages. This function only prints if
+ * ret == 1. All other cases are suppressed by default to reduce noise from
+ * probe failures. Define WOLFPROV_LEAVE_SILENT to enable this logic.
+ *
+ * @param component [IN] Component type, from wolfProv_LogComponents enum.
+ * @param func    [IN] Name of function that is exiting.
+ * @param msg     [IN] Log message (typically file:line).
+ * @param ret     [IN] Value that function will be returning.
+ */
+void WOLFPROV_LEAVE_SILENT_EX(int component, const char* func, 
+                              const char* msg, int ret)
+{
+#ifdef WOLFPROV_LEAVE_SILENT_MODE
+        /* Success - always print */
+        if (ret == 1) {
+            WOLFPROV_LEAVE_EX(component, func, msg, ret);
+        }
+        else {
+            /* Anything else is suppressed */
+        }
+#else
+        /* Legacy behavior: log all returns including return 0 */
+        WOLFPROV_LEAVE_EX(component, func, msg, ret);
+#endif
 }
 
 /**
@@ -291,8 +393,8 @@ void WOLFPROV_ERROR_MSG_LINE(int component, const char* msg,
 {
     if (loggingEnabled) {
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), "%s:%d - wolfProv Error %s",
-                  file, line, msg);
+        XSNPRINTF(buffer, sizeof(buffer), 
+            "%s:%d - wolfProv Error %s", file, line, msg);
         wolfprovider_log(WP_LOG_ERROR, component, buffer);
     }
 }

@@ -28,7 +28,7 @@ static int test_tls1_prf_calc(OSSL_LIB_CTX* libCtx, unsigned char *key,
     int err = 0;
     EVP_PKEY_CTX *ctx = NULL;
     unsigned char secret[32] = { 0, };
-    unsigned char label[5] = "Label";
+    unsigned char label[] = "Label";
     unsigned char seed[32] = { 0, };
     size_t len = keyLen;
 

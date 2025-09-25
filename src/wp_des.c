@@ -31,7 +31,7 @@
 
 
 #if defined(WP_HAVE_DES3CBC)
-
+#if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
 /**
  * Data structure for DES3 ciphers that are block based.
  */
@@ -144,6 +144,8 @@ static int wp_des3_block_get_params(OSSL_PARAM params[], unsigned int mode,
     int ok = 1;
     OSSL_PARAM *p;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_get_params");
+
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_MODE);
     if ((p != NULL) && (!OSSL_PARAM_set_uint(p, mode))) {
         ok = 0;
@@ -167,7 +169,7 @@ static int wp_des3_block_get_params(OSSL_PARAM params[], unsigned int mode,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -237,6 +239,8 @@ static int wp_des3_init_iv(wp_Des3BlockCtx *ctx, const unsigned char *iv,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_init_iv");
+
     if (ivLen != ctx->ivLen) {
         ok = 0;
     }
@@ -248,11 +252,12 @@ static int wp_des3_init_iv(wp_Des3BlockCtx *ctx, const unsigned char *iv,
         XMEMCPY(ctx->oiv, iv, ivLen);
         rc = wc_Des3_SetIV(&ctx->des3, iv);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Des3_SetIV", rc);
             ok = 0;
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -277,13 +282,14 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_init");
+
     ctx->bufSz = 0;
     ctx->enc = enc;
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
-
     if (ok && (iv != NULL) && (ctx->mode != EVP_CIPH_ECB_MODE) &&
             (!wp_des3_init_iv(ctx, iv, ivLen))) {
         ok = 0;
@@ -300,6 +306,7 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
             int rc = wc_Des3_SetKey(&ctx->des3, key, iv,
                 enc ? DES_ENCRYPTION : DES_DECRYPTION);
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Des3_SetKey", rc);
                 ok = 0;
             }
         }
@@ -309,7 +316,7 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
         ok = wp_des3_block_set_ctx_params(ctx, params);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -405,6 +412,8 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
     size_t oLen = 0;
     size_t nextBlocks;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_update");
+
     if ((ctx->tls_version > 0) && (ctx->enc)) {
         int i;
         unsigned char off = inLen % DES_BLOCK_SIZE;
@@ -484,7 +493,7 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
         ok = invalid == 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -503,6 +512,8 @@ static int wp_des3_block_final_enc(wp_Des3BlockCtx* ctx, unsigned char *out,
 {
     int ok = 1;
     size_t oLen = 0;
+
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_final_enc");
 
     if (ctx->pad) {
         size_t i;
@@ -533,7 +544,7 @@ static int wp_des3_block_final_enc(wp_Des3BlockCtx* ctx, unsigned char *out,
         ctx->bufSz = 0;
         *outLen = oLen;
     }
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -551,6 +562,8 @@ static int wp_des3_block_final_dec(wp_Des3BlockCtx* ctx, unsigned char *out,
     size_t *outLen, size_t outSize)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_final_dec");
 
     if (ctx->pad) {
         if (ctx->bufSz != DES_BLOCK_SIZE) {
@@ -599,7 +612,7 @@ static int wp_des3_block_final_dec(wp_Des3BlockCtx* ctx, unsigned char *out,
         *outLen = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -618,6 +631,8 @@ static int wp_des3_block_final(wp_Des3BlockCtx* ctx, unsigned char *out,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_final");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -631,7 +646,7 @@ static int wp_des3_block_final(wp_Des3BlockCtx* ctx, unsigned char *out,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -652,6 +667,8 @@ static int wp_des3_block_cipher(wp_Des3BlockCtx* ctx, unsigned char* out,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_cipher");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -665,7 +682,7 @@ static int wp_des3_block_cipher(wp_Des3BlockCtx* ctx, unsigned char* out,
         *outLen = inLen;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -681,6 +698,8 @@ static int wp_des3_block_get_ctx_params(wp_Des3BlockCtx* ctx, OSSL_PARAM params[
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_get_ctx_params");
 
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_IVLEN);
     if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, ctx->ivLen))) {
@@ -721,7 +740,7 @@ static int wp_des3_block_get_ctx_params(wp_Des3BlockCtx* ctx, OSSL_PARAM params[
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -737,6 +756,8 @@ static int wp_des3_block_set_ctx_params(wp_Des3BlockCtx *ctx,
     const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_DES, "wp_des3_block_set_ctx_params");
 
     if (params != NULL) {
         unsigned int val;
@@ -768,7 +789,7 @@ static int wp_des3_block_set_ctx_params(wp_Des3BlockCtx *ctx,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_CIPHER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -866,6 +887,33 @@ IMPLEMENT_DES3_BLOCK_DISPATCH(lcmode, kBits, ivBits)
 /** wp_des3cbc_functions_functions */
 IMPLEMENT_DES3_BLOCK(cbc, CBC, 192, 64)
 
+#else /* defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS */
 
-#endif /* WP_HAVE_AESCBC || WP_HAVE_AESECB */
+#define IMPLEMENT_DES3_BLOCK_NULL(mode)                                        \
+const OSSL_DISPATCH wp_des3##mode##_functions[] = {                            \
+    { OSSL_FUNC_CIPHER_NEWCTX,          (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_FREECTX,         (DFUNC)wp_des3_void                 }, \
+    { OSSL_FUNC_CIPHER_DUPCTX,          (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_ENCRYPT_INIT,    (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_DECRYPT_INIT,    (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_UPDATE,          (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_FINAL,           (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_CIPHER,          (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_GET_PARAMS,      (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_GET_CTX_PARAMS,  (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_SET_CTX_PARAMS,  (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_GETTABLE_PARAMS, (DFUNC)wp_des3_null                 }, \
+    { OSSL_FUNC_CIPHER_GETTABLE_CTX_PARAMS,                                    \
+                              (DFUNC)wp_des3_null                           }, \
+    { OSSL_FUNC_CIPHER_SETTABLE_CTX_PARAMS,                                    \
+                              (DFUNC)wp_des3_null                           }, \
+    { 0, NULL }                                                                \
+};
+static int wp_des3_null(void) { return 0; }
+static void wp_des3_void(void) {}
+
+IMPLEMENT_DES3_BLOCK_NULL(cbc)
+
+#endif
+#endif /* WP_HAVE_DES3CBC */
 

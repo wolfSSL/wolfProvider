@@ -43,6 +43,8 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
     size_t i;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_mp_read_unsigned_bin_le");
+
     /* Make big-endian. */
     for (i = 0; i < len; i++) {
         rdata[i] = data[len - 1 - i];
@@ -51,6 +53,7 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
     /* Read big-endian data in. */
     rc = mp_read_unsigned_bin(mp, rdata, (word32)len);
     if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_read_unsigned_bin", rc);
         ok = 0;
     }
 
@@ -73,8 +76,11 @@ int wp_mp_to_unsigned_bin_le(mp_int* mp, unsigned char* data, size_t len)
     int rc;
     size_t i;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_mp_to_unsigned_bin_le");
+
     rc = mp_to_unsigned_bin(mp, data);
     if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_to_unsigned_bin", rc);
         ok = 0;
     }
 #ifdef LITTLE_ENDIAN_ORDER
@@ -156,6 +162,8 @@ int wp_param_set_mp(OSSL_PARAM* p, const char* key, mp_int* mp,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_param_set_mp");
+
     p->key = key;
     p->data_type = OSSL_PARAM_UNSIGNED_INTEGER;
     p->return_size = p->data_size = mp_unsigned_bin_size(mp);
@@ -217,6 +225,8 @@ int wp_params_get_digest(const OSSL_PARAM* params, char* name,
     int ok = 1;
     const char* mdName = NULL;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_digest");
+
     if (!wp_params_get_utf8_string_ptr(params, OSSL_ALG_PARAM_DIGEST,
             &mdName)) {
         ok = 0;
@@ -264,6 +274,8 @@ int wp_params_get_mp(const OSSL_PARAM* params, const char* key, mp_int* mp,
     int ok = 1;
     const OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_mp");
+
     if (set != NULL) {
         *set = 0;
     }
@@ -306,6 +318,8 @@ int wp_params_get_octet_string(const OSSL_PARAM* params, const char* key,
     int ok = 1;
     const OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_octet_string");
+
     p = OSSL_PARAM_locate_const(params, key);
     if (p != NULL) {
         if (secure) {
@@ -342,6 +356,8 @@ int wp_params_get_bn_be(const OSSL_PARAM* params, const char* key,
 {
     int ok = 1;
     const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_bn_be");
 
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (p->data_type != OSSL_PARAM_UNSIGNED_INTEGER)) {
@@ -396,6 +412,8 @@ int wp_params_get_octet_string_ptr(const OSSL_PARAM* params, const char* key,
     int ok = 1;
     const OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_octet_string_ptr");
+
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (p->data_type != OSSL_PARAM_OCTET_STRING)) {
         ok = 0;
@@ -426,6 +444,8 @@ int wp_params_get_utf8_string(const OSSL_PARAM* params, const char* key,
 {
     int ok = 1;
     const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_utf8_string");
 
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (p->data_type != OSSL_PARAM_UTF8_STRING)) {
@@ -459,6 +479,8 @@ int wp_params_get_utf8_string_ptr(const OSSL_PARAM* params, const char* key,
     int ok = 1;
     const OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_utf8_string_ptr");
+
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (p->data_type != OSSL_PARAM_UTF8_STRING)) {
         ok = 0;
@@ -487,6 +509,8 @@ int wp_params_get_size_t(const OSSL_PARAM* params, const char* key, size_t* val)
     int ok = 1;
     const OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_size_t");
+
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (!OSSL_PARAM_get_size_t(p, val))) {
         ok = 0;
@@ -513,6 +537,8 @@ int wp_params_get_uint64(const OSSL_PARAM* params, const char* key,
     int ok = 1;
     const OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_uint64");
+
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (!OSSL_PARAM_get_uint64(p, val))) {
         ok = 0;
@@ -537,6 +563,8 @@ int wp_params_get_int(const OSSL_PARAM* params, const char* key, int* val)
 {
     int ok = 1;
     const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_int");
 
     p = OSSL_PARAM_locate_const(params, key);
     if ((p != NULL) && (!OSSL_PARAM_get_int(p, val))) {
@@ -564,6 +592,8 @@ int wp_params_get_uint(const OSSL_PARAM* params, const char* key,
 {
     int ok = 1;
     const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_get_uint");
 
     if (set != NULL) {
         *set = 0;
@@ -598,6 +628,8 @@ int wp_params_set_mp(OSSL_PARAM params[], const char* key, mp_int* mp,
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_set_mp");
 
     p = OSSL_PARAM_locate(params, key);
     if ((p != NULL) && (allow != 1)) {
@@ -637,6 +669,8 @@ int wp_params_set_octet_string_be(OSSL_PARAM params[], const char* key,
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_params_set_octet_string_be");
 
     p = OSSL_PARAM_locate(params, key);
     if (p != NULL) {

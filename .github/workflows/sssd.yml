@@ -36,25 +36,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Check if this version of wolfssl/wolfprovider has already been built,
-      # mark to cache these items on post if we do end up building
-      - name: Checking wolfSSL/wolfProvider in cache
-        uses: actions/cache@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
-          lookup-only: true
-
-      # If not yet built this version, build it now
       - name: Build wolfProvider
-        if: steps.wolfprov-cache.outputs.cache-hit != 'true'
         run: |
           OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 

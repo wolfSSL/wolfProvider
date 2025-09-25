@@ -25,7 +25,18 @@ source ${SCRIPT_DIR}/utils-general.sh
 
 WOLFPROV_SOURCE_DIR=${SCRIPT_DIR}/..
 WOLFPROV_INSTALL_DIR=${SCRIPT_DIR}/../wolfprov-install
-WOLFPROV_CONFIG_OPTS=${WOLFPROV_CONFIG_OPTS:-"--with-openssl=${OPENSSL_INSTALL_DIR} --with-wolfssl=${WOLFSSL_INSTALL_DIR} --prefix=${WOLFPROV_INSTALL_DIR}"}
+LIBDEFAULT_INSTALL_DIR=${WOLFPROV_INSTALL_DIR}
+LIBDEFAULT_STUB_INSTALL_DIR=${SCRIPT_DIR}/../libdefault-stub-install
+WOLFPROV_WITH_WOLFSSL=--with-wolfssl=${WOLFSSL_INSTALL_DIR}
+
+# Check if using system wolfSSL installation
+if command -v dpkg >/dev/null 2>&1; then
+    if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then
+        WOLFPROV_WITH_WOLFSSL=
+    fi
+fi
+
+WOLFPROV_CONFIG_OPTS=${WOLFPROV_CONFIG_OPTS:-"--with-openssl=${OPENSSL_INSTALL_DIR} ${WOLFPROV_WITH_WOLFSSL} --prefix=${WOLFPROV_INSTALL_DIR}"}
 WOLFPROV_CONFIG_CFLAGS=${WOLFPROV_CONFIG_CFLAGS:-''}
 
 if [ "${WOLFPROV_QUICKTEST}" = "1" ]; then
@@ -54,20 +65,23 @@ clean_wolfprov() {
         if [ -f "Makefile" ]; then
             make clean >>$LOG_FILE 2>&1
         fi
+        # Remove entire wolfProvider install directory
+        rm -rf ${WOLFPROV_INSTALL_DIR}
+        rm -rf ${LOG_FILE}
+    fi
+    if [ "$WOLFPROV_DISTCLEAN" -eq "1" ]; then
+        printf "Removing wolfProvider install ...\n"
         rm -rf ${WOLFPROV_INSTALL_DIR}
     fi
 }
 
 install_wolfprov() {
-    cd ${WOLFPROV_SOURCE_DIR}
+    pushd ${WOLFPROV_SOURCE_DIR} &> /dev/null
 
     init_openssl
     init_wolfssl
 
-    printf "\nConsolidating wolfProvider ...\n"
-    unset OPENSSL_MODULES
-    unset OPENSSL_CONF
-    printf "LD_LIBRARY_PATH: $LD_LIBRARY_PATH\n"
+    printf "\nInstalling wolfProvider ...\n"
 
     printf "\tConfigure wolfProvider ... "
     if [ ! -e "${WOLFPROV_SOURCE_DIR}/configure" ]; then
@@ -78,9 +92,16 @@ install_wolfprov() {
         WOLFPROV_CONFIG_OPTS+=" --enable-debug"
     fi
 
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-replace-default"
+    fi
+
+    if [ "${WOLFPROV_LEAVE_SILENT}" = "1" ]; then
+        WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_LEAVE_SILENT_MODE"
+    fi
+
     ./configure ${WOLFPROV_CONFIG_OPTS} CFLAGS="${WOLFPROV_CONFIG_CFLAGS}" >>$LOG_FILE 2>&1
     RET=$?
-
     if [ $RET != 0 ]; then
         printf "\n\n...\n"
         tail -n 40 $LOG_FILE
@@ -99,15 +120,21 @@ install_wolfprov() {
     fi
     printf "Done.\n"
 
-    printf "\tTest wolfProvider ... "
-    make test >>$LOG_FILE 2>&1
-    if [ $? != 0 ]; then
-        printf "\n\n...\n"
-        tail -n 40 $LOG_FILE
-        do_cleanup
-        exit 1
+    # Build the replacement default library after wolfprov to avoid linker errors
+    # but before testing so that the library is present if needed
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then 
+        printf "\tWARNING: Skipping tests in replace mode...\n"
+    else
+        printf "\tTest wolfProvider ... "
+        make test >>$LOG_FILE 2>&1
+        if [ $? != 0 ]; then
+            printf "\n\n...\n"
+            tail -n 40 $LOG_FILE
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
     fi
-    printf "Done.\n"
 
     printf "\tInstall wolfProvider ... "
     make install >>$LOG_FILE 2>&1
@@ -118,6 +145,8 @@ install_wolfprov() {
         exit 1
     fi
     printf "Done.\n"
+
+    popd &> /dev/null
 }
 
 init_wolfprov() {

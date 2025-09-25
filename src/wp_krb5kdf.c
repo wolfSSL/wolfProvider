@@ -143,6 +143,8 @@ static int wp_kdf_krb5kdf_set_ctx_params(wp_Krb5kdfCtx* ctx,
     int ok = 1;
     OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_KRB5KDF, "wp_kdf_krb5kdf_set_ctx_params");
+
     if (params != NULL) {
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_CIPHER);
@@ -194,6 +196,7 @@ static int wp_kdf_krb5kdf_set_ctx_params(wp_Krb5kdfCtx* ctx,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KRB5KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -211,6 +214,8 @@ static int wp_kdf_krb5kdf_get_ctx_params(wp_Krb5kdfCtx* ctx,
     int ok = 1;
     OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_KRB5KDF, "wp_kdf_krb5kdf_get_ctx_params");
+
     (void)ctx;
 
     p = OSSL_PARAM_locate(params, OSSL_KDF_PARAM_SIZE);
@@ -220,6 +225,7 @@ static int wp_kdf_krb5kdf_get_ctx_params(wp_Krb5kdfCtx* ctx,
         }
     }
 
+    WOLFPROV_LEAVE(WP_LOG_KRB5KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -292,83 +298,134 @@ static int wp_kdf_krb5kdf_expected_key_size(wp_Krb5kdfCtx* ctx)
  *   s[l] = (constant rot 13*(l/K))[l%k]
  *   block[l % N] += s[l] (with carry)
  * finally add carry if any
+ *
+ * @param [in] block         Block to fill with constant.
+ * @param [in] blocksize     Size of block in bytes.
+ * @param [in] constant      Constant to use for fill.
+ * @param [in] constant_len  Length of constant in bytes. Not zero and less
+ *                           than or equal to blocksize.
  */
 static void n_fold(unsigned char *block, unsigned int blocksize,
                    const unsigned char *constant, size_t constant_len)
 {
-    unsigned int cnt;
-    unsigned int i;
+    unsigned int const_len = (unsigned int)constant_len;
     unsigned int a;
     unsigned int b;
+    unsigned int cnt;
     unsigned int carry;
-    unsigned int rot;
     unsigned int bi;
-    unsigned int const_len = (unsigned int)constant_len;
+    unsigned int rot;
+    unsigned int i;
+
+    /* Copy in unrotated constant first. */
+    XMEMCPY(block, constant, constant_len);
 
     /* If equal size then only one unrotated copy of constant needed. */
     if (blocksize == const_len) {
-        XMEMCPY(block, constant, constant_len);
         return;
     }
 
-    /* Compute GCD of constant_len and blocksize. */
-    a = blocksize;
-    b = const_len;
-    while (b != 0) {
+    /* Compute first iteration of GCD of constant_len and blocksize. */
+    a = const_len;
+    b = blocksize % const_len;
+
+    if (b == 0) {
+        /* Fill rest of block with rotated constant - no adding. */
+        /* First rotate amount. */
+        rot = 13;
+        for (i = const_len; i < blocksize; i += const_len) {
+            unsigned int j;
+            /* Calculate first index into constant to rotate. */
+            unsigned int ci = (i - (rot >> 3) - 1) % const_len;
+            /* Calculate amount to rotate right and left. */
+            unsigned char rr = rot & 0x7;
+            unsigned char rl = 8 - rr;
+            /* Load first constant value - large type to handle shift 8. */
+            unsigned int cv = constant[ci];
+
+            for (j = 0; j < const_len; j++) {
+                /* Get rotated constant buffer value. */
+                block[i + j]  = (unsigned char)(cv << rl);
+                /* Calculate next constant index. */
+                ci = (ci + 1) % const_len;
+                /* Load next constant value. */
+                cv = constant[ci];
+                /* OR in second rotated value. */
+                block[i + j] |= (unsigned char)(cv >> rr);
+            }
+            /* Update rotate amount. */
+            rot += 13;
+        }
+        return;
+    }
+
+    /* Complete computation of GCD of constant_len and blocksize. */
+    do {
         unsigned int t = b;
         b = a % b;
         a = t;
-    }
+    } while (b != 0);
     /* Calculate LCM of constant_len and blocksize. */
     cnt = (const_len * blocksize) / a;
 
-    /* Start with constant un-rotated and then add to zero for the rest. */
-    XMEMCPY(block, constant, constant_len);
+    /* Set rest to zero for add. */
     XMEMSET(block + constant_len, 0, blocksize - constant_len);
 
     /* No initial carry. */
     carry = 0;
-    /* First rotation is 13 bits. */
-    rot = 13;
-    /* Starting block index - constant_len <= blocksize. */
-    bi = const_len;
+    /* Last block is first as we are adding in reverse. */
+    bi = blocksize - 1;
+    /* Rotation count for when adding last constant. */
+    rot = 13 * ((cnt - const_len) / const_len);
     /* Do one constant at a time - cnt is a multiple of constant_len. */
-    for (i = const_len; i < cnt; i += const_len) {
-         unsigned int j;
-         /* Calculate first index into constant to rotate. */
-         unsigned int ci = ((const_len - (rot >> 3)) - 1) % const_len;
-         /* Calculate amount to rotate right and left. */
-         unsigned char rr = rot & 0x7;
-         unsigned char rl = 8 - rr;
+    for (i = cnt - const_len; i >= const_len; i -= const_len) {
+        int j;
+        /* Calculate last index into constant to rotate. */
+        unsigned int ci = (i - (rot >> 3) - 1) % const_len;
+        /* Calculate amount to rotate right and left. */
+        unsigned char rr = rot & 0x7;
+        unsigned char rl = 8 - rr;
+        /* Load first constant value - large type to handle shift 8. */
+        unsigned int cv = constant[ci];
 
-         /* Add in constant buffer to block. */
-         for (j = 0; j < const_len; j++) {
-             /* Rotated constant value. */
-             unsigned char rcv;
+        /* Add in constant buffer to block. */
+        for (j = const_len - 1; j >= 0; j--) {
+            /* Rotated constant value. */
+            unsigned char rcv;
 
-             /* Get rotated constant buffer value. */
-             rcv  = (unsigned char)(constant[ci] << rl);
-             ci = (ci + 1) % const_len;
-             rcv |= (unsigned char)(constant[ci] >> rr);
+            /* Get rotated constant buffer value. */
+            rcv  = (unsigned char)(cv >> rr);
+            /* Calculate next constant index. */
+            ci = (ci + (const_len - 1)) % const_len;
+            /* Load next constant value. */
+            cv = constant[ci];
+            /* OR in second rotated value. */
+            rcv |= (unsigned char)(cv << rl);
 
-             /* Add block value and rotated constant value to previous carry. */
-             carry += block[bi] + rcv;
-             /* Store new block value. */
-             block[bi] = (unsigned char)(carry & 0xff);
-             /* Get carry. */
-             carry >>= 8;
-
-             /* Next block index. */
-             bi = (bi + 1) % blocksize;
-         }
-         rot += 13;
+            /* Add block value and rotated constant value to previous carry. */
+            carry += block[bi];
+            carry += rcv;
+            /* Store new block value. */
+            block[bi] = (unsigned char)(carry & 0xff);
+            /* Get carry. */
+            carry >>= 8;
+            /* Previous block index. */
+            bi = (bi + (blocksize - 1)) % blocksize;
+        }
+        /* Calculate rotation for previous constant block.  */
+        rot -= 13;
     }
 
     /* Final carry pass. */
-    for (i = 0; (i < blocksize) && (carry > 0); i++) {
-        carry += block[i];
-        block[i] = (unsigned char)(carry & 0xff);
+    while (carry > 0) {
+        /* Add block value to previous carry. */
+        carry += block[bi];
+        /* Store new block value. */
+        block[bi] = (unsigned char)(carry & 0xff);
+        /* Get carry. */
         carry >>= 8;
+        /* Previous block index. */
+        bi = (bi + (blocksize - 1)) % blocksize;
     }
 }
 
@@ -395,6 +452,8 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
     byte *plain = NULL;
     byte *cipher = NULL;
 
+    WOLFPROV_ENTER(WP_LOG_KRB5KDF, "wp_kdf_krb5kdf_derive");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -416,6 +475,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
         rc = wc_AesSetKey(&aes, ctx->key, (word32)ctx->keySz, NULL,
             AES_ENCRYPTION);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_AesSetKey", rc);
             ok = 0;
         }
     }
@@ -426,6 +486,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
         for (osize = 0; ok && osize < keyLen; osize += cipherLen) {
             rc = wc_AesCbcEncrypt(&aes, cipher, plain, AES_BLOCK_SIZE);
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_AesCbcEncrypt", rc);
                 ok = 0;
             }
 
@@ -438,6 +499,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
                 rc = wc_AesSetKey(&aes, ctx->key, (word32)ctx->keySz, NULL,
                     AES_ENCRYPTION);
                 if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_AesSetKey", rc);
                     ok = 0;
                 }
 
@@ -456,6 +518,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
 
     wc_AesFree(&aes);
 
+    WOLFPROV_LEAVE(WP_LOG_KRB5KDF, "wp_kdf_krb5kdf_derive", ok);
     return ok;
 }
 

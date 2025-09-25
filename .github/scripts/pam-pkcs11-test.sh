@@ -1,17 +1,12 @@
 #!/bin/bash
 set -euo pipefail
+set -x
 
-echo "[*] Setting up environment..."
-SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-REPO_ROOT=$(git -C "$(dirname "$SCRIPT_PATH")" rev-parse --show-toplevel)
-source $REPO_ROOT/scripts/env-setup || true
-
-if [[ -z "${OPENSSL_MODULES:-}" ]]; then
-    echo "Environment not set up: OPENSSL_MODULES is not defined or empty"
-    exit 1
-elif [[ ! -d "$OPENSSL_MODULES" ]]; then
-    echo "Could not find wolfProvider at $OPENSSL_MODULES"
-    echo "Please build it first..."
+# Confirm wolfProvider is configured by running openssl list -providers
+if openssl list -providers | grep -qi wolf; then
+    echo "wolfProvider is configured"
+else
+    echo "wolfProvider is not configured"
     exit 1
 fi
 

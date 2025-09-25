@@ -95,8 +95,11 @@ int wp_mac_up_ref(wp_Mac* mac)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_up_ref");
+
     rc = wc_LockMutex(&mac->mutex);
     if (rc < 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_LockMutex", rc);
         ok = 0;
     }
     if (ok) {
@@ -136,6 +139,8 @@ int wp_mac_get_type(wp_Mac* mac)
 int wp_mac_get_private_key(wp_Mac* mac, unsigned char** priv, size_t* privLen)
 {
     int ok = 0;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_get_private_key");
 
     if (mac != NULL) {
         *priv = mac->key;
@@ -188,6 +193,7 @@ static wp_Mac* wp_mac_new(WOLFPROV_CTX *provCtx, int type)
     #ifndef SINGLE_THREADED
         int rc = wc_InitMutex(&mac->mutex);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMutex", rc);
             OPENSSL_free(mac);
             mac = NULL;
         }
@@ -246,11 +252,13 @@ void wp_mac_free(wp_Mac* mac)
  */
 static wp_Mac* wp_mac_dup(const wp_Mac *src, int selection)
 {
-    wp_Mac* dst;
+    wp_Mac* dst = NULL;
 
     (void)selection;
-
-    dst = wp_mac_new(src->provCtx, src->type);
+    if (wolfssl_prov_is_running()) {
+        /* Create a new mac object. */
+        dst = wp_mac_new(src->provCtx, src->type);
+    }
     if (dst != NULL) {
         int ok = 1;
 
@@ -302,6 +310,8 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_has");
+
     if (!wolfssl_prov_is_running()) {
        ok = 0;
     }
@@ -328,6 +338,8 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
 static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
 {
    int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_match");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -356,6 +368,8 @@ static int wp_mac_import(wp_Mac *mac, int selection, const OSSL_PARAM params[])
 {
     int ok = 1;
     const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_import");
 
     if ((!wolfssl_prov_is_running()) || (mac == NULL)) {
         ok = 0;
@@ -421,6 +435,8 @@ static int wp_mac_export_priv_key(wp_Mac* mac, OSSL_PARAM* params, int* pIdx,
 {
     int i = *pIdx;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_export_priv_key");
+
     if (mac->keyLen != MAX_SIZE_T) {
         XMEMCPY(data + *idx, mac->key, mac->keyLen);
         wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PRIV_KEY,
@@ -461,9 +477,15 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
     unsigned char* data = NULL;
     size_t len = 0;
 
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_export");
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+
     XMEMSET(params, 0, sizeof(params));
 
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+    if (ok && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         size_t idx = 0;
 
         len = wp_mac_export_priv_key_alloc_size(mac);
@@ -503,9 +525,11 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
 static wp_MacGenCtx* wp_mac_gen_init(WOLFPROV_CTX* provCtx,
     int selection, const OSSL_PARAM params[], int type)
 {
-    wp_MacGenCtx* ctx;
+    wp_MacGenCtx* ctx = NULL;
 
-    ctx = OPENSSL_zalloc(sizeof(*ctx));
+    if (wolfssl_prov_is_running()) {
+        ctx = OPENSSL_zalloc(sizeof(*ctx));
+    }
     if (ctx != NULL) {
         ctx->provCtx = provCtx;
         ctx->selection = selection;
@@ -531,6 +555,8 @@ static wp_MacGenCtx* wp_mac_gen_init(WOLFPROV_CTX* provCtx,
 static int wp_mac_gen_set_params(wp_MacGenCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_gen_set_params");
 
     if (!wp_params_get_octet_string(params, OSSL_PKEY_PARAM_PRIV_KEY,
             &ctx->key, &ctx->keyLen, 1)) {
@@ -620,6 +646,8 @@ static int wp_mac_get_params(wp_Mac* mac, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_get_params");
 
     if (mac->keyLen != MAX_SIZE_T) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);

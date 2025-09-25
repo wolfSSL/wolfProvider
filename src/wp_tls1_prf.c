@@ -146,6 +146,8 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_TLS1_PRF, "wp_kdf_tls1_prf_derive");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -174,6 +176,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
                 (word32)(ctx->seedSz), NULL, INVALID_DEVID);
             PRIVATE_KEY_LOCK();
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_PRF_TLSv1", rc);
                 ok = 0;
             }
         }
@@ -187,6 +190,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
                 INVALID_DEVID);
             PRIVATE_KEY_LOCK();
             if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_PRF_TLS", rc);
                 ok = 0;
             }
         }
@@ -212,6 +216,8 @@ static int wp_kdf_tls1_prf_get_seed(wp_Tls1Prf_Ctx* ctx,
     int ok = 1;
     const OSSL_PARAM *p;
     unsigned char* q = ctx->seed + ctx->seedSz;
+
+    WOLFPROV_ENTER(WP_LOG_TLS1_PRF, "wp_kdf_tls1_prf_get_seed");
 
     /* Combine all the data in the seed parameters. */
     while (ok && ((p = OSSL_PARAM_locate_const(params,
@@ -245,6 +251,8 @@ static int wp_kdf_tls1_prf_set_ctx_params(wp_Tls1Prf_Ctx* ctx,
     const OSSL_PARAM params[])
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_TLS1_PRF, "wp_kdf_tls1_prf_set_ctx_params");
 
     if (params != NULL) {
         if (!wp_params_get_digest(params, NULL, ctx->provCtx->libCtx,
@@ -301,6 +309,8 @@ static int wp_kdf_tls1_prf_get_ctx_params(wp_Tls1Prf_Ctx* ctx,
 {
     int ok = 1;
     OSSL_PARAM *p;
+
+    WOLFPROV_ENTER(WP_LOG_TLS1_PRF, "wp_kdf_tls1_prf_get_ctx_params");
 
     (void)ctx;
 

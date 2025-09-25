@@ -1170,7 +1170,7 @@ int test_rsa_fromdata(void* data)
         static const int selections[] = {
             EVP_PKEY_KEYPAIR,
             EVP_PKEY_PUBLIC_KEY,
-            EVP_PKEY_PRIVATE_KEY,
+            EVP_PKEY_PRIVATE_KEY, /* added in 3.0.12 and 3.1.4 */
         };
 
         /* Parameter data fields */

@@ -109,56 +109,76 @@ static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
 
     ctx = EVP_PKEY_CTX_new_from_name(libCtx, "HKDF", NULL);
     if (ctx == NULL) {
+        PRINT_MSG("Failed to create HKDF context");
         err = 1;
     }
     if (err == 0) {
         if (EVP_PKEY_derive_init(ctx) != 1) {
+            PRINT_MSG("Failed to init HKDF derive");
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_CTX_hkdf_mode(ctx, mode) != 1) {
+            PRINT_MSG("Failed to set HKDF mode");
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_CTX_set_hkdf_md(ctx, md) != 1) {
+            PRINT_MSG("Failed to set HKDF md");
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_CTX_set1_hkdf_key(ctx, inKey, sizeof(inKey)) != 1) {
+            PRINT_MSG("Failed to set HKDF key");
             err = 1;
         }
     }
     if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXPAND_ONLY)) {
+#if OPENSSL_VERSION_NUMBER >= 0x30100000L && \
+    OPENSSL_VERSION_NUMBER != 0x30200050L && \
+    OPENSSL_VERSION_NUMBER != 0x30300040L
         if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 1) {
+#else
+        /* In 3.1.x, the following code was added to hkdf_common_set_ctx_params()
+         * if (p->data_size != 0 && p->data != NULL) {
+         * The above code is not present in 3.2.5 and 3.3.4. */
+        if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 0) {
+#endif
+            PRINT_MSG("Failed to set HKDF salt to NULL");
             err = 1;
         }
     }
     if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXPAND_ONLY)) {
         if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, salt, sizeof(salt)) != 1) {
+            PRINT_MSG("Failed to set HKDF salt");
             err = 1;
         }
     }
     if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXTRACT_ONLY)) {
         if (EVP_PKEY_CTX_add1_hkdf_info(ctx, info, sizeof(info)) != 1) {
+            PRINT_MSG("Failed to set HKDF info");
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_derive(ctx, key, &len) != 1) {
+            PRINT_MSG("Failed to derive HKDF key");
             err = 1;
         }
     }
 
     if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXTRACT_ONLY)) {
         if (len != (size_t)keyLen) {
+            PRINT_MSG("HKDF key length mismatch");
             err = 1;
         }
     }
     else {
         if (len != (size_t)EVP_MD_size(md)) {
+            PRINT_MSG("HKDF key length mismatch for extract only");
             err = 1;
         }
     }
@@ -204,6 +224,7 @@ static int test_hkdf_md(const EVP_MD *md, int mode)
     memset(wKey, 0, sizeof(wKey));
 
     if (err == 0) {
+        PRINT_MSG("Calc with OpenSSL");
         err = test_hkdf_double_set_salt(osslLibCtx, oKey, sizeof(oKey), md, mode);
         if (err == 1) {
             PRINT_MSG("FAILED OpenSSL");

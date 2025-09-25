@@ -18,46 +18,76 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_openldap:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        openldap_ref: [ 'master', 'OPENLDAP_REL_ENG_2_5_13', 'OPENLDAP_REL_ENG_2_6_7' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        openldap_ref: [ 'OPENLDAP_REL_ENG_2_6_7' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libsasl2-dev
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y git sudo build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
+            groff libsasl2-dev
 
       - name: Checkout openldap
         uses: actions/checkout@v4
@@ -66,23 +96,54 @@ jobs:
           path: openldap
           ref: ${{ matrix.openldap_ref }}
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd openldap
+          # Apply the wolfProvider patch
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openldap/openldap-${{ matrix.openldap_ref }}-debian-wolfprov.patch
+
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap
+        shell: bash
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
+          set -o pipefail
+          # wolfProvider is already loaded as the default provider
+          echo "Current OpenSSL providers:"
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Generate configure script
           rm -f aclocal.m4
           autoreconf -ivf
 
           # Configure with OpenSSL
-          ./configure --with-tls=openssl --disable-bdb --disable-hdb \
-            CFLAGS="-I$GITHUB_WORKSPACE/openssl-install/include \
-              -L$GITHUB_WORKSPACE/openssl-install/lib64" \
-            LDFLAGS="-Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64"
+          ./configure --with-tls=openssl --disable-bdb --disable-hdb
 
           # Build OpenLDAP
           make -j depend
           make -j
-          make -j check
+
+          export ${{ matrix.force_fail }}
+          if [ -n "${{ matrix.force_fail }}" ]; then
+            set +e
+          fi
+
+          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ]; then
+            # Run with a 15 minute timeout for WPFF since it breaks on test 067
+            timeout 15m make -j check 2>&1 | tee openldap-test.log
+            TEST_RESULT=${PIPESTATUS[0]}
+            if [ $TEST_RESULT -eq 124 ]; then
+              echo "make -j check timed out after 15 minutes with WOLFPROV_FORCE_FAIL=1"
+              echo "Tests failed to complete as expected"
+              TEST_RESULT=1
+            fi
+          else
+            make -j check 2>&1 | tee openldap-test.log
+            TEST_RESULT=${PIPESTATUS[0]}
+          fi
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} openldap

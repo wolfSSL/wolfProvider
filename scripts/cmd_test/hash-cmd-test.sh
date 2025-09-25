@@ -19,62 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-# Set up environment
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
-UTILS_DIR="${REPO_ROOT}/scripts"
-export LOG_FILE="${SCRIPT_DIR}/hash-test.log"
-touch "$LOG_FILE"
+source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${SCRIPT_DIR}/clean-cmd-test.sh"
+cmd_test_env_setup "hash-test.log"
+clean_cmd_test "hash"
 
-# Source wolfProvider utilities
-source "${UTILS_DIR}/utils-general.sh"
-source "${UTILS_DIR}/utils-openssl.sh"
-source "${UTILS_DIR}/utils-wolfssl.sh"
-source "${UTILS_DIR}/utils-wolfprovider.sh"
-
-# Initialize wolfProvider
-init_wolfprov
-
-# Fail flags
-FAIL=0
-FORCE_FAIL_PASSED=0
-
-# Get the force fail parameter
-if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-    echo "Force fail mode enabled for Hash tests"
-fi
-if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
-    echo "FIPS mode enabled for Hash tests"
-fi
-
-# Verify wolfProvider is properly loaded
-echo -e "\nVerifying wolfProvider configuration:"
-if ! $OPENSSL_BIN list -providers | grep -q "wolf"; then
-    echo "[FAIL] wolfProvider not found in OpenSSL providers!"
-    echo "Current provider list:"
-    $OPENSSL_BIN list -providers
-    FAIL=1
-else
-    echo "wolfProvider is properly configured"
-fi
-
-# Print environment for verification
-echo "Environment variables:"
-echo "OPENSSL_MODULES: ${OPENSSL_MODULES}"
-echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
-echo "OPENSSL_BIN: ${OPENSSL_BIN}"
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create test data and output directories
 mkdir -p hash_outputs
-echo "This is test data for hash algorithm testing." > test.txt
-
-# Helper function to handle force fail checks
-check_force_fail() {
-    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        echo "[PASS] Test passed when force fail was enabled"
-        FORCE_FAIL_PASSED=1
-    fi
-}
+echo "This is test data for hash cmd test." > hash_outputs/test_data.txt
 
 # Array of hash algorithms to test
 HASH_ALGOS=("sha1" "sha224" "sha256" "sha384" "sha512")
@@ -88,7 +44,7 @@ run_hash_test() {
     local output_file="$3"
     
     # Run the hash algorithm with specified provider options
-    if ! $OPENSSL_BIN dgst -$algo $provider_opts -out "$output_file" test.txt; then
+    if ! $OPENSSL_BIN dgst -$algo $provider_opts -out "$output_file" hash_outputs/test_data.txt; then
         echo "[FAIL] Hash generation failed for ${algo}"
         FAIL=1
     fi

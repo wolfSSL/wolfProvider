@@ -1,5 +1,5 @@
 
-SUFFIXES = 
+SUFFIXES =
 TESTS =
 noinst_PROGRAMS =
 noinst_HEADERS =

@@ -19,62 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-# Set up environment
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
-UTILS_DIR="${REPO_ROOT}/scripts"
-export LOG_FILE="${SCRIPT_DIR}/aes-test.log"
-touch "$LOG_FILE"
+source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${SCRIPT_DIR}/clean-cmd-test.sh"
+cmd_test_env_setup "aes-test.log"
+clean_cmd_test "aes"
 
-# Source wolfProvider utilities
-source "${UTILS_DIR}/utils-general.sh"
-source "${UTILS_DIR}/utils-openssl.sh"
-source "${UTILS_DIR}/utils-wolfssl.sh"
-source "${UTILS_DIR}/utils-wolfprovider.sh"
-
-# Initialize wolfProvider
-init_wolfprov
-
-# Fail flags
-FAIL=0
-FORCE_FAIL_PASSED=0
-
-# Check environment variables directly
-if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-    echo "Force fail mode enabled for AES tests"
-fi
-if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
-    echo "FIPS mode enabled for AES tests"
-fi
-
-# Verify wolfProvider is properly loaded
-echo -e "\nVerifying wolfProvider configuration:"
-if ! $OPENSSL_BIN list -providers | grep -q "wolf"; then
-    echo "[FAIL] wolfProvider not found in OpenSSL providers!"
-    echo "Current provider list:"
-    $OPENSSL_BIN list -providers
-    FAIL=1
-else
-    echo "wolfProvider is properly configured"
-fi
-
-# Print environment for verification
-echo "Environment variables:"
-echo "OPENSSL_MODULES: ${OPENSSL_MODULES}"
-echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
-echo "OPENSSL_BIN: ${OPENSSL_BIN}"
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create test data and output directories
 mkdir -p aes_outputs
-echo "This is test data for AES encryption testing." > test.txt
-
-# Helper function to handle force fail checks
-check_force_fail() {
-    if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        echo "[PASS] Test passed when force fail was enabled"
-        FORCE_FAIL_PASSED=1
-    fi
-}
+echo "This is test data for AES encryption testing." > aes_outputs/test_data.txt
 
 # Arrays for test configurations
 KEY_SIZES=("128" "192" "256")
@@ -112,7 +68,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         
         # Encryption with OpenSSL default provider
         if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider default \
-            -in test.txt -out "$enc_file" -p; then
+            -in aes_outputs/test_data.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt failed"
             FAIL=1
         fi
@@ -125,7 +81,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         fi
         
         if [ $FAIL -eq 0 ]; then
-            if cmp -s "test.txt" "$dec_file"; then
+            if cmp -s "aes_outputs/test_data.txt" "$dec_file"; then
                 echo "[PASS] Interop AES-${key_size}-${mode}: OpenSSL encrypt, wolfProvider decrypt"
                 check_force_fail
             else
@@ -141,7 +97,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         
         # Encryption with wolfProvider
         if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider-path "$WOLFPROV_PATH" -provider libwolfprov \
-            -in test.txt -out "$enc_file" -p; then
+            -in aes_outputs/test_data.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt failed"
             FAIL=1
         fi
@@ -154,7 +110,7 @@ for key_size in "${KEY_SIZES[@]}"; do
         fi
         
         if [ $FAIL -eq 0 ]; then
-            if cmp -s "test.txt" "$dec_file"; then
+            if cmp -s "aes_outputs/test_data.txt" "$dec_file"; then
                 echo "[PASS] Interop AES-${key_size}-${mode}: wolfProvider encrypt, OpenSSL decrypt"
                 check_force_fail
             else

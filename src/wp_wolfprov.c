@@ -78,6 +78,8 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
  */
 int wolfssl_prov_is_running(void)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_prov_is_running");
+
 #ifdef WP_CHECK_FORCE_FAIL
     if (forceFail) {
       WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
@@ -183,6 +185,8 @@ static int bio_core_puts(BIO *bio, const char *str)
 
 static int bio_core_new(BIO *bio)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "bio_core_new");
+
     BIO_set_init(bio, 1);
 
     WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
@@ -191,6 +195,8 @@ static int bio_core_new(BIO *bio)
         
 static int bio_core_free(BIO *bio)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "bio_core_free");
+
     BIO_set_init(bio, 0);
     wolfssl_prov_bio_free(BIO_get_data(bio));
     
@@ -303,6 +309,8 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfprov_get_params");
 
     (void)provCtx;
 
@@ -546,6 +554,10 @@ static const OSSL_ALGORITHM wolfprov_kdfs[] = {
     { WP_NAMES_TLS1_PRF, WOLFPROV_PROPERTIES, wp_kdf_tls1_prf_functions,
       "" },
 #endif
+#ifdef WP_HAVE_KBKDF
+    { WP_NAMES_KBKDF, WOLFPROV_PROPERTIES, wp_kdf_kbkdf_functions,
+      "" },
+#endif
 #ifdef WP_HAVE_KRB5KDF
     { WP_NAMES_KRB5KDF, WOLFPROV_PROPERTIES, wp_kdf_krb5kdf_functions,
       "" },
@@ -736,7 +748,7 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(type-specific, pem),
       wp_rsa_kp_pem_encoder_functions,
       "" },
-#ifdef WOLFSSL_RSA_PSS_ENCODING
+#ifdef WP_RSA_PSS_ENCODING
     { WP_NAMES_RSA_PSS, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
       wp_rsapss_spki_der_encoder_functions,
       "" },
@@ -944,6 +956,8 @@ static int wp_dummy_decode(WOLFPROV_CTX* ctx, OSSL_CORE_BIO* cBio,
     int selection, OSSL_CALLBACK* dataCb, void* dataCbArg,
     OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
 {
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_dummy_decode");
+
     (void)ctx;
     (void)cBio;
     (void)selection;
@@ -1101,6 +1115,9 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
 {
     const OSSL_ALGORITHM* alg;
 
+    WOLFPROV_ENTER(WP_LOG_QUERY, "wolfprov_query");
+    WOLFPROV_MSG_DEBUG(WP_LOG_QUERY, "Query operation ID: %d", id);
+
     (void)provCtx;
 
     *no_cache = 0;
@@ -1150,6 +1167,7 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
             break;
     }
 
+    WOLFPROV_LEAVE(WP_LOG_QUERY, "wolfprov_query", (alg != NULL) ? 1 : 0);
     return alg;
 }
 
@@ -1216,6 +1234,8 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
     const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_provider_init");
 
 #ifdef WOLFPROV_DEBUG
     ok = (wolfProv_Debugging_ON() == 0);

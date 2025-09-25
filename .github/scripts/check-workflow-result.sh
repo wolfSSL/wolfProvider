@@ -107,30 +107,41 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
 
             # Define expected failures
             EXPECTED_FAILS="auth_token_testdriver crypto_testdriver pkt_testdriver tls_crypt_testdriver"
+
+            # This test may fail when replace-default is enabled
+            OPTIONAL_FAILS="provider_testdriver"
             
             # Create temporary files for sorted lists
             TEMP_DIR=$(mktemp -d)
             ACTUAL_SORTED="${TEMP_DIR}/actual_sorted.txt"
             EXPECTED_SORTED="${TEMP_DIR}/expected_sorted.txt"
+            OPTIONAL_SORTED="${TEMP_DIR}/optional_sorted.txt"
             
             # Clean and sort both lists
             echo "$ACTUAL_FAILS" | tr ' ' '\n' | grep -v '^$' | sort > "$ACTUAL_SORTED"
             echo "$EXPECTED_FAILS" | tr ' ' '\n' | grep -v '^$' | sort > "$EXPECTED_SORTED"
-            
+            echo "$OPTIONAL_FAILS" | tr ' ' '\n' | grep -v '^$' | sort > "$OPTIONAL_SORTED"
+
             echo "DEBUG: Actual failed tests: $(tr '\n' ' ' < "$ACTUAL_SORTED")"
             echo "DEBUG: Expected failed tests: $(tr '\n' ' ' < "$EXPECTED_SORTED")"
-            
+            echo "DEBUG: Optional failed tests: $(tr '\n' ' ' < "$OPTIONAL_SORTED")"
+
             # Find missing in actual (in expected but not in actual)
             MISSING=$(comm -23 "$EXPECTED_SORTED" "$ACTUAL_SORTED" | tr '\n' ' ')
             # Find extra in actual (in actual but not in expected)
             EXTRA=$(comm -13 "$EXPECTED_SORTED" "$ACTUAL_SORTED" | tr '\n' ' ')
-            
+            # Strip out optional failures
+            EXTRA=$(comm -23 "$EXTRA" "$OPTIONAL_SORTED" | tr '\n' ' ')
+            # List the optional failures
+            OPTIONAL_FAILS=$(comm -13 "$EXPECTED_SORTED" "$OPTIONAL_SORTED" | tr '\n' ' ')
+
             # Clean up temporary files
             rm -rf "$TEMP_DIR"
             
             echo "Test(s) that should have failed: $MISSING"
             echo "Test(s) that shouldn't have failed: $EXTRA"
-            
+            echo "Test(s) that failed (optional): $OPTIONAL_FAILS"
+
             if [ -z "$MISSING" ] && [ -z "$EXTRA" ]; then
                 echo "PASS: Actual failed tests match expected."
                 exit 0
