@@ -28,6 +28,7 @@ echo ""
 # Configuration
 KEY_TYPES=("rsa" "ecdsa" "ed25519" "chacha20-poly1305")
 ITERATIONS=10
+GITHUB_ITERATIONS=5
 TEST_BASE_DIR="/tmp/git-wolfprovider-test"
 SSH_TEST_ENABLED=${SSH_TEST_ENABLED:-true}
 
@@ -272,6 +273,109 @@ verify_ssh_setup() {
 
     # Clean up temporary files
     rm -f "$ssh_log" "$ssh_error_log"
+}
+
+# Function to test GitHub SSH connectivity
+test_github_ssh_connectivity() {
+    echo "=== Testing GitHub SSH Connectivity ==="
+    echo "Testing lightweight git operation to GitHub via SSH"
+    echo ""
+
+    local github_repo="git@github.com:wolfSSL/wolfProvider.git"
+    local test_iterations=${1:-1}  # Default to 1 iteration for GitHub test
+    local success_count=0
+    local failure_count=0
+    local timing_log="/tmp/github-ssh-timing.log"
+    local error_log="/tmp/github-ssh-errors.log"
+
+    # Clear previous logs
+    > "$timing_log"
+    > "$error_log"
+
+    echo "Testing git ls-remote to $github_repo"
+    echo "This tests SSH connectivity and crypto without heavy operations"
+    echo ""
+
+    # Ensure we're in a valid directory for git operations
+    local original_dir=$(pwd)
+    cd /tmp || cd / || cd "$HOME" || true
+    echo "Current directory: $(pwd)"
+    echo ""
+
+    for ((attempt=1; attempt<=test_iterations; attempt++)); do
+        echo "--- GitHub SSH Test $attempt ---"
+        
+        local start_time=$(date +%s.%N)
+        local status="UNKNOWN"
+        
+        echo "Attempting git ls-remote to GitHub..."
+        
+        # Test the lightweight git operation
+        if timeout 30 git ls-remote "$github_repo" HEAD 2>>"$error_log" | head -1 >/dev/null; then
+            local end_time=$(date +%s.%N)
+            local duration=$(echo "$end_time - $start_time" | bc -l)
+            
+            if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+                status="SUCCESS"
+                ((success_count++))
+                print_status "SUCCESS" "GitHub SSH operation successful (with WPFF=1"
+                check_force_fail
+            else
+                status="SUCCESS"
+                ((success_count++))
+                print_status "SUCCESS" "GitHub SSH operation successful"
+            fi
+            
+            echo "  GitHub SSH test: $status ($(printf "%.6f" "$duration")s)"
+            echo "$attempt,$status,$duration" >> "$timing_log"
+        else
+            local end_time=$(date +%s.%N)
+            local duration=$(echo "$end_time - $start_time" | bc -l)
+            
+            if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
+                status="EXPECTED_FAIL"
+                print_status "SUCCESS" "GitHub SSH operation failed as expected (WPFF=1)"
+            else
+                status="FAILURE"
+                ((failure_count++))
+                print_status "FAILURE" "GitHub SSH operation failed on attempt $attempt"
+            fi
+            
+            echo "  GitHub SSH test: $status ($(printf "%.6f" "$duration")s)"
+            echo "$attempt,$status,$duration" >> "$timing_log"
+        fi
+        
+        echo ""
+    done
+
+    # Summary
+    echo "=== GITHUB SSH TEST SUMMARY ==="
+    echo "Total operations: $((success_count + failure_count))"
+    echo "Successful operations: $success_count"
+    echo "Failed operations: $failure_count"
+    if [ $((success_count + failure_count)) -gt 0 ]; then
+        local failure_rate=$((failure_count * 100 / (success_count + failure_count)))
+        echo "Failure rate: ${failure_rate}%"
+    else
+        echo "Failure rate: 0%"
+    fi
+    echo ""
+    echo "GitHub SSH timing data saved to: $timing_log"
+    echo "GitHub SSH error log saved to: $error_log"
+    echo ""
+
+    # Show error log summary if there were errors
+    if [ -s "$error_log" ]; then
+        echo "=== GITHUB SSH ERROR LOG SUMMARY ==="
+        head -20 "$error_log"
+        if [ $(wc -l < "$error_log") -gt 20 ]; then
+            echo "... (showing first 20 lines, see $error_log for full log)"
+        fi
+        echo ""
+    fi
+
+    # Return to original directory
+    cd "$original_dir" 2>/dev/null || true
 }
 
 # Function to test git operations
@@ -823,10 +927,6 @@ test_ssh_key_operations() {
     if [ $failure_count -gt 0 ]; then
         local failure_rate=$(echo "scale=2; $failure_count * 100 / ($success_count + failure_count)" | bc -l)
         echo "Failure rate: ${failure_rate}%"
-        if [ "$key_type" = "ed25519" ] && [ $failure_count -gt 2 ]; then
-            print_status "WARNING" "High failure rate detected for ED25519 keys - potential intermittent issue!"
-            echo "This confirms the suspected ED25519 intermittent failures!"
-        fi
     else
         echo "Failure rate: 0%"
     fi
@@ -870,6 +970,7 @@ show_usage() {
     echo "  -s, --ssh               Enable SSH key testing (default: enabled)"
     echo "  -n, --no-ssh            Disable SSH key testing"
     echo "  -i, --iterations N      Number of iterations per test (default: 10)"
+    echo "  -g, --github-iterations N  Number of GitHub SSH test iterations (default: 5)"
     echo "  -k, --key-types TYPES   Comma-separated key types (default: rsa,ecdsa,ed25519)"
     echo "  -l, --log-lines N       Maximum git log lines to show (default: 5)"
     echo ""
@@ -885,6 +986,7 @@ show_usage() {
     echo "  $0 --verbose            # Run with verbose debug output"
     echo "  $0 --no-ssh             # Skip SSH key testing"
     echo "  $0 --iterations 20      # Run 20 iterations per test"
+    echo "  $0 --github-iterations 10  # Run 10 GitHub SSH tests"
     echo "  $0 --key-types rsa,ed25519  # Test only RSA and ED25519 keys"
     echo "  WOLFPROV_FORCE_FAIL=1 $0    # Test with force fail to verify wolfProvider usage"
     echo ""
@@ -916,6 +1018,10 @@ parse_args() {
                 ;;
             -i|--iterations)
                 ITERATIONS="$2"
+                shift 2
+                ;;
+            -g|--github-iterations)
+                GITHUB_ITERATIONS="$2"
                 shift 2
                 ;;
             -k|--key-types)
@@ -982,6 +1088,9 @@ main() {
         echo "Set SSH_TEST_ENABLED=true to enable SSH key testing"
         echo ""
     fi
+
+    # Test GitHub SSH connectivity
+    test_github_ssh_connectivity "$GITHUB_ITERATIONS"
 
     # Final verification
     echo "=== Final wolfProvider Verification ==="
