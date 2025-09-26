@@ -784,11 +784,11 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
         if (p != NULL) {
             /* When buffer is NULL, return the size irrespective of type */
             if (p->data == NULL) {
-                ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.g, 1);
+                ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.p, 1);
             }
             /* When buffer is non-NULL, type must be int or uint */
-            else 
-            if (p->data_type == OSSL_PARAM_INTEGER || 
+            else
+            if (p->data_type == OSSL_PARAM_INTEGER ||
                      p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
                     ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.p, 1);
             }
@@ -805,7 +805,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
                 ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g, 1);
             }
             /* When buffer is non-NULL, type must be int or uint */
-            else if (p->data_type == OSSL_PARAM_INTEGER || 
+            else if (p->data_type == OSSL_PARAM_INTEGER ||
                      p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
                     ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_G, &dh->key.g, 1);
             }
@@ -827,7 +827,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
             if (p->data == NULL) {
                 p->return_size = dh->pubSz;
             }
-            else { 
+            else {
                 /* return_size is set within this function */
                 ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PUB_KEY,
                     dh->pub, dh->pubSz);
@@ -850,7 +850,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
                     p->return_size = dh->privSz;
                 }
             }
-            else { 
+            else {
                 /* return_size is set within this function */
                 ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
                     dh->priv, dh->privSz);
