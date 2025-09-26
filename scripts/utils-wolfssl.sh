@@ -183,7 +183,7 @@ install_wolfssl() {
                             if [ -d "../fips-src" ]; then
                                 cp ../fips-src/fips-check-PILOT.sh . 2>/dev/null || true
                             fi
-                            # If we still cant find it clone it temporarily
+                            # If we still can't find it clone it temporarily
                             if [ ! -f "$fips_check_script" ]; then
                                 LD_LIBRARY_PATH="" git clone --depth=1 git@github.com:wolfSSL/fips-src.git fips-src >>$LOG_FILE 2>&1
                                 cp fips-src/fips-check-PILOT.sh . 2>/dev/null || true
