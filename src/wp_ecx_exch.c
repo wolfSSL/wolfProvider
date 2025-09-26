@@ -117,6 +117,7 @@ static wp_EcxCtx* wp_ecx_dupctx(wp_EcxCtx* src)
         if (!ok) {
             wp_ecx_free(src->key);
             OPENSSL_free(dst);
+            dst = NULL;
         }
     }
 

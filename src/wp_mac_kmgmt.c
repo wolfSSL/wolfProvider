@@ -318,7 +318,7 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
     if (mac == NULL) {
        ok = 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         ok &= mac->key != NULL;
     }
 
@@ -387,7 +387,7 @@ static int wp_mac_import(wp_Mac *mac, int selection, const OSSL_PARAM params[])
         ok = 0;
     }
     p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_PROPERTIES);
-    if (p != NULL) {
+    if (ok && (p != NULL)) {
         OPENSSL_free(mac->properties);
         mac->properties = NULL;
         if (!OSSL_PARAM_get_utf8_string(p, &mac->properties, 0)) {
@@ -495,7 +495,7 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
                 ok = 0;
             }
         }
-        if (ok && !wp_mac_export_priv_key(mac, params, &paramsSz, data, &idx)) {
+        if (ok && (data != NULL) && !wp_mac_export_priv_key(mac, params, &paramsSz, data, &idx)) {
             ok = 0;
         }
     }

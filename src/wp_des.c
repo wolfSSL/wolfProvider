@@ -457,9 +457,6 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
             (ctx->tls_version == 0)) {
             nextBlocks -= DES_BLOCK_SIZE;
         }
-        if (outSize < oLen) {
-            ok = 0;
-        }
     }
     if (ok && (nextBlocks > 0)) {
         if (!wp_des3_block_doit(ctx, out, in, nextBlocks)) {

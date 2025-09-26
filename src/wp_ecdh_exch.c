@@ -159,6 +159,7 @@ static wp_EcdhCtx* wp_ecdh_dup(wp_EcdhCtx* src)
             wp_ecc_free(src->peer);
             wp_ecc_free(src->key);
             OPENSSL_free(dst);
+            dst = NULL;
         }
     }
 
