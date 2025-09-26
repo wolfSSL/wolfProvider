@@ -122,4 +122,22 @@ jobs:
         run: |
           export ${{ matrix.force_fail }}
           export WOLFPROV_FORCE_FAIL_STR="${{ matrix.force_fail }}"
-          $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh
+          export X11VNC_TEST_LOG=/tmp/x11vnc-test.log
+          export X11VNC_TEST_STATUS=0
+          if ! $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh $X11VNC_TEST_LOG; then
+            X11VNC_TEST_STATUS=1
+          fi
+          
+          if $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $X11VNC_TEST_STATUS "$WOLFPROV_FORCE_FAIL_STR" x11vnc; then
+            X11VNC_TEST_STATUS=0
+          else
+            X11VNC_TEST_STATUS=1
+          fi
+
+      - name: Show x11vnc test log on failure
+        run: |
+          if [ $X11VNC_TEST_STATUS -ne 0 ]; then
+            cat $X11VNC_TEST_LOG
+          fi
+          exit $X11VNC_TEST_STATUS
+
