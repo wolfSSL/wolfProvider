@@ -78,6 +78,9 @@
  * WOLFPROV_LOG_PRINTF  Define to Use printf instead of fprintf (to stderr)
  *                        for logs. Not applicable if using WOLFPROV_USER_LOG
  *                        or custom logging callback.
+ * WOLFPROV_LOG_FILE     Define to specify a file path for debug output instead
+ *                        of stderr. This is typically set via --debug-log=FILE
+ *                        build script argument.
  *
  * COMPILE-TIME MACRO CONFIGURATIONS:
  * Define these macros in this header to control logging at compile time:

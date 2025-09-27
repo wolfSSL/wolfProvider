@@ -173,6 +173,18 @@ static void wolfprovider_log(const int logLevel, const int component,
         WOLFPROV_USER_LOG(logMessage);
 #elif defined(WOLFPROV_LOG_PRINTF)
         printf("%s\n", logMessage);
+#elif defined(WOLFPROV_LOG_FILE)
+        {
+            FILE* logFile = fopen(WOLFPROV_LOG_FILE, "a");
+            if (logFile != NULL) {
+                fprintf(logFile, "%s\n", logMessage);
+                fclose(logFile);
+            } else {
+                fprintf(stderr, "wolfProvider: Failed to open log file %s\n", 
+                    WOLFPROV_LOG_FILE);
+                fprintf(stderr, "%s\n", logMessage);
+            }
+        }
 #else
         fprintf(stderr, "%s\n", logMessage);
 #endif
