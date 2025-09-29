@@ -117,4 +117,5 @@ debian/libssl3*
 !debian/*.postrm
 !debian/*.docs
 !debian/*.links
+!debian/*.triggers
 

@@ -1,35 +1,44 @@
 #!/bin/sh
 set -e
 
-# We currently only support "replace default" mode.
-# In this mode, we don't need to modify the system openssl.cnf file 
-# since our modified openssl references libwolfprov.so explicitly.
-# In the future, we should add scripting here to find the system openssl.cnf file
-# and add the include line to it. Note that the code below 
-# references a hardcoded path which may not be correct for all systems.
+# Define the include line to add to the openssl.cnf file
+INCLUDE_LINE=".include /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
 
-# INCLUDE_LINE=".include /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
-# CONF_FILE="/usr/lib/ssl/openssl.cnf"
-# CONF_DEFAULT="/usr/share/openssl-defaults/openssl.cnf"
+# Search for the openssl.cnf file in /usr, /lib and /etc
+CONF_FILES=$(find /usr /lib /etc -name openssl.cnf 2>/dev/null)
 
-# # Copy from our template if it doesn't exist
-# if [ ! -f "$CONF_FILE" ]; then
-#     echo "Config file does not exist: $CONF_FILE"
-#     if [ -f "$CONF_DEFAULT" ]; then
-#         install -Dm644 "$CONF_DEFAULT" "$CONF_FILE"
-#     else
-#         echo "Default config file does not exist: $CONF_DEFAULT"
-#         exit 1
-#     fi
-# fi
+# Check if we are in replace-default mode by reading the openssl version
+REPLACE_DEFAULT=0
+if command -v openssl >/dev/null 2>&1; then
+    OPENSSL_VERSION=$(openssl version)
+    if echo "$OPENSSL_VERSION" | grep -q "wolfProvider"; then
+        REPLACE_DEFAULT=1
+    fi  
+fi
 
-# # Add include for wolfprovider config file if not already present
-# if grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
-#     echo "Include line already exists in $CONF_FILE"
-# else 
-#     echo "Adding include for wolfprovider to $CONF_FILE..."
-#     sed -i "/^openssl_conf/ a $INCLUDE_LINE" "$CONF_FILE"
-# fi
+if [ $REPLACE_DEFAULT -eq 1 ]; then
+    # Remove INCLUDE_LINE from each CONF_FILE
+    # Replace default mode should automatically find wolfProvider.
+    # Using the config file or OPENSSL_CONF will cause:
+    #   1. the provider name to be 'libwolfprov' instead of 'default'
+    #   2. the provider init call to happen twice
+    # Neither of these is harmful, but it's not ideal.
+    for CONF_FILE in $CONF_FILES; do
+        # Remove any line containing both ".include" and "wolfprovider.conf"
+        sed -i '/\.include/ { /wolfprovider\.conf/ d; }' "$CONF_FILE"
+        printf "Removed wolfprovider include line(s) from %s\n" "$CONF_FILE"
+    done
+else
+    # For each CONF_FILE, apply the include line to the openssl.cnf file, if not already applied
+    for CONF_FILE in $CONF_FILES; do
+        if grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
+            echo "Include line already exists in $CONF_FILE"
+        else 
+            echo "Adding include for wolfprovider to $CONF_FILE..."
+            echo "$INCLUDE_LINE" >> "$CONF_FILE"
+        fi
+    done
+fi
 
 #DEBHELPER#
 exit 0

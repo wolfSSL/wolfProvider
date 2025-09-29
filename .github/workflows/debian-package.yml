@@ -27,9 +27,6 @@ jobs:
         replace_default: [ true ]
 
   libwolfprov-standalone:
-    # Standalone mode is disabled until we re-enable support for it in the debian build.
-    if: false
-
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # Run inside Debian Bookworm to match packaging environment
@@ -43,7 +40,7 @@ jobs:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
+        replace_default: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -165,7 +162,7 @@ jobs:
           echo "Package uninstallation and cleanup verification successful"
 
 
-  libwolfprov-with-openssl:
+  libwolfprov-replace-default:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # Run inside Debian Bookworm to match packaging environment
