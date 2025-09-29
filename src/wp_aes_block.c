@@ -507,9 +507,6 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
             (ctx->tls_version == 0)) {
             nextBlocks -= AES_BLOCK_SIZE;
         }
-        if (outSize < oLen) {
-            ok = 0;
-        }
     }
     if (ok && (nextBlocks > 0)) {
         if (!wp_aes_block_doit(ctx, out, in, nextBlocks)) {

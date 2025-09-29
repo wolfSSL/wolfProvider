@@ -784,7 +784,7 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
         if (p != NULL) {
             /* When buffer is NULL, return the size irrespective of type */
             if (p->data == NULL) {
-                ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.g, 1);
+                ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_FFC_P, &dh->key.p, 1);
             }
             /* When buffer is non-NULL, type must be int or uint */
             else 

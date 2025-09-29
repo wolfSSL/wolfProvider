@@ -82,6 +82,7 @@ static wp_MacSigCtx* wp_mac_ctx_new(WOLFPROV_CTX* provCtx,
         if (propQuery != NULL) {
             p = OPENSSL_strdup(propQuery);
             if (p == NULL) {
+                OPENSSL_free(ctx);
                 ctx = NULL;
                 ok = 0;
             }
@@ -342,7 +343,7 @@ static const OSSL_PARAM *wp_mac_settable_ctx_params(wp_MacSigCtx *ctx,
         OSSL_PARAM_int(OSSL_MAC_PARAM_DIGEST_ONESHOT, NULL),
         OSSL_PARAM_size_t(OSSL_MAC_PARAM_TLS_DATA_SIZE, NULL),
         OSSL_PARAM_END
-    };    
+    };
     return settable_ctx_params;
 }
 
