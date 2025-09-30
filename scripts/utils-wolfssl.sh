@@ -143,6 +143,12 @@ install_wolfssl() {
             WOLFSSL_FIPS_CONFIG_CFLAGS+=" -DWOLFSSL_DEBUG_ASN_TEMPLATE"
         fi
         if [ -n "$WOLFSSL_FIPS_BUNDLE" ] || [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            if [ -n "$WOLFSSL_FIPS_BUNDLE" ] && [ -z "$WOLFSSL_FIPS_CHECK_TAG" ]; then
+                printf "ERROR, must specify tag if using FIPS bundle (v5.2.1, v5.2.4, linuxv5.2.1, v6.0.0, ready)"
+                do_cleanup
+                exit 1
+            fi
+
             # Determine FIPS tag - use FIPS_CHECK_TAG if provided, default to v5.2.4
             local fips_tag="${WOLFSSL_FIPS_CHECK_TAG}"
             fips_tag="${fips_tag:-v5.2.4}"
@@ -271,10 +277,20 @@ install_wolfssl() {
             do_cleanup
             exit 1
         fi
-        if [ "$WOLFSSL_ISFIPS" = "1" ]; then
-            cd ..
-        fi
         printf "Done.\n"
+
+        if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            printf "\tTesting wolfSSL FIPS ${WOLFSSL_TAG} ... "
+            make test >>$LOG_FILE 2>&1
+            if [ $? != 0 ]; then
+                printf "ERROR.\n"
+                rm -rf ${WOLFSSL_INSTALL_DIR}
+                do_cleanup
+                exit 1
+            fi
+            cd ..
+            printf "Done.\n"
+        fi
     fi
 
     cd ..

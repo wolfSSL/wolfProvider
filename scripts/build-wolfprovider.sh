@@ -84,7 +84,6 @@ for arg in "$@"; do
             WOLFSSL_ISFIPS=1
             ;;
         --fips-bundle=*)
-            unset WOLFSSL_FIPS_CHECK_TAG
             IFS='=' read -r trash fips_bun <<< "$arg"
             if [ -z "$fips_bun" ]; then
                 echo "No directory given for --fips-bundle"
@@ -93,7 +92,6 @@ for arg in "$@"; do
             WOLFSSL_FIPS_BUNDLE="$fips_bun"
             ;;
         --fips-check=*)
-            unset WOLFSSL_FIPS_BUNDLE
             IFS='=' read -r trash fips_tag <<< "$arg"
             if [ -z "$fips_tag" ]; then
                 echo "No tag given for --fips-check"
