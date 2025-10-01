@@ -211,6 +211,12 @@ patch_openssl() {
         printf "Done.\n"
 
         popd &> /dev/null
+    else
+        printf "\tPatching OpenSSL version only ... "
+        pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
+        patch_openssl_version
+        printf "Done.\n"
+        popd &> /dev/null
     fi
 }
 
