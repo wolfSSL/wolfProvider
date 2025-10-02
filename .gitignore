@@ -109,8 +109,12 @@ debian/*.deb
 debian/*.buildinfo
 debian/files
 debian/libwolfprov*
-!debian/libwolfprov.install
-!debian/libwolfprov.postinst
-!debian/libwolfprov.postrm
-!debian/libwolfprov-dev.docs
-!debian/libwolfprov-dev.install
+debian/libssl-dev*
+debian/openssl*
+debian/libssl3*
+!debian/*.install
+!debian/*.postinst
+!debian/*.postrm
+!debian/*.docs
+!debian/*.links
+

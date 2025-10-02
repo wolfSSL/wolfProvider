@@ -62,6 +62,7 @@ int wp_kdf_up_ref(wp_Kdf* kdf)
 
     rc = wc_LockMutex(&kdf->mutex);
     if (rc < 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_LockMutex", rc);
         ok = 0;
     }
     if (ok) {
@@ -98,6 +99,7 @@ static wp_Kdf* wp_kdf_new(WOLFPROV_CTX *provCtx)
     #ifndef SINGLE_THREADED
         int rc = wc_InitMutex(&kdf->mutex);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMutex", rc);
             OPENSSL_free(kdf);
             kdf = NULL;
         }

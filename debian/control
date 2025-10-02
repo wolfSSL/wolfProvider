@@ -3,23 +3,23 @@ Section: libs
 Priority: optional
 Maintainer: WolfSSL <support@wolfssl.com>
 Standards-Version: 4.6.2
-Build-Depends: debhelper (>= 12),
-               devscripts,
-               pkgconf,
-               openssl,
-               libwolfssl,
-               libwolfssl-dev
-
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ devscripts,
+ dh-exec,
+ git,
+ pkgconf
 
 Package: libwolfprov
 Architecture: any
+Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}, libssl3 (>= 3.0.3), libwolfssl (>= 5.8.2), openssl
 Provides: ${variant:provides}
 XB-Variant: ${variant}
 Description: wolfProvider library for OpenSSL — ${variant:desc}
  wolfProvider is a library that can be used as a Provider in OpenSSL.
  It provides cryptographic functionality through wolfSSL including:
- .
   * Hash functions (MD5, SHA-1, SHA-2, SHA-3)
   * Symmetric encryption (AES, DES)
   * Asymmetric cryptography (RSA, ECC, DH)
@@ -31,7 +31,40 @@ Description: wolfProvider library for OpenSSL — ${variant:desc}
 Package: libwolfprov-dev
 Architecture: any
 Section: libdevel
+Multi-Arch: same
 Depends: libwolfprov (= ${binary:Version}), ${misc:Depends}
-Description: Development files for wolfProvider
- This package contains the header files and development libraries
- needed to build applications using wolfProvider.
+XB-Variant: ${variant}
+Description: Development files for wolfProvider — ${variant:desc}
+ This package contains the headers and development files
+ for applications using wolfProvider.
+
+Package: openssl
+Architecture: any
+Section: utils
+Multi-Arch: foreign
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Secure Sockets Layer toolkit - command line interface
+ This package contains the OpenSSL command line utility.
+ Built for use with wolfProvider.
+
+Package: libssl3
+Architecture: any
+Multi-Arch: same
+Depends: libssl3 (= ${binary:Version}), ${misc:Depends}
+Breaks: libssl3 (<< 3.0.0)
+Replaces: libssl3
+Recommends: openssl
+Description: OpenSSL shared libraries (wolfProvider build)
+ This package contains the OpenSSL shared libraries built
+ for use with wolfProvider.
+
+Package: libssl-dev
+Architecture: any
+Section: libdevel
+Multi-Arch: same
+Depends: libssl3 (= ${binary:Version}), ${misc:Depends}
+Breaks: libssl-dev (<< 3.0.0)
+Replaces: libssl-dev
+Description: OpenSSL development files (wolfProvider build)
+ This package contains headers, pkg-config files and linker symlinks
+ for the OpenSSL version built for wolfProvider.

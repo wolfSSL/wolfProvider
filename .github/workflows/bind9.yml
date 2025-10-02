@@ -1,0 +1,126 @@
+name: Bind9 Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
+
+  test_bind:
+    runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    needs: build_wolfprovider
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        bind_ref: [ 'v9.18.28' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Install bind9 test dependencies
+        run: |
+          apt-get update
+          apt install -y build-essential automake libtool gnutls-bin \
+            pkg-config make libidn2-dev libuv1-dev libnghttp2-dev libcap-dev \
+            libjemalloc-dev zlib1g-dev libxml2-dev libjson-c-dev libcmocka-dev \
+            python3-pytest python3-dnspython python3-hypothesis patch iproute2 \
+            net-tools git
+          PERL_MM_USE_DEFAULT=1 cpan -i Net::DNS
+
+      - name: Checkout bind9
+        uses: actions/checkout@v4
+        with:
+          repository: isc-projects/bind9
+          path: bind9
+          ref: ${{ matrix.bind_ref }}
+          fetch-depth: 1
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd bind9
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/bind9/bind9-${{ matrix.bind_ref }}-wolfprov.patch
+
+      - name: Build and test bind9 with wolfProvider
+        working-directory: bind9
+        shell: bash
+        run: |
+          set +o pipefail # ignore errors from make check
+          autoreconf -ivf
+          ./configure
+          make clean
+          make -j$(nproc)
+          ./bin/tests/system/ifconfig.sh up
+
+          export ${{ matrix.force_fail }}
+          make -j$(nproc) check 2>&1 | tee bind9-test.log
+          TEST_RESULT=${PIPESTATUS[0]}
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} bind9

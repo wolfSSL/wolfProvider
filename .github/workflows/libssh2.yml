@@ -18,45 +18,74 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
 
   test_libssh2:
     runs-on: ubuntu-22.04
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     needs: build_wolfprovider
     timeout-minutes: 20
     strategy:
       matrix:
         libssh2_ref: [ 'libssh2-1.10.0' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Retrieving wolfSSL/wolfProvider from cache
+      - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
         with:
           path: |
-            wolfssl-install
-            wolfprov-install
-            openssl-install/lib64
-            openssl-install/include
-            openssl-install/bin
-
-          key: wolfprov-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ github.sha }}
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
           fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev python3-impacket
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y git sudo build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
+            clang libc++-dev python3-impacket openssh-client openssh-server
 
       - name: Download libssh2
         uses: actions/checkout@v4
@@ -74,23 +103,30 @@ jobs:
           fetch-depth: 1
       - run: |
           cd libssh2
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libssh2/${{ matrix.libssh2_ref }}-wolfprov.patch
+          # Apply the wolfProvider patch
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libssh2/libssh2-${{ matrix.libssh2_ref }}-debian-wolfprov.patch
 
       - name: Build libssh2
         working-directory: libssh2
         run: |
           autoreconf -fi
-          ./configure --with-crypto=openssl --with-libssl-prefix="$GITHUB_WORKSPACE/openssl-install"
+          ./configure --with-crypto=openssl
           make -j$(nproc)
 
       - name: Run libssh2 tests
         working-directory: libssh2
+        shell: bash
         run: |
-          # Set up the environment for wolfProvider
-          source $GITHUB_WORKSPACE/scripts/env-setup
+          # wolfProvider is already loaded as the default provider
+          echo "Current OpenSSL providers:"
+          openssl list -providers
+          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
           export ${{ matrix.force_fail }}
+          # Always continue on errors to ensure we show test results
+          set +e
 
           # Run the tests and capture the result
+          set -o pipefail
           make check 2>&1 | tee libssh2-test.log
-          TEST_RESULT=$(grep -q "FAIL: ssh2.sh" libssh2-test.log && echo "1" || echo "0")
+          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} libssh2

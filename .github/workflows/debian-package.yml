@@ -1,212 +1,322 @@
 name: Debian Package Test
 
+# START OF COMMON SECTION
 on:
   push:
-    branches: [ master ]
+    branches: [ '**' ] # 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
 jobs:
-  bookworm:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
+    strategy:
+      matrix: 
+        # Test 5.8.2 since our .deb is based on that version
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
+
+  libwolfprov-standalone:
     runs-on: ubuntu-22.04
-    # Important: use Debian Bookworm for compatibility
+    needs: build_wolfprovider
+    # Run inside Debian Bookworm to match packaging environment
     container:
-      image: debian:bookworm   # or debian:bookworm-slim
+      image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-    - name: Set up environment
-      run: |
-        # Update package lists
-        apt-get update
-        # Install build dependencies
-        apt-get install -y \
-          build-essential \
-          devscripts \
-          debhelper \
-          dh-autoreconf \
-          libtool \
-          pkg-config \
-          git \
-          wget \
-          curl \
-          ca-certificates \
-          openssl \
-          dpkg-dev \
-          lintian \
-          fakeroot \
-          equivs
-        # Install additional tools for testing
-        apt-get install -y \
-          expect \
-          xxd
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-    # Avoid "detected dubious ownership" warning
-    - name: Ensure the working directory safe
-      run: |
-        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
 
-    - name: Checkout wolfProvider
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-    - run: |
-        # Fetch tags
-        git fetch --tags
-        # List all tags
-        git tag -l
+      - name: Install package without custom openssl
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-    - name: Install wolfssl debian package
-      run: |
-        mkdir -p "$RUNNER_TEMP/wolfssl-pkg"
-        cd "$RUNNER_TEMP/wolfssl-pkg"
-        
-        echo "Using standard wolfSSL package"
-        tar -xvf $GITHUB_WORKSPACE/.github/packages/debian-wolfssl.tar.gz
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
-        # Get current architecture
-        CURRENT_ARCH=$(dpkg --print-architecture)
-        echo "Current architecture: $CURRENT_ARCH"
-        
-        # Look for existing .deb files that match the current architecture
-        cd debian-packages
-        MATCHING_DEB_FILES=$(find . -name "*_${CURRENT_ARCH}.deb" -o -name "*_${CURRENT_ARCH}_*.deb" 2>/dev/null || true)
-        
-        if [ -n "$MATCHING_DEB_FILES" ]; then
-          echo "Found matching .deb files for architecture $CURRENT_ARCH:"
-          echo "$MATCHING_DEB_FILES"
-          echo "Installing existing .deb files..."
-          dpkg -i $MATCHING_DEB_FILES
-        else
-          echo "No matching .deb files found for architecture $CURRENT_ARCH, rebuilding from source..."
-          dpkg-source -x wolfssl*.dsc
-          cd wolfssl*/
-          dpkg-buildpackage -b -us -uc
-          dpkg -i ../libwolfssl*.deb
-        fi
+          apt-get update && \
+            apt install --reinstall -y openssl libssl3
 
-    - name: Build Debian package
-      run: |
-        # Bypass the warning prompt with 'yes Y' 
-        yes Y | ./scripts/build-wolfprovider.sh --debian
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
-        # List generated packages
-        echo "Generated Packages:"
-        ls -la ../*.deb ../*.dsc ../*.tar.gz || true
-
-    - name: Install package
-      run: |
-        # Find the package file
-        PACKAGE_FILE=$(find ../ -name "libwolfprov_*.deb" | head -n1)
-        if [ -z "$PACKAGE_FILE" ]; then
-          echo "No package file found!"
-          ls -la ../
-          exit 1
-        fi
-
-        echo "Installing package: $PACKAGE_FILE and dependencies"
-        apt install -y ./"$PACKAGE_FILE"
-
-        # Verify installation
-        echo "Package Installation Verification:"
-        dpkg -l | grep libwolfprov
-        dpkg -L libwolfprov
-
-    - name: Test OpenSSL provider functionality
-      run: |
-        PROVIDER_CONF="/etc/ssl/openssl.cnf.d/wolfprovider.conf"
-        PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
-
-        # Temporarily move wolfprovider config so we can toggle between providers
-        echo "3. Temporarily disabling wolfprovider for default provider tests:"
-        mkdir -p /tmp/openssl-test
-        if [ -f $PROVIDER_CONF ]; then
-          mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
-          echo "   - Moved $PROVIDER_CONF to $PROVIDER_CONF_BACKUP"
-        else
-          echo "$PROVIDER_CONF not found!"
-          exit 1
-        fi
-
-        # Run the do-cmd-test.sh script to execute interoperability tests
-        echo "Running OpenSSL provider interoperability tests..."
-        OPENSSL_BIN=$(eval which openssl) ./scripts/cmd_test/do-cmd-tests.sh
-
-        # Restore wolfprovider configuration
-        echo "5. Restoring wolfprovider configuration:"
-        if [ -f $PROVIDER_CONF_BACKUP ]; then
-          mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
-          echo "   - Restored $PROVIDER_CONF from $PROVIDER_CONF_BACKUP"
-        fi
-
-        echo "PASS: All provider interoperability tests successful"
-
-    - name: Uninstall package and verify cleanup
-      run: |
-        # Uninstall the package
-        apt-get remove --purge -y libwolfprov
-
-        # Verify the package is removed
-        if dpkg -l | grep -q libwolfprov; then
-          echo "Package still installed after removal"
+      - name: Verify installation
+        run: |
+          echo "Package Installation Verification:"
           dpkg -l | grep libwolfprov
-          exit 1
-        else
-          echo "Package successfully removed"
-        fi
+          dpkg -L libwolfprov
 
-        # Check if the config file is removed
-        if [ -f /etc/ssl/openssl.cnf.d/wolfprovider.conf ]; then
-          echo "wolfprovider.conf still exists after package removal"
-          ls -la /etc/ssl/openssl.cnf.d/
-          exit 1
-        else
-          echo "wolfprovider.conf successfully removed"
-        fi
+      - name: Test OpenSSL provider functionality
+        run: |
+          PROVIDER_CONF="/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
+          PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
 
-        # Check if the library files are removed
-        if [ -f /usr/lib/*/ossl-modules/libwolfprov.so ]; then
-          echo "libwolfprov.so still exists after package removal"
-          find /usr/lib -name "libwolfprov.so*" 2>/dev/null || true
-          exit 1
-        else
-          echo "libwolfprov.so successfully removed"
-        fi
+          # Temporarily move wolfprovider config so we can toggle between providers
+          echo "Temporarily disabling wolfprovider for default provider tests:"
+          mkdir -p /tmp/openssl-test
+          if [ -f $PROVIDER_CONF ]; then
+            mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
+            echo "   - Moved $PROVIDER_CONF to $PROVIDER_CONF_BACKUP"
+          else
+            echo "$PROVIDER_CONF not found!"
+            exit 1
+          fi
 
-        # Verify default OpenSSL provider is active
-        echo "Verifying Default Provider is Active:"
-        openssl list -providers
+          # Run the do-cmd-test.sh script to execute interoperability tests
+          echo "Running OpenSSL provider interoperability tests..."
+          OPENSSL_BIN=$(eval which openssl) ./scripts/cmd_test/do-cmd-tests.sh
 
-        # Verify that the default provider is present and active
-        echo "Checking default provider status:"
-        if openssl list -providers | grep -q "default" && \
-           openssl list -providers | grep -q "OpenSSL Default Provider" && \
-           openssl list -providers | grep -q "status: active"; then
-          echo "Default provider is present and active"
-        else
-          echo "Default provider verification failed"
-          echo "Provider output:"
+          # Restore wolfprovider configuration
+          echo "Restoring wolfprovider configuration:"
+          if [ -f $PROVIDER_CONF_BACKUP ]; then
+            mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
+            echo "   - Restored $PROVIDER_CONF from $PROVIDER_CONF_BACKUP"
+          fi
+
+          echo "PASS: All provider interoperability tests successful"
+
+      - name: Uninstall package and verify cleanup
+        run: |
+          # Uninstall the package
+          apt-get remove --purge -y libwolfprov
+
+          # Verify the package is removed
+          if dpkg -l | grep -q libwolfprov; then
+            echo "Package still installed after removal"
+            dpkg -l | grep libwolfprov
+            exit 1
+          else
+            echo "Package successfully removed"
+          fi
+
+          # Check if the config file is removed
+          if [ -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+            echo "wolfprovider.conf still exists after package removal"
+            ls -la /usr/lib/ssl/openssl.cnf.d/
+            exit 1
+          else
+            echo "wolfprovider.conf successfully removed"
+          fi
+
+          # Check if the library files are removed
+          if [ -f /usr/lib/*/ossl-modules/libwolfprov.so ]; then
+            echo "libwolfprov.so still exists after package removal"
+            find /usr/lib -name "libwolfprov.so*" 2>/dev/null || true
+            exit 1
+          else
+            echo "libwolfprov.so successfully removed"
+          fi
+
+          # Verify default OpenSSL provider is active
+          echo "Verifying Default Provider is Active:"
           openssl list -providers
-          exit 1
-        fi
 
-        echo "Package uninstallation and cleanup verification successful"
+          # Verify that the default provider is present and active
+          echo "Checking default provider status:"
+          if openssl list -providers | grep -q "default" && \
+            openssl list -providers | grep -q "OpenSSL Default Provider" && \
+            openssl list -providers | grep -q "status: active"; then
+            echo "Default provider is present and active"
+          else
+            echo "Default provider verification failed"
+            echo "Provider output:"
+            openssl list -providers
+            exit 1
+          fi
 
-    - name: Move package artifacts
-      run: |
-        # Move the generated packages to the temp directory
-        mv ../*.deb $RUNNER_TEMP/ || true
-        mv ../*.dsc $RUNNER_TEMP/ || true
-        mv ../*.tar.gz $RUNNER_TEMP/ || true
+          echo "Package uninstallation and cleanup verification successful"
 
-    # Save the build outputs which for use in release packages
-    - name: Upload package artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: wolfprovider-debian-packages
-        path: |
-          ${{ runner.temp }}/*.deb
-          ${{ runner.temp }}/*.dsc
-          ${{ runner.temp }}/*.tar.gz
-        retention-days: 7
+
+  libwolfprov-with-openssl:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # Run inside Debian Bookworm to match packaging environment
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+    steps:
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
+        with:
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages:\n"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+      - name: Show OpenSSL version
+        run: |
+          echo "OpenSSL version:"
+          openssl version -a || true
+
+      - name: Test OpenSSL providers before wolfprov installation
+        run: |
+          echo "Testing OpenSSL providers before wolfprov installation..."
+          echo "Expected: This should work normally with default providers"
+          
+          # Test openssl list -providers
+          if openssl list -providers; then
+            echo "SUCCESS: openssl list -providers works before wolfprov installation"
+          else
+            echo "FAILURE: openssl list -providers failed before wolfprov installation"
+            exit 1
+          fi
+          
+          echo "Provider list before wolfprov installation:"
+          openssl list -providers
+
+      - name: Install libwolfprov package
+        run: |
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+          echo "Installed packages after wolfprov:"
+          dpkg -l | grep -E "(wolfprov|wolfssl|openssl|libssl)"
+
+      - name: Test OpenSSL providers after wolfprov installation
+        run: |
+          echo "Testing OpenSSL providers after wolfprov installation..."
+          echo "Expected: This should show wolfprov as an available provider"
+          
+          # Test openssl list -providers
+          if openssl list -providers; then
+            echo "SUCCESS: openssl list -providers works after wolfprov installation"
+          else
+            echo "FAILURE: openssl list -providers failed after wolfprov installation"
+            exit 1
+          fi
+          
+          echo "Provider list after wolfprov installation:"
+          openssl list -providers
+          
+          # Check if wolfprov provider is available
+          if openssl list -providers | grep -i "wolfprov"; then
+            echo "SUCCESS: wolfprov provider is available"
+          else
+            echo "WARNING: wolfprov provider not found in provider list"
+            echo "This might be expected if the provider needs to be explicitly loaded"
+          fi
+
+      - name: Verify wolfprov configuration
+        run: |
+          echo "Verifying wolfprov configuration..."
+          
+          # Check if configuration file exists
+          if [ -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+            echo "SUCCESS: wolfprovider.conf exists"
+            cat /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
+          else
+            echo "WARNING: wolfprovider.conf not found"
+          fi
+          
+          # Check if library file exists
+          if [ -f /usr/lib/*/ossl-modules/libwolfprov.so ]; then
+            echo "SUCCESS: libwolfprov.so exists"
+            find /usr/lib -name "libwolfprov.so*" 2>/dev/null
+          else
+            echo "WARNING: libwolfprov.so not found"
+          fi
+
+      - name: Test basic OpenSSL functionality (digests, AES, ECDH, ECC)
+        shell: bash
+        run: |
+          set -e
+          echo "Testing OpenSSL digests..."
+          echo "test" | openssl dgst -sha256
+          echo "test" | openssl dgst -sha512
+
+          echo "Testing OpenSSL AES encryption/decryption..."
+          echo "secret" | openssl enc -aes-128-cbc -pass pass:mykey -out secret.enc
+          openssl enc -d -aes-128-cbc -pass pass:mykey -in secret.enc
+
+          echo "Testing OpenSSL ECDH key generation and shared secret..."
+          openssl ecparam -name prime256v1 -genkey -noout -out ec1.pem
+          openssl ecparam -name prime256v1 -genkey -noout -out ec2.pem
+          openssl pkey -in ec1.pem -pubout -out ec1.pub
+          openssl pkey -in ec2.pem -pubout -out ec2.pub
+          openssl pkeyutl -derive -inkey ec1.pem -peerkey ec2.pub -out secret1.bin
+          openssl pkeyutl -derive -inkey ec2.pem -peerkey ec1.pub -out secret2.bin
+          cmp secret1.bin secret2.bin && echo "ECDH shared secrets match"
+
+          echo "Testing OpenSSL ECC sign/verify..."
+          openssl ecparam -name prime256v1 -genkey -noout -out ecc_key.pem
+          echo "message" > msg.txt
+          openssl dgst -sha256 -sign ecc_key.pem -out msg.sig msg.txt
+          openssl dgst -sha256 -verify <(openssl pkey -in ecc_key.pem -pubout) -signature msg.sig msg.txt
+
+      - name: Cleanup test environment
+        run: |
+          echo "Cleaning up test environment..."
+          
+          # Uninstall test packages
+          apt-get remove --purge -y libwolfprov || true
+          apt-get autoremove -y
+          
+          echo "Cleanup completed"
+

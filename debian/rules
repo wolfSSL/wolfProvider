@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 
 %:
-	dh $@ --with autoreconf
+	dh $@
 
 # Multiarch triplet
 DEB_HOST_MULTIARCH := $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
@@ -11,6 +11,9 @@ DESTDIR=debian/tmp
 # Grab the base version from debian/changelog
 BASEVER := $(shell dpkg-parsechangelog -SVersion)
 
+# Get OpenSSL version from the build (this will be set after build)
+OPENSSL_VERSION ?= 3.5.0
+
 # Check if FIPS build is requested
 WOLFSSL_ISFIPS?=0
 # Variant-specific metadata
@@ -18,7 +21,7 @@ ifeq ($(WOLFSSL_ISFIPS),1)
   VARIANT           := fips
   VARIANT_DESC      := FIPS build
   VARIANT_PROVIDES  := libwolfprov-fips
-  VERSION           := $(BASEVER)+fips
+  VERSION           := $(BASEVER)-fips
   FIPS_FLAG         := --enable-fips
   PROVIDER_CONF     := provider-fips.conf
 else
@@ -30,44 +33,117 @@ else
   FIPS_FLAG         :=
 endif
 
-# Override just the control-file generation to inject our values
+# Debug build flag
+WOLFPROV_DEBUG?=0
+ifeq ($(WOLFPROV_DEBUG),1)
+  VARIANT           := $(VARIANT)-debug
+  VARIANT_DESC      := $(VARIANT_DESC) with debug logs
+  VERSION           := $(VERSION)-debug
+endif
+
+override_dh_auto_configure:
+	# None, handled below
+
+override_dh_auto_build:
+	# Always build OpenSSL with wolfProvider as the default provider even 
+	# if we choose not to use it.
+	WOLFPROV_BUILD_DEBIAN=1 WOLFPROV_DEBUG=$(WOLFPROV_DEBUG) ./scripts/build-wolfprovider.sh --replace-default $(FIPS_FLAG)
+
+override_dh_auto_install:
+	# Detect OpenSSL library directory (lib or lib64)
+	$(eval OPENSSL_LIB_DIR := $(shell if test -d ./openssl-install/lib; then echo lib; elif test -d ./openssl-install/lib64; then echo lib64; else echo "ERROR: Neither ./openssl-install/lib nor ./openssl-install/lib64 found"; exit 1; fi))
+
+	# Install OpenSSL binary for openssl package
+	install -d $(DESTDIR)/usr/bin
+	install -m755 ./openssl-install/bin/openssl \
+		$(DESTDIR)/usr/bin/
+
+	# Install OpenSSL shared libraries for libssl3 package
+	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)
+	install -m755 ./openssl-install/$(OPENSSL_LIB_DIR)/libssl.so.3 \
+		./openssl-install/$(OPENSSL_LIB_DIR)/libcrypto.so.3 \
+		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/
+
+	# Install OpenSSL headers and dev files for libssl-dev package
+	# Copy directly to the destination directory
+	install -d $(DESTDIR)/usr/include/openssl
+	cp -a $(CURDIR)/openssl-install/include/openssl/. $(DESTDIR)/usr/include/openssl
+
+	# Install wolfProvider library
+	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
+	install -m755 ./.libs/libwolfprov.so.0.0.0 \
+		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
+
+	# Install wolfProvider headers
+	install -d $(DESTDIR)/usr/include/wolfprovider
+	install -m644 ./include/wolfprovider/*.h \
+		$(DESTDIR)/usr/include/wolfprovider/
+
+	# Install provider config file
+	install -d $(DESTDIR)/usr/lib/ssl/openssl.cnf.d
+	install -m644 ./$(PROVIDER_CONF) \
+		$(DESTDIR)/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
+
+	# Install default openssl.cnf template (do NOT ship it directly in /usr/lib/ssl)
+	# The postinstall script will handle copying it to the system location
+	install -d $(DESTDIR)/usr/share/openssl-defaults
+	install -m 0644 ./openssl-source/apps/openssl.cnf \
+		$(DESTDIR)/usr/share/openssl-defaults/openssl.cnf
+
+	# Install pkg-config files for libssl-dev
+	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig
+	install -m644 ./openssl-install/$(OPENSSL_LIB_DIR)/pkgconfig/*.pc \
+		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig/
+	# Normalize .pc to system paths
+	sed -i -e 's|^prefix=.*|prefix=/usr|' \
+	       -e 's|^exec_prefix=.*|exec_prefix=${prefix}|' \
+	       -e 's|^libdir=.*|libdir=/usr/lib/$(DEB_HOST_MULTIARCH)|' \
+	       -e 's|^includedir=.*|includedir=/usr/include|' \
+	       -e 's|^enginesdir=.*|enginesdir=/usr/lib/$(DEB_HOST_MULTIARCH)/engines-3|' \
+	       -e 's|^modulesdir=.*|modulesdir=/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules|' \
+	       $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig/*.pc
+
+override_dh_makeshlibs:
+	# Create shlibs only for real SONAME’d libs; skip provider modules under ossl-modules/
+	dh_makeshlibs -V -p libssl3
+	# do NOT run on libwolfprov (plugin-only, no SONAME)
+
 override_dh_gencontrol:
+	# Generate control for wolfProvider packages
 	dh_gencontrol -- \
 	 -v$(VERSION) \
 	 -Vvariant=$(VARIANT) \
 	 -Vvariant:desc="$(VARIANT_DESC)" \
 	 -Vvariant:provides="$(VARIANT_PROVIDES)"
 
-override_dh_auto_configure:
-	# None, handled below
+	# Detect OpenSSL library directory (lib or lib64)
+	$(eval OPENSSL_LIB_DIR := $(shell if test -d ./openssl-install/lib; then echo lib; elif test -d ./openssl-install/lib64; then echo lib64; else echo "ERROR: Neither ./openssl-install/lib nor ./openssl-install/lib64 found"; exit 1; fi))
 
-override_dh_auto_build:
-	./scripts/build-wolfprovider.sh $(FIPS_FLAG)
+	# Extract OpenSSL version from the current build
+	$(eval OPENSSL_VERSION := $(shell LD_LIBRARY_PATH=./openssl-install/$(OPENSSL_LIB_DIR):./wolfprovider-install/lib ./openssl-install/bin/openssl version | cut  -d' ' -f2))
 
-override_dh_auto_install:
-	# Install library
-	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules
-	install -m755 ./.libs/libwolfprov.so* \
-		$(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/ossl-modules/
-
-	# Install headers
-	install -d $(DESTDIR)/usr/include/wolfprovider
-	install -m644 ./include/wolfprovider/*.h \
-		$(DESTDIR)/usr/include/wolfprovider/
-
-	# Install provider config file
-	install -d $(DESTDIR)/etc/ssl/openssl.cnf.d
-	install -m644 ./$(PROVIDER_CONF) \
-		$(DESTDIR)/etc/ssl/openssl.cnf.d/wolfprovider.conf
+	# Generate control for OpenSSL packages with OpenSSL version
+	dh_gencontrol -popenssl -- \
+	 -v$(OPENSSL_VERSION)-1 \
+	 -Vopenssl:Version=$(OPENSSL_VERSION)
+	dh_gencontrol -plibssl3 -- \
+	 -v$(OPENSSL_VERSION)-1 \
+	 -Vopenssl:Version=$(OPENSSL_VERSION)
+	dh_gencontrol -plibssl-dev -- \
+	 -v$(OPENSSL_VERSION)-1 \
+	 -Vopenssl:Version=$(OPENSSL_VERSION)
 
 override_dh_auto_clean:
 	dh_auto_clean
+	rm -rf test/standalone/tests/.libs
 	./scripts/build-wolfprovider.sh --clean --distclean
 
 override_dh_auto_test:
 	@echo "Skipping dh_auto_test (tests already run during build phase)"
 
-# Avoid warnings of the form package-has-unnecessary-activation-of-ldconfig-trigger
-override_dh_makeshlibs:
-	dh_makeshlibs -n
+override_dh_install:
+	dh_install
 
+# Fail the build if anything in debian/tmp (or elsewhere) wasn’t picked up
+override_dh_missing:
+	dh_missing --fail-missing

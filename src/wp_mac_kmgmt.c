@@ -99,6 +99,7 @@ int wp_mac_up_ref(wp_Mac* mac)
 
     rc = wc_LockMutex(&mac->mutex);
     if (rc < 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_LockMutex", rc);
         ok = 0;
     }
     if (ok) {
@@ -192,6 +193,7 @@ static wp_Mac* wp_mac_new(WOLFPROV_CTX *provCtx, int type)
     #ifndef SINGLE_THREADED
         int rc = wc_InitMutex(&mac->mutex);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMutex", rc);
             OPENSSL_free(mac);
             mac = NULL;
         }

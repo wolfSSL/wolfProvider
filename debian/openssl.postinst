@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+CONF_FILE="/usr/lib/ssl/openssl.cnf"
+CONF_DEFAULT="/usr/share/openssl-defaults/openssl.cnf"
+
+# Copy from our template if it doesn't exist
+if [ ! -f "$CONF_FILE" ]; then
+    echo "Config file does not exist: $CONF_FILE"
+    if [ -f "$CONF_DEFAULT" ]; then
+        install -Dm644 "$CONF_DEFAULT" "$CONF_FILE"
+    else
+        echo "Default config file does not exist: $CONF_DEFAULT"
+        exit 1
+    fi
+fi
+
+#DEBHELPER#
+exit 0
