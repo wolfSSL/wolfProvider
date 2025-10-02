@@ -150,7 +150,7 @@ unzip wolfssl-fips-ready.zip
 
 Then use the following command to build wolfProvider with FIPS enabled.
 ```
-./scripts/build-wolfprovider.sh --fips-bundle="path/to/fips-bundle" --fips-version=ready --distclean
+./scripts/build-wolfprovider.sh --fips-bundle="path/to/fips-bundle" --fips-check=ready --distclean
 ```
 
 ## Testing

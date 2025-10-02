@@ -50,7 +50,7 @@ jobs:
       - name: Build wolfProvider with FIPS Ready Bundle
         run: |
           ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
-          --fips-version=ready --wolfssl-ver=v${{matrix.wolfssl_bundle_ref}}-stable
+          --fips-check=ready --wolfssl-ver=v${{matrix.wolfssl_bundle_ref}}-stable
 
       - name: Run FIPS Command Tests
         run: |

@@ -70,50 +70,12 @@ jobs:
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
-      - name: Restore wolfSSL packages
-        uses: actions/cache@v4
-        id: wolfssl_cache
-        with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.dsc
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.tar.gz
-          key: wolfssl-debian-packages-${{ inputs.wolfssl_ref }}
-
-      - name: Install wolfSSL packages from cache
-        if: steps.wolfssl_cache.outputs.cache-hit == 'true'
-        run: |
-          printf "Installing wolfSSL packages from cache:\n"
-          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
-          apt install --reinstall -y ${{ env.WOLFSSL_PACKAGES_PATH }}/*wolfssl*.deb
-
+      # Build wolfSSL packages and install
+      # Note we do not use the cache currently. This is a future optimization.
       # TODO: roll this step into utils-wolfssl.sh
       - name: Build wolfSSL packages and install
-        # if: steps.wolfssl_cache.outputs.cache-hit != 'true'
         run: | 
           $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag ${{ inputs.wolfssl_ref }} ${{ env.WOLFSSL_PACKAGES_PATH }}
-
-      # Check for cached OpenSSL packages
-      - name: Checking OpenSSL packages in cache
-        uses: actions/cache@v4
-        id: openssl_cache
-        continue-on-error: true
-        with:
-          path: |
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-          key: openssl-debian-packages-${{ inputs.openssl_ref }}${{ inputs.replace_default && '-replace-default' || '' }}
-          lookup-only: false
-
-      # Install OpenSSL packages from cache if available
-      - name: Install OpenSSL packages from cache
-        if: steps.openssl_cache.outputs.cache-hit == 'true'
-        run: |
-          printf "Installing OpenSSL packages from cache:\n"
-          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
-          apt install --reinstall -y \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
 
       - name: Build wolfProvider
         run: |
@@ -137,7 +99,7 @@ jobs:
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
 
-      - name: Save to cache
+      - name: Save all packages to cache for use by other workflows
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
@@ -165,15 +127,3 @@ jobs:
             ${{ env.WOLFPROV_PACKAGES_PATH }}/*.dsc
             ${{ env.WOLFPROV_PACKAGES_PATH }}/*.tar.gz
           retention-days: 1
-
-      # TODO: upload wolfSSL artifacts, after building
-      # - name: Upload wolfSSL artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: wolfssl-debian-packages-${{ inputs.wolfssl_ref }}
-      #     path: |
-      #       ${{ env.WOLFPROV_PACKAGES_PATH }}/*wolfssl*.deb
-      #       ${{ env.WOLFPROV_PACKAGES_PATH }}/*wolfssl*.dsc
-      #       ${{ env.WOLFPROV_PACKAGES_PATH }}/*wolfssl*.tar.gz
-      #     retention-days: 1
-

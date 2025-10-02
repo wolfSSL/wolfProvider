@@ -22,6 +22,7 @@ install_wolfssl_from_git() {
     local git_tag="$2"
     local debug_mode="$3"
     local reinstall_mode="$4"
+    local main_branch="master"
 
     # If no working directory specified, create one using mktemp
     if [ -z "$work_dir" ]; then
@@ -58,7 +59,7 @@ install_wolfssl_from_git() {
             cd wolfssl
             git checkout "$git_tag"
         else
-            echo "Cloning master branch with depth 1"
+            echo "Cloning $main_branch branch with depth 1"
             git clone https://github.com/wolfSSL/wolfssl --depth 1
             cd wolfssl
         fi
@@ -66,28 +67,28 @@ install_wolfssl_from_git() {
 
     # Check if debian/rules.in exists, if not, we need to backport debian packaging
     if [ ! -f "debian/rules.in" ]; then
-        echo "debian/rules.in not found, backporting debian packaging from master..."
+        echo "debian/rules.in not found, backporting debian packaging from $main_branch..."
 
-        # Save current branch/tag
-        current_ref=$(git rev-parse HEAD)
+        # Error out if the debian directory has any uncommitted changes since
+        # we are going to clobber it.
+        if [ -d "debian" ] && ! git diff --quiet debian; then
+            echo "debian directory has uncommitted changes, please commit or stash them"
+            exit 1
+        fi
 
-        # Create a temporary directory for master checkout
-        temp_master_dir=$(mktemp -d)
-        cd "$temp_master_dir"
+        # Checkout the debian directory from the main branch which has the updated packaging code
+        if ! git checkout $main_branch -- debian; then
+            echo "Failed to checkout debian directory from $main_branch"
+            echo "Please ensure the $main_branch branch is being tracked and up-to-date"
+            exit 1
+        fi
 
-        echo "Cloning master branch to get debian directory..."
-        git clone https://github.com/wolfSSL/wolfssl master-checkout
-        cd master-checkout
-
-        # Copy debian directory to our working wolfssl
-        echo "Copying debian directory from master..."
-        cp -r debian "$work_dir/wolfssl/"
-
-        # Go back to our working wolfssl directory
-        cd "$work_dir/wolfssl"
-
-        # Clean up temporary directory
-        rm -rf "$temp_master_dir"
+        # Updated rules.in file should be present after checkout
+        if [ ! -f "debian/rules.in" ]; then
+            echo "debian/rules.in not found in $main_branch branch"
+            echo " Try updating the $main_branch branch and try again"
+            exit 1
+        fi
 
         # Patch configure.ac to add required substitutions for debian packaging
         echo "Patching configure.ac for debian packaging compatibility..."

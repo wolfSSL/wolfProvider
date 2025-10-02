@@ -14,10 +14,9 @@ show_help() {
   echo "  --disable-err-trace        No debug trace messages from library errors in wolfSSL"
   echo "  --openssl-ver=VER          Which version of OpenSSL to clone"
   echo "  --wolfssl-ver=VER          Which version of wolfSSL to clone"
-  echo "  --enable-fips              Build wolfProvider with a cloned FIPS bundle. Cloned FIPS bundle can be changed with --fips-check"
-  echo "  --fips-bundle=DIR          Build wolfProvider with a directory containing a wolfSSL FIPS bundle instead of cloning from GitHub. Requires a FIPS version to be given by --fips-version"
-  echo "  --fips-check=TAG           Choose a FIPS tag to clone. May require a version to be given by --fips-version"
-  echo "  --fips-version=VER         Choose the wolfSSL FIPS version"
+  echo "  --enable-fips              Build wolfProvider with a cloned FIPS bundle. Use with --fips-check to specify tag (default: v5.2.4)"
+  echo "  --fips-bundle=DIR          Build wolfProvider with a directory containing a wolfSSL FIPS bundle. Use with --fips-check to specify tag"
+  echo "  --fips-check=TAG           Choose a FIPS tag (v5.2.1, v5.2.4, linuxv5.2.1, v6.0.0, ready, etc). Automatically determines configure option"
   echo "  --debian                   Build a Debian package"
   echo "  --debian --enable-fips     Build a Debian package with FIPS support"
   echo "  --quicktest                Disable some tests for a faster testing suite"
@@ -30,8 +29,7 @@ show_help() {
   echo "  WOLFSSL_TAG                wolfSSL tag to use (e.g., v5.8.0-stable)"
   echo "  WOLFSSL_ISFIPS             If set to 1, clones a wolfSSL FIPS bundle from GitHub"
   echo "  WOLFSSL_FIPS_BUNDLE        Directory containing the wolfSSL FIPS bundle to use instead of cloning from GitHub"
-  echo "  WOLFSSL_FIPS_VERSION       Version of wolfSSL FIPS bundle (v5, v6, ready), used as an argument for --enable-fips when configuring wolfSSL"
-  echo "  WOLFSSL_FIPS_CHECK_TAG     Tag for wolfSSL FIPS bundle (linuxv5.2.1, v6.0.0, etc), used as an argument for fips-check.sh when cloning a wolfSSL FIPS version"
+  echo "  WOLFSSL_FIPS_CHECK_TAG     Tag for wolfSSL FIPS bundle (v5.2.1, v5.2.4, linuxv5.2.1, v6.0.0, ready, etc). Automatically determines configure option (default: v5.2.4)"
   echo "  WOLFPROV_CLEAN             If set to 1, run make clean in OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DISTCLEAN         If set to 1, remove the source and install directories of OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DEBUG             If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"
@@ -86,7 +84,6 @@ for arg in "$@"; do
             WOLFSSL_ISFIPS=1
             ;;
         --fips-bundle=*)
-            unset WOLFSSL_FIPS_CHECK_TAG
             IFS='=' read -r trash fips_bun <<< "$arg"
             if [ -z "$fips_bun" ]; then
                 echo "No directory given for --fips-bundle"
@@ -95,21 +92,12 @@ for arg in "$@"; do
             WOLFSSL_FIPS_BUNDLE="$fips_bun"
             ;;
         --fips-check=*)
-            unset WOLFSSL_FIPS_BUNDLE
             IFS='=' read -r trash fips_tag <<< "$arg"
             if [ -z "$fips_tag" ]; then
                 echo "No tag given for --fips-check"
                 args_wrong+="$arg, "
             fi
             WOLFSSL_FIPS_CHECK_TAG="$fips_tag"
-            ;;
-        --fips-version=*)
-            IFS='=' read -r trash fips_ver <<< "$arg"
-            if [ -z "$fips_ver" ]; then
-                echo "No version given for --fips-version"
-                args_wrong+="$arg, "
-            fi
-            WOLFSSL_FIPS_VERSION="$fips_ver"
             ;;
         --debian)
             build_debian=1
