@@ -237,12 +237,10 @@ int wolfProv_SetLogLevel(int levelMask);
 /* Set which components are logged, bitmask of wolfProv_LogComponents */
 int wolfProv_SetLogComponents(int componentMask);
 
-#ifdef WOLFPROV_LOG_FILE
 /* Initialize the logging system for file based logging */
 int wp_log_file_init(void);
 /* Cleanup the logging system for file based logging */
 void wp_log_file_cleanup(void);
-#endif /* WOLFPROV_LOG_FILE */
 
 #ifdef WOLFPROV_DEBUG
 

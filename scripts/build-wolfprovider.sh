@@ -9,8 +9,8 @@ show_help() {
   echo "  --help, -help, -h          Display this help menu and exit"
   echo "  --clean                    Run make clean in OpenSSL, wolfSSL, and wolfProvider"
   echo "  --distclean                Remove source and install directories of OpenSSL, wolfSSL, and wolfProvider"
-  echo "  --debug                    Builds OpenSSL, wolfSSL, and WolfProvider with debugging enabled. This is the same as setting WOLFPROV_DEBUG=1"
-  echo "  --debug-log=FILE           Force all wolfProvider debug output to specified log file instead of stderr/stdout (FILE = path to log file you want to use)"
+  echo "  --debug                    Builds OpenSSL, wolfSSL, and WolfProvider in debug mode with logging enabled. This is the same as setting WOLFPROV_DEBUG=1"
+  echo "  --debug-log=FILE           Force all wolfProvider runtime output to specified log file instead of stderr/stdout (FILE = path to log file you want to use). Logs are appended to existing file."
   echo "  --debug-asn-template       Enable debug information for asn within wolfSSL"
   echo "  --disable-err-trace        No debug trace messages from library errors in wolfSSL"
   echo "  --openssl-ver=VER          Which version of OpenSSL to clone"
@@ -137,6 +137,11 @@ fi
 # Check if --leave-silent was used without debug mode
 if [ "${WOLFPROV_LEAVE_SILENT}" = "1" ] && [ -z "$WOLFPROV_DEBUG" ] && [ -z "$debug" ]; then
     echo "Error: --leave-silent requires --debug to be set."
+    exit 1
+fi
+
+if [ -n "$WOLFPROV_LOG_FILE" ] && [ -z "$WOLFPROV_DEBUG" ]; then
+    echo "Error: --debug-log requires --debug to be set."
     exit 1
 fi
 
