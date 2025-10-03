@@ -1178,6 +1178,10 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
  */
 static void wolfprov_teardown(void* provCtx)
 {
+#ifdef WOLFPROV_LOG_FILE
+    /* Cleanup logging system */
+    wp_log_file_cleanup();
+#endif
     wolfssl_prov_ctx_free(provCtx);
 }
 
@@ -1250,6 +1254,16 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
             wolfSSL_SetLoggingPrefix("wolfSSL");
         }
     }
+    
+#ifdef WOLFPROV_LOG_FILE
+    /* Initialize logging system for file based logging */
+    if (ok) {
+        if (wp_log_file_init() != 0) {
+            /* Logging init failure is not fatal, but log it */
+            fprintf(stderr, "wolfProvider: Warning - Failed to initialize file logging\n");
+        }
+    }
+#endif
 #endif
 
 #ifdef HAVE_FIPS

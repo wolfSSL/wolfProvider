@@ -49,8 +49,51 @@ static int providerLogLevel = WP_LOG_LEVEL_ALL;
  * in wolfProv_LogComponents. Default components include all. */
 static int providerLogComponents = WP_LOG_COMPONENTS_ALL;
 
+#ifdef WOLFPROV_LOG_FILE
+/* Persistent file handle for logging to file */
+static FILE* logFileHandle = NULL;
+/* Flag to track if we've already reported file open failure to avoid spam */
+static int logFileErrorReported = 0;
+#endif
+
 #endif /* WOLFPROV_DEBUG */
 
+#ifdef WOLFPROV_LOG_FILE
+/**
+ * Initialize the persistent log file handle.
+ * Called once during provider initialization.
+ *
+ * @return 0 on success, negative value on failure.
+ */
+int wp_log_file_init(void)
+{
+    if (logFileHandle == NULL) {
+        fprintf(stderr, "wolfProvider: Opening log file %s\n", WOLFPROV_LOG_FILE);
+        logFileHandle = fopen(WOLFPROV_LOG_FILE, "a");
+        fprintf(stderr, "wolfProvider: Log file handle: %p\n", logFileHandle);
+        if (logFileHandle == NULL) {
+            /* File open failed - will fall back to stderr on first log */
+            fprintf(stderr, "wolfProvider: Failed to open log file %s\n", WOLFPROV_LOG_FILE);
+            return -1;
+        }
+    }
+    
+    return 0;
+}
+
+/**
+ * Cleanup the persistent log file handle.
+ * Called during provider teardown.
+ */
+void wp_log_file_cleanup(void)
+{
+    if (logFileHandle != NULL) {
+        fprintf(stderr, "wolfProvider: Closing log file %s\n", WOLFPROV_LOG_FILE);
+        fclose(logFileHandle);
+        logFileHandle = NULL;
+    }
+}
+#endif /* WOLFPROV_LOG_FILE */
 
 /**
  * Registers wolfProv logging callback.
@@ -175,13 +218,18 @@ static void wolfprovider_log(const int logLevel, const int component,
         printf("%s\n", logMessage);
 #elif defined(WOLFPROV_LOG_FILE)
         {
-            FILE* logFile = fopen(WOLFPROV_LOG_FILE, "a");
-            if (logFile != NULL) {
-                fprintf(logFile, "%s\n", logMessage);
-                fclose(logFile);
+            if (logFileHandle != NULL) {
+                fprintf(stderr, "wolfProvider: Logging to file %s\n", WOLFPROV_LOG_FILE);
+                fprintf(logFileHandle, "%s\n", logMessage);
+                fflush(logFileHandle);
             } else {
-                fprintf(stderr, "wolfProvider: Failed to open log file %s\n", 
-                    WOLFPROV_LOG_FILE);
+                /* Only report file error once to avoid spam */
+                if (!logFileErrorReported) {
+                    fprintf(stderr, "wolfProvider: Failed to open log file %s, "
+                            "falling back to stderr\n", 
+                        WOLFPROV_LOG_FILE);
+                    logFileErrorReported = 1;
+                }
                 fprintf(stderr, "%s\n", logMessage);
             }
         }
