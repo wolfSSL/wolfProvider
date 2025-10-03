@@ -169,7 +169,7 @@ enum wolfProv_LogComponents {
     WP_LOG_QUERY    = 0x80000,  /* wolfprov_query operations */
     WP_LOG_TLS1_PRF = 0x100000, /* TLS1 PRF operations */
 
-    /* log all compoenents */
+    /* log all components */
     WP_LOG_COMPONENTS_ALL = (WP_LOG_RNG
                            | WP_LOG_DIGEST
                            | WP_LOG_MAC
@@ -200,7 +200,7 @@ enum wolfProv_LogComponents {
                            | WP_LOG_QUERY
                            | WP_LOG_TLS1_PRF),
 
-    /* default compoenents logged */
+    /* default components logged */
     WP_LOG_COMPONENTS_DEFAULT = WP_LOG_COMPONENTS_ALL
 };
 
@@ -236,11 +236,6 @@ void wolfProv_Debugging_OFF(void);
 int wolfProv_SetLogLevel(int levelMask);
 /* Set which components are logged, bitmask of wolfProv_LogComponents */
 int wolfProv_SetLogComponents(int componentMask);
-
-/* Initialize the logging system for file based logging */
-int wp_log_file_init(void);
-/* Cleanup the logging system for file based logging */
-void wp_log_file_cleanup(void);
 
 #ifdef WOLFPROV_DEBUG
 

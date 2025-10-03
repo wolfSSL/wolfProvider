@@ -1178,7 +1178,6 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
  */
 static void wolfprov_teardown(void* provCtx)
 {
-    wp_log_file_cleanup();
     wolfssl_prov_ctx_free(provCtx);
 }
 
@@ -1235,8 +1234,6 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
     const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
 {
     int ok = 1;
-
-    wp_log_file_init();
 
     WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_provider_init");
 
