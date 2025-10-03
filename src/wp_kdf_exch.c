@@ -134,6 +134,7 @@ static wp_KdfCtx* wp_kdf_ctx_dup(wp_KdfCtx* src)
 
         if (!ok) {
             OPENSSL_free(dst);
+            dst = NULL;
         }
     }
 

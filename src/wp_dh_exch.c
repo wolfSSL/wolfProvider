@@ -158,6 +158,7 @@ static wp_DhCtx* wp_dh_dupctx(wp_DhCtx* src)
             wp_dh_free(dst->peer);
             wp_dh_free(dst->key);
             OPENSSL_free(dst);
+            dst = NULL;
         }
     }
 
@@ -369,7 +370,7 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
         }
     }
 
-    if ((!done) && ok) {
+    if ((!done) && ok && (out != NULL)) {
         /* DH key exchange derivation using wolfSSL. */
         ok = wp_dh_derive_secret(ctx, out, &outLen, maxLen);
     }
