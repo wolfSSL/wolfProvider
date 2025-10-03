@@ -431,6 +431,17 @@ static OSSL_DECODER_CTX* wp_file_setup_decoders(wp_FileCtx* ctx)
     return decCtx;
 }
 
+static void wp_bio_consume_all(BIO* bio)
+{
+    char buffer[128];
+    int bytes_read = 0;
+
+    /* Consume everything */
+    do {
+        bytes_read = BIO_read(bio, buffer, sizeof(buffer));
+    } while (bytes_read > 0);
+}
+
 /**
  * Load the data from a file.
  *
@@ -454,6 +465,9 @@ static int wp_file_load(wp_FileCtx* ctx, OSSL_CALLBACK* objCb, void* objCbArg,
     }
     if (ctx->decCtx == NULL) {
         ok = 0;
+        /* If we error here, we dont consume the BIO at all and simply return 0,
+         * however callers loop is until EOF. Set BIO to EOF on early error */
+         wp_bio_consume_all(ctx->bio);
     }
 
     if (ok) {

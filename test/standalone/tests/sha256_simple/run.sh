@@ -24,12 +24,13 @@ if ! source "$ROOT_DIR/scripts/env-setup" >/dev/null; then
     exit 1
 fi
 
+# Source common test utilities
+source "$ROOT_DIR/test/standalone/test_common.sh"
+
+# Check if this is a replace-default build
 WP_USING_REPLACE_DEFAULT="0"
-if [ -f "$OPENSSL_LIB_PATH/libcrypto.so" ]; then
-    # Check for wolfProvider symbols in libcrypto
-    if nm -D "$OPENSSL_LIB_PATH/libcrypto.so" 2>/dev/null | grep -q "wolfprov_provider_init"; then
-        WP_USING_REPLACE_DEFAULT="1"
-    fi
+if detect_replace_default_build; then
+    WP_USING_REPLACE_DEFAULT="1"
 fi
 
 # Configure environment based on build type
