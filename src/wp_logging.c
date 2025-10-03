@@ -51,7 +51,6 @@ static int providerLogComponents = WP_LOG_COMPONENTS_ALL;
 
 #endif /* WOLFPROV_DEBUG */
 
-
 /**
  * Registers wolfProv logging callback.
  * Callback will be used by wolfProv for debug/log messages.
@@ -173,8 +172,37 @@ static void wolfprovider_log(const int logLevel, const int component,
         WOLFPROV_USER_LOG(logMessage);
 #elif defined(WOLFPROV_LOG_PRINTF)
         printf("%s\n", logMessage);
+#elif defined(WOLFPROV_LOG_FILE)
+        {
+            /* Flag to track if we've already reported file open failure to avoid spam */
+            static int logFileErrorReported = 0;
+            /* Persistent file handle for logging to file */
+            static XFILE* logFileHandle = NULL;
+
+            if (logFileHandle == NULL) {
+                logFileHandle = XFOPEN(WOLFPROV_LOG_FILE, "a");
+                if (logFileHandle) {
+                    XFPRINTF(stderr, "wolfProvider: Using log file %s\n", WOLFPROV_LOG_FILE);
+                    fflush(stderr);
+                }
+                else {
+                    /* Only report file error once to avoid spam */
+                    if (!logFileErrorReported) {
+                        XFPRINTF(stderr, "wolfProvider: Log file not open: %s, "
+                                "falling back to stderr\n", 
+                            WOLFPROV_LOG_FILE);
+                        logFileErrorReported = 1;
+                        logFileHandle = stderr;
+                    }
+                }
+            }
+            
+            XFWRITE(logMessage, strlen(logMessage), 1, logFileHandle);
+            XFWRITE("\n", 1, 1, logFileHandle);
+            XFFLUSH(logFileHandle);
+        }
 #else
-        fprintf(stderr, "%s\n", logMessage);
+        XFPRINTF(stderr, "%s\n", logMessage);
 #endif
     }
 }

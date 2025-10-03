@@ -78,6 +78,9 @@
  * WOLFPROV_LOG_PRINTF  Define to Use printf instead of fprintf (to stderr)
  *                        for logs. Not applicable if using WOLFPROV_USER_LOG
  *                        or custom logging callback.
+ * WOLFPROV_LOG_FILE     Define to specify a file path for debug output instead
+ *                        of stderr. This is typically set via --debug-log=FILE
+ *                        build script argument.
  *
  * COMPILE-TIME MACRO CONFIGURATIONS:
  * Define these macros in this header to control logging at compile time:
@@ -166,7 +169,7 @@ enum wolfProv_LogComponents {
     WP_LOG_QUERY    = 0x80000,  /* wolfprov_query operations */
     WP_LOG_TLS1_PRF = 0x100000, /* TLS1 PRF operations */
 
-    /* log all compoenents */
+    /* log all components */
     WP_LOG_COMPONENTS_ALL = (WP_LOG_RNG
                            | WP_LOG_DIGEST
                            | WP_LOG_MAC
@@ -197,7 +200,7 @@ enum wolfProv_LogComponents {
                            | WP_LOG_QUERY
                            | WP_LOG_TLS1_PRF),
 
-    /* default compoenents logged */
+    /* default components logged */
     WP_LOG_COMPONENTS_DEFAULT = WP_LOG_COMPONENTS_ALL
 };
 

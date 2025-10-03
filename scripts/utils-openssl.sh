@@ -348,6 +348,8 @@ install_openssl() {
 }
 
 init_openssl() {
+    WOLFPROV_BUILD_DEBIAN=${WOLFPROV_BUILD_DEBIAN:-0}
+    
     if [ $WOLFPROV_BUILD_DEBIAN -eq 1 ]; then
         install_openssl_deb
     else
