@@ -310,6 +310,12 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
     int ok = 1;
     OSSL_PARAM* p;
 
+#ifdef HAVE_FIPS
+    static const char* provider_name = "wolfSSL Provider FIPS";
+#else
+    static const char* provider_name = "wolfSSL Provider";
+#endif
+
     WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfprov_get_params");
 
     (void)provCtx;
@@ -317,7 +323,7 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
     /* Look for provider name as a parameter to return. */
     p = OSSL_PARAM_locate(params, OSSL_PROV_PARAM_NAME);
     /* Set the string if name requested. */
-    if ((p != NULL) && (!OSSL_PARAM_set_utf8_ptr(p, "wolfSSL Provider"))) {
+    if ((p != NULL) && (!OSSL_PARAM_set_utf8_ptr(p, provider_name))) {
         ok = 0;
     }
     if (ok) {

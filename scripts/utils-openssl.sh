@@ -167,7 +167,7 @@ check_openssl_replace_default_mismatch() {
 patch_openssl_version() {
     # Patch the OpenSSL version (wolfProvider/openssl-source/VERSION.dat) 
     # with our BUILD_METADATA, depending on the FIPS flag. Either "wolfProvider" or "wolfProvider-fips".
-    if [ "$WOLFSSL_ISFIPS" = "1" ]; then
+    if [ ${WOLFSSL_ISFIPS:-0} -eq 1 ]; then
         sed -i 's/BUILD_METADATA=.*/BUILD_METADATA=wolfProvider-fips/g' ${OPENSSL_SOURCE_DIR}/VERSION.dat
     else
         sed -i 's/BUILD_METADATA=.*/BUILD_METADATA=wolfProvider-nonfips/g' ${OPENSSL_SOURCE_DIR}/VERSION.dat
