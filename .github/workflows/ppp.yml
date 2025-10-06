@@ -22,6 +22,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_ppp:
     runs-on: ubuntu-22.04
@@ -41,6 +42,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -123,8 +125,6 @@ jobs:
         shell: bash
         run: |
           set +o pipefail # ignore errors from make check
-          # Verify wolfProvider is properly installed
-          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Run tests

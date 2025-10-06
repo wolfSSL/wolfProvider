@@ -90,6 +90,10 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
       - name: Download cjose
         uses: actions/checkout@v4
         with:
@@ -109,8 +113,6 @@ jobs:
       - name: Run cjose tests
         working-directory: cjose
         run: |
-          # Verify wolfProvider is properly installed
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '-replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
           export ${{ matrix.force_fail }}
 
           make test 2>&1 | tee cjose-test.log

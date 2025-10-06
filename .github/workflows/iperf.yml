@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_iperf:
     runs-on: ubuntu-22.04
@@ -41,6 +42,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -80,6 +82,10 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
       - name: Install dependencies
         run: |
           apt-get update
@@ -118,8 +124,6 @@ jobs:
       - name: Run tests
         working-directory: iperf
         run: |
-          # Verify wolfProvider is properly installed
-          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           # Test variables for iperf

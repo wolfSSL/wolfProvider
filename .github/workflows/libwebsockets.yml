@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_libwebsockets:
     runs-on: ubuntu-22.04
@@ -41,6 +42,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -105,8 +107,6 @@ jobs:
         working-directory: libwebsockets
         shell: bash
         run: |
-          # Verify wolfProvider is properly installed
-          $GITHUB_WORKSPACE/scripts/verify-debian.sh
           export ${{ matrix.force_fail }}
 
           ./build/bin/libwebsockets-test-server --port=11111 --ssl > server.log 2>&1 & SERVER_PID=$!

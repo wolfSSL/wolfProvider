@@ -3,7 +3,7 @@ name: Debian Package Test
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ '**' ] # 'master', 'main', 'release/**' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -27,6 +27,9 @@ jobs:
         replace_default: [ true ]
 
   libwolfprov-standalone:
+    # Standalone mode is disabled until we re-enable support for it in the debian build.
+    if: false
+
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # Run inside Debian Bookworm to match packaging environment
@@ -77,11 +80,9 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
-      - name: Verify installation
+      - name: Verify wolfProvider is properly installed
         run: |
-          echo "Package Installation Verification:"
-          dpkg -l | grep libwolfprov
-          dpkg -L libwolfprov
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.fips && '--fips' || '' }}
 
       - name: Test OpenSSL provider functionality
         run: |
@@ -184,6 +185,11 @@ jobs:
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
         id: wolfprov-cache
@@ -239,29 +245,9 @@ jobs:
           echo "Installed packages after wolfprov:"
           dpkg -l | grep -E "(wolfprov|wolfssl|openssl|libssl)"
 
-      - name: Test OpenSSL providers after wolfprov installation
+      - name: Verify wolfProvider is properly installed
         run: |
-          echo "Testing OpenSSL providers after wolfprov installation..."
-          echo "Expected: This should show wolfprov as an available provider"
-          
-          # Test openssl list -providers
-          if openssl list -providers; then
-            echo "SUCCESS: openssl list -providers works after wolfprov installation"
-          else
-            echo "FAILURE: openssl list -providers failed after wolfprov installation"
-            exit 1
-          fi
-          
-          echo "Provider list after wolfprov installation:"
-          openssl list -providers
-          
-          # Check if wolfprov provider is available
-          if openssl list -providers | grep -i "wolfprov"; then
-            echo "SUCCESS: wolfprov provider is available"
-          else
-            echo "WARNING: wolfprov provider not found in provider list"
-            echo "This might be expected if the provider needs to be explicitly loaded"
-          fi
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
       - name: Verify wolfprov configuration
         run: |

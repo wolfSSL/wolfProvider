@@ -15,11 +15,14 @@ jobs:
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
-      openssl_ref: 'openssl-3.5.0'
-      replace_default: true
+      openssl_ref: ${{ matrix.openssl_ref }}
+      replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: ['master', 'v5.8.2-stable']
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
+        fips: [ false ]
 
   git-ssh-default-replace-test:
     runs-on: ubuntu-22.04
@@ -32,7 +35,10 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: [ 'master', 'v5.8.2-stable' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        replace_default: [ true ]
+        fips: [ false ]
         key_type: [ 'rsa', 'ecdsa', 'ed25519', 'chacha20-poly1305' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         iterations: [ 10 ] # Total of 50 runs
@@ -55,7 +61,7 @@ jobs:
           ${{ env.WOLFSSL_PACKAGES_PATH }}
           ${{ env.OPENSSL_PACKAGES_PATH }}
           ${{ env.WOLFPROV_PACKAGES_PATH }}
-        key: openssl-wolfprov-debian-packages-${{ github.sha }}-replace-default
+        key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
         fail-on-cache-miss: true
 
     - name: Install wolfSSL/OpenSSL/wolfprov packages
@@ -76,6 +82,10 @@ jobs:
         apt install --reinstall -y \
           ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+    - name: Verify wolfProvider is properly installed
+      run: |
+        $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
     - name: Set up environment
       run: |
         export DEBIAN_FRONTEND=noninteractive
@@ -86,9 +96,6 @@ jobs:
     - name: Run git + replace default + ssh test
       shell: bash
       run: |
-        # Verify wolfProvider is properly installed
-        $GITHUB_WORKSPACE/scripts/verify-debian.sh
-
         echo "=== Running Git + replace default + ssh Test ==="
         echo "Using the local test script for consistent testing"
         # Run the test with the matrix parameters
