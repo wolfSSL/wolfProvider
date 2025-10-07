@@ -223,6 +223,54 @@ static int wp_kdf_set_ctx_params(wp_KdfCtx* ctx, const OSSL_PARAM params[])
 }
 
 /**
+ * Get the KDF key exchange parameters.
+ *
+ * @param [in]      ctx     KDF key exchange context object.
+ * @param [in, out] params  Array of parameters.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_kdf_get_ctx_params(wp_KdfCtx* ctx, OSSL_PARAM params[])
+{
+    int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_KDF, "wp_kdf_get_ctx_params");
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+    if (ok && !EVP_KDF_CTX_get_params(ctx->kdfCtx, params)) {
+        ok = 0;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Get the list of gettable parameters for a KDF context.
+ *
+ * @param [in] ctx      KDF key exchange context object. Unused.
+ * @param [in] provCtx  Provider context object.
+ * @param [in] kdfName  Name of the KDF.
+ * @return  Array of parameters with data type.
+ */
+static const OSSL_PARAM* wp_kdf_gettable_ctx_params(wp_KdfCtx* ctx,
+    WOLFPROV_CTX* provCtx, const char* kdfName)
+{
+    const OSSL_PARAM* params = NULL;
+
+    (void)provCtx;
+    (void)kdfName;
+
+    if (wolfssl_prov_is_running() && ctx != NULL && ctx->kdfCtx != NULL) {
+        params = EVP_KDF_CTX_gettable_params(ctx->kdfCtx);
+    }
+
+    return params;
+}
+
+/**
  * Return an array of supported settable parameters for the HKDF ke context.
  *
  * @param [in] ctx      ECDH key exchange context object. Unused.
@@ -269,6 +317,32 @@ static const OSSL_PARAM* wp_tls1_prf_settable_ctx_params(wp_KdfCtx* ctx,
     return settable_ctx_params;
 }
 
+/**
+ * Return an array of supported gettable parameters for the HKDF ke context.
+ *
+ * @param [in] ctx      KDF key exchange context object. Unused.
+ * @param [in] provCtx  Provider context object.
+ * @return  Array of parameters with data type.
+ */
+static const OSSL_PARAM* wp_hkdf_gettable_ctx_params(wp_KdfCtx* ctx,
+    WOLFPROV_CTX* provCtx)
+{
+    return wp_kdf_gettable_ctx_params(ctx, provCtx, "HKDF");
+}
+
+/**
+ * Return an array of supported gettable parameters for the TLS1-PRF ke context.
+ *
+ * @param [in] ctx      KDF key exchange context object. Unused.
+ * @param [in] provCtx  Provider context object.
+ * @return  Array of parameters with data type.
+ */
+static const OSSL_PARAM* wp_tls1_prf_gettable_ctx_params(wp_KdfCtx* ctx,
+    WOLFPROV_CTX* provCtx)
+{
+    return wp_kdf_gettable_ctx_params(ctx, provCtx, "TLS1-PRF");
+}
+
 /*
  * HKDF
  */
@@ -293,8 +367,11 @@ const OSSL_DISPATCH wp_hkdf_keyexch_functions[] = {
     { OSSL_FUNC_KEYEXCH_INIT,                (DFUNC)wp_kdf_init               },
     { OSSL_FUNC_KEYEXCH_DERIVE,              (DFUNC)wp_kdf_derive             },
     { OSSL_FUNC_KEYEXCH_SET_CTX_PARAMS,      (DFUNC)wp_kdf_set_ctx_params     },
+    { OSSL_FUNC_KEYEXCH_GET_CTX_PARAMS,      (DFUNC)wp_kdf_get_ctx_params     },
     { OSSL_FUNC_KEYEXCH_SETTABLE_CTX_PARAMS,
                                             (DFUNC)wp_hkdf_settable_ctx_params },
+    { OSSL_FUNC_KEYEXCH_GETTABLE_CTX_PARAMS,
+                                            (DFUNC)wp_hkdf_gettable_ctx_params },
     { 0, NULL }
 };
 
@@ -322,8 +399,11 @@ const OSSL_DISPATCH wp_tls1_prf_keyexch_functions[] = {
     { OSSL_FUNC_KEYEXCH_INIT,                (DFUNC)wp_kdf_init               },
     { OSSL_FUNC_KEYEXCH_DERIVE,              (DFUNC)wp_kdf_derive             },
     { OSSL_FUNC_KEYEXCH_SET_CTX_PARAMS,      (DFUNC)wp_kdf_set_ctx_params     },
+    { OSSL_FUNC_KEYEXCH_GET_CTX_PARAMS,      (DFUNC)wp_kdf_get_ctx_params     },
     { OSSL_FUNC_KEYEXCH_SETTABLE_CTX_PARAMS,
                                             (DFUNC)wp_tls1_prf_settable_ctx_params },
+    { OSSL_FUNC_KEYEXCH_GETTABLE_CTX_PARAMS,
+                                            (DFUNC)wp_tls1_prf_gettable_ctx_params },
     { 0, NULL }
 };
 
