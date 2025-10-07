@@ -21,9 +21,6 @@ jobs:
       matrix:
         wolfssl_ref: ['v5.8.2-stable']
         openssl_ref: [
-          'openssl-3.0.0',
-          'openssl-3.0.1',
-          'openssl-3.0.2',
           'openssl-3.0.3',
           'openssl-3.0.4',
           'openssl-3.0.5',

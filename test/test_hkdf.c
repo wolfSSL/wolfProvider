@@ -91,7 +91,6 @@ static int test_hkdf_calc(OSSL_LIB_CTX* libCtx, unsigned char *key, int keyLen,
     return err;
 }
 
-
 static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
     int keyLen, const EVP_MD *md, int mode, int isOssl)
 {
@@ -216,8 +215,6 @@ static int test_hkdf_md(const EVP_MD *md, int mode)
         err = 1;
     }
 
-#if OPENSSL_VERSION_NUMBER <= 0x30600000L
-
     memset(oKey, 0, sizeof(oKey));
     memset(wKey, 0, sizeof(wKey));
 
@@ -244,8 +241,6 @@ static int test_hkdf_md(const EVP_MD *md, int mode)
         PRINT_BUFFER("wolfSSL key", wKey, sizeof(wKey));
         err = 1;
     }
-
-#endif
 
     return err;
 }
