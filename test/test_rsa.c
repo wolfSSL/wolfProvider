@@ -24,14 +24,6 @@
 #include <openssl/store.h>
 #include <openssl/core_names.h>
 
-/*
- * EVP_PKEY_PRIVATE_KEY was introduced in OpenSSL 3.0.12 and 3.1.4.
- * Earlier versions don't have this convenience macro.
- */
-#define OPENSSL_HAS_EVP_PKEY_PRIVATE_KEY \
-    ((OPENSSL_VERSION_NUMBER >= 0x3000C000L && OPENSSL_VERSION_NUMBER < 0x30100000L) || \
-     (OPENSSL_VERSION_NUMBER >= 0x30104000L))  /* 3.0.12+ or 3.1.4+ */
-
 #ifdef WP_HAVE_RSA
 
 #ifndef ARRAY_SIZE
@@ -1178,7 +1170,7 @@ int test_rsa_fromdata(void* data)
         static const int selections[] = {
             EVP_PKEY_KEYPAIR,
             EVP_PKEY_PUBLIC_KEY,
-#if OPENSSL_HAS_EVP_PKEY_PRIVATE_KEY
+#ifdef EVP_PKEY_PRIVATE_KEY
             EVP_PKEY_PRIVATE_KEY, /* added in 3.0.12 and 3.1.4 */
 #endif
         };

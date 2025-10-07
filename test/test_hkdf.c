@@ -91,23 +91,13 @@ static int test_hkdf_calc(OSSL_LIB_CTX* libCtx, unsigned char *key, int keyLen,
     return err;
 }
 
-/*
- * OpenSSL's magnificently consistent approach to API stability has blessed us
- * with this delightful version-dependent behavior where
- * EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) returns different values
- * across versions for the same input.
- */
-#define OPENSSL_REJECTS_NULL_SALT_VERSIONS \
-    (OPENSSL_VERSION_NUMBER == 0x30000110L || /* 3.0.17 */ \
-     OPENSSL_VERSION_NUMBER == 0x30200050L || /* 3.2.5 */  \
-     OPENSSL_VERSION_NUMBER == 0x30300040L || /* 3.3.4 */  \
-     OPENSSL_VERSION_NUMBER == 0x30400020L || /* 3.4.2 */  \
-     OPENSSL_VERSION_NUMBER >= 0x30500010L)   /* 3.5.1+ assume all future versions reject NULL salt */
 
 static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
-    int keyLen, const EVP_MD *md, int mode)
+    int keyLen, const EVP_MD *md, int mode, int isOssl)
 {
     int err = 0;
+    int ret = 0;
+    static int osslRet = 0;
     EVP_PKEY_CTX *ctx = NULL;
     unsigned char inKey[32] = { 0, };
     unsigned char salt[32] = { 0, };
@@ -148,15 +138,17 @@ static int test_hkdf_double_set_salt(OSSL_LIB_CTX* libCtx, unsigned char *key,
         }
     }
     if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXPAND_ONLY)) {
-#if OPENSSL_REJECTS_NULL_SALT_VERSIONS
-        /* These versions return 0 for EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) */
-        if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 0) {
-#else
-        /* All other versions return 1 for EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) */
-        if (EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0) != 1) {
-#endif
-            PRINT_MSG("Failed to set HKDF salt to NULL");
-            err = 1;
+        ret = EVP_PKEY_CTX_set1_hkdf_salt(ctx, NULL, 0);
+        if (isOssl) {
+            /* Record return value for whatever version of OpenSSL we are
+             * running against as expected result for next call */
+            osslRet = ret;
+        }
+        else {
+            if (ret != osslRet) {
+                PRINT_MSG("Failed to set HKDF salt to NULL");
+                err = 1;
+            }
         }
     }
     if ((err == 0) && (mode != EVP_PKEY_HKDEF_MODE_EXPAND_ONLY)) {
@@ -231,7 +223,8 @@ static int test_hkdf_md(const EVP_MD *md, int mode)
 
     if (err == 0) {
         PRINT_MSG("Calc with OpenSSL");
-        err = test_hkdf_double_set_salt(osslLibCtx, oKey, sizeof(oKey), md, mode);
+        err = test_hkdf_double_set_salt(osslLibCtx,
+            oKey, sizeof(oKey), md, mode, 1);
         if (err == 1) {
             PRINT_MSG("FAILED OpenSSL");
         }
@@ -239,7 +232,8 @@ static int test_hkdf_md(const EVP_MD *md, int mode)
 
     if (err == 0) {
         PRINT_MSG("Calc with wolfSSL");
-        err = test_hkdf_double_set_salt(wpLibCtx, wKey, sizeof(wKey), md, mode);
+        err = test_hkdf_double_set_salt(wpLibCtx,
+            wKey, sizeof(wKey), md, mode, 0);
         if (err == 1) {
             PRINT_MSG("FAILED wolfSSL");
         }

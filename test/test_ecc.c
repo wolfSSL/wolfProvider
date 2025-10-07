@@ -1670,8 +1670,10 @@ static int test_ec_pubkey_match_ex(EVP_PKEY *pkey1, EVP_PKEY *pkey2,
 
 static int test_ec_pubkey_match(EVP_PKEY *pkey1, EVP_PKEY *pkey2) {
     int err = 0;
-
+    /* Older versions of OpenSSL use a different format for raw pub key */
+#if OPENSSL_VERSION_NUMBER >= 0x30008000L
     err = test_ec_pubkey_match_ex(pkey1, pkey2, OSSL_PKEY_PARAM_PUB_KEY);
+#endif
     if (err == 0) {
         err = test_ec_pubkey_match_ex(pkey1, pkey2,
                                       OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY);
@@ -1902,6 +1904,8 @@ static int test_ec_import_priv(void)
             err = 1;
         }
     }
+    /* Older versions of OpenSSL will segfault on this */
+#if OPENSSL_VERSION_NUMBER >= 0x30006000L
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
             OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 0) {
@@ -1914,6 +1918,7 @@ static int test_ec_import_priv(void)
             err = 1;
         }
     }
+#endif
 
     EVP_PKEY_free(pkey1);
     EVP_PKEY_free(pkey2);
