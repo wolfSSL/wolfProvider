@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_krb5:
     runs-on: ubuntu-22.04
@@ -41,6 +42,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -80,6 +82,10 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
       - name: Install KRB5 dependencies
         run: |
           apt-get update
@@ -112,6 +118,7 @@ jobs:
         working-directory: krb5
         shell: bash
         run: |
+
           set +o pipefail # ignore errors from make check
           # Build KRB5
           cd src
@@ -132,4 +139,3 @@ jobs:
           make check 2>&1 | tee krb5-test.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} krb5
-

@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_socat:
     runs-on: ubuntu-22.04
@@ -39,6 +40,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -78,6 +80,10 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
       - name: Install dependencies
         run: |
           export DEBIAN_FRONTEND=noninteractive
@@ -109,10 +115,6 @@ jobs:
           mkdir -p /dev
           touch /dev/vsock
 
-          # wolfProvider is already loaded as the default provider
-          echo "Current OpenSSL providers:"
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
 
           # Show socat version (includes OpenSSL version info)
           ./socat -V

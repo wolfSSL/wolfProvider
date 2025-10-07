@@ -21,6 +21,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_qtbase_network:
     runs-on: ubuntu-22.04
@@ -37,18 +38,12 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-      - name: Install Qt dependencies
-        run: |
-          apt-get update
-          apt-get install -y build-essential pkg-config dpkg-dev \
-            python3 perl libpcre2-dev zlib1g-dev cmake ninja-build \
-            bison flex libpng-dev libjpeg-dev git ca-certificates
-
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -83,6 +78,17 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
+      - name: Install Qt dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential pkg-config dpkg-dev \
+            python3 perl libpcre2-dev zlib1g-dev cmake ninja-build \
+            bison flex libpng-dev libjpeg-dev git ca-certificates
+
       - name: Checkout OSP
         uses: actions/checkout@v4
         with:
@@ -106,22 +112,6 @@ jobs:
           ./configure -opensource -confirm-license -developer-build \
             -nomake examples -no-dbus -no-opengl \
             -openssl-linked
-
-      - name: Build Qt (dev version - CMake)
-        if: matrix.qt_ref == 'dev'
-        working-directory: qt5_repo
-        run: |
-          # Apply patch from OSP repo
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/qtbase/qtbase-v6.10-wolfprov.patch
-
-          # Build the OpenSSL TLS backend plugin first
-          ninja QTlsBackendOpenSSLPlugin
-
-          # Build only the SSL test and its dependencies
-          cmake --build . --target tst_qsslsocket --parallel $(nproc)
-
-          #disable tests that both openssl and wolfprovider fail
-          cp $GITHUB_WORKSPACE/.github/scripts/qtbase/BLACKLIST tests/auto/network/ssl/qsslsocket/BLACKLIST
 
       - name: Build Qt (v5.15.8 - qmake)
         if: matrix.qt_ref != 'dev'
@@ -147,22 +137,12 @@ jobs:
           QTEST_ENVIRONMENT=ci ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
 
           # Check test results based on qt_ref
-          if [[ "${{ matrix.qt_ref }}" == "dev" ]]; then
-            if grep -q "0 failed" qsslsocket-test.log; then
-              TEST_RESULT=0
-            else
-              TEST_RESULT=1
-              echo "Tests failed unexpectedly for 'dev' branch."
-            fi
+          if grep -q "521 passed" qsslsocket-test.log; then
+            TEST_RESULT=0
+            echo "SUCCESS: Found 521 passed tests as expected"
           else
-            #No easy way to disable tests in v5.15.8. Both openssl and wolfprovider should always pass 521 tests on this version though
-            if grep -q "521 passed" qsslsocket-test.log; then
-              TEST_RESULT=0
-              echo "SUCCESS: Found 521 passed tests as expected"
-            else
-              TEST_RESULT=1
-              echo "Tests failed unexpectedly for 'v5.15.8-lts-lgpl' branch."
-            fi
+            TEST_RESULT=1
+            echo "Tests failed unexpectedly for 'v5.15.8-lts-lgpl' branch."
           fi
 
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} qtbase-qsslsocket

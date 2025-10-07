@@ -35,6 +35,7 @@ WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include
 WOLFSSL_DEBUG_ASN_TEMPLATE=${DWOLFSSL_DEBUG_ASN_TEMPLATE:-0}
 WOLFPROV_DISABLE_ERR_TRACE=${WOLFPROV_DISABLE_ERR_TRACE:-0}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
+WOLFPROV_BUILD_DEBIAN=${WOLFPROV_BUILD_DEBIAN:-0}
 USE_CUR_TAG=${USE_CUR_TAG:-0}
 
 clean_wolfssl() {
@@ -106,7 +107,7 @@ install_wolfssl() {
                 printf "ERROR: System wolfSSL is FIPS, but WOLFSSL_ISFIPS is not set to 1\n"
                 do_cleanup
                 exit 1
-            elif [ $? -eq 0 ] && [ "$WOLFSSL_ISFIPS" != "0" ]; then
+            elif [ $? -ne 0 ] && [ "$WOLFSSL_ISFIPS" != "0" ]; then
                 printf "ERROR: System wolfSSL is non-FIPS, but WOLFSSL_ISFIPS is set to 1\n"
                 do_cleanup
                 exit 1

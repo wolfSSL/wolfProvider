@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_grpc:
     runs-on: ubuntu-22.04
@@ -48,6 +49,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -87,11 +89,15 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
       - name: Install prerequisites
         run: |
           apt-get update
-          apt-get install -y build-essential autoconf libtool pkg-config clang libc++-dev \
-            iproute2 clang net-tools git python3-six
+          apt-get install -y build-essential autoconf libtool pkg-config clang \
+            libc++-dev iproute2 net-tools git python3-six
 
       - name: Confirm IPv4 and IPv6 support
         run: |
@@ -129,6 +135,7 @@ jobs:
       - name: Run grpc tests with wolfProvider
         working-directory: ./grpc
         run: |
+
           # Start the port server
           ./tools/run_tests/start_port_server.py
 

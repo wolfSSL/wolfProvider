@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_stunnel:
     runs-on: ubuntu-22.04
@@ -41,6 +42,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -79,6 +81,10 @@ jobs:
 
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
       - name: Install dependencies
         run: |
@@ -125,13 +131,6 @@ jobs:
         run: |
           python3 -m venv myenv
           source myenv/bin/activate
-
-      - name: Apply patch to disable pkcs12 test
-        if : ${{ matrix.stunnel_ref == 'master' }}
-        working-directory: ./stunnel
-        run: |
-          # Bypass the Certp12Test test
-          perl -pe 's/^( \s*)stunnel = Certp12Test\(cfg, logger\)/$1return\n$1stunnel = Certp12Test(cfg, logger)/' -i tests/plugins/p07_p12cert.py
 
       - name: Verify stunnel with wolfProvider
         working-directory: ./stunnel

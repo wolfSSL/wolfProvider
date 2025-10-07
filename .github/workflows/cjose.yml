@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_cjose:
     runs-on: ubuntu-22.04
@@ -43,6 +44,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -88,12 +90,9 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
-
-
-      - name: Check wolfProvider is installed
+      - name: Verify wolfProvider is properly installed
         run: |
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
       - name: Download cjose
         uses: actions/checkout@v4
@@ -114,10 +113,6 @@ jobs:
       - name: Run cjose tests
         working-directory: cjose
         run: |
-          # wolfProvider is already loaded as the default provider
-          echo "Current OpenSSL providers:"
-          openssl list -providers
-          openssl list -providers | grep -q "wolfSSL Provider" || (echo "ERROR: libwolfprov not found in OpenSSL providers" && exit 1)
           export ${{ matrix.force_fail }}
 
           make test 2>&1 | tee cjose-test.log

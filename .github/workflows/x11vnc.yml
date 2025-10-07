@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
       
   test_x11vnc:
     runs-on: ubuntu-22.04
@@ -40,29 +41,13 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
 
     steps:
-      - name: Install x11vnc dependencies
-        run: |
-          apt-get update
-
-          # common build dependencies
-          apt-get install -y build-essential autoconf automake libtool \
-              pkg-config gcc make ca-certificates
-
-          # x11vnc dependencies
-          apt-get install -y libc6-dev libjpeg-dev x11proto-core-dev \
-              libxss-dev zlib1g-dev libavahi-client-dev libvncserver-dev \
-              libx11-dev libxdamage-dev libxext-dev libxfixes-dev libxi-dev \
-              libxinerama-dev libxrandr-dev libxtst-dev
-
-          # packages for testing script
-          apt-get install -y xvfb tigervnc-viewer psmisc expect curl
-
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -97,6 +82,27 @@ jobs:
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+
+      - name: Install x11vnc dependencies
+        run: |
+          apt-get update
+
+          # common build dependencies
+          apt-get install -y build-essential autoconf automake libtool \
+              pkg-config gcc make ca-certificates
+
+          # x11vnc dependencies
+          apt-get install -y libc6-dev libjpeg-dev x11proto-core-dev \
+              libxss-dev zlib1g-dev libavahi-client-dev libvncserver-dev \
+              libx11-dev libxdamage-dev libxext-dev libxfixes-dev libxi-dev \
+              libxinerama-dev libxrandr-dev libxtst-dev
+
+          # packages for testing script
+          apt-get install -y xvfb tigervnc-viewer psmisc expect curl
+
       - name: Download x11vnc
         uses: actions/checkout@v4
         with:
@@ -119,6 +125,7 @@ jobs:
           make install
 
       - name: Run x11vnc tests
+        shell: bash
         run: |
           export ${{ matrix.force_fail }}
           export WOLFPROV_FORCE_FAIL_STR="${{ matrix.force_fail }}"
@@ -140,4 +147,6 @@ jobs:
             cat $X11VNC_TEST_LOG
           fi
           exit $X11VNC_TEST_STATUS
+
+          $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh
 

@@ -24,6 +24,7 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         replace_default: [ true ]
+        fips: [ false ]
 
   test_libwebsockets:
     runs-on: ubuntu-22.04
@@ -41,6 +42,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -51,11 +53,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Install libwebsockets dependencies
-        run: |
-          apt-get update
-          apt-get install -y libc6 libcap2 zlib1g cmake build-essential dpkg-dev
 
       - name: Checking OpenSSL/wolfProvider packages in cache
         uses: actions/cache/restore@v4
@@ -74,14 +71,22 @@ jobs:
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+
           apt install --reinstall -y \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl*.deb
+
           apt install --reinstall -y \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev*.deb
+
           apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+            
+      - name: Install libwebsockets dependencies
+        run: |
+          apt-get update
+          apt-get install -y libc6 libcap2 zlib1g cmake build-essential dpkg-dev
 
       - name: Download libwebsockets
         uses: actions/checkout@v4
@@ -103,6 +108,7 @@ jobs:
         shell: bash
         run: |
           export ${{ matrix.force_fail }}
+
           ./build/bin/libwebsockets-test-server --port=11111 --ssl > server.log 2>&1 & SERVER_PID=$!
           sleep 5
           timeout 10 ./build/bin/libwebsockets-test-client 127.0.0.1 --port=11111 --ssl > client.log 2>&1 || echo "Client exited with error $?"
