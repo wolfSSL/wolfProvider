@@ -110,15 +110,19 @@ jobs:
           ref: ${{ matrix.x11vnc_ref }}
           path: x11vnc
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd x11vnc
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/x11vnc/x11vnc-${{ matrix.x11vnc_ref }}-wolfprov.patch
+
       - name: Build x11vnc
         working-directory: x11vnc
         run: |
-          # change certs from being hashed with MD5 to SHA256
-          perl -pi -e 's/default_md\s*=\s*md5/default_md = SHA256/' src/ssltools.h
-
-          # change encryption for cert keys from des3 to aes256
-          perl -pi -e 's/-des3/-aes256/' src/ssltools.h
-
           autoreconf -vfi
           ./configure
           make -j $(nproc)
