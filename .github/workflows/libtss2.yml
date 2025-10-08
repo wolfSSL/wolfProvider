@@ -59,13 +59,15 @@ jobs:
           ref: ${{ matrix.tpm2_tss_ref }}
           fetch-depth: 1
 
-      # Apply patch to fix missing stdint.h includes in test files
-      # TODO: use patch from OSP repo
-      - name: Apply patch for test source files
-        working-directory: tpm2_tss_repo
-        if: ${{ matrix.tpm2_tss_ref }} == '4.1.3'
-        run: |
-          perl -pi -e 's|(#include <cmocka\.h>)|#include <stdint.h>\n$1|' ./test/unit/*.c
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd tpm2_tss_repo
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libtss2/libtss2-${{ matrix.tpm2_tss_ref }}-wolfprov.patch
 
       - name: Build and install tpm2-tss
         working-directory: tpm2_tss_repo
