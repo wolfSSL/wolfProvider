@@ -1,0 +1,6 @@
+# openssl expects the conf file under /usr/lib/ssl, so ensure the symlink
+# is set to match the normal install
+/etc/ssl/openssl.cnf /usr/lib/ssl/openssl.cnf
+# Other symlinks expected by Debian
+/etc/ssl/certs       /usr/lib/ssl/certs
+/etc/ssl/private     /usr/lib/ssl/private

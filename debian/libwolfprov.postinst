@@ -2,7 +2,7 @@
 set -e
 
 # Define the include line to add to the openssl.cnf file
-INCLUDE_LINE=".include /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
+INCLUDE_LINE=".include /etc/ssl/openssl.cnf.d/wolfprovider.conf"
 
 # Search for the openssl.cnf file in /usr, /lib and /etc
 CONF_FILES=$(find /usr /lib /etc -name openssl.cnf 2>/dev/null)

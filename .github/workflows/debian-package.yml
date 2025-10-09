@@ -45,6 +45,7 @@ jobs:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+      WOLFPROV_CONF_FILE: /etc/ssl/openssl.cnf.d/wolfprovider.conf
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -83,17 +84,16 @@ jobs:
 
       - name: Test OpenSSL provider functionality
         run: |
-          PROVIDER_CONF="/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf"
-          PROVIDER_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
+          WOLFPROV_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
 
           # Temporarily move wolfprovider config so we can toggle between providers
           echo "Temporarily disabling wolfprovider for default provider tests:"
           mkdir -p /tmp/openssl-test
-          if [ -f $PROVIDER_CONF ]; then
-            mv $PROVIDER_CONF $PROVIDER_CONF_BACKUP
-            echo "   - Moved $PROVIDER_CONF to $PROVIDER_CONF_BACKUP"
+          if [ -f $WOLFPROV_CONF_FILE ]; then
+            mv $WOLFPROV_CONF_FILE $WOLFPROV_CONF_BACKUP
+            echo "   - Moved $WOLFPROV_CONF_FILE to $WOLFPROV_CONF_BACKUP"
           else
-            echo "$PROVIDER_CONF not found!"
+            echo "$WOLFPROV_CONF_FILE not found!"
             exit 1
           fi
 
@@ -103,9 +103,9 @@ jobs:
 
           # Restore wolfprovider configuration
           echo "Restoring wolfprovider configuration:"
-          if [ -f $PROVIDER_CONF_BACKUP ]; then
-            mv $PROVIDER_CONF_BACKUP $PROVIDER_CONF
-            echo "   - Restored $PROVIDER_CONF from $PROVIDER_CONF_BACKUP"
+          if [ -f $WOLFPROV_CONF_BACKUP ]; then
+            mv $WOLFPROV_CONF_BACKUP $WOLFPROV_CONF_FILE
+            echo "   - Restored $WOLFPROV_CONF_FILE from $WOLFPROV_CONF_BACKUP"
           fi
 
           echo "PASS: All provider interoperability tests successful"
@@ -113,6 +113,26 @@ jobs:
       - name: Uninstall package and verify cleanup
         run: |
           # Uninstall the package
+          apt-get remove -y libwolfprov
+
+          # Verify default OpenSSL provider is active
+          echo "Verifying Default Provider is Active:"
+          openssl list -providers
+
+          # Verify that the default provider is present and active
+          echo "Checking default provider status:"
+          if openssl list -providers | grep -q "default" && \
+            openssl list -providers | grep -q "OpenSSL Default Provider" && \
+            openssl list -providers | grep -q "status: active"; then
+            echo "Default provider is present and active"
+          else
+            echo "Default provider verification failed"
+            echo "Provider output:"
+            openssl list -providers
+            exit 1
+          fi
+
+          # Purge the package to remove all files
           apt-get remove --purge -y libwolfprov
 
           # Verify the package is removed
@@ -125,26 +145,23 @@ jobs:
           fi
 
           # Check if the config file is removed
-          if [ -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+          if [ -f $WOLFPROV_CONF_FILE ]; then
             echo "wolfprovider.conf still exists after package removal"
-            ls -la /usr/lib/ssl/openssl.cnf.d/
+            ls -la $(dirname $WOLFPROV_CONF_FILE)
             exit 1
           else
             echo "wolfprovider.conf successfully removed"
           fi
 
           # Check if the library files are removed
-          if [ -f /usr/lib/*/ossl-modules/libwolfprov.so ]; then
+          WOLFPROV_OBJS=$(find /usr/lib -name "libwolfprov.so*")
+          if [ -n "$WOLFPROV_OBJS" ]; then
             echo "libwolfprov.so still exists after package removal"
-            find /usr/lib -name "libwolfprov.so*" 2>/dev/null || true
+            echo "$WOLFPROV_OBJS"
             exit 1
           else
             echo "libwolfprov.so successfully removed"
           fi
-
-          # Verify default OpenSSL provider is active
-          echo "Verifying Default Provider is Active:"
-          openssl list -providers
 
           # Verify that the default provider is present and active
           echo "Checking default provider status:"
@@ -181,6 +198,7 @@ jobs:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+      WOLFPROV_CONF_FILE: /etc/ssl/openssl.cnf.d/wolfprovider.conf
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -251,17 +269,18 @@ jobs:
           echo "Verifying wolfprov configuration..."
           
           # Check if configuration file exists
-          if [ -f /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf ]; then
+          if [ -f $WOLFPROV_CONF_FILE ]; then
             echo "SUCCESS: wolfprovider.conf exists"
-            cat /usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
+            cat $WOLFPROV_CONF_FILE
           else
             echo "WARNING: wolfprovider.conf not found"
           fi
           
           # Check if library file exists
-          if [ -f /usr/lib/*/ossl-modules/libwolfprov.so ]; then
+          WOLFPROV_OBJS=$(find /usr/lib -name "libwolfprov.so*")
+          if [ -n "$WOLFPROV_OBJS" ]; then
             echo "SUCCESS: libwolfprov.so exists"
-            find /usr/lib -name "libwolfprov.so*" 2>/dev/null
+            echo "$WOLFPROV_OBJS"
           else
             echo "WARNING: libwolfprov.so not found"
           fi

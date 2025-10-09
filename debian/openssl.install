@@ -1,2 +1,2 @@
 usr/bin/openssl
-usr/share/openssl-defaults/openssl.cnf
+etc/ssl/openssl.cnf
