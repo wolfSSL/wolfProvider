@@ -51,7 +51,8 @@ jobs:
             dh-exec \
             equivs \
             expect \
-            xxd
+            xxd \
+            libdistro-info-perl
 
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
