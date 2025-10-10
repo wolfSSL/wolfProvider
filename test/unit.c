@@ -184,6 +184,8 @@ TEST_CASE test_case[] = {
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_rsa_get_params, NULL),
 #endif
+    TEST_DECL(test_rsa_pss_salt, NULL),
+    TEST_DECL(test_rsa_pss_restrictions, NULL),
     TEST_DECL(test_rsa_load_key, NULL),
     TEST_DECL(test_rsa_load_cert, NULL),
     TEST_DECL(test_rsa_fromdata, NULL),
