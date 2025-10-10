@@ -3,7 +3,7 @@ name: tpm2-tools Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'release/**' ]
+    branches: [ 'master', 'main', 'build-wolfprov-debian-test', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -13,26 +13,12 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
-  build_wolfprovider:
-    uses: ./.github/workflows/build-wolfprovider.yml
-    with:
-      wolfssl_ref: ${{ matrix.wolfssl_ref }}
-      openssl_ref: ${{ matrix.openssl_ref }}
-      replace_default: ${{ matrix.replace_default }}
-    strategy:
-      matrix:
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ true ]
-        fips: [ false ]
-
   test_tpm2_tools:
     runs-on: ubuntu-22.04
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -41,9 +27,9 @@ jobs:
         tpm2_tools_ref: [ '5.7' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -54,26 +40,36 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download wolfProvider packages from nightly build
+        uses: dawidd6/action-download-artifact@v6
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build-wolfprovider-nightly.yml
+          branch: ${{ github.ref_name }}
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp/packages
+
+      - name: Setup package directories
+        run: |
+          # Move packages to expected locations
+          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
+          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
+          
+          echo "Packages ready:"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
+          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
           apt install --reinstall -y \
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
 
           apt install --reinstall -y \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
@@ -81,11 +77,13 @@ jobs:
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
 
           apt install --reinstall -y \
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.deb
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Install tpm2-tools test dependencies
         run: |
