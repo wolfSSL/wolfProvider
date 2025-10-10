@@ -21,8 +21,8 @@
 #include "unit.h"
 
 int test_digest_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *data,
-    size_t len, const char *md, unsigned char *sig, size_t *sigLen,
-    int padMode)
+    size_t len, const char *md, const EVP_MD *mgf1Md, unsigned char *sig,
+    size_t *sigLen, int padMode, int saltlen)
 {
     int err;
     EVP_MD_CTX *mdCtx = NULL;
@@ -37,7 +37,12 @@ int test_digest_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *data,
         err = EVP_PKEY_CTX_set_rsa_padding(pkeyCtx, padMode) <= 0;
     }
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING) {
-        err = EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx, -1) <= 0;
+        err = EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx, saltlen) <= 0;
+    }
+    if ((err == 0) && mgf1Md != NULL &&
+            (padMode == RSA_PKCS1_PSS_PADDING ||
+            padMode == RSA_PKCS1_OAEP_PADDING)) {
+        err = EVP_PKEY_CTX_set_rsa_mgf1_md(pkeyCtx, mgf1Md) <= 0;
     }
     if (err == 0) {
         err = EVP_DigestSign(mdCtx, sig, sigLen, data, len) != 1;
@@ -52,8 +57,8 @@ int test_digest_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *data,
 }
 
 int test_digest_verify(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx,
-    unsigned char *data, size_t len, const char *md, unsigned char *sig,
-    size_t sigLen, int padMode)
+    unsigned char *data, size_t len, const char *md, const EVP_MD *mgf1Md,
+    unsigned char *sig, size_t sigLen, int padMode, int saltlen)
 {
     int err;
     EVP_MD_CTX *mdCtx = NULL;
@@ -68,7 +73,12 @@ int test_digest_verify(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx,
         err = EVP_PKEY_CTX_set_rsa_padding(pkeyCtx, padMode) <= 0;
     }
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING) {
-        err = EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx, -1) < 0;
+        err = EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx, saltlen) <= 0;
+    }
+    if ((err == 0) && mgf1Md != NULL &&
+            (padMode == RSA_PKCS1_PSS_PADDING ||
+            padMode == RSA_PKCS1_OAEP_PADDING)) {
+        err = EVP_PKEY_CTX_set_rsa_mgf1_md(pkeyCtx, mgf1Md) <= 0;
     }
     if (err == 0) {
         err = EVP_DigestVerify(mdCtx, sig, sigLen, data, len) != 1;
@@ -107,7 +117,9 @@ int test_pkey_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING) {
         err = EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx, -1) < 0;
     }
-    if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING && rsaMgf1Md != NULL) {
+    if ((err == 0) && rsaMgf1Md != NULL &&
+            (padMode == RSA_PKCS1_PSS_PADDING ||
+            padMode == RSA_PKCS1_OAEP_PADDING)) {
         err = EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, rsaMgf1Md) <= 0;
     }
     if (err == 0) {
@@ -144,7 +156,9 @@ int test_pkey_verify(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
     if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING) {
         err = EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx, -1) < 0;
     }
-    if ((err == 0) && padMode == RSA_PKCS1_PSS_PADDING && rsaMgf1Md != NULL) {
+    if ((err == 0) && rsaMgf1Md != NULL &&
+            (padMode == RSA_PKCS1_PSS_PADDING ||
+            padMode == RSA_PKCS1_OAEP_PADDING)) {
         err = EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, rsaMgf1Md) <= 0;
     }
     if (err == 0) {

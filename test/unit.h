@@ -18,6 +18,7 @@
  * along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
  */
 
+
 #ifndef UNIT_H
 #define UNIT_H
 
@@ -218,12 +219,12 @@ int test_random(void *data);
 #endif
 
 int test_digest_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *data,
-    size_t len, const char *md, unsigned char *sig, size_t *sigLen,
-    int padMode);
+    size_t len, const char *md, const EVP_MD *mgf1Md, unsigned char *sig,
+    size_t *sigLen, int padMode, int saltlen);
 
 int test_digest_verify(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx,
-    unsigned char *data, size_t len, const char *md, unsigned char *sig,
-    size_t sigLen, int padMode);
+    unsigned char *data, size_t len, const char *md, const EVP_MD *mgf1Md,
+    unsigned char *sig, size_t sigLen, int padMode, int saltlen);
 
 int test_pkey_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *hash,
     size_t hashLen, unsigned char *sig, size_t *sigLen, int padMode,
@@ -259,6 +260,8 @@ int test_rsa_enc_dec_nopad(void *data);
 int test_rsa_pkey_keygen(void *data);
 int test_rsa_pkey_invalid_key_size(void *data);
 int test_rsa_get_params(void *data);
+int test_rsa_pss_salt(void *date);
+int test_rsa_pss_restrictions(void *data);
 
 int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);
@@ -332,7 +335,7 @@ int test_ecdh_p521_keygen(void *data);
 #endif /* WP_HAVE_EC_P521 */
 #ifdef WP_HAVE_X25519
 int test_ecdh_x25519_keygen(void *data);
-#endif /* WP_HAVE_X2559 */
+#endif /* WP_HAVE_X25519 */
 #ifdef WP_HAVE_X448
 int test_ecdh_x448_keygen(void *data);
 #endif /* WP_HAVE_X448 */

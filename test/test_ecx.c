@@ -107,29 +107,29 @@ static int sign_verify(unsigned char* sig, size_t sigLen,
 
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL (%s)", name);
-        err = test_digest_sign(pkey, osslLibCtx, buf, bufLen, NULL,
-                                sig, &sigLen, 0);
+        err = test_digest_sign(pkey, osslLibCtx, buf, bufLen, NULL, NULL, sig,
+                              &sigLen, 0, 0);
     }
     if (err == 0) {
         PRINT_MSG("Verify with WolfProvider (%s)", name);
-        err = test_digest_verify(pkey, wpLibCtx, buf, bufLen, NULL,
-                                sig, sigLen, 0);
+        err = test_digest_verify(pkey, wpLibCtx, buf, bufLen, NULL, NULL, sig,
+                                sigLen, 0, 0);
     }
     if (err == 0) {
         PRINT_MSG("Verify bad signature with WolfProvider (%s)", name);
         sig[1] ^= 0x80;
-        err = test_digest_verify(pkey, wpLibCtx, buf, bufLen, NULL,
-                                sig, sigLen, 0) != 1;
+        err = test_digest_verify(pkey, wpLibCtx, buf, bufLen, NULL, NULL, sig,
+                                sigLen, 0, 0) != 1;
     }
     if (err == 0) {
         PRINT_MSG("Sign with WolfProvider (%s)", name);
-        err = test_digest_sign(pkey, wpLibCtx, buf, bufLen, NULL,
-                            sig, &sigLen, 0);
+        err = test_digest_sign(pkey, wpLibCtx, buf, bufLen, NULL, NULL, sig,
+                              &sigLen, 0, 0);
     }
     if (err == 0) {
         PRINT_MSG("Verify with OpenSSL (%s)", name);
-        err = test_digest_verify(pkey, osslLibCtx, buf, bufLen, NULL,
-                                sig, sigLen, 0);
+        err = test_digest_verify(pkey, osslLibCtx, buf, bufLen, NULL, NULL, sig,
+                                sigLen, 0, 0);
     }
 
     return err;
@@ -409,7 +409,7 @@ int test_ecx_sign_verify_raw_pub(void *data)
         if (err == 0) {
             PRINT_MSG("Sign with OpenSSL (%s)", types[i].name);
             err = test_digest_sign(pkey_der, osslLibCtx, buf, bufLen, NULL,
-                                    types[i].sig, &types[i].sigLen, 0);
+                                    NULL, types[i].sig, &types[i].sigLen, 0, 0);
         }
 
         /* Create keys from the public byte arrays */
@@ -489,12 +489,12 @@ int test_ecx_sign_verify_raw_pub(void *data)
         if (err == 0) {
             PRINT_MSG("Verify with OpenSSL (%s)", types[i].name);
             err = test_digest_verify(pkey_ossl, osslLibCtx, buf, bufLen, NULL,
-                                    types[i].sig, types[i].sigLen, 0);
+                                    NULL, types[i].sig, types[i].sigLen, 0, 0);
         }
         if (err == 0) {
             PRINT_MSG("Verify with WolfProvider (%s)", types[i].name);
             err = test_digest_verify(pkey_wolf, wpLibCtx, buf, bufLen, NULL,
-                                    types[i].sig, types[i].sigLen, 0);
+                                    NULL, types[i].sig, types[i].sigLen, 0, 0);
         }
 
         /* Verify bad signature with the public keys */
@@ -502,12 +502,14 @@ int test_ecx_sign_verify_raw_pub(void *data)
         if (err == 0) {
             PRINT_MSG("Verify bad signature with OpenSSL (%s)", types[i].name);
             err = test_digest_verify(pkey_ossl, osslLibCtx, buf, bufLen, NULL,
-                                    types[i].sig, types[i].sigLen, 0) != 1;
+                                    NULL, types[i].sig, types[i].sigLen,
+                                    0, 0) != 1;
         }
         if (err == 0) {
             PRINT_MSG("Verify bad signature with WolfProvider (%s)", types[i].name);
             err = test_digest_verify(pkey_wolf, wpLibCtx, buf, bufLen, NULL,
-                                    types[i].sig, types[i].sigLen, 0) != 1;
+                                    NULL, types[i].sig, types[i].sigLen,
+                                    0, 0) != 1;
         }
 
         EVP_PKEY_free(pkey_der);
