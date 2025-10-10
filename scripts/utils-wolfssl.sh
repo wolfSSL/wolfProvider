@@ -103,11 +103,12 @@ install_wolfssl() {
             # Check if there is a FIPS mismatch
             # If the system wolfSSL is FIPS, we need to be doing a FIPS build
             dpkg -l | grep "^ii.*libwolfssl[[:space:]]" | grep -q "fips"
-            if [ $? -eq 0 ] && [ "$WOLFSSL_ISFIPS" != "1" ]; then
+            fips_mode=$?
+            if [ $fips_mode -eq 0 ] && [ "$WOLFSSL_ISFIPS" != "1" ]; then
                 printf "ERROR: System wolfSSL is FIPS, but WOLFSSL_ISFIPS is not set to 1\n"
                 do_cleanup
                 exit 1
-            elif [ $? -ne 0 ] && [ "$WOLFSSL_ISFIPS" != "0" ]; then
+            elif [ $fips_mode -ne 0 ] && [ "$WOLFSSL_ISFIPS" != "0" ]; then
                 printf "ERROR: System wolfSSL is non-FIPS, but WOLFSSL_ISFIPS is set to 1\n"
                 do_cleanup
                 exit 1
