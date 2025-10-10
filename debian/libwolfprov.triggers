@@ -1,0 +1,6 @@
+# Re-run our setup whenever OpenSSL config or module dirs change
+interest-noawait /etc/ssl/openssl.cnf
+interest-noawait /etc/ssl/openssl.cnf.d
+interest-noawait /lib/ssl/openssl.cnf
+interest-noawait /lib/ssl/openssl.cnf.d
+

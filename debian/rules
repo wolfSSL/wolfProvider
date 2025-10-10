@@ -80,15 +80,14 @@ override_dh_auto_install:
 		$(DESTDIR)/usr/include/wolfprovider/
 
 	# Install provider config file
-	install -d $(DESTDIR)/usr/lib/ssl/openssl.cnf.d
+	install -d $(DESTDIR)/etc/ssl/openssl.cnf.d
 	install -m644 ./$(PROVIDER_CONF) \
-		$(DESTDIR)/usr/lib/ssl/openssl.cnf.d/wolfprovider.conf
+		$(DESTDIR)/etc/ssl/openssl.cnf.d/wolfprovider.conf
 
-	# Install default openssl.cnf template (do NOT ship it directly in /usr/lib/ssl)
-	# The postinstall script will handle copying it to the system location
-	install -d $(DESTDIR)/usr/share/openssl-defaults
+	# Install openssl.cnf directly into /etc/ssl
+	install -d $(DESTDIR)/etc/ssl
 	install -m 0644 ./openssl-source/apps/openssl.cnf \
-		$(DESTDIR)/usr/share/openssl-defaults/openssl.cnf
+		$(DESTDIR)/etc/ssl/openssl.cnf
 
 	# Install pkg-config files for libssl-dev
 	install -d $(DESTDIR)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig

@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+# On removal/purge of libwolfprov, ensure any include of wolfprovider.conf
+# is removed from system openssl.cnf files to avoid stale includes.
+
+# Search for the openssl.cnf file in /usr, /lib and /etc
+CONF_FILES=$(find /usr /lib /etc -name openssl.cnf 2>/dev/null)
+
+case "$1" in
+remove|purge)
+    for CONF_FILE in $CONF_FILES; do
+        # Remove any line containing both ".include" and "wolfprovider.conf"
+        sed -i '/\.include/ { /wolfprovider\.conf/ d; }' "$CONF_FILE"
+        printf "Removed wolfprovider include line(s) from %s\n" "$CONF_FILE"
+    done
+    ;;
+esac
+
+#DEBHELPER#
+exit 0
+
+

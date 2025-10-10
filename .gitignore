@@ -84,6 +84,8 @@ test/**/*.trs
 test/**/*.o
 test/**/.deps/
 test/**/.dirstamp
+req_outputs
+scripts/cmd_test/req-test.log
 
 IDE/Android/android-ndk-r26b/
 IDE/Android/openssl-source/
@@ -117,4 +119,6 @@ debian/libssl3*
 !debian/*.postrm
 !debian/*.docs
 !debian/*.links
+!debian/*.triggers
+!debian/shlib.local
 

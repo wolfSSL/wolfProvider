@@ -14,7 +14,8 @@ Build-Depends:
 Package: libwolfprov
 Architecture: any
 Multi-Arch: same
-Depends: ${shlibs:Depends}, ${misc:Depends}, libssl3 (>= 3.0.3), libwolfssl (>= 5.8.2), openssl
+Depends: ${shlibs:Depends}, ${misc:Depends}, libssl3 (>= 3.0.3), libwolfssl (>= 5.8.2)
+Recommends: openssl
 Provides: ${variant:provides}
 XB-Variant: ${variant}
 Description: wolfProvider library for OpenSSL — ${variant:desc}
@@ -43,9 +44,8 @@ Architecture: any
 Section: utils
 Multi-Arch: foreign
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Secure Sockets Layer toolkit - command line interface
+Description: Secure Sockets Layer toolkit - command line interface (wolfProvider build)
  This package contains the OpenSSL command line utility.
- Built for use with wolfProvider.
 
 Package: libssl3
 Architecture: any

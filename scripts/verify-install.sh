@@ -152,9 +152,9 @@ verify_openssl_version() {
     if [ $replace_default -eq 0 ]; then
         # Verify that wolfProv (case-insensitive) is in the version output
         if echo "$version_output" | grep -qi "wolfProv"; then
-            log_success "wolfProv is in the version output"
+            handle_error "wolfProv is in the version output"
         else
-            handle_error "wolfProv is not in the version output"
+            log_success "wolfProv is not in the version output"
         fi
     else
         # Verify that wolfProvider (case-insensitive) is in the version output
