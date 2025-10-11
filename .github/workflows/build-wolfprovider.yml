@@ -42,7 +42,9 @@ jobs:
             jq
 
       # Trigger Jenkins to build all packages (wolfSSL, OpenSSL, wolfProvider)
+      # Skip for pull_request events as they don't have access to secrets
       - name: Trigger Jenkins build
+        if: github.event_name != 'pull_request'
         id: trigger
         shell: bash
         run: |
@@ -170,6 +172,7 @@ jobs:
           done
 
       - name: Download all packages from Jenkins
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           echo "Downloading packages from Jenkins build..."
@@ -217,6 +220,7 @@ jobs:
           ls -lh ./downloaded-packages/
 
       - name: Organize packages into directories
+        if: github.event_name != 'pull_request'
         run: |
           # Create package directories
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
@@ -244,6 +248,7 @@ jobs:
 
       # Save all packages as artifacts for consumers
       - name: Upload all packages (wolfSSL, OpenSSL, wolfProvider)
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
