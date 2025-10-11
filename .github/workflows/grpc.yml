@@ -3,7 +3,7 @@ name: gRPC Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'build-wolfprov-debian-test', 'release/**' ]
+        branches: [ 'master', 'main', 'build-wolfprov-debian', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 

@@ -2,7 +2,7 @@ name: PPP Tests
 
 on:
   push:
-    branches: [ 'master', 'main', 'build-wolfprov-debian-test', 'release/**' ]
+        branches: [ 'master', 'main', 'build-wolfprov-debian', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
