@@ -1,10 +1,6 @@
 name: Build wolfProvider Nightly
 
 on:
-  push:
-    branches: [ 'master', 'main', 'build-debian-test', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
   schedule:
     # Jenkins: 2AM UTC nightly - Actual nightly build
     # GitHub Actions: 3AM UTC nightly - Update build in github
@@ -22,7 +18,7 @@ on:
         default: 'openssl-3.5.2'
         type: string
       fips_ref:
-        description: 'Build type'
+        description: 'FIPS Type'
         required: false
         default: 'both'
         type: choice
@@ -31,10 +27,14 @@ on:
           - 'FIPS'
           - 'non-FIPS'
       replace_default:
-        description: 'Replace default provider'
+        description: 'Replace Default Type'
         required: false
-        default: true
-        type: boolean
+        default: 'true'
+        type: choice
+        options:
+          - 'both'
+          - 'true'
+          - 'false' # Currently we dont support debian builds without replace-default
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -45,13 +45,17 @@ jobs:
     name: Build wolfProvider
     uses: ./.github/workflows/build-wolfprovider-debian.yml
     strategy:
+      fail-fast: false # Continue other builds even if some fail
       matrix:
         # When manually triggered with 'both', or on schedule, build both FIPS and non-FIPS
         # When manually triggered with specific type, only build that type
         fips_ref: ${{ (github.event_name == 'schedule' || github.event.inputs.fips_ref == 'both' || github.event.inputs.fips_ref == '') && fromJSON('["FIPS", "non-FIPS"]') || fromJSON(format('["{0}"]', github.event.inputs.fips_ref)) }}
+        # When manually triggered with 'both', or on schedule, build both replace-default variants
+        # When manually triggered with specific value, only build that variant
+        replace_default: ${{ (github.event_name == 'schedule' || github.event.inputs.replace_default == 'both' || github.event.inputs.replace_default == '') && fromJSON('["true", "false"]') || fromJSON(format('["{0}"]', github.event.inputs.replace_default)) }}
     with:
       wolfssl_ref: ${{ github.event.inputs.wolfssl_ref || 'v5.8.2-stable' }}
       openssl_ref: ${{ github.event.inputs.openssl_ref || 'openssl-3.5.2' }}
       fips_ref: ${{ matrix.fips_ref }}
-      replace_default: ${{ github.event.inputs.replace_default != 'false' }}
+      replace_default: ${{ matrix.replace_default == 'true' }}
     secrets: inherit

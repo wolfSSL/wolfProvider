@@ -19,7 +19,7 @@ on:
 
 jobs:
   build_wolfprovider:
-    name: Build wolfProvider (${{ inputs.fips_ref }})
+    name: Build wolfProvider (${{ inputs.fips_ref }}${{ inputs.replace_default && ', replace-default' || '' }})
     runs-on: ubuntu-22.04
     # Run inside Debian Bookworm to match packaging environment
     container:
