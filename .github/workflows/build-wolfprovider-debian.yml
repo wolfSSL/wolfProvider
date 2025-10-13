@@ -1,0 +1,259 @@
+name: Build wolfProvider
+
+on:
+  workflow_call:
+    inputs:
+      wolfssl_ref:
+        required: true
+        type: string
+      openssl_ref:
+        required: true
+        type: string
+      fips_ref:
+        required: true
+        type: string
+      replace_default:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider (${{ inputs.fips_ref }})
+    runs-on: ubuntu-22.04
+    # Run inside Debian Bookworm to match packaging environment
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    timeout-minutes: 30
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+    steps:
+      # Install minimal dependencies for Jenkins interaction
+      - name: Install minimal dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            curl \
+            ca-certificates \
+            libdistro-info-perl \
+            jq
+
+      # Trigger Jenkins to build all packages (wolfSSL, OpenSSL, wolfProvider)
+      # Skip for pull_request events as they don't have access to secrets
+      - name: Trigger Jenkins build
+        if: github.event_name != 'pull_request'
+        id: trigger
+        shell: bash
+        run: |
+          JOB_URL="https://cloud.wolfssl-test.com/jenkins/job/wolfProvider/job/debian-extraction"
+          JENKINS_BASE="https://cloud.wolfssl-test.com/jenkins"
+
+          echo "Jenkins URL: $JENKINS_BASE"
+          echo "Job URL: $JOB_URL"
+
+          # Test authentication first
+          echo "Testing Jenkins authentication..."
+          AUTH_TEST=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$JENKINS_BASE/api/json" \
+            --user "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}")
+          echo "Auth test status: $AUTH_TEST"
+
+          if [ "$AUTH_TEST" != "200" ]; then
+            echo "ERROR: Authentication failed (status: $AUTH_TEST)"
+            exit 1
+          fi
+
+          # Get CSRF token (crumb) first
+          echo "Getting CSRF token..."
+          CRUMB=$(curl -s \
+            "$JENKINS_BASE/crumbIssuer/api/json" \
+            --user "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}" | jq -r '.crumb')
+
+          if [ "$CRUMB" = "null" ] || [ -z "$CRUMB" ]; then
+            echo "ERROR: Failed to get CSRF token"
+            exit 1
+          fi
+
+          # Mask the crumb token to prevent leakage
+          echo "::add-mask::$CRUMB"
+          echo "CSRF token obtained"
+
+          # Try simple build first (without parameters)
+          echo "Trying simple build trigger..."
+          SIMPLE_URL="${JOB_URL}/build"
+          echo "Simple URL: $SIMPLE_URL"
+
+          RESPONSE=$(curl -s -X POST -i \
+            "$SIMPLE_URL?token=${{ secrets.JENKINS_API_TOKEN }}" \
+            --user "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}" \
+            -H "Jenkins-Crumb: $CRUMB")
+
+          # Check if simple build worked
+          HTTP_STATUS=$(echo "$RESPONSE" | grep -i "^HTTP" | head -1)
+          echo "Simple build status: $HTTP_STATUS"
+
+          # If simple build failed, try with parameters
+          if [[ "$HTTP_STATUS" == *"500"* ]] || [[ "$HTTP_STATUS" == *"400"* ]]; then
+            echo "Simple build failed, trying with parameters..."
+            FULL_JOB_URL="${JOB_URL}/buildWithParameters"
+            echo "Parameters URL: $FULL_JOB_URL"
+
+            # Try with form data instead of query parameters
+            RESPONSE=$(curl -s -X POST -i \
+              "$FULL_JOB_URL" \
+              --user "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}" \
+              -H "Jenkins-Crumb: $CRUMB" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "token=${{ secrets.JENKINS_API_TOKEN }}")
+          fi
+
+          # Show response for debugging
+          echo "Response headers:"
+          echo "$RESPONSE" | head -10
+
+          # Extract Location header (queue item URL)
+          QUEUE_URL=$(echo "$RESPONSE" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+
+          if [ -z "$QUEUE_URL" ]; then
+            echo "ERROR: Failed to get queue URL from Jenkins"
+            HTTP_STATUS=$(echo "$RESPONSE" | grep -i "^HTTP" | head -1)
+            echo "HTTP Status: $HTTP_STATUS"
+            echo "Response body (first 500 chars):"
+            echo "$RESPONSE" | tail -n +20 | head -c 500
+            exit 1
+          fi
+
+          echo "Jenkins job queued successfully"
+          echo "Queue URL: $QUEUE_URL"
+          echo "Waiting for job to start..."
+
+          # Wait for job to move from queue to actual build
+          BUILD_URL=""
+          for i in {1..30}; do
+            echo "Checking queue status (attempt $i/30)..."
+            QUEUE_STATUS=$(curl -s "$QUEUE_URL/api/json" --user "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}" | jq -r '.executable.url // empty')
+
+            if [ -n "$QUEUE_STATUS" ] && [ "$QUEUE_STATUS" != "null" ]; then
+              BUILD_URL="$QUEUE_STATUS"
+              echo "Build started: $BUILD_URL"
+              break
+            fi
+
+            echo "Still in queue..."
+            sleep 10
+          done
+
+          if [ -z "$BUILD_URL" ]; then
+            echo "ERROR: Job did not start within 5 minutes"
+            exit 1
+          fi
+
+          # Check status until build finishes
+          echo "Checking build status..."
+          while true; do
+            STATUS=$(curl -s "$BUILD_URL/api/json" --user "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}" | jq -r '.result')
+            if [[ "$STATUS" == "SUCCESS" ]]; then
+              echo "Jenkins build succeeded."
+              echo "build_url=$BUILD_URL" >> $GITHUB_OUTPUT
+              break
+            elif [[ "$STATUS" == "FAILURE" ]]; then
+              echo "Jenkins build failed!"
+              exit 1
+            elif [[ "$STATUS" == "null" ]]; then
+              echo "Build still running..."
+              sleep 20
+            else
+              echo "Unknown status: $STATUS"
+              sleep 10
+            fi
+          done
+
+      - name: Download all packages from Jenkins
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          echo "Downloading packages from Jenkins build..."
+          echo "Build URL: ${{ steps.trigger.outputs.build_url }}"
+
+          # Get list of all artifacts
+          echo "Getting artifact list..."
+          ARTIFACTS_JSON=$(curl -s "${{ steps.trigger.outputs.build_url }}/api/json" --user "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}" | jq '.artifacts')
+
+          # Show all available artifacts
+          echo "All available artifacts:"
+          echo "$ARTIFACTS_JSON" | jq -r '.[] | .fileName' | sort
+
+          # Download based on build type (FIPS or non-FIPS)
+          BUILD_TYPE="${{ inputs.fips_ref }}"
+          echo ""
+          echo "Downloading packages for: $BUILD_TYPE"
+
+          # Determine the pattern to match based on build type
+          if [ "$BUILD_TYPE" = "FIPS" ]; then
+            # For FIPS: match files with "-fips" or ".fips." but NOT "nonfips"
+            FILTER_PATTERN="contains(\"fips\") and (contains(\"nonfips\") | not)"
+          else
+            # For non-FIPS: match files with "nonfips" OR files without "fips" at all
+            FILTER_PATTERN="contains(\"nonfips\") or (contains(\"fips\") | not)"
+          fi
+
+          # Get all package files for this build type
+          ALL_PACKAGES=$(echo "$ARTIFACTS_JSON" | jq -r ".[] | select(.fileName | $FILTER_PATTERN) | .fileName")
+
+          # Create directory for downloaded packages
+          mkdir -p ./downloaded-packages
+
+          # Download all packages
+          echo "$ALL_PACKAGES" | while read -r file; do
+            if [ -n "$file" ] && [ "$file" != "null" ]; then
+              echo "  Downloading: $file"
+              curl -u "${{ secrets.USERNAME }}:${{ secrets.JENKINS_TOKEN }}" -L -o "./downloaded-packages/$file" \
+                "${{ steps.trigger.outputs.build_url }}/artifact/artifacts/$file"
+            fi
+          done
+
+          echo ""
+          echo "Downloaded files:"
+          ls -lh ./downloaded-packages/
+
+      - name: Organize packages into directories
+        if: github.event_name != 'pull_request'
+        run: |
+          # Create package directories
+          mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
+          mkdir -p ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          echo "Organizing packages..."
+          # Copy wolfSSL packages (libwolfssl*)
+          cp ./downloaded-packages/libwolfssl* ${{ env.WOLFSSL_PACKAGES_PATH }}/ 2>/dev/null || echo "No wolfSSL packages found"
+
+          # Copy OpenSSL packages (openssl*, libssl*)
+          cp ./downloaded-packages/openssl* ${{ env.OPENSSL_PACKAGES_PATH }}/ 2>/dev/null || true
+          cp ./downloaded-packages/libssl* ${{ env.OPENSSL_PACKAGES_PATH }}/ 2>/dev/null || true
+
+          # Copy wolfProvider packages (libwolfprov*)
+          cp ./downloaded-packages/libwolfprov* ${{ env.WOLFPROV_PACKAGES_PATH }}/ 2>/dev/null || true
+
+          echo "Package organization complete!"
+          echo "wolfSSL packages:"
+          ls -lh ${{ env.WOLFSSL_PACKAGES_PATH }} 2>/dev/null || echo "  (none)"
+          echo "OpenSSL packages:"
+          ls -lh ${{ env.OPENSSL_PACKAGES_PATH }} 2>/dev/null || echo "  (none)"
+          echo "wolfProvider packages:"
+          ls -lh ${{ env.WOLFPROV_PACKAGES_PATH }} 2>/dev/null || echo "  (none)"
+
+      # Save all packages as artifacts for consumers
+      - name: Upload all packages (wolfSSL, OpenSSL, wolfProvider)
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          retention-days: 1

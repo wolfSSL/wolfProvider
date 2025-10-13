@@ -1,0 +1,57 @@
+name: Build wolfProvider Nightly
+
+on:
+  push:
+    branches: [ 'master', 'main', 'build-debian-test', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+  schedule:
+    # Jenkins: 2AM UTC nightly - Actual nightly build
+    # GitHub Actions: 3AM UTC nightly - Update build in github
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      wolfssl_ref:
+        description: 'wolfSSL ref (tag/branch)'
+        required: false
+        default: 'v5.8.2-stable'
+        type: string
+      openssl_ref:
+        description: 'OpenSSL ref (tag/branch)'
+        required: false
+        default: 'openssl-3.5.2'
+        type: string
+      fips_ref:
+        description: 'Build type'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - 'both'
+          - 'FIPS'
+          - 'non-FIPS'
+      replace_default:
+        description: 'Replace default provider'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    name: Build wolfProvider
+    uses: ./.github/workflows/build-wolfprovider-debian.yml
+    strategy:
+      matrix:
+        # When manually triggered with 'both', or on schedule, build both FIPS and non-FIPS
+        # When manually triggered with specific type, only build that type
+        fips_ref: ${{ (github.event_name == 'schedule' || github.event.inputs.fips_ref == 'both' || github.event.inputs.fips_ref == '') && fromJSON('["FIPS", "non-FIPS"]') || fromJSON(format('["{0}"]', github.event.inputs.fips_ref)) }}
+    with:
+      wolfssl_ref: ${{ github.event.inputs.wolfssl_ref || 'v5.8.2-stable' }}
+      openssl_ref: ${{ github.event.inputs.openssl_ref || 'openssl-3.5.2' }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ github.event.inputs.replace_default != 'false' }}
+    secrets: inherit
