@@ -146,9 +146,29 @@ if [ -n "$WOLFPROV_LOG_FILE" ] && [ -z "$WOLFPROV_DEBUG" ]; then
 fi
 
 if [ -n "$build_debian" ]; then
+    set -e
+
     echo "Building Debian package..."
-    WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0} WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0} ./scripts/build-debian.sh
-    exit $?
+    WOLFSSL_OPTS=
+    WOLFPROV_OPTS=
+    OPENSSL_OPTS=
+
+    if [ "$WOLFPROV_DEBUG" = "1" ]; then
+        WOLFSSL_OPTS="--debug"
+        WOLFPROV_OPTS="--debug"
+    fi
+    if [ -n "$WOLFSSL_ISFIPS" ]; then
+        WOLFSSL_OPTS+=" --fips"
+        WOLFPROV_OPTS+=" --fips"
+    fi
+
+    # Must install wolfSSL locally since it is needed to build wolfProvider
+    debian/install-wolfssl.sh $WOLFSSL_OPTS -r ..
+    # Always build replace-default mode for openssl. Use the standard one from apt.
+    debian/install-openssl.sh $OPENSSL_OPTS --replace-default ..
+    debian/install-wolfprov.sh $WOLFPROV_OPTS --no-install
+
+    exit 0
 fi
 
 if [ -n "$args" ]; then

@@ -1,4 +1,21 @@
 #!/bin/bash
+#
+# Copyright (C) 2006-2025 wolfSSL Inc.
+#
+# This file is part of wolfProvider.
+#
+# wolfProvider is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# wolfProvider is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
 # Script to install wolfSSL packages for Debian
 # Clones from git repository and builds from source
@@ -22,6 +39,7 @@ install_wolfssl_from_git() {
     local git_tag="$2"
     local debug_mode="$3"
     local reinstall_mode="$4"
+    local no_install="$5"
     local main_branch="master"
 
     # If no working directory specified, create one using mktemp
@@ -181,13 +199,15 @@ AC_CONFIG_FILES([debian/rules],[chmod +x debian/rules])' configure.ac
     echo "Building Debian packages..."
     make deb
 
-    # Install the generated packages
-    echo "Installing generated .deb packages..."
-    if [ "$reinstall_mode" = "true" ]; then
-        echo "Reinstall mode: forcing package reinstallation..."
-        dpkg -i --force-overwrite --force-confnew ../*.deb
-    else
-        dpkg -i ../*.deb
+    if [ "$no_install" = "false" ]; then
+        # Install the generated packages
+        echo "Installing generated .deb packages..."
+        if [ "$reinstall_mode" = "true" ]; then
+            echo "Reinstall mode: forcing package reinstallation..."
+            dpkg -i --force-overwrite --force-confnew ../*.deb
+        else
+            dpkg -i ../*.deb
+        fi
     fi
 
     echo "WolfSSL installation from git completed successfully"
@@ -199,6 +219,7 @@ main() {
     local git_tag=""
     local debug_mode="false"
     local reinstall_mode="false"
+    local no_install="false"
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -211,7 +232,8 @@ main() {
                 echo "  -t, --tag TAG        Clone and build specific tag or branch (default: master)"
                 echo "  -d, --debug          Enable debug build mode (adds --enable-debug)"
                 echo "  -r, --reinstall      Force reinstall even if packages are already installed"
-                echo "  -h, --help          Show this help message"
+                echo "  -n, --no-install     Build only, do not install packages"
+                echo "  -h, --help           Show this help message"
                 echo ""
                 echo "Arguments:"
                 echo "  working-directory   Directory to use for build (default: temporary directory)"
@@ -236,6 +258,10 @@ main() {
                 ;;
             -r|--reinstall)
                 reinstall_mode="true"
+                shift
+                ;;
+            -n|--no-install)
+                no_install="true"
                 shift
                 ;;
             -*)
@@ -274,7 +300,7 @@ main() {
         echo "Building wolfSSL master branch"
     fi
 
-    install_wolfssl_from_git "$work_dir" "$git_tag" "$debug_mode" "$reinstall_mode"
+    install_wolfssl_from_git "$work_dir" "$git_tag" "$debug_mode" "$reinstall_mode" "$no_install"
 
     echo "WolfSSL installation completed successfully"
 }

@@ -25,18 +25,24 @@ source ${SCRIPT_DIR}/utils-general.sh
 
 WOLFPROV_SOURCE_DIR=${SCRIPT_DIR}/..
 WOLFPROV_INSTALL_DIR=${SCRIPT_DIR}/../wolfprov-install
-LIBDEFAULT_INSTALL_DIR=${WOLFPROV_INSTALL_DIR}
-LIBDEFAULT_STUB_INSTALL_DIR=${SCRIPT_DIR}/../libdefault-stub-install
 WOLFPROV_WITH_WOLFSSL=--with-wolfssl=${WOLFSSL_INSTALL_DIR}
+WOLFPROV_WITH_OPENSSL=--with-openssl=${OPENSSL_INSTALL_DIR}
 
 # Check if using system wolfSSL installation
-if command -v dpkg >/dev/null 2>&1; then
+if [ ! -d "$WOLFSSL_INSTALL_DIR" ] && command -v dpkg >/dev/null 2>&1; then
     if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then
         WOLFPROV_WITH_WOLFSSL=
     fi
 fi
 
-WOLFPROV_CONFIG_OPTS=${WOLFPROV_CONFIG_OPTS:-"--with-openssl=${OPENSSL_INSTALL_DIR} ${WOLFPROV_WITH_WOLFSSL} --prefix=${WOLFPROV_INSTALL_DIR}"}
+# Check if using system openssl installation
+if [ ! -d "$OPENSSL_INSTALL_DIR" ] && command -v dpkg >/dev/null 2>&1; then
+    if dpkg -l | grep -q "^ii.*libssl[[:space:]]" && dpkg -l | grep -q "^ii.*libssl-dev[[:space:]]"; then
+        WOLFPROV_WITH_OPENSSL=
+    fi
+fi
+
+WOLFPROV_CONFIG_OPTS=${WOLFPROV_CONFIG_OPTS:-"${WOLFPROV_WITH_OPENSSL} ${WOLFPROV_WITH_WOLFSSL} --prefix=${WOLFPROV_INSTALL_DIR}"}
 WOLFPROV_CONFIG_CFLAGS=${WOLFPROV_CONFIG_CFLAGS:-''}
 
 if [ "${WOLFPROV_QUICKTEST}" = "1" ]; then
