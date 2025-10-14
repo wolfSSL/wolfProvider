@@ -52,6 +52,7 @@ jobs:
             equivs \
             expect \
             xxd \
+            bc \
             libdistro-info-perl
 
       - name: Checkout wolfProvider
@@ -71,14 +72,7 @@ jobs:
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
-      # Build wolfSSL packages and install
-      # Note we do not use the cache currently. This is a future optimization.
-      # TODO: roll this step into utils-wolfssl.sh
-      - name: Build wolfSSL packages and install
-        run: | 
-          $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag ${{ inputs.wolfssl_ref }} ${{ env.WOLFSSL_PACKAGES_PATH }}
-
-      - name: Build wolfProvider
+      - name: Build and install wolfSSL/OpenSSL/wolfProvider
         run: |
           WOLFSSL_TAG=${{ inputs.wolfssl_ref }} OPENSSL_TAG=${{ inputs.openssl_ref }} \
             yes "Y" | $GITHUB_WORKSPACE/scripts/build-wolfprovider.sh --debian \
@@ -94,6 +88,9 @@ jobs:
           cp $GITHUB_WORKSPACE/../libwolfprov*.deb    ${{ env.WOLFPROV_PACKAGES_PATH }}
           cp $GITHUB_WORKSPACE/../libwolfprov*.dsc    ${{ env.WOLFPROV_PACKAGES_PATH }}
           cp $GITHUB_WORKSPACE/../libwolfprov*.tar.gz ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../libwolfssl*.deb    ${{ env.WOLFSSL_PACKAGES_PATH }}
 
           printf "Listing packages directory:\n"
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
