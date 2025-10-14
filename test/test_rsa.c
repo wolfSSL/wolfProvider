@@ -704,11 +704,13 @@ int test_rsa_pss_salt(void *data)
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
                 EVP_sha256(), RSA_PSS_SALTLEN_AUTO) == 1;
     }
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
     if (err == 0) {
         PRINT_MSG("Salt length = auto maximum");
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
                 EVP_sha256(), RSA_PSS_SALTLEN_AUTO_DIGEST_MAX) == 1;
     }
+#endif
 
     return err;
 }
