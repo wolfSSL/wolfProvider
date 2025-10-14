@@ -116,21 +116,7 @@ jobs:
           apt-get remove -y libwolfprov
 
           # Verify default OpenSSL provider is active
-          echo "Verifying Default Provider is Active:"
-          openssl list -providers
-
-          # Verify that the default provider is present and active
-          echo "Checking default provider status:"
-          if openssl list -providers | grep -q "default" && \
-            openssl list -providers | grep -q "OpenSSL Default Provider" && \
-            openssl list -providers | grep -q "status: active"; then
-            echo "Default provider is present and active"
-          else
-            echo "Default provider verification failed"
-            echo "Provider output:"
-            openssl list -providers
-            exit 1
-          fi
+          $GITHUB_WORKSPACE/scripts/verify-install.sh --no-wp ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
           # Purge the package to remove all files
           apt-get remove --purge -y libwolfprov
@@ -164,17 +150,7 @@ jobs:
           fi
 
           # Verify that the default provider is present and active
-          echo "Checking default provider status:"
-          if openssl list -providers | grep -q "default" && \
-            openssl list -providers | grep -q "OpenSSL Default Provider" && \
-            openssl list -providers | grep -q "status: active"; then
-            echo "Default provider is present and active"
-          else
-            echo "Default provider verification failed"
-            echo "Provider output:"
-            openssl list -providers
-            exit 1
-          fi
+          $GITHUB_WORKSPACE/scripts/verify-install.sh --no-wp ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
           echo "Package uninstallation and cleanup verification successful"
 
