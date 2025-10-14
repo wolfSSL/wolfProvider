@@ -391,7 +391,10 @@ static int wp_pss_salt_len_to_wc(int saltLen, enum wc_HashType hashType,
     }
     else if (saltLen == RSA_PSS_SALTLEN_AUTO) {
     #ifndef WOLFSSL_PSS_SALT_LEN_DISCOVER
-        saltLen = wc_HashGetDigestSize(hashType);
+        saltLen = wc_RsaEncryptSize(key) - wc_HashGetDigestSize(hashType) - 2;
+        if (((mp_count_bits(&key->n) - 1) & 0x7) == 0) {
+            saltLen--;
+        }
     #else
         saltLen = RSA_PSS_SALT_LEN_DISCOVER;
     #endif
