@@ -118,6 +118,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
     const char* mdProps, int op)
 {
     int ok = 1;
+    char *localMdName = NULL;
 
     WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_setup_md");
 
@@ -125,7 +126,16 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
         mdProps = ctx->propQuery;
     }
 
-    if (mdName != NULL) {
+    /* For PSS restricted mode, not allowed to set new MD */
+    if (ctx->padMode == RSA_PKCS1_PSS_PADDING && ctx->minSaltLen != -1) {
+        wp_rsa_get_pss_mds(ctx->rsa, &localMdName, NULL);
+        if (mdName != NULL &&
+            XSTRNCASECMP(localMdName, mdName, XSTRLEN(localMdName)) != 0) {
+            ok = 0;
+        }
+    }
+
+    if (ok && mdName != NULL) {
         int rc;
         enum wc_HashType hashType;
 
@@ -462,6 +472,7 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
     const OSSL_PARAM params[], int op)
 {
     int ok = 1;
+    int saltLen = 0;
 
     WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsa_signverify_init");
 
@@ -498,6 +509,13 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
             ctx->saltLen = WP_RSA_DEFAULT_SALT_LEN;
         #endif
             ctx->minSaltLen = 0;
+
+            /* If we have already set PSS salt len, use that */
+            saltLen = wp_rsa_get_pss_salt_len(ctx->rsa);
+            if (saltLen != 0) {
+                ctx->saltLen = saltLen;
+                ctx->minSaltLen = saltLen;
+            }
         }
         else {
             char* mdName;
@@ -2142,8 +2160,13 @@ static int wp_rsa_set_salt_len(wp_RsaSigCtx* ctx, const OSSL_PARAM* p)
     else {
         ok = 0;
     }
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+    /* RSA_PSS_SALTLEN_AUTO_DIGEST_MAX is the smallest negative value supported. */
+    if (ok && (ctx->saltLen < RSA_PSS_SALTLEN_AUTO_DIGEST_MAX)) {
+#else
     /* RSA_PSS_SALTLEN_MAX is the smallest negative value supported. */
     if (ok && (ctx->saltLen < RSA_PSS_SALTLEN_MAX)) {
+#endif
         ok = 0;
     }
     if (ok && (ctx->saltLen >= 0) && (ctx->saltLen < ctx->minSaltLen)) {
