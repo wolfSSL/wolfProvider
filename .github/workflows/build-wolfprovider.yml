@@ -72,27 +72,20 @@ jobs:
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
-      - name: Build and install wolfSSL/OpenSSL/wolfProvider
+      - name: Install wolfSSL
         run: |
-          WOLFSSL_TAG=${{ inputs.wolfssl_ref }} OPENSSL_TAG=${{ inputs.openssl_ref }} \
-            yes "Y" | $GITHUB_WORKSPACE/scripts/build-wolfprovider.sh --debian \
-            ${{ inputs.replace_default && '--replace-default' || '' }}
+          $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag ${{ inputs.wolfssl_ref }} ${{ env.WOLFSSL_PACKAGES_PATH }}
 
-      - name: Setup packages directory
+      - name: Install OpenSSL
         run: |
-          mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
-          cp $GITHUB_WORKSPACE/../openssl*.deb        ${{ env.OPENSSL_PACKAGES_PATH }}
-          cp $GITHUB_WORKSPACE/../libssl*.deb         ${{ env.OPENSSL_PACKAGES_PATH }}
+          $GITHUB_WORKSPACE/debian/install-openssl.sh ${{ inputs.replace_default && '--replace-default' || '' }} ${{ env.OPENSSL_PACKAGES_PATH }} 
 
-          mkdir -p ${{ env.WOLFPROV_PACKAGES_PATH }}
-          cp $GITHUB_WORKSPACE/../libwolfprov*.deb    ${{ env.WOLFPROV_PACKAGES_PATH }}
-          cp $GITHUB_WORKSPACE/../libwolfprov*.dsc    ${{ env.WOLFPROV_PACKAGES_PATH }}
-          cp $GITHUB_WORKSPACE/../libwolfprov*.tar.gz ${{ env.WOLFPROV_PACKAGES_PATH }}
+      - name: Install wolfProvider
+        run: |
+          $GITHUB_WORKSPACE/debian/install-wolfprov.sh ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
-          cp $GITHUB_WORKSPACE/../libwolfssl*.deb    ${{ env.WOLFSSL_PACKAGES_PATH }}
-
-          printf "Listing packages directory:\n"
+      - name: List packages directories
+        run: |
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}

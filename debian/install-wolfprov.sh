@@ -19,6 +19,7 @@
 set -euo pipefail
 
 PKG_NAME="libwolfprov"
+REPO_ROOT=${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}
 
 wolfprov_build() {
     local WOLFSSL_ISFIPS=${1:-0}
@@ -106,10 +107,21 @@ wolfprov_build() {
 }
 
 wolfprov_install() {
-    local packages=$(ls ../libwolfprov*.deb)
-    printf "Installing wolfProvider packages:\n"
-    printf "\t$packages\n"
-    dpkg -i --force-overwrite $packages
+    # Install all packages in the parent directory
+    for file in ../*.deb; do
+        if [ -f "$file" ]; then
+            packages+=("$file")
+        fi
+    done
+
+    if [ ${#packages[@]} -eq 0 ]; then
+        echo "No packages found in parent directory"
+        exit 1
+    fi
+
+    printf "Installing packages:\n"
+    printf "\t%s\n" "${packages[@]}"
+    dpkg -i --force-overwrite ${packages[@]}
 }
 
 # Main execution
@@ -117,6 +129,7 @@ main() {
     local debug_mode=0
     local fips_mode=0
     local no_install=0
+    local output_dir=
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -133,7 +146,7 @@ main() {
                 echo "  -h, --help           Show this help message"
                 echo ""
                 echo "Arguments:"
-                echo "  working-directory   Directory to use for build (default: temporary directory)"
+                echo "  output-directory   Directory to use for build (default: temporary directory)"
                 exit 0
                 ;;
             -d|--debug)
@@ -148,33 +161,55 @@ main() {
                 no_install=1
                 shift
                 ;;
-            -*)
-                echo "Unknown option: $1" >&2
-                echo "Use --help for usage information" >&2
-                exit 1
+            *)
+                if [ -z "$output_dir" ]; then
+                    output_dir="$1"
+                else
+                    echo "Too many arguments" >&2
+                    echo "Use --help for usage information" >&2
+                    exit 1
+                fi
+                shift
                 ;;
         esac
     done
 
     # Check for any existing packages in the parent directory.
     # These would conflict with the install.
-    # Alternatively, we could copy the repo to a temporary directory and build there.
     existing_packages=()
-    for file in ../libwolfprov*.deb; do
+    for file in $output_dir/libwolfprov*.deb; do
         if [ -f "$file" ]; then
             existing_packages+=("$file")
         fi
     done
     if [ ${#existing_packages[@]} -gt 0 ]; then
-        echo "Error: libwolfprov*.deb already exists in parent directory, please remove them first"
+        echo "Error: libwolfprov*.deb already exists in output directory, please remove them first"
         echo "Existing packages: ${existing_packages[@]}"
         exit 1
     fi
+
+    work_dir=$(mktemp -d)
+    printf "Working directory: $work_dir\n"
+    pushd $work_dir 2>&1 > /dev/null
+    cp -r $REPO_ROOT .
+    cd $(basename $REPO_ROOT)
 
     wolfprov_build $fips_mode $debug_mode
     if [ $no_install -eq 0 ]; then
         wolfprov_install
     fi
+
+    if [ -n "$output_dir" ]; then
+        if [ ! -d "$output_dir" ]; then
+            printf "Creating output directory: $output_dir\n"
+            mkdir -p "$output_dir"
+        fi
+        cp ../*.* $output_dir
+    else
+        printf "No output directory specified, packages stored in $work_dir\n"
+    fi
+
+    printf "Done.\n"
 }
 
 # Run main function with all arguments

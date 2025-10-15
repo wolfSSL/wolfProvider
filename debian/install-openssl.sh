@@ -95,12 +95,12 @@ openssl_install() {
     done
 
     if [ ${#packages[@]} -eq 0 ]; then
-        echo "No OpenSSL packages found in parent directory"
+        echo "No packages found in parent directory"
         exit 1
     fi
 
-    printf "Installing OpenSSL packages:\n"
-    printf "\t${packages[@]}\n"
+    printf "Installing packages:\n"
+    printf "\t%s\n" "${packages[@]}"
     dpkg -i --force-overwrite ${packages[@]}
 }
 
@@ -136,7 +136,7 @@ main() {
                 ;;
             *)
                 if [ -z "$output_dir" ]; then
-                    output_dir=${PWD}/"$1"
+                    output_dir=$1
                 else
                     echo "Too many arguments" >&2
                     echo "Use --help for usage information" >&2
@@ -162,6 +162,10 @@ main() {
     openssl_patch $replace_default
     openssl_build
 
+    if [ $no_install -eq 0 ]; then
+        openssl_install
+    fi
+
     if [ -n "$output_dir" ]; then
         if [ ! -d "$output_dir" ]; then
             printf "Creating output directory: $output_dir\n"
@@ -169,10 +173,8 @@ main() {
         fi
         cp ../openssl*.deb $output_dir
         cp ../libssl*.deb $output_dir
-    fi
-
-    if [ $no_install -eq 0 ]; then
-        openssl_install
+    else
+        printf "No output directory specified, packages stored in $work_dir\n"
     fi
 
     printf "Done.\n"
