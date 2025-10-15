@@ -73,15 +73,15 @@ jobs:
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          apt install --reinstall -y \
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
-          apt install --reinstall -y \
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
 
-          apt install --reinstall -y \
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Verify wolfProvider is properly installed
