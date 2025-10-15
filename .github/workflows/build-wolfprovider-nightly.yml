@@ -35,6 +35,10 @@ on:
         required: false
         default: true
         type: boolean
+      test_jenkins:
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -54,4 +58,5 @@ jobs:
       openssl_ref: ${{ github.event.inputs.openssl_ref || 'openssl-3.5.2' }}
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ github.event.inputs.replace_default != 'false' }}
+      test_jenkins: ${{ github.event.inputs.test_jenkins != 'false' }}
     secrets: inherit

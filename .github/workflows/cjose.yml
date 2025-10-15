@@ -27,6 +27,7 @@ jobs:
         openssl_ref: [ 'openssl-3.5.2' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
+        test_jenkins: [ true ]
 
   test_cjose:
     runs-on: ubuntu-22.04

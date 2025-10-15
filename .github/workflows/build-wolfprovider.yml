@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      test_jenkins:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build_wolfprovider:
@@ -67,7 +71,7 @@ jobs:
 
       # Step 1: Trigger Jenkins and download wolfSSL packages
       - name: Trigger Jenkins build
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ inputs.test_jenkins }}
         id: trigger
         shell: bash
         run: |
@@ -195,7 +199,7 @@ jobs:
           done
 
       - name: Download .deb files from Jenkins
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ inputs.test_jenkins }}
         shell: bash
         run: |
           echo "Downloading .deb files from Jenkins build..."
@@ -264,7 +268,7 @@ jobs:
           ls -lh nonfips-packages/ 2>/dev/null || echo "  No Non-FIPS packages found"
 
       - name: Setup wolfSSL packages from Jenkins
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ inputs.test_jenkins }}
         run: |
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
 
@@ -291,14 +295,14 @@ jobs:
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
 
       - name: Download previously built wolfSSL artifacts
-        if: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
+        if: ${{ !inputs.test_jenkins }}
         uses: actions/download-artifact@v4
         with:
           name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
           path: ./cached-artifacts
 
       - name: Setup cached wolfSSL artifacts
-        if: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
+        if: ${{ !inputs.test_jenkins }}
         run: |
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
           mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
