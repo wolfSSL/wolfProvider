@@ -306,14 +306,24 @@ jobs:
       - name: Setup cached wolfSSL artifacts
         if: ${{ !inputs.test_jenkins }}
         run: |
+          echo "Checking downloaded artifacts..."
+          ls -la ./cached-artifacts/ || echo "No cached-artifacts directory found!"
+          
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
           mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
           mkdir -p ${{ env.WOLFPROV_PACKAGES_PATH }}
       
           # Copy files to expected directories
-          cp ./cached-artifacts/*wolfssl*.deb ${{ env.WOLFSSL_PACKAGES_PATH }}/ || true
-          cp ./cached-artifacts/*openssl*.deb ${{ env.OPENSSL_PACKAGES_PATH }}/ || true
-          cp ./cached-artifacts/*wolfprov*.* ${{ env.WOLFPROV_PACKAGES_PATH }}/ || true
+          if ls ./cached-artifacts/*wolfssl*.deb 1> /dev/null 2>&1; then
+            cp ./cached-artifacts/*wolfssl*.deb ${{ env.WOLFSSL_PACKAGES_PATH }}/
+            echo "Copied wolfSSL packages"
+          else
+            echo "ERROR: No wolfSSL .deb files found in cached-artifacts!"
+            exit 1
+          fi
+          
+          cp ./cached-artifacts/*openssl*.deb ${{ env.OPENSSL_PACKAGES_PATH }}/ || echo "No OpenSSL packages found (may be expected)"
+          cp ./cached-artifacts/*wolfprov*.* ${{ env.WOLFPROV_PACKAGES_PATH }}/ || echo "No wolfprov packages found (expected for cached run)"
       
           echo "Cached packages restored:"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
