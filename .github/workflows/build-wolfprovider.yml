@@ -296,10 +296,12 @@ jobs:
 
       - name: Download previously built wolfSSL artifacts
         if: ${{ !inputs.test_jenkins }}
-        uses: actions/download-artifact@v4
+        uses: dawidd6/action-download-artifact@v6
         with:
           name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
           path: ./cached-artifacts
+          workflow: build-wolfprovider-nightly.yml
+          workflow_conclusion: success
 
       - name: Setup cached wolfSSL artifacts
         if: ${{ !inputs.test_jenkins }}
