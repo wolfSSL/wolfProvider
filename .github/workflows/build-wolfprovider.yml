@@ -72,13 +72,49 @@ jobs:
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
-      - name: Install wolfSSL
+      # Cache wolfSSL packages
+      - name: Cache wolfSSL packages
+        id: cache-wolfssl
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.WOLFSSL_PACKAGES_PATH }}
+          key: |
+            wolfssl-${{ runner.os }}-${{ matrix.arch || 'noarch' }}-${{ inputs.wolfssl_ref }}-${{ hashFiles('debian/install-wolfssl.sh') }}
+          save-always: true
+      
+      - name: Install wolfSSL from cache
+        if: steps.cache-wolfssl.outputs.cache-hit == 'true'
         run: |
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+
+      # Only install wolfSSL if cache not found
+      - name: Install wolfSSL
+        if: steps.cache-wolfssl.outputs.cache-hit != 'true'
+        run: |
+          echo "Cache miss for wolfSSL — installing..."
           $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag ${{ inputs.wolfssl_ref }} ${{ env.WOLFSSL_PACKAGES_PATH }}
 
-      - name: Install OpenSSL
+      # Cache OpenSSL packages
+      - name: Cache OpenSSL packages
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OPENSSL_PACKAGES_PATH }}
+          key: |
+            openssl-${{ runner.os }}-${{ matrix.arch || 'noarch' }}-replaceDefault=${{ inputs.replace_default }}-wolfsslRef=${{ inputs.wolfssl_ref }}-${{ hashFiles('debian/install-openssl.sh') }}
+          save-always: true
+
+      - name: Install OpenSSL from cache
+        if: steps.cache-openssl.outputs.cache-hit == 'true'
         run: |
-          $GITHUB_WORKSPACE/debian/install-openssl.sh ${{ inputs.replace_default && '--replace-default' || '' }} ${{ env.OPENSSL_PACKAGES_PATH }} 
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages ${{ env.OPENSSL_PACKAGES_PATH }}/*.deb
+
+      # Only install OpenSSL if cache not found
+      - name: Install OpenSSL
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
+        run: |
+          echo "Cache miss for OpenSSL — installing..."
+          $GITHUB_WORKSPACE/debian/install-openssl.sh ${{ inputs.replace_default && '--replace-default' || '' }} ${{ env.OPENSSL_PACKAGES_PATH }}
 
       - name: Install wolfProvider
         run: |
