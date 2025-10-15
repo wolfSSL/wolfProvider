@@ -36,10 +36,10 @@ on:
         default: true
         type: boolean
       build_packages:
-        description: 'Use cached packages (true) or build fresh via Jenkins (false)'
+        description: 'build fresh via Jenkins (true) or use downloaded packages (false)'
         required: false
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -48,6 +48,8 @@ concurrency:
 jobs:
   build_wolfprovider:
     name: Build wolfProvider
+    # Only run Jenkins builds on schedule/dispatch from protected branches
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
     uses: ./.github/workflows/build-wolfprovider.yml
     strategy:
       matrix:

@@ -4,8 +4,8 @@ name: xmlsec Tests
 on:
   push:
     branches: [ 'master', 'main', 'build-wolfprov-debian2', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
+  #pull_request:
+    #branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -107,13 +107,6 @@ jobs:
               libltdl-dev libltdl7 libxml2-dev patch build-essential \
               pkg-config libxml2-dev
 
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfSSL/osp
-          path: osp
-          fetch-depth: 1
-
       - name: Download xmlsec
         uses: actions/checkout@v4
         with:
@@ -122,12 +115,26 @@ jobs:
           path: xmlsec
           fetch-depth: 1
 
+      
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd xmlsec
+          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/xmlsec/xmlsec-FIPS-${{ matrix.xmlsec_ref }}-wolfprov.patch
+          else
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/xmlsec/xmlsec-${{ matrix.xmlsec_ref }}-wolfprov.patch
+          fi
+
       - name: Build xmlsec
         working-directory: xmlsec
         env:
           XMLSEC_REF: ${{ matrix.xmlsec_ref }}
         run: |
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/xmlsec/xmlsec-${{ matrix.xmlsec_ref }}-wolfprov.patch
           ./autogen.sh --disable-openssl3-engines --disable-dsa --without-nss \
               --without-gnutls --without-gcrypt --disable-xmldsig \
               --disable-crypto-dl --disable-apps-crypto-dl \
