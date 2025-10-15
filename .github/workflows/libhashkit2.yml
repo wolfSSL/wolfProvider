@@ -3,7 +3,7 @@ name: libhashkit2 Tests
 # START OF COMMON SECTION
 on:
   push:
-        branches: [ 'master', 'main', 'build-wolfprov-debian', 'release/**' ]
+    branches: [ 'master', 'main', 'build-wolfprov-debian2', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -13,8 +13,26 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ matrix.replace_default }}
+      build_packages: ${{ matrix.build_packages }}
+    secrets: inherit
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true ]
+        build_packages: [ false ]
+
   test_libhashkit2:
     runs-on: ubuntu-22.04
+    needs: build_wolfprovider
     container:
       image: debian:bookworm
       env:
@@ -39,12 +57,9 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download wolfProvider packages from nightly build
-        uses: dawidd6/action-download-artifact@v6
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: build-wolfprovider-nightly.yml
-          branch: ${{ github.ref_name }}
           name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
           path: /tmp/packages
 

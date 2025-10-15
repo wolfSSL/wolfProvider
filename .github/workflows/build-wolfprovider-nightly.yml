@@ -35,10 +35,10 @@ on:
         required: false
         default: true
         type: boolean
-      test_jenkins:
+      build_packages:
         required: false
         type: boolean
-        default: true
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -52,11 +52,16 @@ jobs:
       matrix:
         # When manually triggered with 'both', or on schedule, build both FIPS and non-FIPS
         # When manually triggered with specific type, only build that type
-        fips_ref: ${{ (github.event_name == 'schedule' || github.event.inputs.fips_ref == 'both' || github.event.inputs.fips_ref == '') && fromJSON('["FIPS", "non-FIPS"]') || fromJSON(format('["{0}"]', github.event.inputs.fips_ref)) }}
+        fips_ref: >-
+          ${{ (github.event_name == 'schedule'
+            || github.event.inputs.fips_ref == 'both'
+            || github.event.inputs.fips_ref == '')
+            && fromJSON('["FIPS", "non-FIPS"]')
+            || fromJSON(format('["{0}"]', github.event.inputs.fips_ref)) }}
     with:
       wolfssl_ref: ${{ github.event.inputs.wolfssl_ref || 'v5.8.2-stable' }}
       openssl_ref: ${{ github.event.inputs.openssl_ref || 'openssl-3.5.2' }}
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ github.event.inputs.replace_default != 'false' }}
-      test_jenkins: ${{ github.event.inputs.test_jenkins != 'false' }}
+      build_packages: ${{ github.event.inputs.build_packages }}
     secrets: inherit
