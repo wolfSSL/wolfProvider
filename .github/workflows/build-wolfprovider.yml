@@ -53,7 +53,33 @@ jobs:
             expect \
             xxd \
             bc \
-            libdistro-info-perl
+            libdistro-info-perl \
+            jq \
+            gh
+
+      - name: Check if artifact exists
+        id: check_artifact
+        shell: bash
+        run: |
+          artifact_name="openssl-wolfprov-debian-packages-${{ github.sha }}${{ inputs.replace_default && '-replace-default' || '' }}"
+          echo "Checking if artifact '$artifact_name' exists..."
+          response=$(gh api repos/${{ github.repository }}/actions/artifacts \
+            --paginate --jq ".artifacts[] | select(.name == \"$artifact_name\") | .expired == false")
+          if [ -n "$response" ]; then
+            echo "Artifact $artifact_name already exists."
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "Artifact $artifact_name not found."
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Skip job if artifact exists
+        if: steps.check_artifact.outputs.found == 'true'
+        run: |
+          echo "Artifact already exists — skipping rest of job."
+          exit 0
 
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
