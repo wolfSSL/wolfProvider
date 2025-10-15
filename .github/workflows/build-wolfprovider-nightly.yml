@@ -2,7 +2,7 @@ name: Nightly Build wolfProvider
 
 on:
   push:
-    branches: [ 'master', 'main', 'build-wolfprov-debian', 'release/**' ]
+    branches: [ 'master', 'main', 'build-wolfprov-debian2', 'release/**' ]
   pull_request:
     branches: [ '*' ]
   schedule:
