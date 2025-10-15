@@ -20,6 +20,7 @@ jobs:
       openssl_ref: ${{ matrix.openssl_ref }}
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
+      build_packages: ${{ matrix.build_packages }}
     secrets: inherit
     strategy:
       matrix:

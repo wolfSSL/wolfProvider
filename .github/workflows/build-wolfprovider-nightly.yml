@@ -36,6 +36,7 @@ on:
         default: true
         type: boolean
       build_packages:
+        description: 'Use cached packages (true) or build fresh via Jenkins (false)'
         required: false
         type: boolean
         default: false
@@ -63,5 +64,5 @@ jobs:
       openssl_ref: ${{ github.event.inputs.openssl_ref || 'openssl-3.5.2' }}
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ github.event.inputs.replace_default != 'false' }}
-      build_packages: ${{ github.event.inputs.build_packages }}
+      build_packages: ${{ github.event.inputs.build_packages == 'true' }}
     secrets: inherit
