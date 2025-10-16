@@ -110,6 +110,9 @@
  * #define WOLFPROV_LOG_LEVEL_FILTER (WP_LOG_LEVEL_ALL)
  * #define WOLFPROV_LOG_COMPONENTS_FILTER (WP_LOG_ECC | WP_LOG_RSA | WP_LOG_HKDF)
  * // Shows level (ERROR + ENTER/LEAVE + INFO + VERBOSE + DEBUG + TRACE) for ECC, RSA, and HKDF only
+ *
+ * When modifying the enum values, ensure the corresponding strings in the
+ * wp_logging.c file are updated to match.
  */
 enum wolfProv_LogType {
     WP_LOG_ERROR   = 0x0001,   /* logs errors */
@@ -236,6 +239,8 @@ void wolfProv_Debugging_OFF(void);
 int wolfProv_SetLogLevel(int levelMask);
 /* Set which components are logged, bitmask of wolfProv_LogComponents */
 int wolfProv_SetLogComponents(int componentMask);
+/* Initialize logging module */
+int wolfProv_LogInit(void);
 
 #ifdef WOLFPROV_DEBUG
 

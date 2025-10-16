@@ -1241,6 +1241,8 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 {
     int ok = 1;
 
+    wolfProv_LogInit();
+
     WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_provider_init");
 
 #ifdef WOLFPROV_DEBUG
