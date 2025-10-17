@@ -1024,8 +1024,8 @@ int test_rsa_pkey_invalid_key_size(void *data) {
     RSA *rsa = NULL;
 #endif
 #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    const unsigned char *p = rsa_key_der_1024;
-    size_t pSize = sizeof(rsa_key_der_1024);
+    const unsigned char *p = rsa_key_der_2048;
+    size_t pSize = sizeof(rsa_key_der_2048);
 #else
     const unsigned char *p = rsa_key_der_256;
     size_t pSize = sizeof(rsa_key_der_256);
@@ -1036,7 +1036,7 @@ int test_rsa_pkey_invalid_key_size(void *data) {
 
     (void)data;
     (void)rsa_key_der_256;
-    (void)rsa_key_der_1024;
+    (void)rsa_key_der_2048;
 
     pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, pSize);
     err = pkey == NULL;
@@ -1054,10 +1054,10 @@ int test_rsa_pkey_invalid_key_size(void *data) {
     }
 
 #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    /* In FIPS mode, 1024-bit keys are allowed, so skip the invalid key size check */
+    /* In FIPS mode, use 2048-bit keys which are allowed */
     if (err == 0) {
         PRINT_MSG("Check that signing with OpenSSL and verifying with "
-            "wolfProvider using a 1024-bit key works.");
+            "wolfProvider using a 2048-bit key works.");
         err = test_pkey_sign(pkey, osslLibCtx, buf, sizeof(buf), rsaSig,
             &rsaSigLen, 0, NULL, NULL);
     }
