@@ -594,26 +594,17 @@ int test_rsa_sign_sha1(void *data)
         PRINT_MSG("Sign with OpenSSL");
         err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
                                rsaSig, &rsaSigLen, 0);
-        /* OpenSSL should reject SHA-1 signing in FIPS mode */
-        err = err != 1;
-        if (err == 0) {
-            PRINT_MSG("OpenSSL sign failed, expected (SHA-1 signing not allowed w/ FIPS)");
-        }
-        else {
-            PRINT_MSG("OpenSSL sign succeeded, unexpected (SHA-1 signing not allowed w/ FIPS)");
-        }
+    }
+    if (err == 0) {
+        PRINT_MSG("Verify with wolfprovider");
+        err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
+                                 rsaSig, rsaSigLen, 0);
     }
     if (err == 0) {
         PRINT_MSG("Sign with wolfprovider");
         rsaSigLen = RSA_size(rsaKey);
         err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
                               rsaSig, &rsaSigLen, 0) != 1;
-        if (err == 0) {
-            PRINT_MSG("wolfProvider sign failed, expected (SHA-1 signing not allowed w/ FIPS)");
-        }
-        else {
-            PRINT_MSG("wolfProvider sign succeeded, unexpected (SHA-1 signing not allowed w/ FIPS)");
-        }
     }
     EVP_PKEY_free(pkey);
 
