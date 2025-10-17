@@ -65,38 +65,15 @@ clone_openssl() {
     if [ ! -d ${OPENSSL_SOURCE_DIR} ]; then
         printf "\tOpenSSL source directory not found: ${OPENSSL_SOURCE_DIR}\n"
 
-        # If building for Debian, build from Debian baseline
-        if [ $WOLFPROV_BUILD_DEBIAN -eq 1 ]; then
-            printf "\tDownloading OpenSSL from Debian ... \n"
-            # Check if "deb-src" is in the sources.list, which allows us to 
-            # grab the source from Debian.
-            if [ -f /etc/apt/sources.list ] && grep -q "deb-src" /etc/apt/sources.list; then
-                printf "\tDebian sources.list already contains deb-src\n"
-            else
-                printf "\tAdding deb-src to sources.list\n"
-                echo "deb-src http://deb.debian.org/debian bookworm main" >> /etc/apt/sources.list
-                echo "deb-src http://deb.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list
-                echo "deb-src http://deb.debian.org/debian bookworm-updates main" >> /etc/apt/sources.list
-            fi
+        CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
+        CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
 
-            pushd $(mktemp -d) 2>&1 > /dev/null
-            apt update >>$LOG_FILE 2>&1
-            apt-get source -t bookworm openssl >>$LOG_FILE 2>&1
-            RET=$?
-            # Move the source to the correct directory
-            mv openssl-* ${OPENSSL_SOURCE_DIR}
-            popd 2>&1 > /dev/null
-        else 
-            CLONE_TAG=${USE_CUR_TAG:+${OPENSSL_TAG_CUR}}
-            CLONE_TAG=${CLONE_TAG:-${OPENSSL_TAG}}
+        DEPTH_ARG=${WOLFPROV_DEBUG:+""}
+        DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
-            DEPTH_ARG=${WOLFPROV_DEBUG:+""}
-            DEPTH_ARG=${DEPTH_ARG:---depth=1}
-
-            printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
-            git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-            RET=$?
-        fi
+        printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
+        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+        RET=$?
 
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
@@ -137,35 +114,8 @@ is_openssl_patched() {
     return 1
 }
 
-check_openssl_replace_default_mismatch() {
-    local openssl_is_patched=0
-
-    # Check if the source was patched for --replace-default
-    if is_openssl_patched; then
-        openssl_is_patched=1
-        printf "INFO: OpenSSL source modified - wolfProvider integrated as default provider (non-stock build).\n"
-    fi
-
-    # Check for mismatch
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$openssl_is_patched" = "0" ]; then
-        printf "ERROR: --replace-default build mode mismatch!\n"
-        printf "Existing OpenSSL was built WITHOUT --replace-default patch\n"
-        printf "Current request: --replace-default build\n\n"
-        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
-        printf "Then rebuild with desired configuration.\n"
-        exit 1
-    elif [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ] && [ "$openssl_is_patched" = "1" ]; then
-        printf "ERROR: Standard build mode mismatch!\n"
-        printf "Existing OpenSSL was built WITH --replace-default patch\n"
-        printf "Current request: standard build\n\n"
-        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
-        printf "Then rebuild with desired configuration.\n"
-        exit 1
-    fi
-}
-
 patch_openssl_version() {
-    # Patch the OpenSSL version (wolfProvider/openssl-source/VERSION.dat) 
+    # Patch the OpenSSL version (wolfProvider/openssl-source/VERSION.dat)
     # with our BUILD_METADATA, depending on the FIPS flag. Either "wolfProvider" or "wolfProvider-fips".
     if [ ${WOLFSSL_ISFIPS:-0} -eq 1 ]; then
         sed -i 's/BUILD_METADATA=.*/BUILD_METADATA=wolfProvider-fips/g' ${OPENSSL_SOURCE_DIR}/VERSION.dat
@@ -220,77 +170,31 @@ patch_openssl() {
     fi
 }
 
-install_openssl_deb() {
-    printf "\nInstalling OpenSSL ${OPENSSL_TAG} for Debian packaging ...\n"
-    clone_openssl
-    patch_openssl
-    check_openssl_replace_default_mismatch
+check_openssl_replace_default_mismatch() {
+    local openssl_is_patched=0
 
-    pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
-
-    if [ -d ${OPENSSL_INSTALL_DIR} ]; then
-        printf "\tOpenSSL install directory already exists: ${OPENSSL_INSTALL_DIR}\n"
-        printf "\tRemoving existing install directory...\n"
-        rm -rf ${OPENSSL_INSTALL_DIR}
+    # Check if the source was patched for --replace-default
+    if is_openssl_patched; then
+        openssl_is_patched=1
+        printf "INFO: OpenSSL source modified - wolfProvider integrated as default provider (non-stock build).\n"
     fi
 
-    # Build configure command
-    CONFIG_CMD="./config shared"
-
-    # Determine the install paths for Debian Bookworm
-    DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
-    CONFIG_CMD+=" --prefix=/usr --openssldir=/usr/lib/ssl --libdir=lib/${DEB_HOST_MULTIARCH} "
-
-    if [ "$WOLFPROV_DEBUG" = "1" ]; then
-        CONFIG_CMD+=" enable-trace --debug"
-    fi
-
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
-        CONFIG_CMD+=" no-external-tests no-tests"
-    fi
-
-    printf "\tConfigure OpenSSL ${OPENSSL_TAG} ... "
-    $CONFIG_CMD >>$LOG_FILE 2>&1
-    RET=$?
-    if [ $RET != 0 ]; then
-        printf "ERROR.\n"
-        rm -rf ${OPENSSL_INSTALL_DIR}
-        do_cleanup
+    # Check for mismatch
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$openssl_is_patched" = "0" ]; then
+        printf "ERROR: --replace-default build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITHOUT --replace-default patch\n"
+        printf "Current request: --replace-default build\n\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
+        exit 1
+    elif [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ] && [ "$openssl_is_patched" = "1" ]; then
+        printf "ERROR: Standard build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITH --replace-default patch\n"
+        printf "Current request: standard build\n\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
         exit 1
     fi
-    printf "Done.\n"
-
-    printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
-    make -j$NUMCPU >>$LOG_FILE 2>&1
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        rm -rf ${OPENSSL_INSTALL_DIR}
-        do_cleanup
-        exit 1
-    fi
-    printf "Done.\n"
-
-    printf "\tInstalling OpenSSL ${OPENSSL_TAG} ... "
-    make -j$NUMCPU install DESTDIR=${OPENSSL_INSTALL_DIR} >>$LOG_FILE 2>&1
-    if [ $? != 0 ]; then
-        printf "ERROR.\n"
-        rm -rf ${OPENSSL_INSTALL_DIR}
-        do_cleanup
-        exit 1
-    fi
-    printf "Done.\n"
-
-    # We use a different install path for Debian, which places the outputs in $OPENSSL_INSTALL_DIR/usr/lib/${DEB_HOST_MULTIARCH}
-    # rather than $OPENSSL_INSTALL_DIR. So manually copy the outputs to the correct path.
-    printf "\tCopying outputs to ${OPENSSL_INSTALL_DIR} for OpenSSL ${OPENSSL_TAG} ... "
-    mkdir -p $OPENSSL_INSTALL_DIR/lib
-    cp -r $OPENSSL_INSTALL_DIR/usr/lib/${DEB_HOST_MULTIARCH}/* $OPENSSL_INSTALL_DIR/lib
-    cp -r $OPENSSL_INSTALL_DIR/usr/bin $OPENSSL_INSTALL_DIR/bin
-    cp -r $OPENSSL_INSTALL_DIR/usr/include $OPENSSL_INSTALL_DIR/include
-    cp -r $OPENSSL_INSTALL_DIR/usr/lib/pkgconfig $OPENSSL_INSTALL_DIR/lib/pkgconfig
-    printf "Done.\n"
-
-    popd &> /dev/null
 }
 
 install_openssl() {
@@ -351,7 +255,11 @@ init_openssl() {
     WOLFPROV_BUILD_DEBIAN=${WOLFPROV_BUILD_DEBIAN:-0}
     
     if [ $WOLFPROV_BUILD_DEBIAN -eq 1 ]; then
-        install_openssl_deb
+        OPENSSL_OPTS=
+        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+            OPENSSL_OPTS+=" --replace-default"
+        fi
+        $SCRIPT_DIR/debian/install-openssl.sh $OPENSSL_OPTS --output-dir ${REPO_DIR}/..
     else
         install_openssl
     fi
