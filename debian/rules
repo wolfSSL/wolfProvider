@@ -82,8 +82,4 @@ override_dh_auto_clean:
 	rm -rf test/standalone/tests/.libs
 
 override_dh_auto_test:
-	@if [ "$$WOLFSSL_ISFIPS" = "1" ]; then \
-		echo "WARNING: Skipping tests in FIPS mode (test issues being resolved)"; \
-	else \
-		$(MAKE) test; \
-	fi
+	$(MAKE) test
