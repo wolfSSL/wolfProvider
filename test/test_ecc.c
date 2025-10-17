@@ -944,7 +944,9 @@ static int test_pkey_verify_ecc(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx,
 int test_ecdsa_p192_pkey(void *data)
 {
     int err;
+#if !defined(HAVE_FIPS) && !defined(HAVE_FIPS_VERSION)
     int res;
+#endif
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[64];
     size_t ecdsaSigLen;
@@ -1250,7 +1252,9 @@ int test_ecdsa_p521_pkey(void *data)
 int test_ecdsa_p192(void *data)
 {
     int err;
+#if !defined(HAVE_FIPS) && !defined(HAVE_FIPS_VERSION)
     int res;
+#endif
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[64];
     size_t ecdsaSigLen;
