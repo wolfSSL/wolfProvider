@@ -11,7 +11,7 @@ CONF_FILES=$(find /usr /lib /etc -name openssl.cnf 2>/dev/null)
 REPLACE_DEFAULT=0
 if command -v openssl >/dev/null 2>&1; then
     OPENSSL_VERSION=$(openssl version)
-    if echo "$OPENSSL_VERSION" | grep -q "wolfProvider"; then
+    if echo "$OPENSSL_VERSION" | grep -q "replace-default"; then
         REPLACE_DEFAULT=1
     fi  
 fi

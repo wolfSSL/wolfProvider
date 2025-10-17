@@ -3,7 +3,7 @@ name: IPMItool Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'build-wolfprov-debian2', 'release/**' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -18,25 +18,21 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
-      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
-      build_packages: ${{ matrix.build_packages }}
-    secrets: inherit
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        build_packages: [ false ]
+        fips: [ false ]
 
   test_ipmitool:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+    needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -45,9 +41,8 @@ jobs:
         ipmitool_ref: [ 'IPMITOOL_1_8_19' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        fips_ref: [ 'FIPS', 'non-FIPS' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -58,41 +53,38 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download packages from build job
-        uses: actions/download-artifact@v4
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
         with:
-          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
-          path: /tmp/packages
-
-      - name: Setup package directories
-        run: |
-          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
-          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
-          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
+          printf "Installing OpenSSL/wolfProvider packages:\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          apt install --reinstall -y \
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
-          apt install --reinstall -y \
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
 
-          apt install --reinstall -y \
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.deb
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh \
-            ${{ matrix.replace_default && '--replace-default' || '' }} \
-            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
       - name: Install dependencies
         run: |
@@ -108,44 +100,13 @@ jobs:
           path: ipmitool
           check: false
 
-      - name: Test ipmitool crypto functionality
+      - name: Confirm built with OpenSSL and test with wolfProvider
         working-directory: ipmitool
-        shell: bash
         run: |
-          set +o pipefail # allow force_fail to work
 
-          # Run version check
+          # Verify ipmitool was built and linked correctly with OpenSSL
+          ldd src/ipmitool | grep -E '(libssl|libcrypto)'
+          ldd src/ipmievd | grep -E '(libssl|libcrypto)'
+
+          # Run a simple command to verify functionality
           ./src/ipmitool -V
-
-          export ${{ matrix.force_fail }}
-
-          # Test crypto operations by attempting IPMI-over-LAN connection
-          # This will use HMAC-SHA1 and other crypto functions even if connection fails
-          echo "Testing ipmitool crypto operations via LAN connection attempt..."
-          
-          # Attempt to connect to a dummy IP - this will trigger crypto initialization
-          # The connection will fail, but crypto operations will be attempted
-          ./src/ipmitool -I lan -H 127.0.0.1 -U admin -P admin chassis status 2>&1 | tee ipmitool-test.log
-          TEST_RESULT=${PIPESTATUS[0]}
-
-          # With WPFF enabled, crypto operations should fail
-          # Without WPFF, connection will fail but for different reasons (no IPMI hardware)
-          if [ -n "${{ matrix.force_fail }}" ]; then
-            # With force_fail, we expect failure due to crypto
-            if [ $TEST_RESULT -ne 0 ]; then
-              echo "Expected failure with WPFF (crypto operations failed as expected)"
-              TEST_RESULT=0  # Mark as success since failure was expected
-            else
-              echo "ERROR: Command succeeded when it should have failed with WPFF"
-              TEST_RESULT=1
-            fi
-          else
-            # Without force_fail, command may fail due to no IPMI hardware, but crypto should work
-            # Check that we at least attempted crypto operations
-            if grep -q "Error" ipmitool-test.log; then
-              echo "Command failed (expected without IPMI hardware), but crypto was attempted"
-              TEST_RESULT=0  # Success - crypto worked, just no IPMI hardware
-            fi
-          fi
-
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} ipmitool

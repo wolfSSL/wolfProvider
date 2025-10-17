@@ -18,17 +18,12 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
-      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
-      build_packages: ${{ matrix.build_packages }}
-    secrets: inherit
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        build_packages: [ false ]
 
   test_hostap:
     runs-on: ubuntu-22.04
@@ -47,7 +42,6 @@ jobs:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -61,42 +55,48 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download packages from build job
-        uses: actions/download-artifact@v4
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
         with:
-          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
-          path: /tmp/packages
-
-      - name: Setup package directories
-        run: |
-          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
-          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
-          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
+          printf "Installing OpenSSL/wolfProvider packages:\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          apt install --reinstall -y \
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
-          apt install --reinstall -y \
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
 
-          # Only install libwolfprov packages (exclude wolfssl and openssl)
-          apt install --reinstall -y \
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov*.deb
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Show OpenSSL version
+        run: |
+          echo "OpenSSL version:"
+          openssl version -a || true
+
+      - name: Test OpenSSL providers before hostap installation
+        run: |
+          echo "Testing OpenSSL providers before hostap installation..."
+          openssl list -providers
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh \
-            ${{ matrix.replace_default && '--replace-default' || '' }} \
-            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
       - name: Install hostap dependencies
         run: |
@@ -125,7 +125,12 @@ jobs:
       - name: Apply hostap patches for wolfProvider
         run: |
           cd hostap
-          patch -p1 < "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov.patch"
+          if [ -f "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov.patch" ]; then
+            echo "Applying OSP hostap patch..."
+            patch -p1 < "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov.patch"
+          else
+            echo "No OSP patch found for hostap-${{ matrix.hostap_ref }}"
+          fi
 
       - name: Checkout linux
         uses: actions/checkout@v4

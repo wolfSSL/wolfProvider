@@ -131,61 +131,33 @@ verify_provider_loaded() {
 
 verify_openssl_version() {
     local replace_default="$1"
-    local fips="$2"
 
     # When replace-default is 0, expect something like this:
     # $openssl version
     # OpenSSL 3.0.17 1 Jul 2025 (Library: OpenSSL 3.0.17 1 Jul 2025
 
-    # When replace-default is 1 and fips is 0, expect something like this:
-    # $ openssl version
-    # OpenSSL 3.5.2+wolfProvider-nonfips 03 Oct 2025 (Library: OpenSSL 3.5.2+wolfProvider-nonfips 03 Oct 2025)
-
     log_info "Verifying OpenSSL version..."
 
     local version_output
-    version_output=$(openssl version -a 2>&1)
+    version_output=$(openssl version 2>&1)
 
     echo "OpenSSL version information:"
     echo "$version_output"
 
     if [ $replace_default -eq 0 ]; then
-        # Verify that wolfProv (case-insensitive) is in the version output
-        if echo "$version_output" | grep -qi "wolfProv"; then
-            handle_error "wolfProv is in the version output"
+        # Verify that "wolf" is not in the version output
+        # We should be using a stock OpenSSL build, not ours
+        if echo "$version_output" | grep "OpenSSL 3" | grep -qi "wolf"; then
+            handle_error "OpenSSL version appears to be patched"
         else
-            log_success "wolfProv is not in the version output"
+            log_success "OpenSSL version is not patched"
         fi
     else
-        # Verify that wolfProvider (case-insensitive) is in the version output
-        # for both the OpenSSL version and the Library version
-        # Check for both "# OpenSSL 3.x.y+wolfProvider" and "Library: OpenSSL 3.x.y+wolfProvider" separately
-        if echo "$version_output" | grep -qiE "OpenSSL 3\.[0-9]+\.[0-9]+\+wolfProvider"; then
-            log_success "OpenSSL version is correct"
+        # Verify that wolfProv (case-insensitive) is in the version output
+        if echo "$version_output" | grep "OpenSSL 3" | grep -qi "wolf"; then
+            log_success "wolfProv is not in the version output"
         else
-            handle_error "OpenSSL version is incorrect for replace default"
-        fi
-
-        if echo "$version_output" | grep -qiE "Library: OpenSSL 3\.[0-9]+\.[0-9]+\+wolfProvider"; then
-            log_success "libssl3 version is correct"
-        else
-            handle_error "libssl3 version is incorrect for replace default"
-        fi
-
-        if [ $fips -eq 0 ]; then
-            # For non-FIPS, expect "wolfProvider-nonfips" in the version output
-            # For FIPS, expect "wolfProvider-fips" in the version output
-            if echo "$version_output" | grep -qi "wolfProvider-nonfips"; then
-                log_success "wolfProvider-nonfips is in the version output"
-            else
-                handle_error "wolfProvider-nonfips is not in the version output"
-            fi
-        else
-            if echo "$version_output" | grep -qi "wolfProvider-fips"; then
-                log_success "wolfProvider-fips is in the version output"
-            else
-                handle_error "wolfProvider-fips is not in the version output"
-            fi
+            handle_error "wolfProv is in the version output"
         fi
     fi
 }

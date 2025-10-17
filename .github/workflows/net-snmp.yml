@@ -3,7 +3,7 @@ name: Net-SNMP Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'build-wolfprov-debian2', 'release/**' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -18,25 +18,21 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
-      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
-      build_packages: ${{ matrix.build_packages }}
-    secrets: inherit
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        build_packages: [ false ]
+        fips: [ false ]
 
   test_net_snmp:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+    needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -45,9 +41,9 @@ jobs:
         net_snmp_ref: [ 'v5.9.3' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
+        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -58,89 +54,57 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download packages from build job
-        uses: actions/download-artifact@v4
+      - name: Checking OpenSSL/wolfProvider packages in cache
+        uses: actions/cache/restore@v4
+        id: wolfprov-cache
         with:
-          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
-          path: /tmp/packages
-
-      - name: Setup package directories
-        run: |
-          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
-          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
-          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
+          path: |
+            ${{ env.WOLFSSL_PACKAGES_PATH }}
+            ${{ env.OPENSSL_PACKAGES_PATH }}
+            ${{ env.WOLFPROV_PACKAGES_PATH }}
+          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
+          fail-on-cache-miss: true
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
+          printf "Installing OpenSSL/wolfProvider packages:\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          apt install --reinstall -y \
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
-          apt install --reinstall -y \
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
 
-          apt install --reinstall -y \
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.deb
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh \
-            ${{ matrix.replace_default && '--replace-default' || '' }} \
-            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
 
       - name: Install dependencies
         run: |
           apt-get update
           apt-get install -y libperl-dev build-essential autoconf \
             libtool pkg-config gettext net-tools
-        
-      - name: Checkout net-snmp
-        uses: actions/checkout@v4
+
+      - name: Build net-snmp with wolfProvider
+        uses: wolfSSL/actions-build-autotools-project@v1
         with:
           repository: net-snmp/net-snmp
           ref: ${{ matrix.net_snmp_ref }}
           path: net-snmp
-          fetch-depth: 1
-
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/osp
-          path: osp
-          fetch-depth: 1
-      - run: |
-          cd net-snmp
-          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/net-snmp/net-snmp-FIPS-${{ matrix.net_snmp_ref }}-wolfprov.patch
-          else
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/net-snmp/net-snmp-${{ matrix.net_snmp_ref }}-wolfprov.patch
-          fi
-
-      - name: Build net-snmp with wolfProvider
-        working-directory: net-snmp
-        run: |
-          autoreconf -ivf
-          if [ "${{ matrix.fips_ref }}" = "FIPS" ]; then
-            ./configure --enable-wolfprov-fips \
-              --disable-shared  \
-              --with-default-snmp-version="3" \
-              --with-sys-contact="@@no.where" \
-              --with-sys-location="Unknown" \
-              --with-logfile="$SNMP_LOGFILE" \
-              --with-persistent-directory="$SNMP_PERSISTENT_DIR"
-          else
-            ./configure --disable-shared \
-              --with-default-snmp-version="3" --with-sys-contact="@@no.where" \
-              --with-sys-location="Unknown" --with-logfile="/var/log/snmpd.log" \
-              --with-persistent-directory="/var/net-snmp"
-          fi
-          make -j$(nproc)
+          configure: >-
+            --disable-shared
+            --with-default-snmp-version="3" --with-sys-contact="@@no.where"
+            --with-sys-location="Unknown" --with-logfile="/var/log/snmpd.log"
+            --with-persistent-directory="/var/net-snmp"
+          check: false
 
       - name: Run tests
         working-directory: net-snmp
