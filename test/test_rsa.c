@@ -589,7 +589,7 @@ int test_rsa_sign_sha1(void *data)
     if (err == 0) {
         err = RAND_bytes(buf, sizeof(buf)) == 0;
     }
-#ifdef REPLACE_DEFAULT
+#ifndef REPLACE_DEFAULT
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
         err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
