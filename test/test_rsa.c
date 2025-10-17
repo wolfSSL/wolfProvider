@@ -560,8 +560,9 @@ int test_rsa_sign_sha1(void *data)
 
     (void)data;
 #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    /* Signing with SHA-1 is not allowed in FIPS mode.
-     * We expect both OpenSSL and wolfProvider to reject SHA-1 signing. */
+    /* Signing with wolfProvider should fail, but verifying with wolfProvider should
+     * succeed. In FIPS mode, we can only verify RSA signatures using SHA-1, not
+     * generate them. */
     EVP_PKEY *pkey = NULL;
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
     const RSA *rsaKey = NULL;
@@ -1024,8 +1025,8 @@ int test_rsa_pkey_invalid_key_size(void *data) {
     RSA *rsa = NULL;
 #endif
 #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    const unsigned char *p = rsa_key_der_2048;
-    size_t pSize = sizeof(rsa_key_der_2048);
+    const unsigned char *p = rsa_key_der_1024;
+    size_t pSize = sizeof(rsa_key_der_1024);
 #else
     const unsigned char *p = rsa_key_der_256;
     size_t pSize = sizeof(rsa_key_der_256);
@@ -1036,7 +1037,7 @@ int test_rsa_pkey_invalid_key_size(void *data) {
 
     (void)data;
     (void)rsa_key_der_256;
-    (void)rsa_key_der_2048;
+    (void)rsa_key_der_1024;
 
     pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, pSize);
     err = pkey == NULL;
@@ -1053,25 +1054,11 @@ int test_rsa_pkey_invalid_key_size(void *data) {
         err = RAND_bytes(buf, sizeof(buf)) == 0;
     }
 
-#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    /* In FIPS mode, use 2048-bit keys which are allowed */
-    if (err == 0) {
-        PRINT_MSG("Check that signing with OpenSSL and verifying with "
-            "wolfProvider using a 2048-bit key works.");
-        err = test_pkey_sign(pkey, osslLibCtx, buf, sizeof(buf), rsaSig,
-            &rsaSigLen, 0, NULL, NULL);
-    }
-    if (err == 0) {
-        err = test_pkey_verify(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
-            rsaSigLen, 0, NULL, NULL);
-    }
-#else
     if ((err == 0) && (!noKeyLimits)) {
         PRINT_MSG("Check that signing with an invalid key size fails.");
         err = test_pkey_sign(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
             &rsaSigLen, 0, NULL, NULL) == 0;
     }
-#endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
 
     EVP_PKEY_free(pkey);
     if (rsaSig != NULL)
