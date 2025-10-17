@@ -20,15 +20,12 @@ jobs:
       openssl_ref: ${{ matrix.openssl_ref }}
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
-      build_packages: ${{ matrix.build_packages }}
-    secrets: inherit
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        build_packages: [ false ]
 
   test_cjose:
     runs-on: ubuntu-22.04
