@@ -37,20 +37,26 @@ jobs:
       - name: Install build dependencies
         run: |
           apt-get update && apt-get install -y --no-install-recommends \
-            git \
             build-essential \
-            debhelper \
             devscripts \
-            dpkg-dev \
-            dh-exec \
+            debhelper \
             dh-autoreconf \
+            libtool \
             pkg-config \
-            autoconf \
-            automake \
+            git \
+            wget \
+            curl \
             ca-certificates \
             openssl \
-            libtool \
-            bc
+            dpkg-dev \
+            lintian \
+            fakeroot \
+            dh-exec \
+            equivs \
+            expect \
+            xxd \
+            bc \
+            libdistro-info-perl
 
       # Download pre-built packages from debs branch
       - name: Checkout debs branch
