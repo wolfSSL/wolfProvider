@@ -590,6 +590,8 @@ int test_rsa_sign_sha1(void *data)
         err = RAND_bytes(buf, sizeof(buf)) == 0;
     }
 #ifndef REPLACE_DEFAULT
+    /* With replce default, OpenSSL inherits wolfProvider, so we can't test
+     * cross-provider behavior with SHA-1. */
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
         err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
