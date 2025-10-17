@@ -595,12 +595,12 @@ int test_rsa_sign_sha1(void *data)
         err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
                                rsaSig, &rsaSigLen, 0);
     }
-#endif
     if (err == 0) {
         PRINT_MSG("Verify with wolfprovider");
         err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
-                                 rsaSig, rsaSigLen, 0);
+        rsaSig, rsaSigLen, 0);
     }
+#endif
     if (err == 0) {
         PRINT_MSG("Sign with wolfprovider");
         rsaSigLen = RSA_size(rsaKey);
