@@ -40,6 +40,27 @@ if test "x$have_openssl" = "xyes"; then
     LDFLAGS="$LDFLAGS $OPENSSL_LDFLAGS"
 fi
 
+# Check if OpenSSL is built with replace-default mode
+AC_MSG_CHECKING([if OpenSSL is built with replace-default mode])
+AC_RUN_IFELSE(
+    [AC_LANG_PROGRAM(
+        [[#include <openssl/opensslv.h>
+          #include <string.h>
+          #include <stdio.h>]],
+        [[const char *version = OPENSSL_VERSION_TEXT;
+          if (strstr(version, "replace-default") != NULL) {
+              return 0;
+          }
+          return 1;]])],
+    [replace_default=yes],
+    [replace_default=no],
+    [replace_default=no])
+AC_MSG_RESULT([$replace_default])
+
+if test "$replace_default" = "yes"; then
+    AM_CFLAGS="$AM_CFLAGS -DREPLACE_DEFAULT"
+fi
+
 # wolfSSL
 AX_CHECK_WOLFSSL(
     [have_wolfssl=yes],

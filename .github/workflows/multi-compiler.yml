@@ -3,7 +3,7 @@ name: Multi-Compiler Tests
 # START OF COMMON SECTION
 on:
   push:
-    branches: [ 'master', 'main', 'release/**' ]
+    branches: [ 'master', 'main', 'build-wolfprov-debian2', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
