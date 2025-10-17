@@ -158,7 +158,16 @@ jobs:
 
       - name: Install wolfProvider
         run: |
-          $GITHUB_WORKSPACE/debian/install-wolfprov.sh ${{ env.WOLFPROV_PACKAGES_PATH }}
+          if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
+            FIPS_FLAG="--fips"
+          else
+            FIPS_FLAG=""
+          fi
+          $GITHUB_WORKSPACE/debian/install-wolfprov.sh $FIPS_FLAG ${{ env.WOLFPROV_PACKAGES_PATH }} || {
+            echo "Build failed. Showing test-suite.log if available:"
+            find . -name "test-suite.log" -exec cat {} \;
+            exit 1
+          }
 
       - name: Setup packages directory
         run: |
