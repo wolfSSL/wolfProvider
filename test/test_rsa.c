@@ -560,9 +560,8 @@ int test_rsa_sign_sha1(void *data)
 
     (void)data;
 #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    /* Signing with wolfProvider should fail, but verifying with wolfProvider should
-     * succeed. In FIPS mode, we can only verify RSA signatures using SHA-1, not
-     * generate them. */
+    /* Signing with SHA-1 is not allowed in FIPS mode.
+     * We expect both OpenSSL and wolfProvider to reject SHA-1 signing. */
     EVP_PKEY *pkey = NULL;
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
     const RSA *rsaKey = NULL;
@@ -594,17 +593,26 @@ int test_rsa_sign_sha1(void *data)
         PRINT_MSG("Sign with OpenSSL");
         err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
                                rsaSig, &rsaSigLen, 0);
-    }
-    if (err == 0) {
-        PRINT_MSG("Verify with wolfprovider");
-        err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
-                                 rsaSig, rsaSigLen, 0);
+        /* OpenSSL should reject SHA-1 signing in FIPS mode */
+        err = err != 1;
+        if (err == 0) {
+            PRINT_MSG("OpenSSL sign failed, expected (SHA-1 signing not allowed w/ FIPS)");
+        }
+        else {
+            PRINT_MSG("OpenSSL sign succeeded, unexpected (SHA-1 signing not allowed w/ FIPS)");
+        }
     }
     if (err == 0) {
         PRINT_MSG("Sign with wolfprovider");
         rsaSigLen = RSA_size(rsaKey);
         err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
                               rsaSig, &rsaSigLen, 0) != 1;
+        if (err == 0) {
+            PRINT_MSG("wolfProvider sign failed, expected (SHA-1 signing not allowed w/ FIPS)");
+        }
+        else {
+            PRINT_MSG("wolfProvider sign succeeded, unexpected (SHA-1 signing not allowed w/ FIPS)");
+        }
     }
     EVP_PKEY_free(pkey);
 
@@ -1045,13 +1053,8 @@ int test_rsa_pkey_invalid_key_size(void *data) {
         err = RAND_bytes(buf, sizeof(buf)) == 0;
     }
 
-    if ((err == 0) && (!noKeyLimits)) {
-        PRINT_MSG("Check that signing with an invalid key size fails.");
-        err = test_pkey_sign(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
-            &rsaSigLen, 0, NULL, NULL) == 0;
-    }
-
 #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+    /* In FIPS mode, 1024-bit keys are allowed, so skip the invalid key size check */
     if (err == 0) {
         PRINT_MSG("Check that signing with OpenSSL and verifying with "
             "wolfProvider using a 1024-bit key works.");
@@ -1061,6 +1064,12 @@ int test_rsa_pkey_invalid_key_size(void *data) {
     if (err == 0) {
         err = test_pkey_verify(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
             rsaSigLen, 0, NULL, NULL);
+    }
+#else
+    if ((err == 0) && (!noKeyLimits)) {
+        PRINT_MSG("Check that signing with an invalid key size fails.");
+        err = test_pkey_sign(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
+            &rsaSigLen, 0, NULL, NULL) == 0;
     }
 #endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
 
