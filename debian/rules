@@ -82,4 +82,6 @@ override_dh_auto_clean:
 	rm -rf test/standalone/tests/.libs
 
 override_dh_auto_test:
+	# Set LD_LIBRARY_PATH to find installed wolfSSL/OpenSSL libraries
+	export LD_LIBRARY_PATH=/usr/lib/$(DEB_HOST_MULTIARCH):$$LD_LIBRARY_PATH && \
 	$(MAKE) test
