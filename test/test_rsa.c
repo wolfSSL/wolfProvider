@@ -352,7 +352,7 @@ static const unsigned char rsa_key_der_2048_pkcs8[] = {
 };
 
 static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
-    const EVP_MD *mgf1Md)
+    const EVP_MD *mgf1Md, int saltlen)
 {
     int err;
     int res;
@@ -367,10 +367,12 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
     size_t bufLen = 20;
     unsigned char *buf = NULL;
     const unsigned char *p = rsa_key_der_2048;
+    const char *md_name = NULL;
 
     PRINT_MSG("Load RSA key");
     pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
     err = pkey == NULL;
+
     if (err == 0) {
         rsaKey = EVP_PKEY_get0_RSA(pkey);
         err = rsaKey == NULL;
@@ -393,7 +395,7 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
     if (err == 0) {
         err = RAND_bytes(buf, (int)bufLen) == 0;
     }
-     if (err == 0 && padMode == RSA_NO_PADDING) {
+    if (err == 0 && padMode == RSA_NO_PADDING) {
         /* Set the MSB to 0 so there's no chance the number is too large for the
          * RSA modulus. */
         buf[0] = 0;
@@ -432,46 +434,50 @@ static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
             padMode, md, mgf1Md);
     }
 
-#ifdef WP_HAVE_SHA256
+#if defined(WP_HAVE_SHA256) || defined(WP_HAVE_SHA384) || \
+    defined(WP_HAVE_SHA512)
+    md_name = EVP_MD_name(md);
+
     /* OpenSSL doesn't allow RSA signatures with no padding. */
     if ((err == 0) && (padMode != RSA_NO_PADDING)) {
         PRINT_MSG("Test creating/verifying a signature");
         PRINT_MSG("Sign with OpenSSL");
-        err = test_digest_sign(pkey, osslLibCtx, buf, bufLen, "SHA-256", rsaSig,
-            &rsaSigLen, padMode);
+        err = test_digest_sign(pkey, osslLibCtx, buf, bufLen, md_name, mgf1Md,
+            rsaSig, &rsaSigLen, padMode, saltlen);
     }
     if ((err == 0) && (padMode != RSA_NO_PADDING)) {
         PRINT_MSG("Verify with wolfprovider");
-        err = test_digest_verify(pkey, wpLibCtx, buf, bufLen, "SHA-256", rsaSig,
-            rsaSigLen, padMode);
+        err = test_digest_verify(pkey, wpLibCtx, buf, bufLen, md_name, mgf1Md,
+            rsaSig, rsaSigLen, padMode, saltlen);
     }
     if ((err == 0) && (padMode != RSA_NO_PADDING)) {
         PRINT_MSG("Verify bad signature with wolfprovider");
         rsaSig[1] ^= 0x80;
-        res = test_digest_verify(pkey, wpLibCtx, buf, bufLen, "SHA-256", rsaSig,
-            rsaSigLen, padMode);
+        res = test_digest_verify(pkey, wpLibCtx, buf, bufLen, md_name, mgf1Md,
+            rsaSig, rsaSigLen, padMode, saltlen);
         if (res != 1)
             err = 1;
     }
     if ((err == 0) && (padMode != RSA_NO_PADDING)) {
         PRINT_MSG("Sign with wolfprovider");
         rsaSigLen = RSA_size(rsaKey);
-        err = test_digest_sign(pkey, wpLibCtx, buf, bufLen, "SHA-256", rsaSig,
-            &rsaSigLen, padMode);
+        err = test_digest_sign(pkey, wpLibCtx, buf, bufLen, md_name, mgf1Md,
+            rsaSig, &rsaSigLen, padMode, saltlen);
     }
     if ((err == 0) && (padMode != RSA_NO_PADDING)) {
         PRINT_MSG("Verify with OpenSSL");
-        err = test_digest_verify(pkey, osslLibCtx, buf, bufLen, "SHA-256",
-             rsaSig, rsaSigLen, padMode);
+        err = test_digest_verify(pkey, osslLibCtx, buf, bufLen, md_name, mgf1Md,
+            rsaSig, rsaSigLen, padMode, saltlen);
     }
 #endif
 
     EVP_PKEY_free(pkey);
-
-    if (rsaSig)
+    if (rsaSig) {
         OPENSSL_free(rsaSig);
-    if (buf)
+    }
+    if (buf) {
         OPENSSL_free(buf);
+    }
 
     return err;
 }
@@ -593,18 +599,18 @@ int test_rsa_sign_sha1(void *data)
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
         err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
-                               rsaSig, &rsaSigLen, 0);
+                              NULL, rsaSig, &rsaSigLen, 0, 0);
     }
     if (err == 0) {
         PRINT_MSG("Verify with wolfprovider");
         err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
-                                 rsaSig, rsaSigLen, 0);
+                                NULL, rsaSig, rsaSigLen, 0, 0);
     }
     if (err == 0) {
         PRINT_MSG("Sign with wolfprovider");
         rsaSigLen = RSA_size(rsaKey);
         err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
-                              rsaSig, &rsaSigLen, 0) != 1;
+                              NULL, rsaSig, &rsaSigLen, 0, 0) != 1;
     }
     EVP_PKEY_free(pkey);
 
@@ -619,7 +625,7 @@ int test_rsa_sign_verify_pkcs1(void *data)
 {
     (void)data;
 
-    return test_rsa_sign_verify_pad(RSA_PKCS1_PADDING, NULL, NULL);
+    return test_rsa_sign_verify_pad(RSA_PKCS1_PADDING, NULL, NULL, 0);
 }
 
 int test_rsa_sign_verify_recover_pkcs1(void *data)
@@ -635,56 +641,254 @@ int test_rsa_sign_verify_pss(void *data)
 
     (void)data;
 
-    /* Use SHA-1 (default) for MD and MGF1 MD. */
-    err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, NULL, NULL) == 1;
+#ifndef HAVE_FIPS
+    /* Use SHA-1 for MD and MGF1 MD. */
+    err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha1(),
+                                  EVP_sha1(), 0) == 1;
+#endif
 #ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD and MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
-                                       EVP_sha256()) == 1;
+                                      EVP_sha256(), 0) == 1;
     }
 #endif
-#if defined(WP_HAVE_SHA384) && defined(WP_AHVE_SHA512)
+#ifdef WP_HAVE_SHA384
+    if (err == 0) {
+        /* Use SHA-384 for MD and MGF1 MD. */
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha384(),
+                                      EVP_sha384(), 0) == 1;
+    }
+#endif
+#ifdef WP_HAVE_SHA512
+    if (err == 0) {
+        /* Use SHA-512 for MD and MGF1 MD. */
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha512(),
+                                      EVP_sha512(), 0) == 1;
+    }
+#endif
+#if defined(WP_HAVE_SHA384) && defined(WP_HAVE_SHA512)
     if (err == 0) {
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha384(),
-                                       EVP_sha512()) == 1;
+                                      EVP_sha512(), 0) == 1;
     }
 #endif
 
     return err;
 }
 
+int test_rsa_pss_salt(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    if (err == 0) {
+        PRINT_MSG("Salt length = 0 (no salt)");
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
+                EVP_sha256(), 0) == 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Salt length = maximum");
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
+                EVP_sha256(), RSA_PSS_SALTLEN_MAX) == 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Salt length = digest length");
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
+                EVP_sha256(), RSA_PSS_SALTLEN_DIGEST) == 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Salt length = auto");
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
+                EVP_sha256(), RSA_PSS_SALTLEN_AUTO) == 1;
+    }
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+    if (err == 0) {
+        PRINT_MSG("Salt length = auto maximum");
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
+                EVP_sha256(), RSA_PSS_SALTLEN_AUTO_DIGEST_MAX) == 1;
+    }
+#endif
+
+    return err;
+}
+
+static int test_rsa_pss_restrict_params(OSSL_LIB_CTX *libCtx)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    EVP_PKEY_CTX *pkeyCtx = NULL;
+    EVP_MD_CTX *mdCtx = NULL;
+
+    /* Restrict RSA-PSS to: SHA-512 for MD and MGF1, and a salt length of
+     * 32 bytes*/
+
+    pkeyCtx = EVP_PKEY_CTX_new_from_name(libCtx, "RSA-PSS", NULL);
+    if (pkeyCtx == NULL) {
+        PRINT_ERR_MSG("Failed to create RSA-PSS key context");
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(pkeyCtx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_keygen_bits(pkeyCtx, 2048) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_md(pkeyCtx, EVP_sha512()) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_mgf1_md(pkeyCtx,
+                EVP_sha512()) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_saltlen(pkeyCtx, 32) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(pkeyCtx, &pkey) <= 0;
+    }
+    if (err == 0) {
+        err = (mdCtx = EVP_MD_CTX_new()) == NULL;
+    }
+    EVP_PKEY_CTX_free(pkeyCtx);
+    pkeyCtx = NULL;
+
+    /* md should accept being set to sha512 but not sha256 */
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, &pkeyCtx, "SHA256", libCtx, NULL, pkey,
+            NULL) != 0;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, &pkeyCtx, "SHA512", libCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("MD restriction verified");
+    }
+
+    /* mgf1 should accept being set to sha512 but not sha256 */
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_mgf1_md(pkeyCtx, EVP_sha512()) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_mgf1_md(pkeyCtx, EVP_sha256()) > 0;
+    }
+    if (err == 0) {
+        PRINT_MSG("MGF1 restriction verified");
+    }
+
+    /* saltlen should accept being set to maximum but not 0 */
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx,
+                RSA_PSS_SALTLEN_MAX) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_saltlen(pkeyCtx, 0) > 0;
+    }
+    if (err == 0) {
+        PRINT_MSG("Saltlen restriction verified");
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    EVP_PKEY_free(pkey);
+    mdCtx = NULL;
+    pkey = NULL;
+
+    /* Test if salt length restricts digest */
+
+    pkeyCtx = EVP_PKEY_CTX_new_from_name(libCtx, "RSA-PSS", NULL);
+    if (pkeyCtx == NULL) {
+        PRINT_ERR_MSG("Failed to create RSA-PSS key context");
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(pkeyCtx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_keygen_bits(pkeyCtx, 2048) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_md(pkeyCtx, EVP_sha256()) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_saltlen(pkeyCtx, 32) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(pkeyCtx, &pkey) <= 0;
+    }
+    if (err == 0) {
+        err = (mdCtx = EVP_MD_CTX_new()) == NULL;
+    }
+    EVP_PKEY_CTX_free(pkeyCtx);
+    pkeyCtx = NULL;
+
+    /* md should accept being set to sha256 but not sha512 */
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, &pkeyCtx, "SHA512", libCtx, NULL, pkey,
+            NULL) != 0;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, &pkeyCtx, "SHA256", libCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Restrictions affect all parameters");
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
+int test_rsa_pss_restrictions(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("Test OpenSSL");
+    err = test_rsa_pss_restrict_params(osslLibCtx) == 1;
+    if (err == 0) {
+        PRINT_MSG("Test WolfProvider");
+        err = test_rsa_pss_restrict_params(wpLibCtx) == 1;
+    }
+
+    return err;
+}
+
 int test_rsa_sign_verify_x931(void *data)
 {
-
     int err = 0;
 
     (void)data;
 
 #ifndef HAVE_FIPS
-    /* Use SHA-1 (default) for MD and MGF1 MD. */
-    err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha1(), NULL) == 1;
+    /* Use SHA-1 for MD and MGF1 MD. */
+    err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha1(),
+            EVP_sha1(), 0) == 1;
 #endif
 #ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD. */
         err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha256(),
-                                       NULL) == 1;
+                EVP_sha256(), 0) == 1;
     }
 #endif
 #ifdef WP_HAVE_SHA384
     if (err == 0) {
         /* Use SHA-384 for MD. */
         err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha384(),
-                                       NULL) == 1;
+                EVP_sha384(), 0) == 1;
     }
 #endif
 #ifdef WP_HAVE_SHA512
     if (err == 0) {
         /* Use SHA-512 for MD. */
         err = test_rsa_sign_verify_pad(RSA_X931_PADDING, EVP_sha512(),
-                                       NULL) == 1;
+                EVP_sha512(), 0) == 1;
     }
 #endif
 
@@ -823,9 +1027,9 @@ int test_rsa_enc_dec_oaep(void *data)
 
     (void)data;
 
-    /* Use SHA-1 (default) for MD and MGF1 MD. */
+    /* Use SHA-1 for MD and MGF1 MD. */
     err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
-                           RSA_PKCS1_OAEP_PADDING, NULL, NULL) == 1;
+                           RSA_PKCS1_OAEP_PADDING, EVP_sha1(), EVP_sha1()) == 1;
 #ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD and MGF1 MD. */
@@ -1182,7 +1386,7 @@ int test_rsa_fromdata(void* data)
         const char *foo = "some string";
         size_t foo_l = strlen(foo);
         const char bar[] = "some other string";
-        
+
         /* Permutations of the params field to test */
         OSSL_PARAM params_none[] = {
             OSSL_PARAM_END

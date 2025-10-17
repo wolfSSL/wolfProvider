@@ -415,8 +415,12 @@ static int wp_rsagen_check_key_size(wp_RsaGenCtx* rsagen)
  */
 void wp_rsa_get_pss_mds(wp_Rsa* rsa, char** mdName, char** mgfMdName)
 {
-    *mdName = rsa->pssParams.mdName;
-    *mgfMdName = rsa->pssParams.mgfMdName;
+    if (mdName != NULL) {
+        *mdName = rsa->pssParams.mdName;
+    }
+    if (mgfMdName != NULL) {
+        *mgfMdName = rsa->pssParams.mgfMdName;
+    }
 }
 
 /**
