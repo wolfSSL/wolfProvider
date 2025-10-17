@@ -944,9 +944,7 @@ static int test_pkey_verify_ecc(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx,
 int test_ecdsa_p192_pkey(void *data)
 {
     int err;
-#if !defined(HAVE_FIPS) && !defined(HAVE_FIPS_VERSION)
     int res;
-#endif
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[64];
     size_t ecdsaSigLen;
@@ -960,36 +958,6 @@ int test_ecdsa_p192_pkey(void *data)
         pkey = d2i_PrivateKey(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_192));
         err = pkey == NULL;
     }
-#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    /* In FIPS mode, P-192 operations are not allowed, so we expect all operations to fail */
-    if (err == 0) {
-        PRINT_MSG("Sign with OpenSSL");
-        ecdsaSigLen = sizeof(ecdsaSig);
-        err = test_pkey_sign_ecc(pkey, osslLibCtx, buf, sizeof(buf), ecdsaSig,
-                                 &ecdsaSigLen);
-        /* OpenSSL should also reject P-192 in FIPS mode */
-        err = err != 1;
-        if (err == 0) {
-            PRINT_MSG("OpenSSL sign failed, expected (P-192 not allowed w/ FIPS)");
-        }
-        else {
-            PRINT_MSG("OpenSSL sign succeeded, unexpected (P-192 not allowed w/ FIPS)");
-        }
-    }
-    if (err == 0) {
-        PRINT_MSG("Sign with wolfprovider");
-        ecdsaSigLen = sizeof(ecdsaSig);
-        err = test_pkey_sign_ecc(pkey, wpLibCtx, buf, sizeof(buf), ecdsaSig,
-                                 &ecdsaSigLen);
-        err = err != 1;
-        if (err == 0) {
-            PRINT_MSG("ECDSA failed, expected (P-192 not allowed w/ FIPS)");
-        }
-        else {
-            PRINT_MSG("ECDSA succeeded, unexpected (P-192 not allowed w/ FIPS)");
-        }
-    }
-#else
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
         ecdsaSigLen = sizeof(ecdsaSig);
@@ -1014,6 +982,17 @@ int test_ecdsa_p192_pkey(void *data)
         ecdsaSigLen = sizeof(ecdsaSig);
         err = test_pkey_sign_ecc(pkey, wpLibCtx, buf, sizeof(buf), ecdsaSig,
                                  &ecdsaSigLen);
+#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+        err = err != 1;
+        if (err == 0) {
+            PRINT_MSG("ECDSA failed, expected (P-192 not allowed w/ FIPS)");
+        }
+        else {
+            PRINT_MSG("ECDSA succeeded, unexpected (P-192 not allowed w/ "
+                "FIPS)");
+        }
+    }
+#else
     }
     if (err == 0) {
         PRINT_MSG("Verify with OpenSSL");
@@ -1252,9 +1231,7 @@ int test_ecdsa_p521_pkey(void *data)
 int test_ecdsa_p192(void *data)
 {
     int err;
-#if !defined(HAVE_FIPS) && !defined(HAVE_FIPS_VERSION)
     int res;
-#endif
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[64];
     size_t ecdsaSigLen;
@@ -1273,37 +1250,6 @@ int test_ecdsa_p192(void *data)
         pkey = d2i_PrivateKey(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_192));
         err = pkey == NULL;
     }
-#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
-    /* In FIPS mode, P-192 operations are not allowed, so we expect all operations to fail */
-    if (err == 0) {
-        PRINT_MSG("Sign with OpenSSL");
-        ecdsaSigLen = sizeof(ecdsaSig);
-        err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), md,
-                              ecdsaSig, &ecdsaSigLen, 0);
-        /* OpenSSL should also reject P-192 in FIPS mode */
-        err = err != 1;
-        if (err == 0) {
-            PRINT_MSG("OpenSSL sign failed, expected (P-192 not allowed w/ FIPS)");
-        }
-        else {
-            PRINT_MSG("OpenSSL sign succeeded, unexpected (P-192 not allowed w/ FIPS)");
-        }
-    }
-    if (err == 0) {
-        PRINT_MSG("Sign with wolfprovider");
-        ecdsaSigLen = sizeof(ecdsaSig);
-        err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), md,
-                              ecdsaSig, &ecdsaSigLen, 0);
-        err = err != 1;
-        if (err == 0) {
-            PRINT_MSG("ECDSA failed, expected (P-192 not allowed w/ FIPS)");
-        }
-        else {
-            PRINT_MSG("ECDSA succeeded, unexpected (P-192 not allowed w/ "
-                "FIPS)");
-        }
-    }
-#else
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
         ecdsaSigLen = sizeof(ecdsaSig);
@@ -1329,6 +1275,17 @@ int test_ecdsa_p192(void *data)
         ecdsaSigLen = sizeof(ecdsaSig);
         err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), md,
                               ecdsaSig, &ecdsaSigLen, 0);
+#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+        err = err != 1;
+        if (err == 0) {
+            PRINT_MSG("ECDSA failed, expected (P-192 not allowed w/ FIPS)");
+        }
+        else {
+            PRINT_MSG("ECDSA succeeded, unexpected (P-192 not allowed w/ "
+                "FIPS)");
+        }
+    }
+#else
     }
     if (err == 0) {
         PRINT_MSG("Verify with OpenSSL");
