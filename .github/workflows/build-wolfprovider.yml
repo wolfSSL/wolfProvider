@@ -49,7 +49,8 @@ jobs:
             automake \
             ca-certificates \
             openssl \
-            libtool
+            libtool \
+            bc
 
       # Download pre-built packages from debs branch
       - name: Checkout debs branch
@@ -149,13 +150,9 @@ jobs:
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
-      - name: Build wolfProvider
+      - name: Install wolfProvider
         run: |
-          echo "Building ${{ inputs.fips_ref }} wolfProvider..."
-          WOLFSSL_TAG=${{ inputs.wolfssl_ref }} OPENSSL_TAG=${{ inputs.openssl_ref }} \
-            yes "Y" | $GITHUB_WORKSPACE/scripts/build-wolfprovider.sh --debian \
-            ${{ inputs.fips_ref == 'FIPS' && '--enable-fips' || '' }} \
-            ${{ inputs.replace_default && '--replace-default' || '' }}
+          $GITHUB_WORKSPACE/debian/install-wolfprov.sh ${{ env.WOLFPROV_PACKAGES_PATH }}
 
       - name: Setup packages directory
         run: |
