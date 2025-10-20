@@ -596,6 +596,9 @@ int test_rsa_sign_sha1(void *data)
         err = RAND_bytes(buf, sizeof(buf)) == 0;
     }
 
+#ifndef REPLACE_DEFAULT
+    /* With replace default, OpenSSL inherits wolfProvider, so we can't test
+     * cross-provider behavior with SHA-1. */
     if (err == 0) {
         PRINT_MSG("Sign with OpenSSL");
         err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), "SHA-1",
@@ -612,6 +615,7 @@ int test_rsa_sign_sha1(void *data)
         err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), "SHA-1",
                               NULL, rsaSig, &rsaSigLen, 0, 0) != 1;
     }
+#endif /* REPLACE_DEFAULT */
     EVP_PKEY_free(pkey);
 
     if (rsaSig)
@@ -1256,6 +1260,7 @@ int test_rsa_pkey_invalid_key_size(void *data) {
     }
 
 #if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+#ifndef REPLACE_DEFAULT
     if (err == 0) {
         PRINT_MSG("Check that signing with OpenSSL and verifying with "
             "wolfProvider using a 1024-bit key works.");
@@ -1266,6 +1271,7 @@ int test_rsa_pkey_invalid_key_size(void *data) {
         err = test_pkey_verify(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
             rsaSigLen, 0, NULL, NULL);
     }
+#endif
 #endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
 
     EVP_PKEY_free(pkey);

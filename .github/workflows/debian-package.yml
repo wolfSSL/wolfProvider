@@ -18,12 +18,13 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
-      matrix: 
-        # Test 5.8.2 since our .deb is based on that version
+      matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   libwolfprov-standalone:
@@ -40,7 +41,8 @@ jobs:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
-        replace_default: [ false ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -52,35 +54,41 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp/packages
 
-      - name: Install package without custom openssl
+      - name: Setup package directories
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
+          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
+          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+          apt install --reinstall -y \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
-          apt-get update && \
-            apt install --reinstall -y openssl libssl3
-
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Test OpenSSL provider functionality
         run: |
@@ -178,7 +186,6 @@ jobs:
 
           echo "Package uninstallation and cleanup verification successful"
 
-
   libwolfprov-replace-default:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
@@ -193,6 +200,7 @@ jobs:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -200,36 +208,35 @@ jobs:
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
       WOLFPROV_CONF_FILE: /etc/ssl/openssl.cnf.d/wolfprovider.conf
     steps:
-      - name: Checkout wolfProvider
-        uses: actions/checkout@v4
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          fetch-depth: 1
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp/packages
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
-        with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+      - name: Setup package directories
+        run: |
+          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
+          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
+          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+          apt install --reinstall -y \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Show OpenSSL version
         run: |
@@ -240,7 +247,7 @@ jobs:
         run: |
           echo "Testing OpenSSL providers before wolfprov installation..."
           echo "Expected: This should work normally with default providers"
-          
+
           # Test openssl list -providers
           if openssl list -providers; then
             echo "SUCCESS: openssl list -providers works before wolfprov installation"
@@ -248,7 +255,7 @@ jobs:
             echo "FAILURE: openssl list -providers failed before wolfprov installation"
             exit 1
           fi
-          
+
           echo "Provider list before wolfprov installation:"
           openssl list -providers
 
@@ -262,12 +269,14 @@ jobs:
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Verify wolfprov configuration
         run: |
           echo "Verifying wolfprov configuration..."
-          
+
           # Check if configuration file exists
           if [ -f $WOLFPROV_CONF_FILE ]; then
             echo "SUCCESS: wolfprovider.conf exists"
@@ -275,7 +284,7 @@ jobs:
           else
             echo "WARNING: wolfprovider.conf not found"
           fi
-          
+
           # Check if library file exists
           WOLFPROV_OBJS=$(find /usr/lib -name "libwolfprov.so*")
           if [ -n "$WOLFPROV_OBJS" ]; then
@@ -315,10 +324,9 @@ jobs:
       - name: Cleanup test environment
         run: |
           echo "Cleaning up test environment..."
-          
+
           # Uninstall test packages
           apt-get remove --purge -y libwolfprov || true
           apt-get autoremove -y
-          
-          echo "Cleanup completed"
 
+          echo "Cleanup completed"
