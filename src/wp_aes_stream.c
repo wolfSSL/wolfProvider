@@ -331,7 +331,11 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
         /* TODO: don't reach in under the covers.
          * Setting the key will reset this.
          */
+#if defined(WOLFSSL_AES_COUNTER) || defined(WOLFSSL_AES_CFB) || \
+    defined(WOLFSSL_AES_OFB) || defined(WOLFSSL_AES_XTS) || \
+    defined(WOLFSSL_AES_CTS)
         ctx->aes.left = 0;
+#endif
     }
 
     if (ok) {

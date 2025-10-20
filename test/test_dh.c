@@ -555,10 +555,12 @@ static int test_dh_krb5_keygen_ex(OSSL_LIB_CTX *libCtx)
     OSSL_DECODER_CTX *dctx = NULL;
     const unsigned char *inptr = dh_2048;
     size_t inlen = sizeof(dh_2048);
+#ifdef WOLFSSL_DH_EXTRA
     unsigned char *spki = NULL;
     size_t spki_len = 0;
     unsigned char *der = NULL;
     size_t der_len;
+#endif /* WOLFSSL_DH_EXTRA */
 
     PRINT_MSG("Testing DH key generation with krb5 parameters");
 
@@ -584,6 +586,7 @@ static int test_dh_krb5_keygen_ex(OSSL_LIB_CTX *libCtx)
         err = EVP_PKEY_keygen(ctx, &key) != 1;
     }
 
+#ifdef WOLFSSL_DH_EXTRA
     if (err == 0) {
         /* Get the size of the encoded public key */
         err = i2d_PUBKEY(key, NULL) <= 0;
@@ -618,6 +621,7 @@ static int test_dh_krb5_keygen_ex(OSSL_LIB_CTX *libCtx)
     if (spki) {
         OPENSSL_free(spki);
     }
+#endif /* WOLFSSL_DH_EXTRA */
     EVP_PKEY_free(key);
     EVP_PKEY_free(params);
     EVP_PKEY_CTX_free(ctx);

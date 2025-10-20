@@ -127,19 +127,19 @@
 #ifdef HAVE_ECC
     #define WP_HAVE_ECC
     #ifndef NO_ECC_SECP
-        #if defined(HAVE_ECC192) || defined(HAVE_ALL_CURVES)
+        #if (defined(HAVE_ECC192) || defined(HAVE_ALL_CURVES)) && ECC_MIN_KEY_SZ <= 192
             #define WP_HAVE_EC_P192
         #endif
-        #if defined(HAVE_ECC224) || defined(HAVE_ALL_CURVES)
+        #if (defined(HAVE_ECC224) || defined(HAVE_ALL_CURVES)) && ECC_MIN_KEY_SZ <= 224
             #define WP_HAVE_EC_P224
         #endif
-        #if defined(HAVE_ECC256) || defined(HAVE_ALL_CURVES)
+        #if (!defined(NO_ECC256)  || defined(HAVE_ALL_CURVES)) && ECC_MIN_KEY_SZ <= 256
             #define WP_HAVE_EC_P256
         #endif
-        #if defined(HAVE_ECC384) || defined(HAVE_ALL_CURVES)
+        #if (defined(HAVE_ECC384) || defined(HAVE_ALL_CURVES)) && ECC_MIN_KEY_SZ <= 384
             #define WP_HAVE_EC_P384
         #endif
-        #if defined(HAVE_ECC521) || defined(HAVE_ALL_CURVES)
+        #if (defined(HAVE_ECC521) || defined(HAVE_ALL_CURVES)) && ECC_MIN_KEY_SZ <= 521
             #define WP_HAVE_EC_P521
         #endif
     #endif

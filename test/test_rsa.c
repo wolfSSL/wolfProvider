@@ -20,6 +20,7 @@
 
 #include "unit.h"
 #include <wolfprovider/wp_fips.h>
+#include <wolfssl/wolfcrypt/asn.h>
 
 #include <openssl/store.h>
 #include <openssl/core_names.h>
@@ -1063,7 +1064,8 @@ int test_rsa_pkey_keygen(void *data)
     BIGNUM *eCmd = NULL;
     BIGNUM *n = NULL;
     BIGNUM *eKey = NULL;
-#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION) || \
+    (defined(RSA_MIN_SIZE) && RSA_MIN_SIZE >= 2048)
     /* Generating a 3072-bit key is slow, so only do it if we have to because
      * we're using wolfCrypt FIPS. Can't do 2048 because that's the default. */
     const int newKeySize = 3072;
@@ -1096,7 +1098,7 @@ int test_rsa_pkey_keygen(void *data)
         err = BN_set_word(eCmd, 3) != 1;
     }
     if (err == 0) {
-         PRINT_MSG("Change the public exponent w/ ctrl command");
+        PRINT_MSG("Change the public exponent w/ ctrl command");
         err = EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN,
                                 EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP, 0, eCmd) <= 0;
     }
