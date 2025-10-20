@@ -103,6 +103,18 @@ jobs:
           ref: ${{ matrix.libnice_ref }}
           path: libnice
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
+            cd libnice
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libnice/libnice-0.1.21-wolfprov.patch
+          fi
+
       - name: Build libnice
         working-directory: libnice
         run: |
