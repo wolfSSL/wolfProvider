@@ -183,7 +183,7 @@ main() {
         openssl_install
     fi
 
-    if [ -n "$output_dir" ]; then
+    if [ -n "$output_dir" ] && [ "$output_dir" != ".." ]; then
         if [ ! -d "$output_dir" ]; then
             printf "Creating output directory: $output_dir\n"
             mkdir -p "$output_dir"
