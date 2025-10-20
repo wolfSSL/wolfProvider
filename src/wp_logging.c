@@ -49,6 +49,20 @@ static int providerLogLevel = WP_LOG_LEVEL_ALL;
  * in wolfProv_LogComponents. Default components include all. */
 static int providerLogComponents = WP_LOG_COMPONENTS_ALL;
 
+/* Callback functions to parse environment variables WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS */
+static void wolfProv_LogLevelToMask(const char* level, size_t len, void* ctx);
+static void wolfProv_LogComponentToMask(const char* level, size_t len, void* ctx);
+
+/* Callback receives a pointer to the token (valid only during this call),
+ * the token length (excluding the trailing '\0'), and an opaque context.
+ */
+typedef void (*token_cb)(const char *token, size_t len, void *ctx);
+/* Parse environment variables WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS 
+ * in the form (WP_LOG_ERROR | WP_LOG_LEAVE). 
+ * See wp_logging.h for valid values */
+static int wolfProv_TokenParse(const char *input, const char *delims,
+    token_cb cb, void* ctx);
+
 #endif /* WOLFPROV_DEBUG */
 
 /**
@@ -96,6 +110,46 @@ void wolfProv_Debugging_OFF(void)
 #ifdef WOLFPROV_DEBUG
     loggingEnabled = 0;
 #endif
+}
+
+int wolfProv_LogInit(void)
+{
+#ifdef WOLFPROV_DEBUG
+#if defined(XGETENV) && !defined(NO_GETENV)
+    uint32_t level = 0;
+    uint32_t components = 0;
+    char* logLevelStr = XGETENV("WOLFPROV_LOG_LEVEL");
+    char* logComponentsStr = XGETENV("WOLFPROV_LOG_COMPONENTS");
+
+    if (logLevelStr != NULL) {
+        if (wolfProv_TokenParse(logLevelStr, "()| \t", wolfProv_LogLevelToMask, 
+                &level) == 0) {
+            WOLFPROV_MSG(WP_LOG_PROVIDER,
+                "Setting WOLFPROV_LOG_LEVEL to 0x%X", level);
+            providerLogLevel = level;
+        }
+        else {
+            WOLFPROV_MSG(WP_LOG_PROVIDER,
+                "WOLFPROV_LOG_LEVEL environment variable too long or missing, "
+                    "ignoring it");
+        }
+    }
+    if (logComponentsStr != NULL) {
+        if (wolfProv_TokenParse(logComponentsStr, "()| \t", 
+                wolfProv_LogComponentToMask, &components) == 0) {
+            WOLFPROV_MSG(WP_LOG_PROVIDER,
+                "Setting WOLFPROV_LOG_COMPONENTS to 0x%X", components);
+            providerLogComponents = components;
+        }
+        else {
+            WOLFPROV_MSG(WP_LOG_PROVIDER,
+                "WOLFPROV_LOG_COMPONENTS environment variable too long or "
+                    "missing, ignoring it");
+        }
+    }
+#endif
+#endif
+    return 0;
 }
 
 /**
@@ -182,7 +236,8 @@ static void wolfprovider_log(const int logLevel, const int component,
             if (logFileHandle == NULL) {
                 logFileHandle = XFOPEN(WOLFPROV_LOG_FILE, "a");
                 if (logFileHandle) {
-                    XFPRINTF(stderr, "wolfProvider: Using log file %s\n", WOLFPROV_LOG_FILE);
+                    XFPRINTF(stderr, "wolfProvider: Using log file %s\n", 
+                        WOLFPROV_LOG_FILE);
                     fflush(stderr);
                 }
                 else {
@@ -533,6 +588,143 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
         buffer += WOLFPROV_LINE_LEN;
         buflen -= WOLFPROV_LINE_LEN;
     }
+}
+
+static void wolfProv_LogLevelToMask(const char* level, size_t len, void* ctx) {
+    /* Map strings to enum values. 
+     * Ensure this table is kept in sync with the enum in wp_logging.h */
+    static const struct {
+        const char* name;
+        size_t      len;
+        uint32_t    mask;
+    } log_levels[] = {
+        { "WP_LOG_ERROR",     XSTRLEN("WP_LOG_ERROR"),  WP_LOG_ERROR   },
+        { "WP_LOG_ENTER",     XSTRLEN("WP_LOG_ENTER"),  WP_LOG_ENTER   },
+        { "WP_LOG_LEAVE",     XSTRLEN("WP_LOG_LEAVE"),  WP_LOG_LEAVE   },
+        { "WP_LOG_INFO",      XSTRLEN("WP_LOG_INFO"),   WP_LOG_INFO    },
+        { "WP_LOG_VERBOSE",   XSTRLEN("WP_LOG_VERBOSE"),WP_LOG_VERBOSE },
+        { "WP_LOG_DEBUG",     XSTRLEN("WP_LOG_DEBUG"),  WP_LOG_DEBUG   },
+        { "WP_LOG_TRACE",     XSTRLEN("WP_LOG_TRACE"),  WP_LOG_TRACE   },
+        { "WP_LOG_LEVEL_DEFAULT",
+                              XSTRLEN("WP_LOG_LEVEL_DEFAULT"),
+                                                    WP_LOG_LEVEL_DEFAULT },
+        { "WP_LOG_LEVEL_ALL",
+                              XSTRLEN("WP_LOG_LEVEL_ALL"),
+                                                    WP_LOG_LEVEL_ALL },
+    };
+    static const size_t num_levels = sizeof(log_levels) / sizeof(log_levels[0]);
+    uint32_t *mask = (uint32_t *)ctx;
+
+    for (size_t i = 0; i < num_levels; ++i) {
+        if (log_levels[i].len == len &&
+            XSTRNCMP(level, log_levels[i].name, len) == 0) {
+            *mask |= log_levels[i].mask;
+            break;
+        }
+    }
+}
+
+static void wolfProv_LogComponentToMask(const char* level, size_t len, void* ctx) {
+    /* Map strings to enum values. 
+     * Ensure this table is kept in sync with the enum in wp_logging.h */
+    static const struct {
+        const char* name;
+        size_t      len;
+        uint32_t    mask;
+    } log_components[] = {
+        { "WP_LOG_RNG",         XSTRLEN("WP_LOG_RNG"),        WP_LOG_RNG      },
+        { "WP_LOG_DIGEST",      XSTRLEN("WP_LOG_DIGEST"),     WP_LOG_DIGEST   },
+        { "WP_LOG_MAC",         XSTRLEN("WP_LOG_MAC"),        WP_LOG_MAC      },
+        { "WP_LOG_CIPHER",      XSTRLEN("WP_LOG_CIPHER"),     WP_LOG_CIPHER   },
+        { "WP_LOG_PK",          XSTRLEN("WP_LOG_PK"),         WP_LOG_PK       },
+        { "WP_LOG_KE",          XSTRLEN("WP_LOG_KE"),         WP_LOG_KE       },
+        { "WP_LOG_KDF",         XSTRLEN("WP_LOG_KDF"),        WP_LOG_KDF      },
+        { "WP_LOG_PROVIDER",    XSTRLEN("WP_LOG_PROVIDER"),   WP_LOG_PROVIDER },
+        { "WP_LOG_RSA",         XSTRLEN("WP_LOG_RSA"),        WP_LOG_RSA      },
+        { "WP_LOG_ECC",         XSTRLEN("WP_LOG_ECC"),        WP_LOG_ECC      },
+        { "WP_LOG_DH",          XSTRLEN("WP_LOG_DH"),         WP_LOG_DH       },
+        { "WP_LOG_AES",         XSTRLEN("WP_LOG_AES"),        WP_LOG_AES      },
+        { "WP_LOG_DES",         XSTRLEN("WP_LOG_DES"),        WP_LOG_DES      },
+        { "WP_LOG_SHA",         XSTRLEN("WP_LOG_SHA"),        WP_LOG_SHA      },
+        { "WP_LOG_MD5",         XSTRLEN("WP_LOG_MD5"),        WP_LOG_MD5      },
+        { "WP_LOG_HMAC",        XSTRLEN("WP_LOG_HMAC"),       WP_LOG_HMAC     },
+        { "WP_LOG_CMAC",        XSTRLEN("WP_LOG_CMAC"),       WP_LOG_CMAC     },
+        { "WP_LOG_HKDF",        XSTRLEN("WP_LOG_HKDF"),       WP_LOG_HKDF     },
+        { "WP_LOG_PBKDF2",      XSTRLEN("WP_LOG_PBKDF2"),     WP_LOG_PBKDF2   },
+        { "WP_LOG_KRB5KDF",     XSTRLEN("WP_LOG_KRB5KDF"),    WP_LOG_KRB5KDF  },
+        { "WP_LOG_DRBG",        XSTRLEN("WP_LOG_DRBG"),       WP_LOG_DRBG     },
+        { "WP_LOG_ECDSA",       XSTRLEN("WP_LOG_ECDSA"),      WP_LOG_ECDSA    },
+        { "WP_LOG_ECDH",        XSTRLEN("WP_LOG_ECDH"),       WP_LOG_ECDH     },
+        { "WP_LOG_ED25519",     XSTRLEN("WP_LOG_ED25519"),    WP_LOG_ED25519  },
+        { "WP_LOG_ED448",       XSTRLEN("WP_LOG_ED448"),      WP_LOG_ED448    },
+        { "WP_LOG_X25519",      XSTRLEN("WP_LOG_X25519"),     WP_LOG_X25519   },
+        { "WP_LOG_X448",        XSTRLEN("WP_LOG_X448"),       WP_LOG_X448     },
+        { "WP_LOG_QUERY",       XSTRLEN("WP_LOG_QUERY"),      WP_LOG_QUERY    },
+        { "WP_LOG_TLS1_PRF",     XSTRLEN("WP_LOG_TLS1_PRF"),   WP_LOG_TLS1_PRF },
+        { "WP_LOG_COMPONENTS_ALL",
+                                XSTRLEN("WP_LOG_COMPONENTS_ALL"),
+                                                        WP_LOG_COMPONENTS_ALL },
+        { "WP_LOG_COMPONENTS_DEFAULT",
+                                XSTRLEN("WP_LOG_COMPONENTS_DEFAULT"),
+                                                        WP_LOG_COMPONENTS_DEFAULT },
+    };
+    static const size_t num_components =
+        sizeof(log_components) / sizeof(log_components[0]);
+    uint32_t *mask = (uint32_t *)ctx;
+
+    for (size_t i = 0; i < num_components; ++i) {
+        if (log_components[i].len == len &&
+            XSTRNCMP(level, log_components[i].name, len) == 0) {
+            *mask |= log_components[i].mask;
+            break;
+        }
+    }
+}
+
+/* Returns number of tokens passed to cb,
+ *  0 if input is NULL or empty,
+ * -1 on allocation failure.
+ */
+static int wolfProv_TokenParse(const char *input,
+                      const char *delims,   /* e.g. "()| \t" */
+                      token_cb cb,
+                      void *ctx)  /* opaque context passed to cb */
+{
+    if (!cb || !delims) return -1;
+    if (!input || !*input) return 0;
+
+    char token[256];
+    size_t n = XSTRLEN(input);
+
+    if (n < sizeof(token)) {
+        /* Copy the input string to a writable buffer, including the trailing '\0' */
+        XSTRNCPY(token, input, n + 1);
+    }
+    else {
+        return -1;
+    }
+
+    /* Overwrite delimiters with '\0' using a simple nested loop. */
+    for (size_t i = 0; i < n; ++i) {
+        for (const char *d = delims; *d; ++d) {
+            if (token[i] == *d) {
+                token[i] = '\0';
+                break;
+            }
+        }
+    }
+
+    /* Walk tokens: skip runs of NULs, emit non-empty spans. */
+    for (size_t i = 0; i <= n; i++) {   
+        if (token[i] == '\0') {
+            continue;  /* skip empties */
+        }
+        size_t len = strlen(&token[i]);
+        cb(&token[i], len, ctx);
+        i += len; /* hop past this token */
+    }
+
+    return 0;
 }
 
 #endif /* WOLFPROV_DEBUG */
