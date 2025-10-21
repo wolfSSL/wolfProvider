@@ -148,6 +148,8 @@ fi
 if [ -n "$build_debian" ]; then
     set -e
 
+    DEB_OUTPUT_DIR=$(realpath '..')
+
     echo "Building Debian package..."
     WOLFSSL_OPTS=
     WOLFPROV_OPTS=
@@ -161,12 +163,42 @@ if [ -n "$build_debian" ]; then
         WOLFSSL_OPTS+=" --fips"
         WOLFPROV_OPTS+=" --fips"
     fi
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        OPENSSL_OPTS+=" --replace-default"
+    fi
 
-    # Must install wolfSSL locally since it is needed to build wolfProvider
-    debian/install-wolfssl.sh $WOLFSSL_OPTS -r ..
-    # Always build replace-default mode for openssl. Use the standard one from apt.
-    debian/install-openssl.sh $OPENSSL_OPTS --replace-default ..
-    debian/install-wolfprov.sh $WOLFPROV_OPTS --no-install
+    # wolfSSL and OpenSSL are independent and must be built first
+    debian/install-wolfssl.sh $WOLFSSL_OPTS --no-install -r $DEB_OUTPUT_DIR
+    debian/install-openssl.sh $OPENSSL_OPTS --no-install $DEB_OUTPUT_DIR
+
+    # wolfProvider depends on wolfSSL and OpenSSL headers and libraries.
+    # We don't want to install them locally, so we unpack them to 
+    # temp dirs and reference those in the build.
+
+    # Unpack the wolfssl packages to a temporary directory
+    wolfssl_dev_dir=$(mktemp -d)
+    dpkg -x $DEB_OUTPUT_DIR/libwolfssl_*.deb $wolfssl_dev_dir
+    dpkg -x $DEB_OUTPUT_DIR/libwolfssl-dev_*.deb $wolfssl_dev_dir
+    # Unpack the libssl-dev package to a temporary directory
+    openssl_dev_dir=$(mktemp -d)
+    dpkg -x $DEB_OUTPUT_DIR/openssl_*.deb $openssl_dev_dir
+    dpkg -x $DEB_OUTPUT_DIR/libssl-dev_*.deb $openssl_dev_dir
+
+    export DEB_HOST_MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+    printf "wolfssl_dev_dir: %s\n" $wolfssl_dev_dir
+    printf "wolfssl_dev_dir libs: %s\n" $(ls $wolfssl_dev_dir/usr/lib/$DEB_HOST_MULTIARCH)
+    printf "openssl_dev_dir: %s\n" $openssl_dev_dir
+    printf "openssl_dev_dir libs: %s\n" $(ls $openssl_dev_dir/usr/lib/$DEB_HOST_MULTIARCH)
+
+    export DEB_CFLAGS_APPEND="-I$wolfssl_dev_dir/usr/include -I$openssl_dev_dir/usr/include"
+    export DEB_CPPFLAGS_APPEND="-I$wolfssl_dev_dir/usr/include -I$openssl_dev_dir/usr/include"
+    export DEB_CXXFLAGS_APPEND="-I$wolfssl_dev_dir/usr/include -I$openssl_dev_dir/usr/include"
+    export DEB_LDFLAGS_APPEND="-L$wolfssl_dev_dir/usr/lib/$DEB_HOST_MULTIARCH -L$openssl_dev_dir/usr/lib/$DEB_HOST_MULTIARCH"
+    export PKG_CONFIG_LIBDIR=$wolfssl_dev_dir/usr/lib/$DEB_HOST_MULTIARCH/pkgconfig:$openssl_dev_dir/usr/lib/$DEB_HOST_MULTIARCH/pkgconfig
+    debian/install-wolfprov.sh $WOLFPROV_OPTS --no-install $DEB_OUTPUT_DIR
+
+    printf "Debian packages built in: %s\n" $DEB_OUTPUT_DIR
 
     exit 0
 fi

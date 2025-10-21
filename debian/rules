@@ -32,19 +32,35 @@ endif
 
 # Debug build flag
 WOLFPROV_DEBUG?=0
+DEBUG_FLAG=
 ifeq ($(WOLFPROV_DEBUG),1)
   VARIANT           := $(VARIANT)-debug
   VARIANT_DESC      := $(VARIANT_DESC) with debug logs
   VERSION           := $(VERSION)-debug
+  DEBUG_FLAG        := --enable-debug
+endif
+
+ifeq ($(DEB_CFLAGS_APPEND),)
+export PKG_CONFIG_LIBDIR # value comes from outer environment 
+export PKG_CONFIG_DIR := 
+export PKG_CONFIG_PATH :=
 endif
 
 override_dh_auto_configure:
 	./autogen.sh
-ifneq ($(WOLFPROV_DEBUG),0)
-	./configure --enable-debug
-else
-	./configure
-endif
+	@if [ -n "$(DEB_CFLAGS_APPEND)" ]; then \
+		printf "DEB_CFLAGS_APPEND: %s\n" $(DEB_CFLAGS_APPEND); \
+		printf "DEB_CPPFLAGS_APPEND: %s\n" $(DEB_CPPFLAGS_APPEND); \
+		printf "DEB_CXXFLAGS_APPEND: %s\n" $(DEB_CXXFLAGS_APPEND); \
+		printf "DEB_LDFLAGS_APPEND: %s\n" $(DEB_LDFLAGS_APPEND); \
+		@echo "PKG_CONFIG_LIBDIR=$(PKG_CONFIG_LIBDIR)" \
+		# ensure only our .pc dirs are searched: \
+		PKG_CONFIG_DIR= PKG_CONFIG_PATH= \
+		PKG_CONFIG_LIBDIR="$(PKG_CONFIG_LIBDIR)" \
+		dh_auto_configure -- $(DEBUG_FLAG); \
+	else \
+		./configure $(DEBUG_FLAG); \
+	fi
 
 override_dh_auto_build:
 	$(MAKE)
@@ -82,4 +98,23 @@ override_dh_auto_clean:
 	rm -rf test/standalone/tests/.libs
 
 override_dh_auto_test:
-	$(MAKE) test
+	@if [ -n "$(DEB_LDFLAGS_APPEND)" ]; then \
+		# If DEB_LDFLAGS_APPEND is set, it usually means the \
+		# build system is using a custom library path, rather \
+		# than the system path. So let's set up LD_LIBRARY_PATH \
+		# to use it when running `make test`. \
+		echo "Setting up LD_LIBRARY_PATH from DEB_LDFLAGS_APPEND"; \
+		LD_LIBRARY_PATH="$$(echo $(DEB_LDFLAGS_APPEND) | \
+		  grep -oE -- '-L[^ ]+' | sed 's/^-L//' | awk '!seen[$$0]++' | paste -sd: -)" \
+		$(MAKE) test; \
+	else \
+		$(MAKE) test; \
+	fi
+
+override_dh_shlibdeps:
+	@if [ -n "$(DEB_LDFLAGS_APPEND)" ]; then \
+		# Skip shlibdeps for now since we're using a custom library path \
+		: \
+	else \
+		dh_shlibdeps; \
+	fi

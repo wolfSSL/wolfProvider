@@ -171,6 +171,10 @@ main() {
         exit 0
     fi
 
+    if [ -n "output_dir" ]; then
+        output_dir=$(realpath $output_dir)
+    fi
+
     work_dir=$(mktemp -d)
     printf "Working directory: $work_dir\n"
     pushd $work_dir 2>&1 > /dev/null
@@ -183,13 +187,13 @@ main() {
         openssl_install
     fi
 
-    if [ -n "$output_dir" ] && [ "$output_dir" != ".." ]; then
+    if [ -n "$output_dir" ]; then
         if [ ! -d "$output_dir" ]; then
             printf "Creating output directory: $output_dir\n"
             mkdir -p "$output_dir"
         fi
-        cp ../openssl*.deb $output_dir
-        cp ../libssl*.deb $output_dir
+        cp ../openssl*.deb $output_dir || true
+        cp ../libssl*.deb $output_dir || true
     else
         printf "No output directory specified, packages stored in $work_dir\n"
     fi
