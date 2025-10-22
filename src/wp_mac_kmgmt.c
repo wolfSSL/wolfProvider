@@ -95,11 +95,11 @@ int wp_mac_up_ref(wp_Mac* mac)
     int ok = 1;
     int rc;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_up_ref");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_up_ref");
 
     rc = wc_LockMutex(&mac->mutex);
     if (rc < 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_LockMutex", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
         ok = 0;
     }
     if (ok) {
@@ -107,11 +107,11 @@ int wp_mac_up_ref(wp_Mac* mac)
         wc_UnLockMutex(&mac->mutex);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
     mac->refCnt++;
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -140,7 +140,7 @@ int wp_mac_get_private_key(wp_Mac* mac, unsigned char** priv, size_t* privLen)
 {
     int ok = 0;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_get_private_key");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_get_private_key");
 
     if (mac != NULL) {
         *priv = mac->key;
@@ -148,7 +148,7 @@ int wp_mac_get_private_key(wp_Mac* mac, unsigned char** priv, size_t* privLen)
         ok = 1;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -193,7 +193,7 @@ static wp_Mac* wp_mac_new(WOLFPROV_CTX *provCtx, int type)
     #ifndef SINGLE_THREADED
         int rc = wc_InitMutex(&mac->mutex);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMutex", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitMutex", rc);
             OPENSSL_free(mac);
             mac = NULL;
         }
@@ -310,7 +310,7 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_has");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_has");
 
     if (!wolfssl_prov_is_running()) {
        ok = 0;
@@ -322,7 +322,7 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
         ok &= mac->key != NULL;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -339,7 +339,7 @@ static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
 {
    int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_match");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_match");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -351,7 +351,7 @@ static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -369,7 +369,7 @@ static int wp_mac_import(wp_Mac *mac, int selection, const OSSL_PARAM params[])
     int ok = 1;
     const OSSL_PARAM* p;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_import");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_import");
 
     if ((!wolfssl_prov_is_running()) || (mac == NULL)) {
         ok = 0;
@@ -395,7 +395,7 @@ static int wp_mac_import(wp_Mac *mac, int selection, const OSSL_PARAM params[])
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -435,7 +435,7 @@ static int wp_mac_export_priv_key(wp_Mac* mac, OSSL_PARAM* params, int* pIdx,
 {
     int i = *pIdx;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_export_priv_key");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_export_priv_key");
 
     if (mac->keyLen != MAX_SIZE_T) {
         XMEMCPY(data + *idx, mac->key, mac->keyLen);
@@ -452,7 +452,7 @@ static int wp_mac_export_priv_key(wp_Mac* mac, OSSL_PARAM* params, int* pIdx,
     }
 
     *pIdx = i;
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -477,7 +477,7 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
     unsigned char* data = NULL;
     size_t len = 0;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_export");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_export");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -504,7 +504,7 @@ static int wp_mac_export(wp_Mac *mac, int selection, OSSL_CALLBACK *paramCb,
     }
     OPENSSL_clear_free(data, len);
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -556,7 +556,7 @@ static int wp_mac_gen_set_params(wp_MacGenCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_gen_set_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_gen_set_params");
 
     if (!wp_params_get_octet_string(params, OSSL_PKEY_PARAM_PRIV_KEY,
             &ctx->key, &ctx->keyLen, 1)) {
@@ -568,7 +568,7 @@ static int wp_mac_gen_set_params(wp_MacGenCtx* ctx, const OSSL_PARAM params[])
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -647,7 +647,7 @@ static int wp_mac_get_params(wp_Mac* mac, OSSL_PARAM params[])
     int ok = 1;
     OSSL_PARAM* p;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_get_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_get_params");
 
     if (mac->keyLen != MAX_SIZE_T) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
@@ -663,7 +663,7 @@ static int wp_mac_get_params(wp_Mac* mac, OSSL_PARAM params[])
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

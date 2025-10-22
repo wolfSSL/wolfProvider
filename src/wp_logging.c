@@ -40,14 +40,14 @@ static wolfProv_Logging_cb log_function = NULL;
  * wolfProv_Debugging_ON() and wolfProv_Debugging_OFF() */
 static int loggingEnabled = 1;
 
-/* Logging level. Bitmask of logging levels in wolfProv_LogType.
+/* Logging level. Bitmask of logging levels in wolfProv_LogLevels.
  * Default log level includes error, enter/leave, and info. Does not turn on
  * verbose by default. */
 static int providerLogLevel = WP_LOG_LEVEL_ALL;
 
 /* Components which will be logged when debug enabled. Bitmask of components
  * in wolfProv_LogComponents. Default components include all. */
-static int providerLogComponents = WP_LOG_COMPONENTS_ALL;
+static int providerLogComponents = WP_LOG_COMP_ALL;
 
 /* Callback functions to parse environment variables WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS */
 static void wolfProv_LogLevelToMask(const char* level, size_t len, void* ctx);
@@ -58,7 +58,7 @@ static void wolfProv_LogComponentToMask(const char* level, size_t len, void* ctx
  */
 typedef void (*token_cb)(const char *token, size_t len, void *ctx);
 /* Parse environment variables WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS 
- * in the form (WP_LOG_ERROR | WP_LOG_LEAVE). 
+ * in the form (WP_LOG_LEVEL_ERROR | WP_LOG_LEVEL_LEAVE). 
  * See wp_logging.h for valid values */
 static int wolfProv_TokenParse(const char *input, const char *delims,
     token_cb cb, void* ctx);
@@ -124,12 +124,12 @@ int wolfProv_LogInit(void)
     if (logLevelStr != NULL) {
         if (wolfProv_TokenParse(logLevelStr, "()| \t", wolfProv_LogLevelToMask, 
                 &level) == 0) {
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
                 "Setting WOLFPROV_LOG_LEVEL to 0x%X", level);
             providerLogLevel = level;
         }
         else {
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
                 "WOLFPROV_LOG_LEVEL environment variable too long or missing, "
                     "ignoring it");
         }
@@ -137,12 +137,12 @@ int wolfProv_LogInit(void)
     if (logComponentsStr != NULL) {
         if (wolfProv_TokenParse(logComponentsStr, "()| \t", 
                 wolfProv_LogComponentToMask, &components) == 0) {
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
                 "Setting WOLFPROV_LOG_COMPONENTS to 0x%X", components);
             providerLogComponents = components;
         }
         else {
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
                 "WOLFPROV_LOG_COMPONENTS environment variable too long or "
                     "missing, ignoring it");
         }
@@ -156,7 +156,7 @@ int wolfProv_LogInit(void)
  * Set wolfProv logging level.
  * Default logging level for wolfProv is WP_LOG_LEVEL_DEFAULT.
  *
- * @param levelMask [IN] Bitmask of logging levels from wolfProv_LogType
+ * @param levelMask [IN] Bitmask of logging levels from wolfProv_LogLevels
  *                  in wp_logging.h.
  * @return 0 on success, NOT_COMPILED_IN if debugging has not been enabled.
  */
@@ -173,7 +173,7 @@ int wolfProv_SetLogLevel(int levelMask)
 
 /**
  * Set which components to log in wolfProv debug logs.
- * Default component level for wolfProv is WP_LOG_COMPONENT_DEFAULT.
+ * Default component level for wolfProv is WP_LOG_COMP_COMPONENT_DEFAULT.
  *
  * @param componentMask [IN] Bitmask of components from
  *                      wolfProv_LogComponents in wp_logging.h.
@@ -268,7 +268,7 @@ static void wolfprovider_log(const int logLevel, const int component,
  * log level. Used by WOLFPROV_MSG and WOLFPROV_MSG_VERBOSE.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param logLevel [IN] Log level, from wolfProv_LogType enum.
+ * @param logLevel [IN] Log level, from wolfProv_LogLevels enum.
  * @param fmt   [IN] Log message format string.
  * @param vargs [IN] Variable arguments, used with format string, fmt.
  */
@@ -296,12 +296,12 @@ void WOLFPROV_MSG(int component, const char* fmt, ...)
 {
     va_list vlist;
     va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_INFO, fmt, vlist);
+    wolfprovider_msg_internal(component, WP_LOG_LEVEL_INFO, fmt, vlist);
     va_end(vlist);
 }
 
 /**
- * Log function for general messages, prints to WP_LOG_VERBOSE level.
+ * Log function for general messages, prints to WP_LOG_LEVEL_VERBOSE level.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
  * @param fmt   [IN] Log message format string.
@@ -312,12 +312,12 @@ void WOLFPROV_MSG_VERBOSE(int component, const char* fmt, ...)
 {
     va_list vlist;
     va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_VERBOSE, fmt, vlist);
+    wolfprovider_msg_internal(component, WP_LOG_LEVEL_VERBOSE, fmt, vlist);
     va_end(vlist);
 }
 
 /**
- * Log function for debug messages, prints to WP_LOG_DEBUG level.
+ * Log function for debug messages, prints to WP_LOG_LEVEL_DEBUG level.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
  * @param fmt   [IN] Log message format string.
@@ -328,12 +328,12 @@ void WOLFPROV_MSG_DEBUG(int component, const char* fmt, ...)
 {
     va_list vlist;
     va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_DEBUG, fmt, vlist);
+    wolfprovider_msg_internal(component, WP_LOG_LEVEL_DEBUG, fmt, vlist);
     va_end(vlist);
 }
 
 /**
- * Log function for trace messages, prints to WP_LOG_TRACE level.
+ * Log function for trace messages, prints to WP_LOG_LEVEL_TRACE level.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
  * @param fmt   [IN] Log message format string.
@@ -344,12 +344,12 @@ void WOLFPROV_MSG_TRACE(int component, const char* fmt, ...)
 {
     va_list vlist;
     va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_TRACE, fmt, vlist);
+    wolfprovider_msg_internal(component, WP_LOG_LEVEL_TRACE, fmt, vlist);
     va_end(vlist);
 }
 
 /**
- * Log function for debug messages with return code, prints to WP_LOG_DEBUG level.
+ * Log function for debug messages with return code, prints to WP_LOG_LEVEL_DEBUG level.
  * Unified function to reduce code duplication for common "function failed with rc=%d" pattern.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
@@ -373,7 +373,7 @@ void WOLFPROV_ENTER(int component, const char* msg)
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
         XSNPRINTF(buffer, sizeof(buffer), 
             "wolfProv Entering %s", msg);
-        wolfprovider_log(WP_LOG_ENTER, component, buffer);
+        wolfprovider_log(WP_LOG_LEVEL_ENTER, component, buffer);
     }
 }
 
@@ -392,7 +392,7 @@ void WOLFPROV_ENTER_SILENT(int component, const char* msg)
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
         XSNPRINTF(buffer, sizeof(buffer), 
             "wolfProv Entering [leaving silently] %s", msg);
-        wolfprovider_log(WP_LOG_ENTER, component, buffer);
+        wolfprovider_log(WP_LOG_LEVEL_ENTER, component, buffer);
     }
 #else
     WOLFPROV_ENTER(component, msg);
@@ -414,7 +414,7 @@ void WOLFPROV_LEAVE_EX(int component, const char* func, const char* msg,
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
         XSNPRINTF(buffer, sizeof(buffer), 
             "wolfProv Leaving %s, return %d (%s)", msg, ret, func);
-        wolfprovider_log(WP_LOG_LEAVE, component, buffer);
+        wolfprovider_log(WP_LOG_LEVEL_LEAVE, component, buffer);
     }
 }
 
@@ -460,7 +460,7 @@ void WOLFPROV_ERROR_LINE(int component, int error, const char* file, int line)
         XSNPRINTF(buffer, sizeof(buffer),
                   "%s:%d - wolfProv error occurred, error = %d", file, line,
                   error);
-        wolfprovider_log(WP_LOG_ERROR, component, buffer);
+        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
     }
 }
 
@@ -479,7 +479,7 @@ void WOLFPROV_ERROR_MSG_LINE(int component, const char* msg,
         char buffer[WOLFPROV_MAX_LOG_WIDTH];
         XSNPRINTF(buffer, sizeof(buffer), 
             "%s:%d - wolfProv Error %s", file, line, msg);
-        wolfprovider_log(WP_LOG_ERROR, component, buffer);
+        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
     }
 }
 
@@ -501,7 +501,7 @@ void WOLFPROV_ERROR_FUNC_LINE(int component, const char* funcName, int ret,
         XSNPRINTF(buffer, sizeof(buffer),
                   "%s:%d - Error calling %s: ret = %d", file, line, funcName,
                   ret);
-        wolfprovider_log(WP_LOG_ERROR, component, buffer);
+        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
     }
 }
 
@@ -524,7 +524,7 @@ void WOLFPROV_ERROR_FUNC_NULL_LINE(int component, const char* funcName,
         XSNPRINTF(buffer, sizeof(buffer),
                   "%s:%d - Error calling %s: ret = %p", file, line, funcName,
                   ret);
-        wolfprovider_log(WP_LOG_ERROR, component, buffer);
+        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
     }
 }
 
@@ -553,7 +553,7 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
     }
 
     if (!buffer) {
-        wolfprovider_log(WP_LOG_VERBOSE, component, "\tNULL");
+        wolfprovider_log(WP_LOG_LEVEL_VERBOSE, component, "\tNULL");
         return;
     }
 
@@ -584,7 +584,7 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
             }
         }
 
-        wolfprovider_log(WP_LOG_VERBOSE, component, line);
+        wolfprovider_log(WP_LOG_LEVEL_VERBOSE, component, line);
         buffer += WOLFPROV_LINE_LEN;
         buflen -= WOLFPROV_LINE_LEN;
     }
@@ -598,13 +598,13 @@ static void wolfProv_LogLevelToMask(const char* level, size_t len, void* ctx) {
         size_t      len;
         uint32_t    mask;
     } log_levels[] = {
-        { "WP_LOG_ERROR",     XSTRLEN("WP_LOG_ERROR"),  WP_LOG_ERROR   },
-        { "WP_LOG_ENTER",     XSTRLEN("WP_LOG_ENTER"),  WP_LOG_ENTER   },
-        { "WP_LOG_LEAVE",     XSTRLEN("WP_LOG_LEAVE"),  WP_LOG_LEAVE   },
-        { "WP_LOG_INFO",      XSTRLEN("WP_LOG_INFO"),   WP_LOG_INFO    },
-        { "WP_LOG_VERBOSE",   XSTRLEN("WP_LOG_VERBOSE"),WP_LOG_VERBOSE },
-        { "WP_LOG_DEBUG",     XSTRLEN("WP_LOG_DEBUG"),  WP_LOG_DEBUG   },
-        { "WP_LOG_TRACE",     XSTRLEN("WP_LOG_TRACE"),  WP_LOG_TRACE   },
+        { "WP_LOG_LEVEL_ERROR",     XSTRLEN("WP_LOG_LEVEL_ERROR"),  WP_LOG_LEVEL_ERROR   },
+        { "WP_LOG_LEVEL_ENTER",     XSTRLEN("WP_LOG_LEVEL_ENTER"),  WP_LOG_LEVEL_ENTER   },
+        { "WP_LOG_LEVEL_LEAVE",     XSTRLEN("WP_LOG_LEVEL_LEAVE"),  WP_LOG_LEVEL_LEAVE   },
+        { "WP_LOG_LEVEL_INFO",      XSTRLEN("WP_LOG_LEVEL_INFO"),   WP_LOG_LEVEL_INFO    },
+        { "WP_LOG_LEVEL_VERBOSE",   XSTRLEN("WP_LOG_LEVEL_VERBOSE"),WP_LOG_LEVEL_VERBOSE },
+        { "WP_LOG_LEVEL_DEBUG",     XSTRLEN("WP_LOG_LEVEL_DEBUG"),  WP_LOG_LEVEL_DEBUG   },
+        { "WP_LOG_LEVEL_TRACE",     XSTRLEN("WP_LOG_LEVEL_TRACE"),  WP_LOG_LEVEL_TRACE   },
         { "WP_LOG_LEVEL_DEFAULT",
                               XSTRLEN("WP_LOG_LEVEL_DEFAULT"),
                                                     WP_LOG_LEVEL_DEFAULT },
@@ -632,41 +632,41 @@ static void wolfProv_LogComponentToMask(const char* level, size_t len, void* ctx
         size_t      len;
         uint32_t    mask;
     } log_components[] = {
-        { "WP_LOG_RNG",         XSTRLEN("WP_LOG_RNG"),        WP_LOG_RNG      },
-        { "WP_LOG_DIGEST",      XSTRLEN("WP_LOG_DIGEST"),     WP_LOG_DIGEST   },
-        { "WP_LOG_MAC",         XSTRLEN("WP_LOG_MAC"),        WP_LOG_MAC      },
-        { "WP_LOG_CIPHER",      XSTRLEN("WP_LOG_CIPHER"),     WP_LOG_CIPHER   },
-        { "WP_LOG_PK",          XSTRLEN("WP_LOG_PK"),         WP_LOG_PK       },
-        { "WP_LOG_KE",          XSTRLEN("WP_LOG_KE"),         WP_LOG_KE       },
-        { "WP_LOG_KDF",         XSTRLEN("WP_LOG_KDF"),        WP_LOG_KDF      },
-        { "WP_LOG_PROVIDER",    XSTRLEN("WP_LOG_PROVIDER"),   WP_LOG_PROVIDER },
-        { "WP_LOG_RSA",         XSTRLEN("WP_LOG_RSA"),        WP_LOG_RSA      },
-        { "WP_LOG_ECC",         XSTRLEN("WP_LOG_ECC"),        WP_LOG_ECC      },
-        { "WP_LOG_DH",          XSTRLEN("WP_LOG_DH"),         WP_LOG_DH       },
-        { "WP_LOG_AES",         XSTRLEN("WP_LOG_AES"),        WP_LOG_AES      },
-        { "WP_LOG_DES",         XSTRLEN("WP_LOG_DES"),        WP_LOG_DES      },
-        { "WP_LOG_SHA",         XSTRLEN("WP_LOG_SHA"),        WP_LOG_SHA      },
-        { "WP_LOG_MD5",         XSTRLEN("WP_LOG_MD5"),        WP_LOG_MD5      },
-        { "WP_LOG_HMAC",        XSTRLEN("WP_LOG_HMAC"),       WP_LOG_HMAC     },
-        { "WP_LOG_CMAC",        XSTRLEN("WP_LOG_CMAC"),       WP_LOG_CMAC     },
-        { "WP_LOG_HKDF",        XSTRLEN("WP_LOG_HKDF"),       WP_LOG_HKDF     },
-        { "WP_LOG_PBKDF2",      XSTRLEN("WP_LOG_PBKDF2"),     WP_LOG_PBKDF2   },
-        { "WP_LOG_KRB5KDF",     XSTRLEN("WP_LOG_KRB5KDF"),    WP_LOG_KRB5KDF  },
-        { "WP_LOG_DRBG",        XSTRLEN("WP_LOG_DRBG"),       WP_LOG_DRBG     },
-        { "WP_LOG_ECDSA",       XSTRLEN("WP_LOG_ECDSA"),      WP_LOG_ECDSA    },
-        { "WP_LOG_ECDH",        XSTRLEN("WP_LOG_ECDH"),       WP_LOG_ECDH     },
-        { "WP_LOG_ED25519",     XSTRLEN("WP_LOG_ED25519"),    WP_LOG_ED25519  },
-        { "WP_LOG_ED448",       XSTRLEN("WP_LOG_ED448"),      WP_LOG_ED448    },
-        { "WP_LOG_X25519",      XSTRLEN("WP_LOG_X25519"),     WP_LOG_X25519   },
-        { "WP_LOG_X448",        XSTRLEN("WP_LOG_X448"),       WP_LOG_X448     },
-        { "WP_LOG_QUERY",       XSTRLEN("WP_LOG_QUERY"),      WP_LOG_QUERY    },
-        { "WP_LOG_TLS1_PRF",     XSTRLEN("WP_LOG_TLS1_PRF"),   WP_LOG_TLS1_PRF },
-        { "WP_LOG_COMPONENTS_ALL",
-                                XSTRLEN("WP_LOG_COMPONENTS_ALL"),
-                                                        WP_LOG_COMPONENTS_ALL },
-        { "WP_LOG_COMPONENTS_DEFAULT",
-                                XSTRLEN("WP_LOG_COMPONENTS_DEFAULT"),
-                                                        WP_LOG_COMPONENTS_DEFAULT },
+        { "WP_LOG_COMP_RNG",         XSTRLEN("WP_LOG_COMP_RNG"),        WP_LOG_COMP_RNG      },
+        { "WP_LOG_COMP_DIGEST",      XSTRLEN("WP_LOG_COMP_DIGEST"),     WP_LOG_COMP_DIGEST   },
+        { "WP_LOG_COMP_MAC",         XSTRLEN("WP_LOG_COMP_MAC"),        WP_LOG_COMP_MAC      },
+        { "WP_LOG_COMP_CIPHER",      XSTRLEN("WP_LOG_COMP_CIPHER"),     WP_LOG_COMP_CIPHER   },
+        { "WP_LOG_COMP_PK",          XSTRLEN("WP_LOG_COMP_PK"),         WP_LOG_COMP_PK       },
+        { "WP_LOG_COMP_KE",          XSTRLEN("WP_LOG_COMP_KE"),         WP_LOG_COMP_KE       },
+        { "WP_LOG_COMP_KDF",         XSTRLEN("WP_LOG_COMP_KDF"),        WP_LOG_COMP_KDF      },
+        { "WP_LOG_COMP_PROVIDER",    XSTRLEN("WP_LOG_COMP_PROVIDER"),   WP_LOG_COMP_PROVIDER },
+        { "WP_LOG_COMP_RSA",         XSTRLEN("WP_LOG_COMP_RSA"),        WP_LOG_COMP_RSA      },
+        { "WP_LOG_COMP_ECC",         XSTRLEN("WP_LOG_COMP_ECC"),        WP_LOG_COMP_ECC      },
+        { "WP_LOG_COMP_DH",          XSTRLEN("WP_LOG_COMP_DH"),         WP_LOG_COMP_DH       },
+        { "WP_LOG_COMP_AES",         XSTRLEN("WP_LOG_COMP_AES"),        WP_LOG_COMP_AES      },
+        { "WP_LOG_COMP_DES",         XSTRLEN("WP_LOG_COMP_DES"),        WP_LOG_COMP_DES      },
+        { "WP_LOG_COMP_SHA",         XSTRLEN("WP_LOG_COMP_SHA"),        WP_LOG_COMP_SHA      },
+        { "WP_LOG_COMP_MD5",         XSTRLEN("WP_LOG_COMP_MD5"),        WP_LOG_COMP_MD5      },
+        { "WP_LOG_COMP_HMAC",        XSTRLEN("WP_LOG_COMP_HMAC"),       WP_LOG_COMP_HMAC     },
+        { "WP_LOG_COMP_CMAC",        XSTRLEN("WP_LOG_COMP_CMAC"),       WP_LOG_COMP_CMAC     },
+        { "WP_LOG_COMP_HKDF",        XSTRLEN("WP_LOG_COMP_HKDF"),       WP_LOG_COMP_HKDF     },
+        { "WP_LOG_COMP_PBKDF2",      XSTRLEN("WP_LOG_COMP_PBKDF2"),     WP_LOG_COMP_PBKDF2   },
+        { "WP_LOG_COMP_KRB5KDF",     XSTRLEN("WP_LOG_COMP_KRB5KDF"),    WP_LOG_COMP_KRB5KDF  },
+        { "WP_LOG_COMP_DRBG",        XSTRLEN("WP_LOG_COMP_DRBG"),       WP_LOG_COMP_DRBG     },
+        { "WP_LOG_COMP_ECDSA",       XSTRLEN("WP_LOG_COMP_ECDSA"),      WP_LOG_COMP_ECDSA    },
+        { "WP_LOG_COMP_ECDH",        XSTRLEN("WP_LOG_COMP_ECDH"),       WP_LOG_COMP_ECDH     },
+        { "WP_LOG_COMP_ED25519",     XSTRLEN("WP_LOG_COMP_ED25519"),    WP_LOG_COMP_ED25519  },
+        { "WP_LOG_COMP_ED448",       XSTRLEN("WP_LOG_COMP_ED448"),      WP_LOG_COMP_ED448    },
+        { "WP_LOG_COMP_X25519",      XSTRLEN("WP_LOG_COMP_X25519"),     WP_LOG_COMP_X25519   },
+        { "WP_LOG_COMP_X448",        XSTRLEN("WP_LOG_COMP_X448"),       WP_LOG_COMP_X448     },
+        { "WP_LOG_COMP_QUERY",       XSTRLEN("WP_LOG_COMP_QUERY"),      WP_LOG_COMP_QUERY    },
+        { "WP_LOG_COMP_TLS1_PRF",     XSTRLEN("WP_LOG_COMP_TLS1_PRF"),   WP_LOG_COMP_TLS1_PRF },
+        { "WP_LOG_COMP_ALL",
+                                XSTRLEN("WP_LOG_COMP_ALL"),
+                                                        WP_LOG_COMP_ALL },
+        { "WP_LOG_COMP_DEFAULT",
+                                XSTRLEN("WP_LOG_COMP_DEFAULT"),
+                                                        WP_LOG_COMP_DEFAULT },
     };
     static const size_t num_components =
         sizeof(log_components) / sizeof(log_components[0]);

@@ -154,7 +154,7 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
     const char* base64Data;
     size_t base64Len;
 
-    WOLFPROV_ENTER(WP_LOG_PK, "wp_pem2der_convert");
+    WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_pem2der_convert");
 
     /* Skip '-----BEGIN <name>-----\n'. */
     base64Data = data + 16 + nameLen + 1;
@@ -170,7 +170,7 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
         base64Len = footer - base64Data;
         rc = wc_AllocDer(pDer, (word32)base64Len, ECC_TYPE, NULL);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_AllocDer", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AllocDer", rc);
             ok = 0;
         }
     }
@@ -178,12 +178,12 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
         rc = Base64_Decode((byte*)base64Data, (word32)base64Len,
             (*pDer)->buffer, &(*pDer)->length);
         if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "Base64_Decode", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "Base64_Decode", rc);
             ok = 0;
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -221,7 +221,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     wp_PasswordCbData wpPwCb = { pwCb, pwCbArg };
 #endif
 
-    WOLFPROV_ENTER(WP_LOG_PK, "wp_pem2der_decode_data");
+    WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_pem2der_decode_data");
 
     (void)pwCb;
     (void)pwCbArg;
@@ -326,7 +326,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         /* Decode the PEM to DER using wolfSSL. */
         rc = wc_PemToDer(data, len, type, &der, NULL, &info, &algoId);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_PemToDer", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_PemToDer", rc);
             ok = 0;
         }
     #if LIBWOLFSSL_VERSION_HEX < 0x05000000
@@ -344,7 +344,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
             if (ok) {
                 rc = wc_AllocDer(&pkcs8Der, pkcs8Sz, DYNAMIC_TYPE_KEY, NULL);
                 if (rc != 0) {
-                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_AllocDer", rc);
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AllocDer", rc);
                     ok = 0;
                 }
             }
@@ -388,7 +388,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     /* Dispose of the DER data buffer now that callback has used it. */
     wc_FreeDer(&der);
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -415,7 +415,7 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     word32 len = 0;
     word32 idx = 0;
 
-    WOLFPROV_ENTER(WP_LOG_PK, "wp_pem2der_decode");
+    WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_pem2der_decode");
 
     (void)ctx;
     (void)selection;
@@ -442,7 +442,7 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     /* Dispose of the PEM data buffer. */
     OPENSSL_free(data);
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

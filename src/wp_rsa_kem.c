@@ -76,7 +76,7 @@ static wp_RsaKemCtx* wp_rsakem_ctx_new(WOLFPROV_CTX* provCtx)
     if (ctx != NULL) {
         int rc = wc_InitRng(&ctx->rng);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitRng", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRng", rc);
             OPENSSL_free(ctx);
             ctx = NULL;
         }
@@ -228,18 +228,18 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
     mp_int mod;
     RsaKey* key = wp_rsa_get_key(ctx->rsa);
 
-    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsasve_gen_rand_bytes");
+    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsasve_gen_rand_bytes");
 
     rc = mp_init_multi(&r, &mod, NULL, NULL, NULL, NULL);
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_init_multi", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "mp_init_multi", rc);
         ok = 0;
     }
     if (ok) {
         /* mod = n - 3 */
         rc = mp_sub_d(&key->n, 3, &mod);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_sub_d", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "mp_sub_d", rc);
             ok = 0;
         }
     }
@@ -247,7 +247,7 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
         /* r = random number with all words filled. */
         rc = wp_mp_rand(&r, mod.used, &ctx->rng);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wp_mp_rand", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wp_mp_rand", rc);
             ok = 0;
         }
         /* Done when random is less than modulus. */
@@ -259,7 +259,7 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
         /* r in range 0..n-4. Add 2 and r in range 2..n-2. */
         rc = mp_add_d(&r, 2, &r);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_add_d", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "mp_add_d", rc);
             ok = 0;
         }
     }
@@ -267,12 +267,12 @@ static int wp_rsasve_gen_rand_bytes(wp_RsaKemCtx* ctx, unsigned char* out)
         /* Encode random number as a zero padded, big-endian array of bytes. */
         rc = mp_to_unsigned_bin_len(&r, out, mp_unsigned_bin_size(&key->n));
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "mp_to_unsigned_bin_len", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "mp_to_unsigned_bin_len", rc);
             ok = 0;
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -298,7 +298,7 @@ static int wp_rsasve_generate(wp_RsaKemCtx* ctx, unsigned char* out,
     word32 oLen;
     RsaKey* rsa = NULL;
 
-    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsasve_generate");
+    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsasve_generate");
 
     if ((out == NULL) && (outLen == NULL) && (secretLen == NULL)) {
         ok = 0;
@@ -326,7 +326,7 @@ static int wp_rsasve_generate(wp_RsaKemCtx* ctx, unsigned char* out,
         rc = wc_RsaDirect(secret, nLen, out, &oLen, rsa, RSA_PUBLIC_ENCRYPT,
             &ctx->rng);
         if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_RsaDirect", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaDirect", rc);
             OPENSSL_cleanse(secret, nLen);
             ok = 0;
         }
@@ -348,7 +348,7 @@ static int wp_rsasve_generate(wp_RsaKemCtx* ctx, unsigned char* out,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -368,7 +368,7 @@ static int wp_rsakem_encapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
 {
     int ok;
 
-    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsakem_encapsulate");
+    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsakem_encapsulate");
 
     switch (ctx->op) {
         case WP_RSA_KEM_OP_RSASVE:
@@ -380,7 +380,7 @@ static int wp_rsakem_encapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
             break;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -405,7 +405,7 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
     word32 nLen;
     RsaKey* rsa = wp_rsa_get_key(ctx->rsa);
 
-    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsasve_recover");
+    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsasve_recover");
 
     /* Step 1: get the byte length of n */
     nLen = wc_RsaEncryptSize(rsa);
@@ -429,7 +429,7 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
             RSA_PRIVATE_DECRYPT, &ctx->rng);
         PRIVATE_KEY_LOCK();
         if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_RsaDirect decrypt", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaDirect decrypt", rc);
             ok = 0;
         }
         /* Front pad output with zeros if required. */
@@ -443,7 +443,7 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
         *outLen = nLen;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -463,7 +463,7 @@ static int wp_rsakem_decapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
 {
     int ok;
 
-    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsakem_decapsulate");
+    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsakem_decapsulate");
 
     switch (ctx->op) {
         case WP_RSA_KEM_OP_RSASVE:
@@ -475,7 +475,7 @@ static int wp_rsakem_decapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
             break;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -529,7 +529,7 @@ static int wp_rsakem_set_ctx_params(wp_RsaKemCtx* ctx,
     int ok = 1;
     const char* op = NULL;
 
-    WOLFPROV_ENTER(WP_LOG_RSA, "wp_rsakem_set_ctx_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsakem_set_ctx_params");
 
     /* Type of RSA KEM operation - only RSASVE supported. */
     if (!wp_params_get_utf8_string_ptr(params, OSSL_KEM_PARAM_OPERATION,
@@ -546,7 +546,7 @@ static int wp_rsakem_set_ctx_params(wp_RsaKemCtx* ctx,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

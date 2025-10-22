@@ -194,7 +194,7 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     size_t passwordLen;
     word32 tradIdx = 0;
 
-    WOLFPROV_ENTER(WP_LOG_PK, "wp_epki2pki_decode");
+    WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_epki2pki_decode");
 
     (void)ctx;
     (void)selection;
@@ -263,7 +263,7 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     /* Dispose of the EPKI data buffer. */
     OPENSSL_free(data);
 
-    WOLFPROV_LEAVE(WP_LOG_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

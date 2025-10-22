@@ -56,14 +56,14 @@
 /* wolfProv debug logging support can be compiled in by defining
  * WOLFPROV_DEBUG or by using the --enable-debug configure option.
  *
- * wolfProv supports the log levels as mentioned in wolfProv_LogType
+ * wolfProv supports the log levels as mentioned in wolfProv_LogLevels
  * enum below. The default logging level when debug logging is compiled in
  * and enabled at runtime is WP_LOG_LEVEL_DEFAULT.
  *
  * wolfProv supports log message control per-component/algorithm type,
  * with all possible logging components in wolfProv_LogComponents enum
  * below. The default logging level when debug logging is compiled in and
- * enabled at runtime is WP_LOG_COMPONENTS_DEFAULT.
+ * enabled at runtime is WP_LOG_COMP_DEFAULT.
  *
  */
 
@@ -89,122 +89,122 @@
  *
  * WOLFPROV_LOG_LEVEL_FILTER Sets the log level. Use WP_LOG_* constants from enum below.
  *                        Examples:
- *                        - WP_LOG_ERROR (only errors)
- *                        - (WP_LOG_ERROR | WP_LOG_ENTER) (errors and function enter)
- *                        - (WP_LOG_ERROR | WP_LOG_LEAVE) (errors and function leave)
+ *                        - WP_LOG_LEVEL_ERROR (only errors)
+ *                        - (WP_LOG_LEVEL_ERROR | WP_LOG_LEVEL_ENTER) (errors and function enter)
+ *                        - (WP_LOG_LEVEL_ERROR | WP_LOG_LEVEL_LEAVE) (errors and function leave)
  *                        - (WP_LOG_LEVEL_ALL) (all levels)
  *
  * WOLFPROV_LOG_COMPONENTS_FILTER  Set component bitmask to filter specific
  *                        algorithms. Use WP_LOG_* constants from enum below.
  *                        Examples:
- *                        - WP_LOG_HKDF (HKDF only)
- *                        - (WP_LOG_AES | WP_LOG_DES) (ciphers only)
- *                        - (WP_LOG_ECC | WP_LOG_RSA | WP_LOG_HKDF) (multiple algorithms)
- *                        - WP_LOG_CIPHER (all cipher operations)
+ *                        - WP_LOG_COMP_HKDF (HKDF only)
+ *                        - (WP_LOG_COMP_AES | WP_LOG_COMP_DES) (ciphers only)
+ *                        - (WP_LOG_COMP_ECC | WP_LOG_COMP_RSA | WP_LOG_COMP_HKDF) (multiple algorithms)
+ *                        - WP_LOG_COMP_CIPHER (all cipher operations)
  *
  * EXAMPLES:
- * #define WOLFPROV_LOG_LEVEL_FILTER (WP_LOG_ERROR | WP_LOG_ENTER | WP_LOG_LEAVE | WP_LOG_INFO)
- * #define WOLFPROV_LOG_COMPONENTS_FILTER WP_LOG_HKDF
+ * #define WOLFPROV_LOG_LEVEL_FILTER (WP_LOG_LEVEL_ERROR | WP_LOG_LEVEL_ENTER | WP_LOG_LEVEL_LEAVE | WP_LOG_LEVEL_INFO)
+ * #define WOLFPROV_LOG_COMPONENTS_FILTER WP_LOG_COMP_HKDF
  * // Shows level (ERROR + ENTER/LEAVE + INFO) for HKDF operations only
  *
  * #define WOLFPROV_LOG_LEVEL_FILTER (WP_LOG_LEVEL_ALL)
- * #define WOLFPROV_LOG_COMPONENTS_FILTER (WP_LOG_ECC | WP_LOG_RSA | WP_LOG_HKDF)
+ * #define WOLFPROV_LOG_COMPONENTS_FILTER (WP_LOG_COMP_ECC | WP_LOG_COMP_RSA | WP_LOG_COMP_HKDF)
  * // Shows level (ERROR + ENTER/LEAVE + INFO + VERBOSE + DEBUG + TRACE) for ECC, RSA, and HKDF only
  *
  * When modifying the enum values, ensure the corresponding strings in the
  * wp_logging.c file are updated to match.
  */
-enum wolfProv_LogType {
-    WP_LOG_ERROR   = 0x0001,   /* logs errors */
-    WP_LOG_ENTER   = 0x0002,   /* logs function enter*/
-    WP_LOG_LEAVE   = 0x0004,   /* logs function leave */
-    WP_LOG_INFO    = 0x0008,   /* logs informative messages */
-    WP_LOG_VERBOSE = 0x0010,   /* logs encrypted/decrypted/digested data */
-    /* To see the return code from wolfssl, you must add WP_LOG_DEBUG to the
+enum wolfProv_LogLevels {
+    WP_LOG_LEVEL_ERROR   = 0x0001,   /* logs errors */
+    WP_LOG_LEVEL_ENTER   = 0x0002,   /* logs function enter*/
+    WP_LOG_LEVEL_LEAVE   = 0x0004,   /* logs function leave */
+    WP_LOG_LEVEL_INFO    = 0x0008,   /* logs informative messages */
+    WP_LOG_LEVEL_VERBOSE = 0x0010,   /* logs encrypted/decrypted/digested data */
+    /* To see the return code from wolfssl, you must add WP_LOG_LEVEL_DEBUG to the
      * WOLFPROV_LOG_LEVEL_FILTER */
-    WP_LOG_DEBUG   = 0x0020,   /* logs debug-level detailed information */
-    WP_LOG_TRACE   = 0x0040,   /* logs trace-level ultra-detailed information */
+    WP_LOG_LEVEL_DEBUG   = 0x0020,   /* logs debug-level detailed information */
+    WP_LOG_LEVEL_TRACE   = 0x0040,   /* logs trace-level ultra-detailed information */
 
     /* default log level when logging is turned on */
-    WP_LOG_LEVEL_DEFAULT = (WP_LOG_ERROR | WP_LOG_LEAVE | WP_LOG_INFO),
+    WP_LOG_LEVEL_DEFAULT = (WP_LOG_LEVEL_ERROR | WP_LOG_LEVEL_LEAVE | WP_LOG_LEVEL_INFO),
 
     /* log all, including verbose */
-    WP_LOG_LEVEL_ALL = (WP_LOG_ERROR
-                      | WP_LOG_ENTER
-                      | WP_LOG_LEAVE
-                      | WP_LOG_INFO
-                      | WP_LOG_VERBOSE
-                      | WP_LOG_DEBUG
-                      | WP_LOG_TRACE)
+    WP_LOG_LEVEL_ALL = (WP_LOG_LEVEL_ERROR
+                      | WP_LOG_LEVEL_ENTER
+                      | WP_LOG_LEVEL_LEAVE
+                      | WP_LOG_LEVEL_INFO
+                      | WP_LOG_LEVEL_VERBOSE
+                      | WP_LOG_LEVEL_DEBUG
+                      | WP_LOG_LEVEL_TRACE)
 };
 
 enum wolfProv_LogComponents {
     /* Legacy component categories */
-    WP_LOG_RNG      = 0x0001,   /* random number generation */
-    WP_LOG_DIGEST   = 0x0002,   /* digest (SHA-1/2/3) */
-    WP_LOG_MAC      = 0x0004,   /* mac functions: HMAC, CMAC */
-    WP_LOG_CIPHER   = 0x0008,   /* cipher (AES, 3DES) */
-    WP_LOG_PK       = 0x0010,   /* public key algorithms (RSA, ECC) */
-    WP_LOG_KE       = 0x0020,   /* key agreement (DH, ECDH) */
-    WP_LOG_KDF      = 0x0040,   /* password base key derivation algorithms */
-    WP_LOG_PROVIDER = 0x0080,   /* all provider specific logs */
+    WP_LOG_COMP_RNG      = 0x0001,   /* random number generation */
+    WP_LOG_COMP_DIGEST   = 0x0002,   /* digest (SHA-1/2/3) */
+    WP_LOG_COMP_MAC      = 0x0004,   /* mac functions: HMAC, CMAC */
+    WP_LOG_COMP_CIPHER   = 0x0008,   /* cipher (AES, 3DES) */
+    WP_LOG_COMP_PK       = 0x0010,   /* public key algorithms (RSA, ECC) */
+    WP_LOG_COMP_KE       = 0x0020,   /* key agreement (DH, ECDH) */
+    WP_LOG_COMP_KDF      = 0x0040,   /* password base key derivation algorithms */
+    WP_LOG_COMP_PROVIDER = 0x0080,   /* all provider specific logs */
 
     /* Granular algorithm family categories */
-    WP_LOG_RSA      = 0x0001,   /* RSA operations */
-    WP_LOG_ECC      = 0x0002,   /* ECC operations */
-    WP_LOG_DH       = 0x0004,   /* Diffie-Hellman operations */
-    WP_LOG_AES      = 0x0008,   /* AES cipher operations */
-    WP_LOG_DES      = 0x0010,   /* 3DES cipher operations */
-    WP_LOG_SHA      = 0x0020,   /* SHA digest operations */
-    WP_LOG_MD5      = 0x0040,   /* MD5 digest operations */
-    WP_LOG_HMAC     = 0x0080,   /* HMAC operations */
-    WP_LOG_CMAC     = 0x0100,   /* CMAC operations */
-    WP_LOG_HKDF     = 0x0200,   /* HKDF operations */
-    WP_LOG_PBKDF2   = 0x0400,   /* PBKDF2 operations */
-    WP_LOG_KRB5KDF  = 0x0800,   /* KRB5KDF operations */
-    WP_LOG_DRBG     = 0x1000,   /* DRBG operations */
-    WP_LOG_ECDSA    = 0x2000,   /* ECDSA signature operations */
-    WP_LOG_ECDH     = 0x4000,   /* ECDH key exchange operations */
-    WP_LOG_ED25519  = 0x8000,   /* Ed25519 operations */
-    WP_LOG_ED448    = 0x10000,  /* Ed448 operations */
-    WP_LOG_X25519   = 0x20000,  /* X25519 operations */
-    WP_LOG_X448     = 0x40000,  /* X448 operations */
-    WP_LOG_QUERY    = 0x80000,  /* wolfprov_query operations */
-    WP_LOG_TLS1_PRF = 0x100000, /* TLS1 PRF operations */
+    WP_LOG_COMP_RSA      = 0x0100,    /* RSA operations */
+    WP_LOG_COMP_ECC      = 0x0200,    /* ECC operations */
+    WP_LOG_COMP_DH       = 0x0400,    /* Diffie-Hellman operations */
+    WP_LOG_COMP_AES      = 0x0800,    /* AES cipher operations */
+    WP_LOG_COMP_DES      = 0x1000,    /* 3DES cipher operations */
+    WP_LOG_COMP_SHA      = 0x2000,    /* SHA digest operations */
+    WP_LOG_COMP_MD5      = 0x4000,    /* MD5 digest operations */
+    WP_LOG_COMP_HMAC     = 0x8000,    /* HMAC operations */
+    WP_LOG_COMP_CMAC     = 0x10000,   /* CMAC operations */
+    WP_LOG_COMP_HKDF     = 0x20000,   /* HKDF operations */
+    WP_LOG_COMP_PBKDF2   = 0x40000,   /* PBKDF2 operations */
+    WP_LOG_COMP_KRB5KDF  = 0x80000,   /* KRB5KDF operations */
+    WP_LOG_COMP_DRBG     = 0x100000,  /* DRBG operations */
+    WP_LOG_COMP_ECDSA    = 0x200000,  /* ECDSA signature operations */
+    WP_LOG_COMP_ECDH     = 0x400000,  /* ECDH key exchange operations */
+    WP_LOG_COMP_ED25519  = 0x800000,  /* Ed25519 operations */
+    WP_LOG_COMP_ED448    = 0x1000000, /* Ed448 operations */
+    WP_LOG_COMP_X25519   = 0x2000000, /* X25519 operations */
+    WP_LOG_COMP_X448     = 0x4000000, /* X448 operations */
+    WP_LOG_COMP_QUERY    = 0x8000000, /* wolfprov_query operations */
+    WP_LOG_COMP_TLS1_PRF = 0x10000000, /* TLS1 PRF operations */
 
     /* log all components */
-    WP_LOG_COMPONENTS_ALL = (WP_LOG_RNG
-                           | WP_LOG_DIGEST
-                           | WP_LOG_MAC
-                           | WP_LOG_CIPHER
-                           | WP_LOG_PK
-                           | WP_LOG_KE
-                           | WP_LOG_KDF
-                           | WP_LOG_PROVIDER
-                           | WP_LOG_RSA
-                           | WP_LOG_ECC
-                           | WP_LOG_DH
-                           | WP_LOG_AES
-                           | WP_LOG_DES
-                           | WP_LOG_SHA
-                           | WP_LOG_MD5
-                           | WP_LOG_HMAC
-                           | WP_LOG_CMAC
-                           | WP_LOG_HKDF
-                           | WP_LOG_PBKDF2
-                           | WP_LOG_KRB5KDF
-                           | WP_LOG_DRBG
-                           | WP_LOG_ECDSA
-                           | WP_LOG_ECDH
-                           | WP_LOG_ED25519
-                           | WP_LOG_ED448
-                           | WP_LOG_X25519
-                           | WP_LOG_X448
-                           | WP_LOG_QUERY
-                           | WP_LOG_TLS1_PRF),
+    WP_LOG_COMP_ALL = (WP_LOG_COMP_RNG
+                           | WP_LOG_COMP_DIGEST
+                           | WP_LOG_COMP_MAC
+                           | WP_LOG_COMP_CIPHER
+                           | WP_LOG_COMP_PK
+                           | WP_LOG_COMP_KE
+                           | WP_LOG_COMP_KDF
+                           | WP_LOG_COMP_PROVIDER
+                           | WP_LOG_COMP_RSA
+                           | WP_LOG_COMP_ECC
+                           | WP_LOG_COMP_DH
+                           | WP_LOG_COMP_AES
+                           | WP_LOG_COMP_DES
+                           | WP_LOG_COMP_SHA
+                           | WP_LOG_COMP_MD5
+                           | WP_LOG_COMP_HMAC
+                           | WP_LOG_COMP_CMAC
+                           | WP_LOG_COMP_HKDF
+                           | WP_LOG_COMP_PBKDF2
+                           | WP_LOG_COMP_KRB5KDF
+                           | WP_LOG_COMP_DRBG
+                           | WP_LOG_COMP_ECDSA
+                           | WP_LOG_COMP_ECDH
+                           | WP_LOG_COMP_ED25519
+                           | WP_LOG_COMP_ED448
+                           | WP_LOG_COMP_X25519
+                           | WP_LOG_COMP_X448
+                           | WP_LOG_COMP_QUERY
+                           | WP_LOG_COMP_TLS1_PRF),
 
     /* default components logged */
-    WP_LOG_COMPONENTS_DEFAULT = WP_LOG_COMPONENTS_ALL
+    WP_LOG_COMP_DEFAULT = WP_LOG_COMP_ALL
 };
 
 /* Manually set the log level */
@@ -214,7 +214,7 @@ enum wolfProv_LogComponents {
 
 /* Manually set the components */
 #ifndef WOLFPROV_LOG_COMPONENTS_FILTER
-#define WOLFPROV_LOG_COMPONENTS_FILTER WP_LOG_COMPONENTS_DEFAULT
+#define WOLFPROV_LOG_COMPONENTS_FILTER WP_LOG_COMP_DEFAULT
 #endif
 
 /* Conditional logging macro that checks compile-time configuration */
@@ -235,7 +235,7 @@ int  wolfProv_Debugging_ON(void);
 /* turn logging off */
 void wolfProv_Debugging_OFF(void);
 
-/* Set logging level, bitmask of wolfProv_LogType */
+/* Set logging level, bitmask of wolfProv_LogLevels */
 int wolfProv_SetLogLevel(int levelMask);
 /* Set which components are logged, bitmask of wolfProv_LogComponents */
 int wolfProv_SetLogComponents(int componentMask);
