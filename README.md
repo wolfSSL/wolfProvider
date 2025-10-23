@@ -12,7 +12,7 @@ These artifacts are automatically uploaded here for testing, validation, and dis
 
 * **Do not submit pull requests** to this branch.
 * **Do not modify files manually** — all updates are performed by automated CI jobs (e.g., Jenkins, GitHub Actions).
-* If you need to consume the `.deb` artifacts, you can reference this branch via the project’s GitHub Pages or artifact URLs.
+* **Do not consume these debs** - These are for testing purposes only and should not be used in real application.
 
 #### Notes
 
