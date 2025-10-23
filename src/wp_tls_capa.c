@@ -151,7 +151,7 @@ static int wp_tls_group_capability(OSSL_CALLBACK *cb, void *arg)
     int ok = 1;
     size_t i;
 
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_tls_group_capability");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_tls_group_capability");
 
     for (i = 0; i < WP_PARAM_GROUP_CNT; i++) {
         if (!cb(wp_param_group_list[i], arg)) {
@@ -160,7 +160,7 @@ static int wp_tls_group_capability(OSSL_CALLBACK *cb, void *arg)
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -181,14 +181,14 @@ int wolfssl_prov_get_capabilities(void *provCtx, const char *capability,
 {
     int ok = 0;
 
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_prov_get_capabilities");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wolfssl_prov_get_capabilities");
 
     (void)provCtx;
 
     if (strcasecmp(capability, "TLS-GROUP") == 0) {
         ok = wp_tls_group_capability(cb, arg);
     }
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

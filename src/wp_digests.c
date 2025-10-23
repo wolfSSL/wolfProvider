@@ -123,18 +123,18 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 {                                                                              \
     int ok = 1;                                                                \
     (void)params;                                                              \
-    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_init");                             \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_init");                             \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \
         int rc = init(ctx, NULL, -1);                                          \
         if (rc != 0) {                                                         \
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #init, rc);      \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #init, rc);      \
             ok = 0;                                                            \
         }                                                                      \
     }                                                                          \
-    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }                                                                              \
 
@@ -152,13 +152,13 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
 {                                                                              \
     int ok = 1;                                                                \
-    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_update");                           \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_update");                           \
     int rc = upd(ctx, in, (word32)inLen);                                      \
     if (rc != 0) {                                                             \
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #upd, rc);            \
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #upd, rc);            \
         ok = 0;                                                                \
     }                                                                          \
-    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 
@@ -178,7 +178,7 @@ static int name##_final(void* ctx, unsigned char* out, size_t* outLen,         \
     size_t outSize)                                                            \
 {                                                                              \
     int ok = 1;                                                                \
-    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_final");                            \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_final");                            \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -188,14 +188,14 @@ static int name##_final(void* ctx, unsigned char* out, size_t* outLen,         \
     if (ok) {                                                                  \
         int rc = fin(ctx, out);                                                \
         if (rc != 0) {                                                         \
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #fin, rc);        \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #fin, rc);        \
             ok = 0;                                                            \
         }                                                                      \
         else {                                                                 \
             *outLen = dgstSize;                                                \
         }                                                                      \
     }                                                                          \
-    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 
@@ -258,7 +258,7 @@ static int wp_digest_get_params(OSSL_PARAM params[], size_t blkSize,
     OSSL_PARAM* p = NULL;
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_DIGEST, "wp_digest_get_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, "wp_digest_get_params");
 
     p = OSSL_PARAM_locate(params, OSSL_DIGEST_PARAM_BLOCK_SIZE);
     if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, blkSize))) {
@@ -285,7 +285,7 @@ static int wp_digest_get_params(OSSL_PARAM params[], size_t blkSize,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -356,12 +356,12 @@ static int wp_InitMd5Sha_ex(wp_Md5Sha* dgst, void* heap, int devId)
     int rc;
     rc = wc_InitMd5_ex(&dgst->md5, heap, devId);
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMd5_ex", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitMd5_ex", rc);
     }
     if (rc == 0) {
         rc = wc_InitSha_ex(&dgst->sha, heap, devId);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitSha_ex", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitSha_ex", rc);
         }
     }
 
@@ -383,12 +383,12 @@ static int wp_Md5ShaUpdate(wp_Md5Sha* dgst, const byte* data, word32 len)
 
     rc = wc_Md5Update(&dgst->md5, data, len);
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Md5Update", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_Md5Update", rc);
     }
     if (rc == 0) {
         rc = wc_ShaUpdate(&dgst->sha, data, len);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_ShaUpdate", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ShaUpdate", rc);
         }
     }
 
@@ -410,12 +410,12 @@ static int wp_Md5ShaFinal(wp_Md5Sha* dgst, byte* hash)
 
     rc = wc_Md5Final(&dgst->md5, hash);
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Md5Final", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_Md5Final", rc);
     }
     if (rc == 0) {
         rc = wc_ShaFinal(&dgst->sha, hash + WC_MD5_DIGEST_SIZE);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_ShaFinal", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ShaFinal", rc);
         }
     }
 
@@ -436,12 +436,12 @@ static int wp_Md5ShaCopy(wp_Md5Sha* src, wp_Md5Sha* dst)
 
     rc = wc_Md5Copy(&src->md5, &dst->md5);
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Md5Copy", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_Md5Copy", rc);
     }
     if (rc == 0) {
         rc = wc_ShaCopy(&src->sha, &dst->sha);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_ShaCopy", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ShaCopy", rc);
         }
     }
 
@@ -597,21 +597,21 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
 {                                                                              \
     int ok = 1;                                                                \
     (void)params;                                                              \
-    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_init");                             \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_init");                             \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \
         int rc = init(&ctx->obj, NULL, -1);                                    \
         if (rc != 0) {                                                         \
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #init, rc); \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #init, rc); \
             ok = 0;                                                            \
         }                                                                      \
     }                                                                          \
     if (ok && (!wp_##alg##_set_ctx_params(ctx, params))) {                     \
         ok = 0;                                                                \
     }                                                                          \
-    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }                                                                              \
 
@@ -631,7 +631,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     size_t outSize)                                                            \
 {                                                                              \
     int ok = 1;                                                                \
-    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_final");                            \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_final");                            \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -641,14 +641,14 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     if (ok) {                                                                  \
         int rc = fin(&ctx->obj, out, (word32)ctx->outLen);                     \
         if (rc != 0) {                                                         \
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #fin, rc);   \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #fin, rc);   \
             ok = 0;                                                            \
         }                                                                      \
         else {                                                                 \
            *outLen = ctx->outLen;                                             \
         }                                                                      \
     }                                                                          \
-    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 
@@ -687,7 +687,7 @@ static CTX* name##_dupctx(CTX* src)                                            \
         int rc;                                                                \
         rc = copy(&src->obj, &dst->obj);                                       \
         if (rc != 0) {                                                         \
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, #copy, rc);  \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #copy, rc);  \
             OPENSSL_free(dst);                                                 \
             dst = NULL;                                                        \
         }                                                                      \
@@ -711,7 +711,7 @@ static CTX* name##_dupctx(CTX* src)                                            \
 static int name##_set_ctx_params(CTX* ctx, const OSSL_PARAM params[])          \
 {                                                                              \
     int ok = 1;                                                                \
-    WOLFPROV_ENTER(WP_LOG_DIGEST, #name "_set_ctx_params");                   \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_set_ctx_params");                   \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
@@ -719,7 +719,7 @@ static int name##_set_ctx_params(CTX* ctx, const OSSL_PARAM params[])          \
                 OSSL_DIGEST_PARAM_XOFLEN, &ctx->outLen))) {                    \
         ok = 0;                                                                \
     }                                                                          \
-    WOLFPROV_LEAVE(WP_LOG_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 

@@ -175,9 +175,9 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_kdf_hkdf_derive");
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "HKDF derive: keyLen=%zu, mode=%d", keyLen, ctx->mode);
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "HKDF derive: keySz=%zu, saltSz=%zu, infoSz=%zu", 
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_kdf_hkdf_derive");
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "HKDF derive: keyLen=%zu, mode=%d", keyLen, ctx->mode);
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "HKDF derive: keySz=%zu, saltSz=%zu, infoSz=%zu", 
                        ctx->keySz, ctx->saltSz, ctx->infoSz);
 
     if (!wolfssl_prov_is_running()) {
@@ -207,7 +207,7 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
                     (word32)ctx->saltSz, ctx->key, (word32)ctx->keySz, key);
                 PRIVATE_KEY_LOCK();
                 if (rc != 0) {
-                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HKDF_Extract", rc);
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HKDF_Extract", rc);
                     ok = 0;
                 }
             }
@@ -219,7 +219,7 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
                 ctx->info, (word32)ctx->infoSz, key, (word32)keyLen);
             PRIVATE_KEY_LOCK();
             if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HKDF_Expand", rc);
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HKDF_Expand", rc);
                 ok = 0;
             }
             break;
@@ -232,14 +232,14 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
                 (word32)keyLen);
             PRIVATE_KEY_LOCK();
             if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HKDF", rc);
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HKDF", rc);
                 ok = 0;
             }
             break;
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -256,7 +256,7 @@ static int wp_hkdf_base_get_mode(const OSSL_PARAM params[], int* mode)
     int ok = 1;
     const OSSL_PARAM* p;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_hkdf_base_get_mode");
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_hkdf_base_get_mode");
 
     p = OSSL_PARAM_locate_const(params, OSSL_KDF_PARAM_MODE);
     if (p != NULL) {
@@ -289,7 +289,7 @@ static int wp_hkdf_base_get_mode(const OSSL_PARAM params[], int* mode)
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -307,7 +307,7 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
     int ok = 1;
     OSSL_PARAM *p;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_hkdf_base_set_ctx_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_hkdf_base_set_ctx_params");
 
     if (params != NULL) {
         if (!wp_params_get_digest(params, NULL, ctx->provCtx->libCtx,
@@ -341,7 +341,7 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -358,7 +358,7 @@ static int wp_kdf_hkdf_get_ctx_params(wp_HkdfCtx* ctx, OSSL_PARAM params[])
     int ok = 1;
     OSSL_PARAM* p;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_kdf_hkdf_get_ctx_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_kdf_hkdf_get_ctx_params");
 
     p = OSSL_PARAM_locate(params, OSSL_KDF_PARAM_SIZE);
     if (p != NULL) {
@@ -375,7 +375,7 @@ static int wp_kdf_hkdf_get_ctx_params(wp_HkdfCtx* ctx, OSSL_PARAM params[])
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -393,7 +393,7 @@ static int wp_hkdf_base_set_info(wp_HkdfCtx* ctx, const OSSL_PARAM params[])
     const OSSL_PARAM* p;
     unsigned char* q = ctx->info;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_hkdf_base_set_info");
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_hkdf_base_set_info");
 
     ctx->infoSz = 0;
     /* Combine all the data in the info parameters. */
@@ -413,7 +413,7 @@ static int wp_hkdf_base_set_info(wp_HkdfCtx* ctx, const OSSL_PARAM params[])
         params = p + 1;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -430,7 +430,7 @@ static int wp_kdf_hkdf_set_ctx_params(wp_HkdfCtx* ctx,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_kdf_hkdf_set_ctx_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_kdf_hkdf_set_ctx_params");
 
     if (params != NULL) {
         if (!wp_hkdf_base_set_ctx_params(ctx, params)) {
@@ -440,7 +440,7 @@ static int wp_kdf_hkdf_set_ctx_params(wp_HkdfCtx* ctx,
             ok = 0;
         }
     }
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -538,11 +538,11 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     size_t idx = 0;
     int rc;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_tls13_hkdf_expand");
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF,
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_tls13_hkdf_expand");
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF,
         "TLS1.3 HKDF expand: inKeyLen=%zu, dataLen=%zu, keyLen=%zu",
         inKeyLen, dataLen, keyLen);
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF,
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF,
         "TLS1.3 HKDF expand: prefixLen=%zu, labelLen=%zu",
         ctx->prefixLen, ctx->labelLen);
 
@@ -571,11 +571,11 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
         (word32)ctx->infoSz, key, (word32)keyLen);
     PRIVATE_KEY_LOCK();
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HKDF_Expand", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HKDF_Expand", rc);
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -601,9 +601,9 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
     unsigned char* salt;
     size_t saltLen;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_tls13_hkdf_extract");
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "TLS1.3 HKDF extract: keyLen=%zu", keyLen);
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "TLS1.3 HKDF extract: keySz=%zu, saltSz=%zu", 
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_tls13_hkdf_extract");
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "TLS1.3 HKDF extract: keyLen=%zu", keyLen);
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "TLS1.3 HKDF extract: keySz=%zu, saltSz=%zu", 
                        ctx->keySz, ctx->saltSz);
 
     if (ctx->key == NULL) {
@@ -625,7 +625,7 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
         /* Calculate the digest of an empty string. */
         rc = wc_Hash(ctx->mdType, zeros, 0, secret, (word32)ctx->mdLen);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_Hash", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_Hash", rc);
             ok = 0;
         }
         else if (!wp_tls13_hkdf_expand(ctx, ctx->salt, ctx->saltSz, secret,
@@ -647,12 +647,12 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
         }
         PRIVATE_KEY_LOCK();
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_HKDF_Extract", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HKDF_Extract", rc);
             ok = 0;
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -671,8 +671,8 @@ static int wp_kdf_tls1_3_derive(wp_HkdfCtx* ctx, unsigned char* key,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_kdf_tls1_3_derive");
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "TLS1.3 KDF derive: keyLen=%zu, mode=%d",
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_kdf_tls1_3_derive");
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "TLS1.3 KDF derive: keyLen=%zu, mode=%d",
         keyLen, ctx->mode);
 
     if (!wolfssl_prov_is_running()) {
@@ -696,7 +696,7 @@ static int wp_kdf_tls1_3_derive(wp_HkdfCtx* ctx, unsigned char* key,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -713,8 +713,8 @@ static int wp_kdf_tls1_3_set_ctx_params(wp_HkdfCtx* ctx,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_HKDF, "wp_kdf_tls1_3_set_ctx_params");
-    WOLFPROV_MSG_DEBUG(WP_LOG_HKDF, "TLS1.3 KDF set params: mode=%d", ctx->mode);
+    WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_kdf_tls1_3_set_ctx_params");
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "TLS1.3 KDF set params: mode=%d", ctx->mode);
 
     if (params != NULL) {
         if (!wp_hkdf_base_set_ctx_params(ctx, params)) {
@@ -737,7 +737,7 @@ static int wp_kdf_tls1_3_set_ctx_params(wp_HkdfCtx* ctx,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

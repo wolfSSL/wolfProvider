@@ -78,16 +78,16 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
  */
 int wolfssl_prov_is_running(void)
 {
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_prov_is_running");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wolfssl_prov_is_running");
 
 #ifdef WP_CHECK_FORCE_FAIL
     if (forceFail) {
-      WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+      WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
       return 0;
     }
 #endif
     /* Always running. */
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -185,22 +185,22 @@ static int bio_core_puts(BIO *bio, const char *str)
 
 static int bio_core_new(BIO *bio)
 {
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "bio_core_new");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "bio_core_new");
 
     BIO_set_init(bio, 1);
 
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
         
 static int bio_core_free(BIO *bio)
 {
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "bio_core_free");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "bio_core_free");
 
     BIO_set_init(bio, 0);
     wolfssl_prov_bio_free(BIO_get_data(bio));
     
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -316,7 +316,7 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
     static const char* provider_name = "wolfSSL Provider";
 #endif
 
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfprov_get_params");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wolfprov_get_params");
 
     (void)provCtx;
 
@@ -353,7 +353,7 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
             ok = 0;
         }
     }
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -962,7 +962,7 @@ static int wp_dummy_decode(WOLFPROV_CTX* ctx, OSSL_CORE_BIO* cBio,
     int selection, OSSL_CALLBACK* dataCb, void* dataCbArg,
     OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
 {
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wp_dummy_decode");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_dummy_decode");
 
     (void)ctx;
     (void)cBio;
@@ -972,7 +972,7 @@ static int wp_dummy_decode(WOLFPROV_CTX* ctx, OSSL_CORE_BIO* cBio,
     (void)pwCb;
     (void)pwCbArg;
 
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 /**
@@ -1121,8 +1121,8 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
 {
     const OSSL_ALGORITHM* alg;
 
-    WOLFPROV_ENTER(WP_LOG_QUERY, "wolfprov_query");
-    WOLFPROV_MSG_DEBUG(WP_LOG_QUERY, "Query operation ID: %d", id);
+    WOLFPROV_ENTER(WP_LOG_COMP_QUERY, "wolfprov_query");
+    WOLFPROV_MSG_DEBUG(WP_LOG_COMP_QUERY, "Query operation ID: %d", id);
 
     (void)provCtx;
 
@@ -1173,7 +1173,7 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
             break;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_QUERY, "wolfprov_query", (alg != NULL) ? 1 : 0);
+    WOLFPROV_LEAVE(WP_LOG_COMP_QUERY, "wolfprov_query", (alg != NULL) ? 1 : 0);
     return alg;
 }
 
@@ -1206,11 +1206,11 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
         (void)ok;
         (void)err;
         (void)hash;
-        WOLFPROV_MSG(WP_LOG_PROVIDER,
+        WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
            "in my Fips callback, ok = %d, err = %d\n", ok, err);
-        WOLFPROV_MSG(WP_LOG_PROVIDER,
+        WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
            "message = %s\n", wc_GetErrorString(err));
-        WOLFPROV_MSG(WP_LOG_PROVIDER,
+        WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
            "hash = %s\n", hash);
 
 #ifdef WC_NO_ERR_TRACE
@@ -1218,9 +1218,9 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
 #else
         if (err == IN_CORE_FIPS_E) {
 #endif
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
                "In core integrity hash check failure, copy above hash\n");
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
                "into verifyCore[] in fips_test.c and rebuild\n");
         }
     }
@@ -1243,15 +1243,15 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 
     wolfProv_LogInit();
 
-    WOLFPROV_ENTER(WP_LOG_PROVIDER, "wolfssl_provider_init");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wolfssl_provider_init");
 
 #ifdef WOLFPROV_DEBUG
     ok = (wolfProv_Debugging_ON() == 0);
     if (ok) {
         if (wolfSSL_Debugging_ON() != 0) {
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
               "WARNING: wolfProvider built with debug but underlying wolfSSL is not!");
-            WOLFPROV_MSG(WP_LOG_PROVIDER,
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
               "\tBuilding wolfSSl with debug is highly recommended, proceeding...");
         }
         else {
@@ -1269,7 +1269,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 #if defined(XGETENV) && !defined(NO_GETENV)
     forceFailEnv = XGETENV("WOLFPROV_FORCE_FAIL");
     if (forceFailEnv != NULL && XATOI(forceFailEnv) == 1) {
-        WOLFPROV_MSG(WP_LOG_PROVIDER, "WOLFPROV_FORCE_FAIL=1, Forcing failure\n");
+        WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "WOLFPROV_FORCE_FAIL=1, Forcing failure\n");
         forceFail = 1;
     }
 #else
@@ -1332,7 +1332,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
         *out = wolfprov_dispatch_table;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

@@ -58,11 +58,11 @@ int wp_kdf_up_ref(wp_Kdf* kdf)
     int ok = 1;
     int rc;
 
-    WOLFPROV_ENTER(WP_LOG_KDF, "wp_kdf_up_ref");
+    WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kdf_up_ref");
 
     rc = wc_LockMutex(&kdf->mutex);
     if (rc < 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_LockMutex", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
         ok = 0;
     }
     if (ok) {
@@ -70,11 +70,11 @@ int wp_kdf_up_ref(wp_Kdf* kdf)
         wc_UnLockMutex(&kdf->mutex);
     }
 
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
     kdf->refCnt++;
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -99,7 +99,7 @@ static wp_Kdf* wp_kdf_new(WOLFPROV_CTX *provCtx)
     #ifndef SINGLE_THREADED
         int rc = wc_InitMutex(&kdf->mutex);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_DEBUG, "wc_InitMutex", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitMutex", rc);
             OPENSSL_free(kdf);
             kdf = NULL;
         }
@@ -154,11 +154,11 @@ void wp_kdf_free(wp_Kdf* kdf)
  */
 static int wp_kdf_has(const wp_Kdf* kdf, int selection)
 {
-    WOLFPROV_ENTER(WP_LOG_KDF, "wp_kdf_has");
+    WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kdf_has");
     
     (void)kdf;
     (void)selection;
-    WOLFPROV_LEAVE(WP_LOG_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+    WOLFPROV_LEAVE(WP_LOG_COMP_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 

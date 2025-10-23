@@ -194,7 +194,7 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
     OSSL_PARAM lParams[4];
     int lParamSz = 0;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_digest_sign_init");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_digest_sign_init");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -248,7 +248,7 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -266,13 +266,13 @@ static int wp_mac_digest_sign_update(wp_MacSigCtx *ctx,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_digest_sign_update");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_digest_sign_update");
 
     if (!EVP_MAC_update(ctx->macCtx, data, dataLen)) {
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -294,7 +294,7 @@ static int wp_mac_digest_sign_final(wp_MacSigCtx *ctx, unsigned char *sig,
 {
     int ok = 1;
 
-    WOLFPROV_ENTER(WP_LOG_MAC, "wp_mac_digest_sign_final");
+    WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_digest_sign_final");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
@@ -306,7 +306,7 @@ static int wp_mac_digest_sign_final(wp_MacSigCtx *ctx, unsigned char *sig,
         ok = 0;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 

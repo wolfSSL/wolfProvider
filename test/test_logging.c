@@ -107,217 +107,217 @@ int test_logging(void *data)
         return -1;
     }
     /* Scenario A: ALL levels, provider component */
-    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_PROVIDER");
+    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_COMP_PROVIDER");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info A");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (A)");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info A");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (A)");
 
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_PROVIDER, -100);
-        CHECK_LOGGED(prev, WP_LOG_ERROR, WP_LOG_PROVIDER, "ERROR (A)");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_PROVIDER, -100);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_PROVIDER, "ERROR (A)");
 
-        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_PROVIDER, "funcA");
-        CHECK_LOGGED(prev, WP_LOG_ENTER, WP_LOG_PROVIDER, "ENTER (A)");
+        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "funcA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ENTER, WP_LOG_COMP_PROVIDER, "ENTER (A)");
 
-        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_PROVIDER, "funcA", 0);
-        CHECK_LOGGED(prev, WP_LOG_LEAVE, WP_LOG_PROVIDER, "LEAVE (A)");
+        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, "funcA", 0);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_LEAVE, WP_LOG_COMP_PROVIDER, "LEAVE (A)");
 
-        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_PROVIDER, "verbose A");
-        CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_PROVIDER, "VERBOSE (A)");
+        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_COMP_PROVIDER, "verbose A");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_PROVIDER, "VERBOSE (A)");
 
-        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_PROVIDER, "debug A");
-        CHECK_LOGGED(prev, WP_LOG_DEBUG, WP_LOG_PROVIDER, "DEBUG (A)");
+        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_COMP_PROVIDER, "debug A");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_DEBUG, WP_LOG_COMP_PROVIDER, "DEBUG (A)");
 
-        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_PROVIDER, "trace A");
-        CHECK_LOGGED(prev, WP_LOG_TRACE, WP_LOG_PROVIDER, "TRACE (A)");
+        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_COMP_PROVIDER, "trace A");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_TRACE, WP_LOG_COMP_PROVIDER, "TRACE (A)");
 
         {
             static const unsigned char buf[] = { 0x01, 0x02 };
-            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_PROVIDER, buf, 2);
-            CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_PROVIDER, "BUFFER/VERBOSE (A)");
+            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_COMP_PROVIDER, buf, 2);
+            CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_PROVIDER, "BUFFER/VERBOSE (A)");
         }
     }
 
     /* Scenario B: (ERROR | INFO), provider component */
-    reset_env_and_init("(WP_LOG_ERROR | WP_LOG_INFO)", "WP_LOG_PROVIDER");
+    reset_env_and_init("(WP_LOG_LEVEL_ERROR | WP_LOG_LEVEL_INFO)", "WP_LOG_COMP_PROVIDER");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info B");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (B)");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info B");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (B)");
 
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_PROVIDER, -200);
-        CHECK_LOGGED(prev, WP_LOG_ERROR, WP_LOG_PROVIDER, "ERROR (B)");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_PROVIDER, -200);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_PROVIDER, "ERROR (B)");
 
-        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_PROVIDER, "funcB");
-        CHECK_NOT_LOGGED(prev, WP_LOG_ENTER, WP_LOG_PROVIDER, "ENTER (B)");
+        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "funcB");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_ENTER, WP_LOG_COMP_PROVIDER, "ENTER (B)");
 
-        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_PROVIDER, "funcB", 0);
-        CHECK_NOT_LOGGED(prev, WP_LOG_LEAVE, WP_LOG_PROVIDER, "LEAVE (B)");
+        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, "funcB", 0);
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_LEAVE, WP_LOG_COMP_PROVIDER, "LEAVE (B)");
 
-        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_PROVIDER, "verbose B");
-        CHECK_NOT_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_PROVIDER, "VERBOSE (B)");
+        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_COMP_PROVIDER, "verbose B");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_PROVIDER, "VERBOSE (B)");
 
-        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_PROVIDER, "debug B");
-        CHECK_NOT_LOGGED(prev, WP_LOG_DEBUG, WP_LOG_PROVIDER, "DEBUG (B)");
+        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_COMP_PROVIDER, "debug B");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_DEBUG, WP_LOG_COMP_PROVIDER, "DEBUG (B)");
 
-        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_PROVIDER, "trace B");
-        CHECK_NOT_LOGGED(prev, WP_LOG_TRACE, WP_LOG_PROVIDER, "TRACE (B)");
+        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_COMP_PROVIDER, "trace B");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_TRACE, WP_LOG_COMP_PROVIDER, "TRACE (B)");
     }
 
     /* Scenario C: ERROR only */
-    reset_env_and_init("WP_LOG_ERROR", "WP_LOG_PROVIDER");
+    reset_env_and_init("WP_LOG_LEVEL_ERROR", "WP_LOG_COMP_PROVIDER");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_PROVIDER, -300);
-        CHECK_LOGGED(prev, WP_LOG_ERROR, WP_LOG_PROVIDER, "ERROR (C)");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_PROVIDER, -300);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_PROVIDER, "ERROR (C)");
 
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info C");
-        CHECK_NOT_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (C)");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info C");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (C)");
     }
 
     /* Scenario D: VERBOSE only */
-    reset_env_and_init("WP_LOG_VERBOSE", "WP_LOG_PROVIDER");
+    reset_env_and_init("WP_LOG_LEVEL_VERBOSE", "WP_LOG_COMP_PROVIDER");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_PROVIDER, "verbose D");
-        CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_PROVIDER, "VERBOSE (D)");
+        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_COMP_PROVIDER, "verbose D");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_PROVIDER, "VERBOSE (D)");
         /* BUFFER emits VERBOSE */
         {
             static const unsigned char buf[] = { 0xAA, 0xBB };
-            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_PROVIDER, buf, 2);
-            CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_PROVIDER, "BUFFER/VERBOSE (D)");
+            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_COMP_PROVIDER, buf, 2);
+            CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_PROVIDER, "BUFFER/VERBOSE (D)");
         }
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info D");
-        CHECK_NOT_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (D)");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info D");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (D)");
     }
 
     /* Scenario E: ALL levels, RSA component only -> provider logs blocked */
-    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_RSA");
+    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_COMP_RSA");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info E");
-        CHECK_NOT_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (E) provider filtered");
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_PROVIDER, -400);
-        CHECK_NOT_LOGGED(prev, WP_LOG_ERROR, WP_LOG_PROVIDER, "ERROR (E) provider filtered");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info E");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (E) provider filtered");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_PROVIDER, -400);
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_PROVIDER, "ERROR (E) provider filtered");
 
         /* Now log under RSA and expect pass */
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_RSA, "info E RSA");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_RSA, "INFO (E) RSA");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_RSA, "info E RSA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_RSA, "INFO (E) RSA");
     }
 
     /* Scenario H: AES and SHA components with ALL levels */
-    reset_env_and_init("WP_LOG_LEVEL_ALL", "(WP_LOG_AES | WP_LOG_SHA)");
+    reset_env_and_init("WP_LOG_LEVEL_ALL", "(WP_LOG_COMP_AES | WP_LOG_COMP_SHA)");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_AES, "info H AES");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_AES, "INFO (H) AES");
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_SHA, "info H SHA");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_SHA, "INFO (H) SHA");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_AES, "info H AES");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_AES, "INFO (H) AES");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_SHA, "info H SHA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_SHA, "INFO (H) SHA");
         /* Provider component should be filtered */
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info H provider");
-        CHECK_NOT_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (H) provider filtered");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info H provider");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (H) provider filtered");
     }
 
     /* Scenario I: RSA component - exercise all log types */
-    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_RSA");
+    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_COMP_RSA");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_RSA, "info I RSA");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_RSA, "INFO (I) RSA");
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_RSA, -600);
-        CHECK_LOGGED(prev, WP_LOG_ERROR, WP_LOG_RSA, "ERROR (I) RSA");
-        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_RSA, "funcI");
-        CHECK_LOGGED(prev, WP_LOG_ENTER, WP_LOG_RSA, "ENTER (I) RSA");
-        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_RSA, "funcI", 0);
-        CHECK_LOGGED(prev, WP_LOG_LEAVE, WP_LOG_RSA, "LEAVE (I) RSA");
-        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_RSA, "verbose I RSA");
-        CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_RSA, "VERBOSE (I) RSA");
-        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_RSA, "debug I RSA");
-        CHECK_LOGGED(prev, WP_LOG_DEBUG, WP_LOG_RSA, "DEBUG (I) RSA");
-        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_RSA, "trace I RSA");
-        CHECK_LOGGED(prev, WP_LOG_TRACE, WP_LOG_RSA, "TRACE (I) RSA");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_RSA, "info I RSA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_RSA, "INFO (I) RSA");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_RSA, -600);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_RSA, "ERROR (I) RSA");
+        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_COMP_RSA, "funcI");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ENTER, WP_LOG_COMP_RSA, "ENTER (I) RSA");
+        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_COMP_RSA, "funcI", 0);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_LEAVE, WP_LOG_COMP_RSA, "LEAVE (I) RSA");
+        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_COMP_RSA, "verbose I RSA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_RSA, "VERBOSE (I) RSA");
+        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RSA, "debug I RSA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_DEBUG, WP_LOG_COMP_RSA, "DEBUG (I) RSA");
+        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_COMP_RSA, "trace I RSA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_TRACE, WP_LOG_COMP_RSA, "TRACE (I) RSA");
         {
             static const unsigned char buf[] = { 0x10, 0x20 };
-            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_RSA, buf, 2);
-            CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_RSA, "BUFFER/VERBOSE (I) RSA");
+            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_COMP_RSA, buf, 2);
+            CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_RSA, "BUFFER/VERBOSE (I) RSA");
         }
     }
 
     /* Scenario J: AES component - exercise all log types */
-    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_AES");
+    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_COMP_AES");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_AES, "info J AES");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_AES, "INFO (J) AES");
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_AES, -700);
-        CHECK_LOGGED(prev, WP_LOG_ERROR, WP_LOG_AES, "ERROR (J) AES");
-        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_AES, "funcJ");
-        CHECK_LOGGED(prev, WP_LOG_ENTER, WP_LOG_AES, "ENTER (J) AES");
-        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_AES, "funcJ", 0);
-        CHECK_LOGGED(prev, WP_LOG_LEAVE, WP_LOG_AES, "LEAVE (J) AES");
-        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_AES, "verbose J AES");
-        CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_AES, "VERBOSE (J) AES");
-        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_AES, "debug J AES");
-        CHECK_LOGGED(prev, WP_LOG_DEBUG, WP_LOG_AES, "DEBUG (J) AES");
-        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_AES, "trace J AES");
-        CHECK_LOGGED(prev, WP_LOG_TRACE, WP_LOG_AES, "TRACE (J) AES");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_AES, "info J AES");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_AES, "INFO (J) AES");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_AES, -700);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_AES, "ERROR (J) AES");
+        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_COMP_AES, "funcJ");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ENTER, WP_LOG_COMP_AES, "ENTER (J) AES");
+        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_COMP_AES, "funcJ", 0);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_LEAVE, WP_LOG_COMP_AES, "LEAVE (J) AES");
+        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_COMP_AES, "verbose J AES");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_AES, "VERBOSE (J) AES");
+        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_COMP_AES, "debug J AES");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_DEBUG, WP_LOG_COMP_AES, "DEBUG (J) AES");
+        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_COMP_AES, "trace J AES");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_TRACE, WP_LOG_COMP_AES, "TRACE (J) AES");
         {
             static const unsigned char buf[] = { 0xAB, 0xCD };
-            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_AES, buf, 2);
-            CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_AES, "BUFFER/VERBOSE (J) AES");
+            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_COMP_AES, buf, 2);
+            CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_AES, "BUFFER/VERBOSE (J) AES");
         }
     }
 
     /* Scenario K: SHA component - exercise all log types */
-    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_SHA");
+    reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_COMP_SHA");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_SHA, "info K SHA");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_SHA, "INFO (K) SHA");
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_SHA, -800);
-        CHECK_LOGGED(prev, WP_LOG_ERROR, WP_LOG_SHA, "ERROR (K) SHA");
-        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_SHA, "funcK");
-        CHECK_LOGGED(prev, WP_LOG_ENTER, WP_LOG_SHA, "ENTER (K) SHA");
-        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_SHA, "funcK", 0);
-        CHECK_LOGGED(prev, WP_LOG_LEAVE, WP_LOG_SHA, "LEAVE (K) SHA");
-        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_SHA, "verbose K SHA");
-        CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_SHA, "VERBOSE (K) SHA");
-        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_SHA, "debug K SHA");
-        CHECK_LOGGED(prev, WP_LOG_DEBUG, WP_LOG_SHA, "DEBUG (K) SHA");
-        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_SHA, "trace K SHA");
-        CHECK_LOGGED(prev, WP_LOG_TRACE, WP_LOG_SHA, "TRACE (K) SHA");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_SHA, "info K SHA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_SHA, "INFO (K) SHA");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_SHA, -800);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_SHA, "ERROR (K) SHA");
+        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_COMP_SHA, "funcK");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_ENTER, WP_LOG_COMP_SHA, "ENTER (K) SHA");
+        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_COMP_SHA, "funcK", 0);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_LEAVE, WP_LOG_COMP_SHA, "LEAVE (K) SHA");
+        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_COMP_SHA, "verbose K SHA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_SHA, "VERBOSE (K) SHA");
+        prev = gLog.called; WOLFPROV_MSG_DEBUG(WP_LOG_COMP_SHA, "debug K SHA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_DEBUG, WP_LOG_COMP_SHA, "DEBUG (K) SHA");
+        prev = gLog.called; WOLFPROV_MSG_TRACE(WP_LOG_COMP_SHA, "trace K SHA");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_TRACE, WP_LOG_COMP_SHA, "TRACE (K) SHA");
         {
             static const unsigned char buf[] = { 0xDE, 0xAD };
-            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_SHA, buf, 2);
-            CHECK_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_SHA, "BUFFER/VERBOSE (K) SHA");
+            prev = gLog.called; WOLFPROV_BUFFER(WP_LOG_COMP_SHA, buf, 2);
+            CHECK_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_SHA, "BUFFER/VERBOSE (K) SHA");
         }
     }
 
     /* Scenario F: DEFAULT level, ALL components (ERROR | LEAVE | INFO) */
-    reset_env_and_init("WP_LOG_LEVEL_DEFAULT", "WP_LOG_COMPONENTS_ALL");
+    reset_env_and_init("WP_LOG_LEVEL_DEFAULT", "WP_LOG_COMP_ALL");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info F");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (F)");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info F");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (F)");
 
-        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_PROVIDER, "funcF", 0);
-        CHECK_LOGGED(prev, WP_LOG_LEAVE, WP_LOG_PROVIDER, "LEAVE (F)");
+        prev = gLog.called; WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, "funcF", 0);
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_LEAVE, WP_LOG_COMP_PROVIDER, "LEAVE (F)");
 
-        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_PROVIDER, "funcF");
-        CHECK_NOT_LOGGED(prev, WP_LOG_ENTER, WP_LOG_PROVIDER, "ENTER (F)");
+        prev = gLog.called; WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "funcF");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_ENTER, WP_LOG_COMP_PROVIDER, "ENTER (F)");
 
-        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_PROVIDER, "verbose F");
-        CHECK_NOT_LOGGED(prev, WP_LOG_VERBOSE, WP_LOG_PROVIDER, "VERBOSE (F)");
+        prev = gLog.called; WOLFPROV_MSG_VERBOSE(WP_LOG_COMP_PROVIDER, "verbose F");
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_VERBOSE, WP_LOG_COMP_PROVIDER, "VERBOSE (F)");
     }
 
     /* Scenario G: Mixed valid + invalid tokens -> INFO only */
-    reset_env_and_init("(WP_LOG_INFO | WP_LOG_FAKE)", "WP_LOG_PROVIDER");
+    reset_env_and_init("(WP_LOG_LEVEL_INFO | WP_LOG_COMP_FAKE)", "WP_LOG_COMP_PROVIDER");
     {
         int prev;
-        prev = gLog.called; WOLFPROV_MSG(WP_LOG_PROVIDER, "info G");
-        CHECK_LOGGED(prev, WP_LOG_INFO, WP_LOG_PROVIDER, "INFO (G)");
-        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_PROVIDER, -500);
-        CHECK_NOT_LOGGED(prev, WP_LOG_ERROR, WP_LOG_PROVIDER, "ERROR (G)");
+        prev = gLog.called; WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "info G");
+        CHECK_LOGGED(prev, WP_LOG_LEVEL_INFO, WP_LOG_COMP_PROVIDER, "INFO (G)");
+        prev = gLog.called; WOLFPROV_ERROR(WP_LOG_COMP_PROVIDER, -500);
+        CHECK_NOT_LOGGED(prev, WP_LOG_LEVEL_ERROR, WP_LOG_COMP_PROVIDER, "ERROR (G)");
     }
 
     /* Cleanup */
