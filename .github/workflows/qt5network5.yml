@@ -15,30 +15,31 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        fips: [ false ]
 
   test_qtbase_network:
     runs-on: ubuntu-22.04
+    needs: build_wolfprovider
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
     timeout-minutes: 40
     strategy:
       matrix:
         qt_ref: [ 'v5.15.8-lts-lgpl' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -49,20 +50,27 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp/packages
+
+      - name: Setup package directories
+        run: |
+          # Move packages to expected locations
+          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
+          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
+          
+          echo "Packages ready:"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
+          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
@@ -80,7 +88,9 @@ jobs:
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Install Qt dependencies
         run: |
