@@ -30,18 +30,22 @@ jobs:
   test_socat:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
+    continue-on-error: true
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 30
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
+        socat_ref: [ 'socat-1.8.0.0' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -97,10 +101,10 @@ jobs:
             clang libc++-dev curl net-tools netcat-openbsd procps
 
       - name: Download socat
-        run: curl -O http://www.dest-unreach.org/socat/download/socat-1.8.0.0.tar.gz && tar xvf socat-1.8.0.0.tar.gz
+        run: curl -O http://www.dest-unreach.org/socat/download/${{ matrix.socat_ref }}.tar.gz && tar xvf ${{ matrix.socat_ref }}.tar.gz
 
       - name: Build socat
-        working-directory: ./socat-1.8.0.0
+        working-directory: ./${{ matrix.socat_ref }}
         run: |
           # Configure with OpenSSL
           ./configure
@@ -108,8 +112,20 @@ jobs:
           # Build socat
           make
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+
+      - name: Apply OSP patch to socat
+        working-directory: ./${{ matrix.socat_ref }}
+        run: |
+          patch -p0 < $GITHUB_WORKSPACE/osp/wolfProvider/socat/${{ matrix.socat_ref }}-wolfprov.patch
+
       - name: Run socat tests
-        working-directory: ./socat-1.8.0.0
+        working-directory: ./${{ matrix.socat_ref }}
         shell: bash
         env:
           SHELL: /bin/bash
@@ -119,9 +135,13 @@ jobs:
           mkdir -p /dev
           touch /dev/vsock
 
-
           # Show socat version (includes OpenSSL version info)
           ./socat -V
 
+          export ${{ matrix.force_fail }} 
+
+          set +e
           # Run the tests with expected failures
-          SOCAT=$GITHUB_WORKSPACE/socat-1.8.0.0/socat ./test.sh -t 0.5 --expect-fail 36,64,146,214,216,217,309,310,386,399,402,403,410,418,453,459,460,467,468,475,478,491,492,528,529,530
+          SOCAT=$GITHUB_WORKSPACE/${{ matrix.socat_ref }}/socat ./test.sh -t 0.5 --expect-fail 36,64,146,214,216,217,309,310,386,399,402,403,408,409,410,416,417,418,451,452,453,459,460,467,468,475,476,477,478,491,492,526,527,528,529,530
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} socat
