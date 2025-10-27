@@ -1316,13 +1316,19 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
         /* To avoid multi-threading issues in FIPS CAST tests, run all tests
          * under a lock now */
         if (wp_lock(wp_get_cast_mutex()) != 1) {
+            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+              "Fatal Error: unable to acquire FIPS CAST lock");
             ok = 0;
         }
         if (ok) {
             if (wc_RunAllCast_fips() != 0) {
+                WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+                  "Fatal Error: FIPS algo selftest failure");
                 ok = 0;
             }
-            wp_unlock(wp_get_cast_mutex());
+            if (wp_unlock(wp_get_cast_mutex()) != 1) {
+                ok = 0;
+            }
         }
 #endif
     }
