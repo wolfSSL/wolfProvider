@@ -249,7 +249,6 @@ verify_wolfprovider() {
         elif [ $is_wp_default -ne 1 ]; then
             handle_error "wolfProvider is not the default provider"
         fi
-
     else
         if [ $is_openssl_replace_default -eq 1 ]; then
             handle_error "OpenSSL is replace default"

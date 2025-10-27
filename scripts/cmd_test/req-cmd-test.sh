@@ -35,6 +35,16 @@ test_cert_creation() {
     local cert_file="req_outputs/cert_${curve}_${hash_alg}_${req_provider_name//lib/}.pem"
     
     echo -e "\n=== Testing Certificate Creation (${curve}/${hash_alg}) - req with ${req_provider_name} ==="
+
+    if [ -f "$key_file" ]; then
+        echo "Key file $key_file already exists, removing it."
+        rm -f "$key_file"
+    fi
+
+    if [ -f "$cert_file" ]; then
+        echo "Certificate file $cert_file already exists, removing it."
+        rm -f "$cert_file"
+    fi
     
     # Generate EC key with default provider
     echo "Generating EC key with curve ${curve} using default provider..."
