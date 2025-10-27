@@ -1981,7 +1981,7 @@ static int wp_rsa_enc_dec_set_ctx_params(wp_RsaEncDecCtx* ctx,
 }
 
 /** Common base of RSA PKCS #1.5 and PSS OID. */
-unsigned char rsa_pkcs1_oid[] = {
+static const unsigned char rsa_pkcs1_oid[] = {
     0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01
 };
 /** Size of RSA PKCS OID. */
@@ -2002,7 +2002,7 @@ unsigned char rsa_pkcs1_oid[] = {
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_rsa_find_oid(unsigned char* data, word32 len, unsigned char* oid,
+static int wp_rsa_find_oid(unsigned char* data, word32 len, const unsigned char* oid,
     word32 oidLen, word32* offset)
 {
     int ok = 0;
@@ -2010,7 +2010,7 @@ static int wp_rsa_find_oid(unsigned char* data, word32 len, unsigned char* oid,
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_RSA, WOLFPROV_FUNC_NAME);
 
-    for (i = 0; i < len - RSA_PKCS1_OID_SZ - 1; i++) {
+    for (i = 0; i + oidLen <= len; i++) {
         /* Find the base OID. */
         if (XMEMCMP(data + i, oid, oidLen) == 0) {
             ok = 1;
@@ -2082,11 +2082,30 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
         /* Step over PSS algorithm. */
         idx += 11;
 
-        if (data[idx] != 0x30) {
-            ok = 0;
+        /* Step over BIT STRING field */
+        if (data[idx] == 0x03) {
+            idx++;
+            if (data[idx] < 0x80) {
+                idx += 2;
+            }
+            else if (data[idx] == 0x81) {
+                idx += 3;
+            }
+            else if (data[idx] == 0x82) {
+                idx += 4;
+            }
+            else {
+                ok = 0;
+            }
         }
-        else {
-            idx += 2;
+
+        if (ok) {
+            if (data[idx] != 0x30) {
+                ok = 0;
+            }
+            else {
+                idx += 2;
+            }
         }
     }
     if (ok && (data[idx] == 0xa0)) {

@@ -288,6 +288,13 @@ jobs:
           openssl dgst -sha256 -sign ecc_key.pem -out msg.sig msg.txt
           openssl dgst -sha256 -verify <(openssl pkey -in ecc_key.pem -pubout) -signature msg.sig msg.txt
 
+      - name: Run cmd tests
+        shell: bash
+        run: |
+          # Run the do-cmd-test.sh script to execute interoperability tests
+          echo "Running OpenSSL provider interoperability tests..."
+          OPENSSL_BIN=$(eval which openssl) ./scripts/cmd_test/do-cmd-tests.sh
+
       - name: Cleanup test environment
         run: |
           echo "Cleaning up test environment..."
