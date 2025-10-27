@@ -25,35 +25,7 @@ REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
 UTILS_DIR="${REPO_ROOT}/scripts"
 
 source "${SCRIPT_DIR}/cmd-test-common.sh"
-
-# If OPENSSL_BIN is not set, assume we are using a local build
-if [ -z "${OPENSSL_BIN:-}" ]; then
-    # Check if the install directories exist
-    if [ ! -d "${REPO_ROOT}/openssl-install" ] || 
-       [ ! -d "${REPO_ROOT}/wolfssl-install" ]; then
-        echo "[FAIL] OpenSSL or wolfSSL install directories not found"
-        echo "Please set OPENSSL_BIN or run build-wolfprovider.sh first"
-        exit 1
-    fi
-
-    # Setup the environment for a local build
-    source "${REPO_ROOT}/scripts/env-setup"
-else
-    # We are using a user-provided OpenSSL binary, manually set the test
-    # environment variables rather than using env-setup.
-    # Find the location of the wolfProvider modules
-    if [ -z "${WOLFPROV_PATH:-}" ]; then
-        export WOLFPROV_PATH=$(find /usr/lib /usr/local/lib -type d -name ossl-modules 2>/dev/null | head -n 1)
-    fi
-    # Set the path to the wolfProvider config file
-    if [ -z "${WOLFPROV_CONFIG:-}" ]; then
-        if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
-            export WOLFPROV_CONFIG="${REPO_ROOT}/provider-fips.conf"
-        else
-            export WOLFPROV_CONFIG="${REPO_ROOT}/provider.conf"
-        fi  
-    fi
-fi
+cmd_test_env_setup
 
 echo "=== Running wolfProvider Command-Line Tests ==="
 echo "Using OPENSSL_BIN: ${OPENSSL_BIN}" 
