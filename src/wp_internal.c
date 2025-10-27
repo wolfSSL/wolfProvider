@@ -30,6 +30,27 @@
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
+#if defined(HAVE_FIPS) && (!defined(WP_SINGLE_THREADED))
+static wolfSSL_Mutex castMutex;
+
+/**
+ * Initialize the cast mutex on library load.
+ *
+ * This constructor runs when libwolfprov.so is loaded via dlopen() or at
+ * program startup. It ensures the castMutex is initialized under lock.
+ */
+__attribute__((constructor))
+static void wolfprov_init_cast_mutex(void)
+{
+    wc_InitMutex(&castMutex);
+}
+
+wolfSSL_Mutex *wp_get_cast_mutex()
+{
+    return &castMutex;
+}
+#endif
+
 /**
  * Get the wolfSSL random number generator from the provider context.
  *

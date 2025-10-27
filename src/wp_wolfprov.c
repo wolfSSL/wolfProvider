@@ -214,10 +214,6 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
 {
     WOLFPROV_CTX* ctx;
 
-#ifdef WC_RNG_SEED_CB
-    wc_SetSeed_Cb(wc_GenerateSeed);
-#endif
-
     ctx = (WOLFPROV_CTX*)OPENSSL_zalloc(sizeof(WOLFPROV_CTX));
     if ((ctx != NULL) && (wc_InitRng(&ctx->rng) != 0)) {
         OPENSSL_free(ctx);
@@ -1310,6 +1306,25 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
                 /* Just ignore anything we don't understand */
                 break;
         }
+    }
+
+    if (ok) {
+#ifdef WC_RNG_SEED_CB
+        wc_SetSeed_Cb(wc_GenerateSeed);
+#endif
+#if defined(HAVE_FIPS) && (!defined(WP_SINGLE_THREADED))
+        /* To avoid multi-threading issues in FIPS CAST tests, run all tests
+         * under a lock now */
+        if (wp_lock(wp_get_cast_mutex()) != 1) {
+            ok = 0;
+        }
+        if (ok) {
+            if (wc_RunAllCast_fips() != 0) {
+                ok = 0;
+            }
+            wp_unlock(wp_get_cast_mutex());
+        }
+#endif
     }
 
     if (ok) {
