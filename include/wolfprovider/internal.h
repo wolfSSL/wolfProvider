@@ -160,6 +160,10 @@ WC_RNG* wp_provctx_get_rng(WOLFPROV_CTX* provCtx);
 #ifndef WP_SINGLE_THREADED
 int wp_provctx_lock_rng(WOLFPROV_CTX* provCtx);
 void wp_provctx_unlock_rng(WOLFPROV_CTX* provCtx);
+
+#ifdef HAVE_FIPS
+wolfSSL_Mutex *wp_get_cast_mutex(void);
+#endif
 #endif
 
 int wolfssl_prov_get_capabilities(void *provctx, const char *capability,
