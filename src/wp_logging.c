@@ -197,16 +197,14 @@ int wolfProv_SetLogComponents(int componentMask)
  * Calls either default log mechanism or application-registered logging
  * callback.
  *
- * @param logLevel   [IN] Log level.
  * @param logMessage [IN] Log message.
+ * @param logLevel   [IN] Log level.
  */
-static void wolfprovider_log(const int logLevel, const int component,
-                           const char *const logMessage)
+WP_PRINTF_FUNC(3, 0)
+static void wolfprovider_log(const int component, const int logLevel, 
+        const char* fmt, va_list vlist)
 {
-    /* Check compile-time configuration first */
-    if (!WOLFPROV_COMPILE_TIME_CHECK(component, logLevel)) {
-        return;
-    }
+    char logMessage[WOLFPROV_MAX_LOG_WIDTH];
 
     /* Don't log messages that do not match our current logging level */
     if ((providerLogLevel & logLevel) != logLevel) {
@@ -217,6 +215,8 @@ static void wolfprovider_log(const int logLevel, const int component,
     if ((providerLogComponents & component) != component) {
         return;
     }
+
+    XVSNPRINTF(logMessage, sizeof(logMessage), fmt, vlist);
 
     if (log_function) {
         log_function(logLevel, component, logMessage);
@@ -265,138 +265,19 @@ static void wolfprovider_log(const int logLevel, const int component,
 
 /**
  * Internal log function for printing varg messages to a specific
- * log level. Used by WOLFPROV_MSG and WOLFPROV_MSG_VERBOSE.
+ * log level. Used by various LOG macros.
  *
  * @param component [IN] Component type, from wolfProv_LogComponents enum.
  * @param logLevel [IN] Log level, from wolfProv_LogLevels enum.
  * @param fmt   [IN] Log message format string.
  * @param vargs [IN] Variable arguments, used with format string, fmt.
  */
-WP_PRINTF_FUNC(3, 0)
-static void wolfprovider_msg_internal(int component, int logLevel,
-                                    const char* fmt, va_list vlist)
-{
-    char msgStr[WOLFPROV_MAX_LOG_WIDTH];
-
-    if (loggingEnabled) {
-        XVSNPRINTF(msgStr, sizeof(msgStr), fmt, vlist);
-        wolfprovider_log(logLevel, component, msgStr);
-    }
-}
-
-/**
- * Log function for general messages.
- *
- * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param fmt   [IN] Log message format string.
- * @param vargs [IN] Variable arguments, used with format string, fmt.
- */
-WP_PRINTF_FUNC(2, 3)
-void WOLFPROV_MSG(int component, const char* fmt, ...)
+void wolfprovider_msg(int component, int logLevel, const char *fmt, ...)
 {
     va_list vlist;
     va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_LEVEL_INFO, fmt, vlist);
+    wolfprovider_log(component, logLevel, fmt, vlist);
     va_end(vlist);
-}
-
-/**
- * Log function for general messages, prints to WP_LOG_LEVEL_VERBOSE level.
- *
- * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param fmt   [IN] Log message format string.
- * @param vargs [IN] Variable arguments, used with format string, fmt.
- */
-WP_PRINTF_FUNC(2, 3)
-void WOLFPROV_MSG_VERBOSE(int component, const char* fmt, ...)
-{
-    va_list vlist;
-    va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_LEVEL_VERBOSE, fmt, vlist);
-    va_end(vlist);
-}
-
-/**
- * Log function for debug messages, prints to WP_LOG_LEVEL_DEBUG level.
- *
- * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param fmt   [IN] Log message format string.
- * @param vargs [IN] Variable arguments, used with format string, fmt.
- */
-WP_PRINTF_FUNC(2, 3)
-void WOLFPROV_MSG_DEBUG(int component, const char* fmt, ...)
-{
-    va_list vlist;
-    va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_LEVEL_DEBUG, fmt, vlist);
-    va_end(vlist);
-}
-
-/**
- * Log function for trace messages, prints to WP_LOG_LEVEL_TRACE level.
- *
- * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param fmt   [IN] Log message format string.
- * @param vargs [IN] Variable arguments, used with format string, fmt.
- */
-WP_PRINTF_FUNC(2, 3)
-void WOLFPROV_MSG_TRACE(int component, const char* fmt, ...)
-{
-    va_list vlist;
-    va_start(vlist, fmt);
-    wolfprovider_msg_internal(component, WP_LOG_LEVEL_TRACE, fmt, vlist);
-    va_end(vlist);
-}
-
-/**
- * Log function for debug messages with return code, prints to WP_LOG_LEVEL_DEBUG level.
- * Unified function to reduce code duplication for common "function failed with rc=%d" pattern.
- *
- * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param func_name [IN] Name of the function that failed.
- * @param rc       [IN] Return code value.
- */
-void WOLFPROV_MSG_DEBUG_RETCODE(int component, const char* func_name, int rc)
-{
-    WOLFPROV_MSG_DEBUG(component, "%s failed with rc=%d", func_name, rc);
-}
-
-/**
- * Log function used to record function entry.
- *
- * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param msg  [IN] Log message.
- */
-void WOLFPROV_ENTER(int component, const char* msg)
-{
-    if (loggingEnabled) {
-        char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), 
-            "wolfProv Entering %s", msg);
-        wolfprovider_log(WP_LOG_LEVEL_ENTER, component, buffer);
-    }
-}
-
-/**
- * Log function used to record function entry for check functions.
- * These functions use WOLFPROV_LEAVE_SILENT and may not show up in logs.
- * The "[leaving silently]" prefix indicates that exit logging may be suppressed.
- *
- * @param component [IN] Component type, from wolfProv_LogComponents enum.
- * @param msg  [IN] Log message.
- */
-void WOLFPROV_ENTER_SILENT(int component, const char* msg)
-{
-#ifdef WOLFPROV_LEAVE_SILENT_MODE
-    if (loggingEnabled) {
-        char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), 
-            "wolfProv Entering [leaving silently] %s", msg);
-        wolfprovider_log(WP_LOG_LEVEL_ENTER, component, buffer);
-    }
-#else
-    WOLFPROV_ENTER(component, msg);
-#endif
 }
 
 /**
@@ -410,12 +291,8 @@ void WOLFPROV_ENTER_SILENT(int component, const char* msg)
 void WOLFPROV_LEAVE_EX(int component, const char* func, const char* msg,
                          int ret)
 {
-    if (loggingEnabled) {
-        char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), 
-            "wolfProv Leaving %s, return %d (%s)", msg, ret, func);
-        wolfprovider_log(WP_LOG_LEVEL_LEAVE, component, buffer);
-    }
+    wolfprovider_msg(component, WP_LOG_LEVEL_LEAVE, 
+        "wolfProv Leaving %s, return %d (%s)", msg, ret, func);
 }
 
 /**
@@ -455,13 +332,8 @@ void WOLFPROV_LEAVE_SILENT_EX(int component, const char* func,
  */
 void WOLFPROV_ERROR_LINE(int component, int error, const char* file, int line)
 {
-    if (loggingEnabled) {
-        char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer),
-                  "%s:%d - wolfProv error occurred, error = %d", file, line,
-                  error);
-        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
-    }
+    wolfprovider_msg(component, WP_LOG_LEVEL_ERROR, 
+        "%s:%d - wolfProv error occurred, error = %d", file, line, error);
 }
 
 /**
@@ -475,12 +347,8 @@ void WOLFPROV_ERROR_LINE(int component, int error, const char* file, int line)
 void WOLFPROV_ERROR_MSG_LINE(int component, const char* msg,
                                const char* file, int line)
 {
-    if (loggingEnabled) {
-        char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer), 
-            "%s:%d - wolfProv Error %s", file, line, msg);
-        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
-    }
+    wolfprovider_msg(component, WP_LOG_LEVEL_ERROR, 
+        "%s:%d - wolfProv Error %s", file, line, msg);
 }
 
 /**
@@ -496,13 +364,8 @@ void WOLFPROV_ERROR_MSG_LINE(int component, const char* msg,
 void WOLFPROV_ERROR_FUNC_LINE(int component, const char* funcName, int ret,
                                 const char* file, int line)
 {
-    if (loggingEnabled) {
-        char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer),
-                  "%s:%d - Error calling %s: ret = %d", file, line, funcName,
-                  ret);
-        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
-    }
+    wolfprovider_msg(component, WP_LOG_LEVEL_ERROR, 
+        "%s:%d - Error calling %s: ret = %d", file, line, funcName, ret);
 }
 
 /**
@@ -519,13 +382,8 @@ void WOLFPROV_ERROR_FUNC_NULL_LINE(int component, const char* funcName,
                                      const void *ret, const char* file,
                                      int line)
 {
-    if (loggingEnabled) {
-        char buffer[WOLFPROV_MAX_LOG_WIDTH];
-        XSNPRINTF(buffer, sizeof(buffer),
-                  "%s:%d - Error calling %s: ret = %p", file, line, funcName,
-                  ret);
-        wolfprovider_log(WP_LOG_LEVEL_ERROR, component, buffer);
-    }
+    wolfprovider_msg(component, WP_LOG_LEVEL_ERROR, 
+        "%s:%d - Error calling %s: ret = %p", file, line, funcName, ret);
 }
 
 /* Macro to control line length of WOLFPROV_BUFFER, for number of
@@ -547,13 +405,12 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
     int i, buflen = (int)length, bufidx;
     char line[(WOLFPROV_LINE_LEN * 4) + 3]; /* \t00..0F | chars...chars\0 */
 
-
     if (!loggingEnabled) {
         return;
     }
 
     if (!buffer) {
-        wolfprovider_log(WP_LOG_LEVEL_VERBOSE, component, "\tNULL");
+        wolfprovider_msg(component, WP_LOG_LEVEL_VERBOSE, "\tNULL");
         return;
     }
 
@@ -584,7 +441,7 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
             }
         }
 
-        wolfprovider_log(WP_LOG_LEVEL_VERBOSE, component, line);
+        wolfprovider_msg(WP_LOG_LEVEL_VERBOSE, component, line);
         buffer += WOLFPROV_LINE_LEN;
         buflen -= WOLFPROV_LINE_LEN;
     }
