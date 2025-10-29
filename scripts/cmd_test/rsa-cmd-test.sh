@@ -37,22 +37,7 @@ KEY_TYPES=("RSA" "RSA-PSS")
 KEY_SIZES=("2048" "3072" "4096")
 PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
 
-OPENSSL_BIN=${OPENSSL_BIN:-openssl}
-
 echo "=== Running RSA Key Generation Tests ==="
-
-rsa_check_force_fail() {
-    local openssl_providers=$($OPENSSL_BIN list -providers)
-    is_openssl_default_provider=$(echo "$openssl_providers" | grep -qi "OpenSSL Default Provider" && echo 1 || echo 0)
-    if [ $is_openssl_default_provider -eq 1 ]; then
-        # With the OpenSSL provider, don't expect failures
-        echo "OPENSSL Default provider active, no forced failures expected."
-    elif [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        echo "[PASS] Test passed when force fail was enabled"
-        FORCE_FAIL_PASSED=1
-        exit 1
-    fi
-}
 
 # Function to validate key
 validate_key() {
@@ -76,7 +61,7 @@ validate_key() {
         return
     else
         echo "[PASS] ${key_type} key file exists and has content"
-        rsa_check_force_fail
+        check_force_fail
     fi
     
     # Only try to extract public key if file exists and has content
@@ -84,7 +69,7 @@ validate_key() {
     if $OPENSSL_BIN pkey -in "$key_file" -pubout -out "$pub_key_file" \
         ${provider_args} -passin pass: >/dev/null; then
         echo "[PASS] ${key_type} Public key extraction successful"
-        rsa_check_force_fail
+        check_force_fail
     else
         echo "[FAIL] ${key_type} Public key extraction failed"
         FAIL=1
@@ -169,6 +154,8 @@ test_sign_verify_pkeyutl() {
 
     # Get the provider name
     provider_name=$(get_provider_name "$provider_args")
+
+    echo -e "\n=== Testing ${key_type} (${key_size}) Sign/Verify with pkeyutl Using ${provider_name} ==="
     
     # Handle different key naming conventions
     local key_prefix="${key_type}"
@@ -192,18 +179,16 @@ test_sign_verify_pkeyutl() {
         exit 1
     fi
     
-    echo -e "\n=== Testing ${key_type} (${key_size}) Sign/Verify with pkeyutl Using ${provider_name} ==="
-    
     # Test 1: Sign and verify with OpenSSL default
     use_default_provider
     echo "Test 1: Sign and verify with OpenSSL default (${key_type})"
     local default_sig_file="rsa_outputs/${key_prefix}_${key_size}_default_sig.bin"
     if $sign_func "$key_file" "$data_file" "$default_sig_file" "$provider_args"; then
         echo "[PASS] Signing with OpenSSL default successful"
-        rsa_check_force_fail
+        check_force_fail
         if $verify_func "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
             echo "[PASS] Default provider verify successful"
-            rsa_check_force_fail
+            check_force_fail
         else
             echo "[FAIL] Default provider verify failed"
             FAIL=1
@@ -219,10 +204,10 @@ test_sign_verify_pkeyutl() {
     local wolf_sig_file="rsa_outputs/${key_prefix}_${key_size}_wolf_sig.bin"
     if $sign_func "$key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
         echo "[PASS] Signing with wolfProvider successful"
-        rsa_check_force_fail
+        check_force_fail
         if $verify_func "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
             echo "[PASS] wolfProvider sign/verify successful"
-            rsa_check_force_fail
+            check_force_fail
         else
             echo "[FAIL] wolfProvider verify failed"
             FAIL=1
@@ -238,7 +223,7 @@ test_sign_verify_pkeyutl() {
         use_wolf_provider
         if $verify_func "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
             echo "[PASS] wolfProvider can verify OpenSSL default signature"
-            rsa_check_force_fail
+            check_force_fail
         else
             echo "[FAIL] wolfProvider cannot verify OpenSSL default signature"
             FAIL=1
@@ -248,7 +233,7 @@ test_sign_verify_pkeyutl() {
         echo "Test 4: Cross-provider verification (wolf sign, default verify)"
         if $verify_func "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
             echo "[PASS] OpenSSL default can verify wolfProvider signature"
-            rsa_check_force_fail
+            check_force_fail
         else
             echo "[FAIL] OpenSSL default cannot verify wolfProvider signature"
             FAIL=1
@@ -263,15 +248,16 @@ generate_and_test_key() {
     local provider_args=$3
     local output_file="rsa_outputs/${key_type}_${key_size}.pem"
 
+    # Get the provider name
+    provider_name=$(get_provider_name "$provider_args")
+
+    echo -e "\n=== Testing ${key_type} Key Generation (${key_size}) with ${provider_name} ==="
+
     if [ -f "$output_file" ]; then
         echo "Output file $output_file already exists, removing it."
         rm -f "$output_file"
     fi
 
-    # Get the provider name
-    provider_name=$(get_provider_name "$provider_args")
-    
-    echo -e "\n=== Testing ${key_type} Key Generation (${key_size}) with ${provider_name} ==="
     echo "Generating ${key_type} key (${key_size})..."
     if [ "$key_type" = "RSA-PSS" ]; then
         # For RSA-PSS, specify all parameters
@@ -283,7 +269,7 @@ generate_and_test_key() {
             -pkeyopt rsa_pss_keygen_saltlen:-1 \
             -out "$output_file" 2>/dev/null; then
             echo "[PASS] RSA-PSS key generation successful"
-            rsa_check_force_fail
+            check_force_fail
         else
             echo "[FAIL] RSA-PSS key generation failed"
             FAIL=1
@@ -295,7 +281,7 @@ generate_and_test_key() {
             -pkeyopt rsa_keygen_bits:${key_size} \
             -out "$output_file" 2>/dev/null; then
             echo "[PASS] RSA key generation successful"
-            rsa_check_force_fail
+            check_force_fail
         else
             echo "[FAIL] RSA key generation failed"
             FAIL=1
@@ -305,7 +291,7 @@ generate_and_test_key() {
     # Verify the key was generated
     if [ -s "$output_file" ]; then
         echo "[PASS] ${key_type} key (${key_size}) generation successful"
-        rsa_check_force_fail
+        check_force_fail
     else
         echo "[FAIL] ${key_type} key (${key_size}) generation failed"
         FAIL=1
@@ -322,7 +308,7 @@ generate_and_test_key() {
     if $OPENSSL_BIN pkey -in "$output_file" -check \
         ${provider_args} -passin pass: >/dev/null; then
         echo "[PASS] ${provider_name} can use ${key_type} key (${key_size})"
-        rsa_check_force_fail
+        check_force_fail
     else
         echo "[FAIL] ${provider_name} cannot use ${key_type} key (${key_size})"
         FAIL=1
