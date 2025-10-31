@@ -17,10 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 # 
-# This image contains all the dependcies required to build wolfProvider and 
-# test with our OSP integrations in `.github/workflows`. Using the docker allows
-# us to avoid having to install all the dependencies on the host machine and 
-# speed up the build process.
+# This image contains all the dependencies required to build wolfProvider and 
+# test with our OSP integrations in `.github/workflows`. Using the docker image
+# allows us to avoid having to install all the dependencies on the host machine
+# and speed up the build process.
 
 FROM debian:bookworm
 
