@@ -92,13 +92,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install rsync dependencies
-        run: |
-          apt-get update
-          apt-get install -y gcc g++ gawk autoconf automake python3-cmarkgfm \
-            acl libacl1-dev attr libattr1-dev libxxhash-dev \
-            libzstd-dev liblz4-dev build-essential
-
       - name: Checkout rsync
         uses: actions/checkout@v4
         with:

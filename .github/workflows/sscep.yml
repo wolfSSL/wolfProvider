@@ -96,11 +96,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install sscep dependencies
-        run: |
-          apt-get update
-          apt-get install -y scep psmisc build-essential autoconf libtool pkg-config
-
       - name: Download sscep
         uses: actions/checkout@v4
         with:

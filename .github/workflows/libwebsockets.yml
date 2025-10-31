@@ -30,10 +30,13 @@ jobs:
   test_libwebsockets:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    container:
-      image: debian:bookworm
+container:
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -54,11 +57,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Install libwebsockets dependencies
-        run: |
-          apt-get update
-          apt-get install -y libc6 libcap2 zlib1g cmake build-essential dpkg-dev
 
       - name: Download packages from build job
         uses: actions/download-artifact@v4

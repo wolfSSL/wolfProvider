@@ -104,18 +104,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install hostap dependencies
-        run: |
-          apt-get update
-          apt-get install -y libpcap0.8 libpcap-dev curl libcurl4-openssl-dev \
-            libnl-3-dev binutils-dev libiberty-dev libnl-genl-3-dev libnl-route-3-dev \
-            libdbus-1-dev bridge-utils tshark python3-pycryptodome libsqlite3-dev \
-            libzstd1 wireless-tools iw build-essential autoconf automake libtool \
-            pkg-config git wget ca-certificates flex bison bc libxml2-dev zlib1g-dev \
-            python3-pip psmisc iproute2 procps net-tools systemd kmod wireless-regdb
-          apt-get remove -y python3-cryptography 2>/dev/null || true
-          pip install --no-cache-dir --force-reinstall --break-system-packages cryptography
-
       - name: Checkout hostap
         run: |
           test -d hostap || git clone https://w1.fi/hostap.git

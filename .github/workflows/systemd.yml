@@ -90,19 +90,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install dependencies
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y build-essential meson ninja-build \
-            libmount-dev gperf python3-pytest python3-jinja2 python3-pip \
-            libuv1-dev libnghttp2-dev libcap-dev uuid-dev libdevmapper-dev \
-            libpopt-dev libjson-c-dev libargon2-dev libblkid-dev asciidoctor \
-            pkgconf zlib1g-dev libgcrypt20-dev libgpg-error-dev libgnutls28-dev \
-            libp11-kit-dev libfido2-dev libtss2-dev libdw-dev libbz2-dev \
-            liblzma-dev liblz4-dev libzstd-dev libxkbcommon-dev libglib2.0-dev \
-            libdbus-1-dev python3-setuptools python3-wheel git
-
       - name: Checkout systemd
         uses: actions/checkout@v4
         with:

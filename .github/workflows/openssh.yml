@@ -100,12 +100,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install dependencies
-        run: |
-          apt-get update
-          apt-get install -y build-essential autoconf automake libtool \
-            pkg-config patch zlib1g-dev kmod util-linux cryptsetup-bin
-
       - name: Ensure kernel modules are present
         run: |
           # loop + device-mapper (dm-crypt); scsi_debug is optional and may still be unavailable on the host kernel

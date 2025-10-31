@@ -31,10 +31,13 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
     # Run inside Debian Bookworm to match packaging environment
-    container:
-      image: debian:bookworm
+container:
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -51,12 +54,6 @@ jobs:
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-      - name: Install cjose dependencies
-        run: |
-          apt-get update
-          apt-get install -y git build-essential autoconf automake \
-            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev
-
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:

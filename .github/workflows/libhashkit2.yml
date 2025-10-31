@@ -30,10 +30,13 @@ jobs:
   test_libhashkit2:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    container:
-      image: debian:bookworm
+container:
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -89,11 +92,6 @@ jobs:
           $GITHUB_WORKSPACE/scripts/verify-install.sh \
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
-
-      - name: Install libmemcached dependencies
-        run: |
-          apt-get update
-          apt-get install -y cmake build-essential bison flex memcached libc6
 
       - name: Download libmemcached
         uses: actions/checkout@v4

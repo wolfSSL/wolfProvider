@@ -30,10 +30,13 @@ jobs:
   test_cryptsetup:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    container:
-      image: debian:bookworm
+container:
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -91,14 +94,6 @@ jobs:
           $GITHUB_WORKSPACE/scripts/verify-install.sh \
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
-
-      - name: Install dependencies
-        run: |
-          apt-get update
-          apt-get install -y \
-            build-essential autoconf asciidoctor gettext autopoint libtool \
-            pkg-config uuid-dev libdevmapper-dev libpopt-dev libjson-c-dev \
-            libargon2-dev libblkid-dev bsdextrautils kmod util-linux cryptsetup-bin
  
       - name: Checkout cryptsetup
         uses: actions/checkout@v4
