@@ -27,7 +27,7 @@ jobs:
 
   git-ssh-default-replace-test:
     runs-on: ubuntu-22.04
-container:
+    container:
       image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive

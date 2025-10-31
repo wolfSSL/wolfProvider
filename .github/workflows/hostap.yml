@@ -32,10 +32,12 @@ jobs:
     needs: build_wolfprovider
     # Run inside Debian Bookworm with privileged access for UML
     container:
-      image: debian:bookworm
-      options: --privileged --cap-add=ALL -v /dev:/dev
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     # This should be a safe limit for the tests to run.
     timeout-minutes: 90
     strategy:

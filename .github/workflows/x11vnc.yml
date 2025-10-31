@@ -30,7 +30,7 @@ jobs:
   test_x11vnc:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-container:
+    container:
       image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive

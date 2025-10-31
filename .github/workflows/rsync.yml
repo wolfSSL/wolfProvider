@@ -29,10 +29,13 @@ jobs:
     needs: build_wolfprovider
     timeout-minutes: 15
     container:
-      image: debian:bookworm
-      options: --user root
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     env:
-      DEBIAN_FRONTEND: noninteractive
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
