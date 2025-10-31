@@ -18,30 +18,34 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        fips: [ false ]
 
   test_libnice:
     runs-on: ubuntu-22.04
-    container:
-      image: debian:bookworm
+    needs: build_wolfprovider
+container:
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     timeout-minutes: 20
     strategy:
       matrix:
         libnice_ref: [ '0.1.21' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
-        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -52,20 +56,21 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp/packages
+
+      - name: Setup package directories
+        run: |
+          mv /tmp/packages/wolfssl-packages ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mv /tmp/packages/openssl-packages ${{ env.OPENSSL_PACKAGES_PATH }}
+          mv /tmp/packages/wolfprov-packages ${{ env.WOLFPROV_PACKAGES_PATH }}
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
+          printf "Installing OpenSSL/wolfProvider packages (${{ matrix.fips_ref }}):\n"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
@@ -83,14 +88,9 @@ jobs:
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
-
-      - name: Install dependencies
-        run: |
-          apt update
-          apt install -y \
-            build-essential pkg-config meson ninja-build libglib2.0-dev \
-            libgstreamer1.0-dev libunwind-dev gstreamer1.0-plugins-base-apps
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Download libnice
         uses: actions/checkout@v4
@@ -98,6 +98,18 @@ jobs:
           repository: libnice/libnice
           ref: ${{ matrix.libnice_ref }}
           path: libnice
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
+            cd libnice
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libnice/libnice-${{ matrix.libnice_ref }}-wolfprov.patch
+          fi
 
       - name: Build libnice
         working-directory: libnice

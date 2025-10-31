@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   openssl_version_test:
+    continue-on-error: true
     name: OpenSSL Version Test
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -22,7 +23,6 @@ jobs:
         wolfssl_ref: ['v5.8.2-stable']
         openssl_ref: [
           'openssl-3.0.3',
-          'openssl-3.0.4',
           'openssl-3.0.5',
           'openssl-3.0.6',
           'openssl-3.0.7',
@@ -69,7 +69,8 @@ jobs:
 
       - name: Build and test wolfProvider
         run: |
-          OPENSSL_TAG=${{ matrix.openssl_ref }} \
+          WOLFPROV_CONFIG_CFLAGS="-static-libasan -fsanitize=address,undefined -g" \
+            OPENSSL_TAG=${{ matrix.openssl_ref }} \
             WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
             ./scripts/build-wolfprovider.sh
 

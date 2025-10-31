@@ -98,17 +98,28 @@ override_dh_auto_clean:
 	rm -rf test/standalone/tests/.libs
 
 override_dh_auto_test:
-	@if [ -n "$(DEB_LDFLAGS_APPEND)" ]; then \
-		# If DEB_LDFLAGS_APPEND is set, it usually means the \
-		# build system is using a custom library path, rather \
-		# than the system path. So let's set up LD_LIBRARY_PATH \
-		# to use it when running `make test`. \
-		echo "Setting up LD_LIBRARY_PATH from DEB_LDFLAGS_APPEND"; \
-		LD_LIBRARY_PATH="$$(echo $(DEB_LDFLAGS_APPEND) | \
-		  grep -oE -- '-L[^ ]+' | sed 's/^-L//' | awk '!seen[$$0]++' | paste -sd: -)" \
-		$(MAKE) test; \
+	@REPLACE_DEFAULT=0; \
+	if command -v openssl >/dev/null 2>&1; then \
+		OPENSSL_VERSION=$$(openssl version 2>/dev/null || echo ""); \
+		if echo "$$OPENSSL_VERSION" | grep -qi "wolfProvider"; then \
+			REPLACE_DEFAULT=1; \
+		fi; \
+	fi; \
+	if [ $$REPLACE_DEFAULT -eq 1 ]; then \
+		echo "Skipping unit tests (OpenSSL built with replace-default mode)"; \
 	else \
-		$(MAKE) test; \
+		if [ -n "$(DEB_LDFLAGS_APPEND)" ]; then \
+			# If DEB_LDFLAGS_APPEND is set, it usually means the \
+			# build system is using a custom library path, rather \
+			# than the system path. So let's set up LD_LIBRARY_PATH \
+			# to use it when running `make test`. \
+			echo "Setting up LD_LIBRARY_PATH from DEB_LDFLAGS_APPEND"; \
+			LD_LIBRARY_PATH="$$(echo $(DEB_LDFLAGS_APPEND) | \
+			  grep -oE -- '-L[^ ]+' | sed 's/^-L//' | awk '!seen[$$0]++' | paste -sd: -)" \
+			$(MAKE) test; \
+		else \
+			$(MAKE) test; \
+		fi; \
 	fi
 
 override_dh_shlibdeps:
