@@ -48,12 +48,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xxd \
     bc \
     libdistro-info-perl \
-    \
-    # Common OSP build dependencies
     autoconf \
     automake \
     make \
-    \
+    patch \
+    meson \
+    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependencies for bind9.yml workflow
