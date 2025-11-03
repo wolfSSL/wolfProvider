@@ -23,6 +23,7 @@
 set -e
 
 REPO_ROOT=${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}
+source ${REPO_ROOT}/scripts/utils-general.sh
 
 openssl_clone() {
     local debian_version=${1:-bookworm}
@@ -47,59 +48,9 @@ openssl_clone() {
     cd $openssl_dir
 }
 
-openssl_patch_version() {
-    local replace_default=${1:-0}
-    printf "\tPatching OpenSSL version"
-    # Patch the OpenSSL version with our BUILD_METADATA
-    if [ "$replace_default" = "1" ]; then
-        sed -i 's/BUILD_METADATA=.*/BUILD_METADATA=wolfProvider-replace-default/g' VERSION.dat
-    else
-        sed -i 's/BUILD_METADATA=.*/BUILD_METADATA=wolfProvider/g' VERSION.dat
-    fi
-    # Patch the OpenSSL RELEASE_DATE field with the current date in the format DD MMM YYYY
-    sed -i "s/RELEASE_DATE=.*/RELEASE_DATE=$(date '+%d %b %Y')/g" VERSION.dat
-}
-
-openssl_is_patched() {
-    # Return 0 if patched, 1 if not
-    local file="crypto/provider_predefined.c"
-
-    # File must exist to be patched
-    [[ -f "$file" ]] || return 1
-
-    # Any time we see libwolfprov, we're patched
-    if grep -q 'libwolfprov' -- "$file"; then
-        return 0
-    fi
-
-    # Not patched
-    return 1
-}
-
-openssl_patch() {
-    local replace_default=${1:-0}
-
-    if openssl_is_patched; then
-        printf "\tOpenSSL already patched\n"
-    elif [ "$replace_default" = "1" ]; then
-        printf "\tApplying OpenSSL default provider patch ... "
-
-        # Apply the patch
-        patch -p1 < ${REPO_ROOT}/patches/openssl3-replace-default.patch
-        if [ $? != 0 ]; then
-            printf "ERROR.\n"
-            printf "\n\nPatch application failed.\n"
-            exit 1
-        fi
-    fi
-    # Patch the OpenSSL version with our metadata
-    openssl_patch_version $replace_default
-
+openssl_build() {
     DEBFULLNAME="${DEBFULLNAME:-WolfSSL Developer}" DEBEMAIL="${DEBEMAIL:-support@wolfssl.com}" dch -l +wolfprov "Adjust VERSION.dat for custom build"
     DEBIAN_FRONTEND=noninteractive EDITOR=true dpkg-source --commit . adjust-version-dat
-}
-
-openssl_build() {
     DEB_BUILD_OPTIONS="parallel=$(nproc) nocheck" dpkg-buildpackage -us -uc
 }
 
@@ -171,7 +122,7 @@ main() {
         exit 0
     fi
 
-    if [ -n "output_dir" ]; then
+    if [ -n "$output_dir" ]; then
         output_dir=$(realpath $output_dir)
     fi
 
