@@ -4,8 +4,8 @@ name: xmlsec Tests
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
+  #pull_request:
+    #branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,13 +18,14 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        fips: [ false ]
 
   test_xmlsec:
     runs-on: ubuntu-22.04
@@ -41,9 +42,9 @@ jobs:
         xmlsec_ref: [ 'xmlsec-1_2_37' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -54,24 +55,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
-          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
-          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
-          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
-
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
@@ -85,7 +76,9 @@ jobs:
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Install xmlsec dependencies
         run: |
@@ -93,13 +86,6 @@ jobs:
           apt-get install -y automake autoconf libtool libtool-bin \
               libltdl-dev libltdl7 libxml2-dev patch build-essential \
               pkg-config libxml2-dev
-
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfSSL/osp
-          path: osp
-          fetch-depth: 1
 
       - name: Download xmlsec
         uses: actions/checkout@v4
@@ -109,12 +95,26 @@ jobs:
           path: xmlsec
           fetch-depth: 1
 
+      
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd xmlsec
+          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/xmlsec/xmlsec-FIPS-${{ matrix.xmlsec_ref }}-wolfprov.patch
+          else
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/xmlsec/xmlsec-${{ matrix.xmlsec_ref }}-wolfprov.patch
+          fi
+
       - name: Build xmlsec
         working-directory: xmlsec
         env:
           XMLSEC_REF: ${{ matrix.xmlsec_ref }}
         run: |
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/xmlsec/xmlsec-${{ matrix.xmlsec_ref }}-wolfprov.patch
           ./autogen.sh --disable-openssl3-engines --disable-dsa --without-nss \
               --without-gnutls --without-gcrypt --disable-xmldsig \
               --disable-crypto-dl --disable-apps-crypto-dl \

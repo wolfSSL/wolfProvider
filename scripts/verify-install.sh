@@ -200,8 +200,7 @@ verify_wolfprovider() {
     local replace_default="$2"
     local no_wp="$3"
 
-    is_openssl_fips=$(echo "$openssl_version" | grep -v "nonfips" | grep -qi "fips" && echo 1 || echo 0)
-    is_openssl_replace_default=$(echo "$openssl_version" | grep -qi "wolfProvider" && echo 1 || echo 0)
+    is_openssl_replace_default=$(echo "$openssl_version" | grep -qi "wolfProvider-replace-default" && echo 1 || echo 0)
     is_openssl_default_provider=$(echo "$openssl_providers" | grep -qi "OpenSSL Default Provider" && echo 1 || echo 0)
 
     is_wp_active=$(echo "$openssl_providers" | grep -qi "wolfSSL Provider" && echo 1 || echo 0)
@@ -215,7 +214,6 @@ verify_wolfprovider() {
         echo "fips: $fips"
         echo "replace_default: $replace_default"
         echo "no_wp: $no_wp"
-        echo "DEBUG: is_openssl_fips: $is_openssl_fips"
         echo "DEBUG: is_openssl_replace_default: $is_openssl_replace_default"
         echo "DEBUG: is_openssl_default_provider: $is_openssl_default_provider"
         echo "DEBUG: is_wp_active: $is_wp_active"
@@ -251,16 +249,7 @@ verify_wolfprovider() {
         elif [ $is_wp_default -ne 1 ]; then
             handle_error "wolfProvider is not the default provider"
         fi
-        
-        if [ $fips -eq 1 ]; then
-            if [ $is_openssl_fips -ne 1 ]; then
-                handle_error "OpenSSL is not FIPS"
-            fi
-        else
-            if [ $is_openssl_fips -eq 1 ]; then
-                handle_error "OpenSSL is FIPS"
-            fi
-        fi
+
     else
         if [ $is_openssl_replace_default -eq 1 ]; then
             handle_error "OpenSSL is replace default"

@@ -18,16 +18,18 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        fips: [ false ]
 
   test_openssh:
     runs-on: ubuntu-22.04
+    needs: build_wolfprovider
     container:
       image: debian:bookworm
       # Extra permissions needed for Debian Bookworm
@@ -42,7 +44,6 @@ jobs:
         -v /lib/modules:/lib/modules:ro
       env:
         DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 20
     strategy:
@@ -50,9 +51,9 @@ jobs:
         openssh_ref: [ 'V_10_0_P2', 'V_9_9_P1' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'non-FIPS' ] # FIPS is not yet supported for OpenSSH
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -63,24 +64,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
-          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
-          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
-          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
-
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
@@ -94,7 +85,9 @@ jobs:
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Install dependencies
         run: |
