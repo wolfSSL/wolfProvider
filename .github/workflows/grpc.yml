@@ -18,21 +18,22 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        fips: [ false ]
 
   test_grpc:
     runs-on: ubuntu-22.04
+    needs: build_wolfprovider
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
     # This should be a safe limit for the tests to run.
     timeout-minutes: 30
     strategy:
@@ -48,8 +49,9 @@ jobs:
               h2_ssl_cert_test h2_ssl_session_reuse_test
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -60,24 +62,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
-          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
-          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
-          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
-
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
@@ -91,7 +83,9 @@ jobs:
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Install prerequisites
         run: |
@@ -116,6 +110,17 @@ jobs:
           path: grpc
           ref: ${{ matrix.grpc_ref }}
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd grpc
+          # Apply the wolfProvider patch
+          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/grpc/grpc-FIPS-${{ matrix.grpc_ref }}-wolfprov.patch
+
       - name: Build grpc with wolfProvider
         working-directory: ./grpc
         run: |
@@ -139,7 +144,33 @@ jobs:
           # Start the port server
           ./tools/run_tests/start_port_server.py
 
+          export ${{ matrix.force_fail }}
+          set +e
+
           # Run the tests
+          all_passed=1
           for t in ${{ matrix.tests }} ; do
+            echo "==================================="
+            echo "Running test: $t"
+            echo "Force fail: ${{ matrix.force_fail }}"
+            echo "==================================="
             ./cmake/build/$t
+            exit_code=$?
+            if [ $exit_code -ne 0 ]; then
+              echo "Test $t FAILED with exit code $exit_code"
+              echo "Force fail: ${{ matrix.force_fail }}"
+              all_passed=0
+            fi
           done
+
+          set -e
+          if [ $all_passed -eq 1 ]; then
+            echo "ALL TESTS PASSED"
+            TEST_RESULT=0
+          else
+            echo "SOME TESTS FAILED"
+            TEST_RESULT=1
+          fi
+
+          # Check results
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} grpc

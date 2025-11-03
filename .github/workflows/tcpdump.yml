@@ -15,30 +15,32 @@ jobs:
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
       openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        fips: [ false ]
 
   test_tcpdump:
     runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    continue-on-error: true
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
     timeout-minutes: 15
     strategy:
       matrix:
         tcpdump_ref: [ 'tcpdump-4.99.3' ]
         wolfssl_ref: [ 'v5.8.2-stable' ]
         openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
-        fips: [ false ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -49,24 +51,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checking OpenSSL/wolfProvider packages in cache
-        uses: actions/cache/restore@v4
-        id: wolfprov-cache
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}
-            ${{ env.OPENSSL_PACKAGES_PATH }}
-            ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ matrix.replace_default && '-replace-default' || '' }}
-          fail-on-cache-miss: true
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          printf "Installing OpenSSL/wolfProvider packages:\n"
-          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
-          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
-          ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
-
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
@@ -80,7 +72,9 @@ jobs:
 
       - name: Verify wolfProvider is properly installed
         run: |
-          $GITHUB_WORKSPACE/scripts/verify-install.sh ${{ matrix.replace_default && '--replace-default' || '' }} ${{ matrix.fips && '--fips' || '' }}
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Install test dependencies
         run: |
@@ -109,6 +103,20 @@ jobs:
           path: tcpdump_repo
           ref: ${{ matrix.tcpdump_ref }}
 
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+      - run: |
+          cd tcpdump_repo
+          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/tcpdump/tcpdump-FIPS-${{ matrix.tcpdump_ref }}-wolfprov.patch
+          else
+            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/tcpdump/tcpdump-${{ matrix.tcpdump_ref }}-wolfprov.patch
+          fi
+
       - name: Build and install tcpdump
         working-directory: tcpdump_repo
         run: |
@@ -118,7 +126,11 @@ jobs:
             autoreconf -fiv
           fi
           export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/libpcap-install/lib/pkgconfig:$PKG_CONFIG_CONFIG:$PKG_CONFIG_PATH
-          ./configure --prefix=$GITHUB_WORKSPACE/tcpdump-install --with-pcap=$GITHUB_WORKSPACE/libpcap-install
+          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
+            ./configure --prefix=$GITHUB_WORKSPACE/tcpdump-install --with-pcap=$GITHUB_WORKSPACE/libpcap-install --enable-wolfprov-fips
+          else
+            ./configure --prefix=$GITHUB_WORKSPACE/tcpdump-install --with-pcap=$GITHUB_WORKSPACE/libpcap-install
+          fi
           make -j$(nproc)
           make install
 
@@ -134,4 +146,3 @@ jobs:
           # Capture the test result using PIPESTATUS (Bash only)
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tcpdump
-

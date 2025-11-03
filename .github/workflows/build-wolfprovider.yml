@@ -9,6 +9,9 @@ on:
       openssl_ref:
         required: true
         type: string
+      fips_ref:
+        required: false
+        type: string
       replace_default:
         required: false
         type: boolean
@@ -18,44 +21,133 @@ jobs:
   build_wolfprovider_common:
     name: Build wolfProvider
     runs-on: ubuntu-22.04
-    # Run inside Debian Bookworm to match packaging environment
+    # Grant permissions to read packages from ghcr.io
+    permissions:
+      contents: read
+      packages: read
+    # Run inside Debian Bookworm using container from ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
+    # We are using this container to avoid having to install all the dependencies on the host machine 
+    # and speed up the build process.
+    # Note: Docker image paths must be lowercase even though the GitHub org is wolfSSL
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
+      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
+      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     timeout-minutes: 20
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+      DEBS_PATH: debs
     steps:
-      # Install git prior to cloning to ensure we have the full repo
-      # TODO: create a docker with these pre-installed
-      - name: Install common dependencies
+      # Check if artifact already exists from another job in the same workflow run
+      # When multiple matrix jobs run in parallel, the first one to finish uploads the artifact
+      # Other jobs can then find it and skip rebuilding (no need to download it, just check it exists)
+      - name: Check for existing artifact from same run
+        id: check_artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
+
+      # Download pre-built packages from debs branch
+      - name: Checkout debs branch
+        if: steps.check_artifact.outcome != 'success'
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/wolfProvider
+          ref: debs
+          sparse-checkout: |
+            fips
+            nonfips
+            openssl
+          sparse-checkout-cone-mode: false
+          path: ${{ env.DEBS_PATH }}
+
+      - name: Setup packages from debs branch
+        if: steps.check_artifact.outcome != 'success'
         run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            build-essential \
-            devscripts \
-            debhelper \
-            dh-autoreconf \
-            libtool \
-            pkg-config \
-            git \
-            wget \
-            curl \
-            ca-certificates \
-            openssl \
-            dpkg-dev \
-            lintian \
-            fakeroot \
-            dh-exec \
-            equivs \
-            expect \
-            xxd \
-            bc \
-            libdistro-info-perl
+          mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
+          mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
+
+          echo "Available packages in debs branch:"
+          ls -la ${{ env.DEBS_PATH }}/
+
+          # Copy packages based on build type
+          if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
+            if [ -d "${{ env.DEBS_PATH }}/fips" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/fips/*.deb 2>/dev/null)" ]; then
+              echo "Copying FIPS wolfSSL packages..."
+              cp ${{ env.DEBS_PATH }}/fips/*.deb ${{ env.WOLFSSL_PACKAGES_PATH }}/
+            else
+              echo "ERROR: No FIPS packages found in debs branch"
+              exit 1
+            fi
+          else
+            if [ -d "${{ env.DEBS_PATH }}/nonfips" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/nonfips/*.deb 2>/dev/null)" ]; then
+              echo "Copying non-FIPS wolfSSL packages..."
+              cp ${{ env.DEBS_PATH }}/nonfips/*.deb ${{ env.WOLFSSL_PACKAGES_PATH }}/
+            else
+              echo "ERROR: No non-FIPS packages found in debs branch"
+              exit 1
+            fi
+          fi
+          # Copy OpenSSL packages based on replace_default setting
+          if [ "${{ inputs.replace_default }}" = "true" ]; then
+            if [ -d "${{ env.DEBS_PATH }}/openssl/debs-replace-default" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/openssl/debs-replace-default/*.deb 2>/dev/null)" ]; then
+              echo "Copying OpenSSL replace-default packages..."
+              cp ${{ env.DEBS_PATH }}/openssl/debs-replace-default/*.deb ${{ env.OPENSSL_PACKAGES_PATH }}/
+            else
+              echo "WARNING: No OpenSSL replace-default packages found in debs branch"
+            fi
+          else
+            if [ -d "${{ env.DEBS_PATH }}/openssl/debs-default" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/openssl/debs-default/*.deb 2>/dev/null)" ]; then
+              echo "Copying OpenSSL default packages..."
+              cp ${{ env.DEBS_PATH }}/openssl/debs-default/*.deb ${{ env.OPENSSL_PACKAGES_PATH }}/
+            else
+              echo "WARNING: No OpenSSL default packages found in debs branch"
+            fi
+          fi
+
+          echo ""
+          echo "Packages ready for installation:"
+          echo "wolfSSL packages:"
+          ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          echo ""
+          echo "OpenSSL packages:"
+          ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
+
+      - name: Install OpenSSL and wolfSSL packages
+        if: steps.check_artifact.outcome != 'success'
+        run: |
+          echo "Installing OpenSSL and wolfSSL packages (${{ inputs.fips_ref }})..."
+
+          # Install OpenSSL packages first
+          if [ -n "$(ls -A ${{ env.OPENSSL_PACKAGES_PATH }}/*.deb 2>/dev/null)" ]; then
+            echo "Installing OpenSSL packages..."
+            dpkg -i ${{ env.OPENSSL_PACKAGES_PATH }}/*.deb || true
+          fi
+          # Install wolfSSL packages
+          if [ -n "$(ls -A ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb 2>/dev/null)" ]; then
+            echo "Installing wolfSSL packages..."
+            dpkg -i ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb || true
+          fi
+
+          # Fix any dependency issues
+          apt-get install -f -y
+
+          echo ""
+          echo "Packages installed successfully:"
+          echo "OpenSSL:"
+          dpkg -l | grep openssl || echo "  No OpenSSL packages found"
+          echo ""
+          echo "wolfSSL:"
+          dpkg -l | grep wolfssl || echo "  No wolfSSL packages found"
 
       - name: Checkout wolfProvider
+        if: steps.check_artifact.outcome != 'success'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -63,58 +155,53 @@ jobs:
 
       # Avoid "detected dubious ownership" warning
       - name: Ensure the working directory safe
+        if: steps.check_artifact.outcome != 'success'
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # When running on a fork the upstream tags are not present, so fetch them explicitly
       - name: Fetch tags from upstream(for Debian versioning)
+        if: steps.check_artifact.outcome != 'success'
         run: |
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
-      - name: Install wolfSSL
-        run: |
-          $GITHUB_WORKSPACE/debian/install-wolfssl.sh --tag ${{ inputs.wolfssl_ref }} ${{ env.WOLFSSL_PACKAGES_PATH }}
-
-      - name: Install OpenSSL
-        run: |
-          $GITHUB_WORKSPACE/debian/install-openssl.sh ${{ inputs.replace_default && '--replace-default' || '' }} ${{ env.OPENSSL_PACKAGES_PATH }} 
-
       - name: Install wolfProvider
+        if: steps.check_artifact.outcome != 'success'
         run: |
-          $GITHUB_WORKSPACE/debian/install-wolfprov.sh ${{ env.WOLFPROV_PACKAGES_PATH }}
+          $GITHUB_WORKSPACE/debian/install-wolfprov.sh ${{ inputs.fips_ref == 'FIPS' && '--fips' || '' }} ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-      - name: List packages directories
+      - name: Setup packages directory
+        if: steps.check_artifact.outcome != 'success'
         run: |
+          mkdir -p ${{ env.WOLFPROV_PACKAGES_PATH }}
+          
+          # Copy wolfProvider packages (built in previous step)
+          cp $GITHUB_WORKSPACE/../libwolfprov*.deb    ${{ env.WOLFPROV_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../libwolfprov*.dsc    ${{ env.WOLFPROV_PACKAGES_PATH }}
+          cp $GITHUB_WORKSPACE/../libwolfprov*.tar.gz ${{ env.WOLFPROV_PACKAGES_PATH }}
+
+          # Note: OpenSSL and wolfSSL packages already copied from debs branch earlier
+          
+          printf "Listing packages directory:\n"
+          echo "wolfProvider packages:"
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
+          echo ""
+          echo "wolfSSL packages:"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
+          echo ""
+          echo "OpenSSL packages:"
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
 
-      - name: Save all packages to cache for use by other workflows
-        uses: actions/cache/save@v4
-        continue-on-error: true
+      # Save all packages as artifacts for consumers
+      # Skip upload if artifact already exists (from a parallel run)
+      - name: Upload wolfProvider packages
+        if: steps.check_artifact.outcome != 'success'
+        uses: actions/upload-artifact@v4
         with:
+          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
           path: |
             ${{ env.WOLFSSL_PACKAGES_PATH }}
             ${{ env.OPENSSL_PACKAGES_PATH }}
             ${{ env.WOLFPROV_PACKAGES_PATH }}
-          key: openssl-wolfprov-debian-packages-${{ github.sha }}${{ inputs.replace_default && '-replace-default' || '' }}
-
-      # Save all packages in a single artifact for consumers
-      # TODO: support debug builds
-      - name: Upload wolfProvider artifacts
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: openssl-wolfprov-debian-packages-${{ github.sha }}${{ inputs.replace_default && '-replace-default' || '' }}
-          path: |
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.deb
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.dsc
-            ${{ env.WOLFSSL_PACKAGES_PATH }}/*.tar.gz
-            ${{ env.OPENSSL_PACKAGES_PATH }}/*.deb
-            ${{ env.OPENSSL_PACKAGES_PATH }}/*.dsc
-            ${{ env.OPENSSL_PACKAGES_PATH }}/*.tar.gz
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.deb
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.dsc
-            ${{ env.WOLFPROV_PACKAGES_PATH }}/*.tar.gz
           retention-days: 1
