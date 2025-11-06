@@ -82,20 +82,6 @@ jobs:
           apt-get install -y build-essential flex bison autoconf libtool\
             libpcap-dev
 
-      - name: Checkout libpcap
-        uses: actions/checkout@v4
-        with:
-          repository: the-tcpdump-group/libpcap
-          path: libpcap_repo
-          # Compiling tcpdump from source explicitly requires a built libpcap installation
-      - name: Build and install libpcap
-        working-directory: libpcap_repo
-        run: |
-          ./autogen.sh
-          ./configure --prefix=$GITHUB_WORKSPACE/libpcap-install
-          make -j$(nproc)
-          make install
-
       - name: Checkout tcpdump
         uses: actions/checkout@v4
         with:
@@ -111,10 +97,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd tcpdump_repo
-          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
+          if [ "${{ matrix.fips_ref }}" = "FIPS" ]; then
             patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/tcpdump/tcpdump-FIPS-${{ matrix.tcpdump_ref }}-wolfprov.patch
-          else
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/tcpdump/tcpdump-${{ matrix.tcpdump_ref }}-wolfprov.patch
           fi
 
       - name: Build and install tcpdump
