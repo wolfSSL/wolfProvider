@@ -22,24 +22,26 @@ jobs:
   setup_docker:
     name: Setup Docker Environment
     runs-on: ubuntu-22.04
-    continue-on-error: true  # Don't fail the workflow if this job fails
     permissions:
       contents: read
       packages: read
     outputs:
       success: ${{ steps.test_image.outputs.success }}
-    # Try to use custom image from ghcr.io
-    container:
-      image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     steps:
       - name: Test custom image availability
         id: test_image
+        continue-on-error: true
         run: |
-          echo "Custom Docker image is available and working"
-          echo "success=true" >> $GITHUB_OUTPUT
+          # Try to pull the custom Docker image
+          if docker pull ghcr.io/wolfssl/build-wolfprovider-debian:bookworm 2>/dev/null; then
+            echo "✓ Custom Docker image is available"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "✗ Custom Docker image not available, will use fallback"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+          # Always exit successfully so this job shows as passing
+          exit 0
 
   build_wolfprovider_common:
     name: Build wolfProvider
