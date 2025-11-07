@@ -18,23 +18,42 @@ on:
         default: false
 
 jobs:
-  build_wolfprovider_common:
-    name: Build wolfProvider
+  # Setup Docker environment - test if custom image is available
+  setup_docker:
+    name: Setup Docker Environment
     runs-on: ubuntu-22.04
-    # Grant permissions to read packages from ghcr.io
+    continue-on-error: true  # Don't fail the workflow if this job fails
     permissions:
       contents: read
       packages: read
-    # Run inside Debian Bookworm using container from ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
-    # We are using this container to avoid having to install all the dependencies on the host machine 
-    # and speed up the build process.
-    # Note: Docker image paths must be lowercase even though the GitHub org is wolfSSL
+    outputs:
+      success: ${{ steps.test_image.outputs.success }}
+    # Try to use custom image from ghcr.io
     container:
       image: ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-      # Add network capabilities so ifconfig/RTNETLINK operations are permitted
-      # These are passed to `docker run` as runtime options
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
+    steps:
+      - name: Test custom image availability
+        id: test_image
+        run: |
+          echo "Custom Docker image is available and working"
+          echo "success=true" >> $GITHUB_OUTPUT
+
+  build_wolfprovider_common:
+    name: Build wolfProvider
+    runs-on: ubuntu-22.04
+    needs: setup_docker
+    if: always()
+    permissions:
+      contents: read
+      packages: read
+    # Use custom image if available, otherwise fallback to stock debian:bookworm
+    container:
+      image: ${{ needs.setup_docker.outputs.success == 'true' && 'ghcr.io/wolfssl/build-wolfprovider-debian:bookworm' || 'debian:bookworm' }}
+      env:
+        DEBIAN_FRONTEND: noninteractive
       options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     timeout-minutes: 20
     env:
@@ -43,6 +62,34 @@ jobs:
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
       DEBS_PATH: debs
     steps:
+      # Install dependencies if using fallback stock debian:bookworm image
+      - name: Install build dependencies (fallback)
+        if: needs.setup_docker.outputs.success != 'true'
+        run: |
+          echo "Custom Docker image unavailable, installing dependencies on stock debian:bookworm..."
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential \
+            devscripts \
+            debhelper \
+            dh-autoreconf \
+            libtool \
+            pkg-config \
+            git \
+            wget \
+            curl \
+            ca-certificates \
+            openssl \
+            dpkg-dev \
+            lintian \
+            fakeroot \
+            dh-exec \
+            equivs \
+            expect \
+            xxd \
+            bc \
+            libdistro-info-perl
+          echo "✓ Dependencies installed successfully"
+
       # Check if artifact already exists from another job in the same workflow run
       # When multiple matrix jobs run in parallel, the first one to finish uploads the artifact
       # Other jobs can then find it and skip rebuilding (no need to download it, just check it exists)
