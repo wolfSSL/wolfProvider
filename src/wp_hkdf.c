@@ -30,6 +30,38 @@
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
 
+/**
+ * Define WP_HKDF_NULL_SALT_ALLOWED for OpenSSL versions that allow NULL salt in HKDF.
+ * Behavior changed at different patch versions for each minor version.
+ */
+#if OPENSSL_VERSION_MAJOR == 3
+  #if OPENSSL_VERSION_MINOR == 0
+    #if OPENSSL_VERSION_PATCH <= 16
+      #define WP_HKDF_NULL_SALT_ALLOWED
+    #endif
+  #elif OPENSSL_VERSION_MINOR == 1
+    #if OPENSSL_VERSION_PATCH <= 8
+      #define WP_HKDF_NULL_SALT_ALLOWED
+    #endif
+  #elif OPENSSL_VERSION_MINOR == 2
+    #if OPENSSL_VERSION_PATCH <= 4
+      #define WP_HKDF_NULL_SALT_ALLOWED
+    #endif
+  #elif OPENSSL_VERSION_MINOR == 3
+    #if OPENSSL_VERSION_PATCH <= 3
+      #define WP_HKDF_NULL_SALT_ALLOWED
+    #endif
+  #elif OPENSSL_VERSION_MINOR == 4
+    #if OPENSSL_VERSION_PATCH <= 1
+      #define WP_HKDF_NULL_SALT_ALLOWED
+    #endif
+  #elif OPENSSL_VERSION_MINOR == 5
+    #if OPENSSL_VERSION_PATCH <= 0
+      #define WP_HKDF_NULL_SALT_ALLOWED
+    #endif
+  #endif
+#endif
+
 /** Base set of parameters settable against context. */
 #define WP_HKDF_BASE_SETTABLES                                          \
         OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_MODE, NULL, 0),           \
@@ -330,7 +362,11 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
         }
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM *)params, OSSL_KDF_PARAM_SALT);
+#ifdef WP_HKDF_NULL_SALT_ALLOWED
             if ((p != NULL) && (p->data != NULL)) {
+#else
+            if (p != NULL) {
+#endif
                 OPENSSL_free(ctx->salt);
                 ctx->salt = NULL;
                 if (!OSSL_PARAM_get_octet_string(
