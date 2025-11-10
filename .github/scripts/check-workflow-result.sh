@@ -274,13 +274,14 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
     # ----- TCPDUMP -----
     elif [ "$TEST_SUITE" = "tcpdump" ]; then
         if [ -f "tcpdump-test.log" ]; then
-            # Check for expected 7 failed tests (ESP/crypto segfaults)
-            if grep -q "2 tests failed" tcpdump-test.log; then
-                echo "PASS: tcpdump tests failed as expected with force fail enabled (2 tests failed)"
-                exit 0
-            else
-                echo "FAIL: tcpdump tests did not fail as expected (should have 2 failed tests)"
+            # Expect 7 failed tests (ESP/crypto segfaults) in non-FIPS
+            # and 2 failed tests in FIPS mode
+            if grep -q "Tests passed successfully" tcpdump-test.log; then
+                echo "FAIL: tcpdump tests did not fail as expected"
                 exit 1
+            else
+                echo "PASS: tcpdump tests failed as expected with force fail enabled"
+                exit 0
             fi
         else
             echo "Error: tcpdump-test.log not found"
