@@ -32,6 +32,9 @@ OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
 OPENSSL_TEST=${OPENSSL_SOURCE_DIR}/test
 OPENSSL_LIB_DIRS="${OPENSSL_INSTALL_DIR}/lib:${OPENSSL_INSTALL_DIR}/lib64"
+OPENSSL_CFLAGS=${OPENSSL_CFLAGS:-""}
+OPENSSL_CXXFLAGS=${OPENSSL_CXXFLAGS:-""}
+OPENSSL_LDFLAGS=${OPENSSL_LDFLAGS:-""}
 
 NUMCPU=${NUMCPU:-8}
 WOLFPROV_DEBUG=${WOLFPROV_DEBUG:-0}
@@ -226,6 +229,10 @@ install_openssl() {
             exit 1
         fi
         printf "Done.\n"
+
+        export CFLAGS="${OPENSSL_CFLAGS}"
+        export CXXFLAGS="${OPENSSL_CXXFLAGS}"
+        export LDFLAGS="${OPENSSL_LDFLAGS}"
 
         printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
         make -j$NUMCPU >>$LOG_FILE 2>&1

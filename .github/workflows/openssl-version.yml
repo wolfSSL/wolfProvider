@@ -77,7 +77,9 @@ jobs:
 
       - name: Build and test wolfProvider
         run: |
-          WOLFPROV_CONFIG_CFLAGS="-static-libasan -fsanitize=address,undefined -g" \
+          OPENSSL_CFLAGS="-static-libasan -fsanitize=address,undefined -g" \
+          OPENSSL_CXXFLAGS="-static-libasan -fsanitize=address,undefined -g" \
+          OPENSSL_LDFLAGS="-fsanitize=address,undefined -static-libasan" \
             OPENSSL_TAG=${{ matrix.openssl_ref }} \
             WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
             ./scripts/build-wolfprovider.sh
