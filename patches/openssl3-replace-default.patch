@@ -1,8 +1,8 @@
 diff --git a/crypto/provider_predefined.c b/crypto/provider_predefined.c
-index 068e0b7..7bc4ddb 100644
+index 068e0b7..e9ae469 100644
 --- a/crypto/provider_predefined.c
 +++ b/crypto/provider_predefined.c
-@@ -5,23 +5,56 @@
+@@ -5,28 +5,67 @@
   * this file except in compliance with the License.  You can obtain a copy
   * in the file LICENSE in the source distribution or at
   * https://www.openssl.org/source/license.html
@@ -16,6 +16,13 @@ index 068e0b7..7bc4ddb 100644
  #include "provider_local.h"
  
 -OSSL_provider_init_fn ossl_default_provider_init;
++/* For the replace default model we actually do not want OpenSSL built with FIPS.
++ * It pushes FIPS related logic into OpenSSL itself, when that should really be
++ * handled by wolfCrypt. */
++#ifdef FIPS_MODULE
++#error "For wolfProvider replace default mode, do not build OpenSSL with FIPS"
++#endif
++
 +static DSO *d = NULL;
 +
 +/* Common function to dynamically load libwolfprov and call wolfssl_provider_init */
@@ -26,12 +33,12 @@ index 068e0b7..7bc4ddb 100644
 +    OSSL_provider_init_fn *wolfssl_provider_init_fn = NULL;
 +
 +    d = DSO_new();
-+    if (!d) { 
++    if (!d) {
 +        fprintf(stderr, "DSO_new() failed\n");
 +        return 1;
 +    }
 +
-+    if (!DSO_load(d, "wolfprov", NULL, 0)) { 
++    if (!DSO_load(d, "wolfprov", NULL, 0)) {
 +        fprintf(stderr, "Could not load libwolfprov.so. Is the libwolfprov package installed?\n");
 +        DSO_free(d);
 +        return 1;
@@ -57,13 +64,21 @@ index 068e0b7..7bc4ddb 100644
 -OSSL_provider_init_fn ossl_legacy_provider_init;
 -#endif
 +
++/* For replace default mode, we will always be the selected provider for attempts
++ * to load either the "fips" or "default" providers by name.*/
  const OSSL_PROVIDER_INFO ossl_predefined_providers[] = {
- #ifdef FIPS_MODULE
+-#ifdef FIPS_MODULE
 -    { "fips", NULL, ossl_fips_intern_provider_init, NULL, 1 },
-+    { "fips", NULL, load_wolfprov_and_init, NULL, 1 },
- #else
+-#else
 -    { "default", NULL, ossl_default_provider_init, NULL, 1 },
++    { "fips", NULL, load_wolfprov_and_init, NULL, 0 },
 +    { "default", NULL, load_wolfprov_and_init, NULL, 1 },
  # ifdef STATIC_LEGACY
-     { "legacy", NULL, ossl_legacy_provider_init, NULL, 0 },
+-    { "legacy", NULL, ossl_legacy_provider_init, NULL, 0 },
++    { "legacy", NULL, load_wolfprov_and_init, NULL, 0 },
  # endif
+     { "base", NULL, ossl_base_provider_init, NULL, 0 },
+     { "null", NULL, ossl_null_provider_init, NULL, 0 },
+-#endif
+     { NULL, NULL, NULL, NULL, 0 }
+ };
