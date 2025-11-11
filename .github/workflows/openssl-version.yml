@@ -36,6 +36,7 @@ jobs:
           'openssl-3.0.15',
           'openssl-3.0.16',
           'openssl-3.0.17',
+          'openssl-3.0.18',
           'openssl-3.1.0',
           'openssl-3.1.1',
           'openssl-3.1.2',
@@ -51,16 +52,23 @@ jobs:
           'openssl-3.2.3',
           'openssl-3.2.4',
           'openssl-3.2.5',
+          'openssl-3.2.6',
           'openssl-3.3.0',
           'openssl-3.3.1',
           'openssl-3.3.2',
           'openssl-3.3.3',
           'openssl-3.3.4',
+          'openssl-3.3.5',
           'openssl-3.4.0',
           'openssl-3.4.1',
           'openssl-3.4.2',
+          'openssl-3.4.3',
           'openssl-3.5.0',
-          'openssl-3.5.1']
+          'openssl-3.5.1',
+          'openssl-3.5.2',
+          'openssl-3.5.3',
+          'openssl-3.5.4',
+          'openssl-3.6.0']
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
