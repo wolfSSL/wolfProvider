@@ -1,20 +1,38 @@
 #!/bin/bash
-# req-cmd-test.sh - Certificate request test for wolfProvider
+# req-cmd-test.sh
+# Certificate request test for wolfProvider
+#
+# NOTE: This script is designed to be called from do-cmd-tests.sh
+# Do not run this script directly - use do-cmd-tests.sh instead
+#
+# Copyright (C) 2006-2025 wolfSSL Inc.
+#
+# This file is part of wolfProvider.
+#
+# wolfProvider is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# wolfProvider is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
-cmd_test_env_setup "req-test.log"
+cmd_test_init "req-test.log"
 clean_cmd_test "req"
 
-exec > >(tee -a "$LOG_FILE") 2>&1
 mkdir -p req_outputs
 
 CURVES=("prime256v1" "secp384r1" "secp521r1") 
 HASH_ALGORITHMS=("sha256" "sha384" "sha512")
 PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
-
-echo "=== Running Certificate Request (X.509) Tests ==="
 
 # Skip tests for FIPS mode (unless force-failing)
 if [ "${WOLFSSL_ISFIPS}" = "1" ] && [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then

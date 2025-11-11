@@ -2,6 +2,9 @@
 # ecc-cmd-test.sh
 # ECC key generation test for wolfProvider
 #
+# NOTE: This script is designed to be called from do-cmd-tests.sh
+# Do not run this script directly - use do-cmd-tests.sh instead
+#
 # Copyright (C) 2006-2025 wolfSSL Inc.
 #
 # This file is part of wolfProvider.
@@ -22,11 +25,8 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
-cmd_test_env_setup "ecc-test.log"
+cmd_test_init "ecc-test.log"
 clean_cmd_test "ecc"
-
-# Redirect all output to log file
-exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create test data and output directories
 mkdir -p ecc_outputs
@@ -35,8 +35,6 @@ echo "This is test data for ECC signing and verification." > ecc_outputs/test_da
 # Array of ECC curves and providers to test
 CURVES=("prime256v1" "secp384r1" "secp521r1")
 PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
-
-echo "=== Running ECC Key Generation Tests ==="
 
 # Function to validate key
 validate_key() {

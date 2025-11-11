@@ -2,6 +2,9 @@
 # aes-cmd-test.sh
 # AES encryption test for wolfProvider
 #
+# NOTE: This script is designed to be called from do-cmd-tests.sh
+# Do not run this script directly - use do-cmd-tests.sh instead
+#
 # Copyright (C) 2006-2025 wolfSSL Inc.
 #
 # This file is part of wolfProvider.
@@ -22,11 +25,8 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
-cmd_test_env_setup "aes-test.log"
+cmd_test_init "aes-test.log"
 clean_cmd_test "aes"
-
-# Redirect all output to log file
-exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create test data and output directories
 mkdir -p aes_outputs
@@ -41,8 +41,6 @@ if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
 else
     MODES=("ecb" "cbc" "ctr" "cfb")
 fi
-
-echo "=== Running AES Algorithm Comparisons ==="
 
 # Run tests for each key size and mode
 for key_size in "${KEY_SIZES[@]}"; do
