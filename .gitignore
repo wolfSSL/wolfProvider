@@ -122,3 +122,6 @@ debian/libssl3*
 !debian/*.triggers
 !debian/shlib.local
 
+# clangd
+.cache/
+compile_commands.json

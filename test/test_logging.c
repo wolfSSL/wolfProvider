@@ -106,6 +106,7 @@ int test_logging(void *data)
         PRINT_ERR_MSG("wolfProv_SetLoggingCb failed: %d", ret);
         return -1;
     }
+
     /* Scenario A: ALL levels, provider component */
     reset_env_and_init("WP_LOG_LEVEL_ALL", "WP_LOG_COMP_PROVIDER");
     {
