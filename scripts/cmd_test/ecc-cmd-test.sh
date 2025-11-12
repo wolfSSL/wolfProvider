@@ -117,6 +117,18 @@ test_sign_verify_pkeyutl() {
     local data_file="ecc_outputs/test_data.txt"
     
     echo -e "\n=== Testing ECC (${curve}) Sign/Verify with pkeyutl Using ${provider_name} ==="
+
+    if [ ! -f "$key_file" ] || [ ! -f "$pub_key_file" ]; then
+        echo "[FAIL] Key files for ECC (${curve}) not found, cannot run sign/verify tests"
+        FAIL=1
+        exit 1
+    fi
+
+    if [ ! -f "$data_file" ]; then
+        echo "[FAIL] Test data file not found, cannot run sign/verify tests"
+        FAIL=1
+        exit 1
+    fi
     
     # Test 1: Sign and verify with OpenSSL default
     use_default_provider
@@ -193,6 +205,12 @@ generate_and_test_key() {
     provider_name=$(get_provider_name "$provider_args")
     
     echo -e "\n=== Testing ECC Key Generation (${curve}) with ${provider_name} ==="
+
+    if [ -f "$output_file" ]; then
+        echo "ECC key file $output_file already exists, removing it."
+        rm -f "$output_file"
+    fi
+
     echo "Generating ECC key (${curve})..."
     
     if $OPENSSL_BIN genpkey -algorithm EC \
@@ -238,6 +256,14 @@ for curve in "${CURVES[@]}"; do
     for test_provider in "${PROVIDER_ARGS[@]}"; do
         # Generate key with current provider
         generate_and_test_key "$curve" "$test_provider"
+
+        # If WPFF is set, we need to run again to actually create the 
+        # key files
+        if [ $WOLFPROV_FORCE_FAIL -ne 0 ]; then
+            WOLFPROV_FORCE_FAIL=0
+            generate_and_test_key "$curve" "$test_provider"
+            WOLFPROV_FORCE_FAIL=1
+        fi
 
         # Test sign/verify interoperability
         test_sign_verify_pkeyutl "$curve" "$test_provider"
