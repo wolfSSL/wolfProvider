@@ -130,22 +130,7 @@ install_wolfprov() {
     fi
     printf "Done.\n"
 
-    # Build the replacement default library after wolfprov to avoid linker errors
-    # but before testing so that the library is present if needed
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then 
-        printf "\tWARNING: Skipping tests in replace mode...\n"
-    else
-        printf "\tTest wolfProvider ... "
-        make test >>$LOG_FILE 2>&1
-        if [ $? != 0 ]; then
-            printf "\n\n...\n"
-            tail -n 40 $LOG_FILE
-            do_cleanup
-            exit 1
-        fi
-        printf "Done.\n"
-    fi
-
+    # Install prior to test so that the library is present in the known location.
     printf "\tInstall wolfProvider ... "
     make install >>$LOG_FILE 2>&1
     if [ $? != 0 ]; then
@@ -155,6 +140,31 @@ install_wolfprov() {
         exit 1
     fi
     printf "Done.\n"
+
+    # Build the replacement default library after wolfprov to avoid linker errors
+    # but before testing so that the library is present if needed
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then 
+        printf "\tWARNING: Skipping tests in replace mode...\n"
+    else
+        # Setup the environment to ensure we use the local builds of wolfprov, wolfssl, and openssl.
+        if ! source ${SCRIPT_DIR}/env-setup >/dev/null 2>&1; then
+            printf "\n\nError: Failed to source env-setup\n"
+            do_cleanup
+            exit 1
+        fi
+
+        printf "\tTest wolfProvider ... "
+        make test >>$LOG_FILE 2>&1
+        if [ $? != 0 ]; then
+            printf "\n\n...\n"
+            tail -n 40 $LOG_FILE
+            # Clean up the install directory
+            make uninstall >>$LOG_FILE 2>&1 || true
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+    fi
 
     popd &> /dev/null
 }
@@ -174,9 +184,6 @@ init_wolfprov() {
             install_wolfprov
         fi
         printf "\twolfProvider installed in: ${WOLFPROV_INSTALL_DIR}\n"
-
-        export OPENSSL_MODULES=$WOLFPROV_PATH
-        export OPENSSL_CONF=${WOLFPROV_CONFIG}
     fi
 }
 
