@@ -20,8 +20,8 @@
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
 # Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+REPO_ROOT="$( cd "${CMD_TEST_DIR}/../.." &> /dev/null && pwd )"
 UTILS_DIR="${REPO_ROOT}/scripts"
 
 # Flag to indicate that this script is being called from do-cmd-tests.sh
@@ -52,9 +52,7 @@ TESTS (if none specified, all tests run):
     req                 Run certificate request test
 
 ENVIRONMENT VARIABLES (env vars get detected from verify-install.sh):
-    OPENSSL_BIN         Path to OpenSSL binary (auto-detected if not set)
-    WOLFPROV_PATH       Path to wolfProvider modules directory
-    WOLFPROV_CONFIG     Path to wolfProvider config file
+    OPENSSL_BIN         Path to OpenSSL binary (auto-detected with which(openssl) if not set)
     WOLFSSL_ISFIPS      Set to 1 for FIPS mode (or use --fips flag)
     WOLFPROV_FORCE_FAIL Set to 1 for force-fail mode (or use --force-fail flag)
 
@@ -110,7 +108,7 @@ if [ $RUN_ALL -eq 1 ]; then
     RUN_REQ=1
 fi
 
-source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
 cmd_test_env_setup
 
 echo "==========================================
@@ -120,14 +118,9 @@ echo ""
 echo "Running command-line test suite..."
 echo ""
 
-# Detect installation mode and setup environment
-cmd_test_env_setup
-
 echo ""
 echo "=== Running wolfProvider Command-Line Tests ==="
-echo "Using OPENSSL_BIN: ${OPENSSL_BIN}" 
-echo "Using WOLFPROV_PATH: ${WOLFPROV_PATH}"
-echo "Using WOLFPROV_CONFIG: ${WOLFPROV_CONFIG}"
+echo "Using OPENSSL_BIN: ${OPENSSL_BIN}"
 if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
     echo "FIPS mode: ENABLED"
 fi
@@ -138,8 +131,6 @@ fi
 # Export detection variables for child scripts
 export WOLFPROV_REPLACE_DEFAULT
 export WOLFPROV_FIPS
-export WOLFPROV_INSTALLED
-export WOLFPROV_MODE_DETECTED
 
 # Ensure we can switch providers before proceeding
 use_default_provider

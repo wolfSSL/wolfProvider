@@ -19,9 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "${SCRIPT_DIR}/cmd-test-common.sh"
-source "${SCRIPT_DIR}/clean-cmd-test.sh"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/clean-cmd-test.sh"
 
 if [ -z "${DO_CMD_TESTS:-}" ]; then
     echo "This script is designed to be called from do-cmd-tests.sh"
@@ -42,8 +42,7 @@ HASH_ALGOS=("sha1" "sha224" "sha256" "sha384" "sha512")
 # Function to run hash test with specified provider options
 run_hash_test() {
     local algo="$1"
-    local provider_opts="$2"
-    local output_file="$3"
+    local output_file="$2"
     
     # Run the hash algorithm with specified provider options
     if ! $OPENSSL_BIN dgst -$algo $provider_opts -out "$output_file" hash_outputs/test_data.txt; then
@@ -93,10 +92,12 @@ for algo in "${HASH_ALGOS[@]}"; do
     echo -e "\n=== Testing ${algo^^} ==="
     
     # Test with OpenSSL default provider
-    run_hash_test $algo "-provider default" "hash_outputs/openssl_${algo}.txt"
+    use_default_provider
+    run_hash_test $algo "hash_outputs/openssl_${algo}.txt"
     
     # Test with wolfProvider
-    run_hash_test $algo "-provider-path $WOLFPROV_PATH -provider libwolfprov" "hash_outputs/wolf_${algo}.txt"
+    use_wolf_provider
+    run_hash_test $algo "hash_outputs/wolf_${algo}.txt"
     
     # Compare results
     compare_hashes $algo

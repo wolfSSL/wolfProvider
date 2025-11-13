@@ -19,9 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "${SCRIPT_DIR}/cmd-test-common.sh"
-source "${SCRIPT_DIR}/clean-cmd-test.sh"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/clean-cmd-test.sh"
 
 if [ -z "${DO_CMD_TESTS:-}" ]; then
     echo "This script is designed to be called from do-cmd-tests.sh"
@@ -38,13 +38,12 @@ echo "This is test data for ECC signing and verification." > ecc_outputs/test_da
 
 # Array of ECC curves and providers to test
 CURVES=("prime256v1" "secp384r1" "secp521r1")
-PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
+PROVIDER_NAMES=("libwolfprov" "default")
 
 # Function to validate key
 validate_key() {
     local curve=$1
     local key_file=${2:-"ecc_outputs/ecc_${curve}.pem"}
-    local provider_args=$3
     echo -e "\n=== Validating ECC Key (${curve}) ==="
     
     # First check if file exists
@@ -67,7 +66,7 @@ validate_key() {
     # Only try to extract public key if file exists and has content
     local pub_key_file="ecc_outputs/ecc_${curve}_pub.pem"
     if $OPENSSL_BIN pkey -in "$key_file" -pubout -out "$pub_key_file" \
-        ${provider_args} -passin pass: >/dev/null; then
+        -passin pass: >/dev/null; then
         echo "[PASS] ECC Public key extraction successful"
         check_force_fail
     else
@@ -81,11 +80,12 @@ sign_ecc() {
     local key_file=$1
     local data_file=$2
     local sig_file=$3
-    local provider_args=$4
+    local provider_name=$4
     
     echo "Signing data with ECC..."
+    use_provider_by_name "$provider_name"
     $OPENSSL_BIN pkeyutl -sign -inkey "$key_file" \
-        ${provider_args} -passin pass: \
+        -passin pass: \
         -in "$data_file" \
         -out "$sig_file"
     return $?
@@ -96,11 +96,12 @@ verify_ecc() {
     local pub_key_file=$1
     local data_file=$2
     local sig_file=$3
-    local provider_args=$4
+    local provider_name=$4
     
     echo "Verifying ECC signature..."
+    use_provider_by_name "$provider_name"
     $OPENSSL_BIN pkeyutl -verify -pubin -inkey "$pub_key_file" \
-        ${provider_args} -passin pass: \
+        -passin pass: \
         -in "$data_file" \
         -sigfile "$sig_file"
     return $?
@@ -109,10 +110,7 @@ verify_ecc() {
 # Generic function to test sign/verify interoperability using pkeyutl
 test_sign_verify_pkeyutl() {
     local curve=$1
-    local provider_args=$2
-    
-    # Get the provider name
-    provider_name=$(get_provider_name "$provider_args")
+    local provider_name=$2
     
     local key_file="ecc_outputs/ecc_${curve}.pem"
     local pub_key_file="ecc_outputs/ecc_${curve}_pub.pem"
@@ -136,10 +134,10 @@ test_sign_verify_pkeyutl() {
     use_default_provider
     echo "Test 1: Sign and verify with OpenSSL default"
     local default_sig_file="ecc_outputs/ecc_${curve}_default_sig.bin"
-    if sign_ecc "$key_file" "$data_file" "$default_sig_file" "$provider_args"; then
+    if sign_ecc "$key_file" "$data_file" "$default_sig_file"; then
         echo "[PASS] Signing with OpenSSL default successful"
         check_force_fail
-        if verify_ecc "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
+        if verify_ecc "$pub_key_file" "$data_file" "$default_sig_file"; then
             echo "[PASS] Default provider verify successful"
             check_force_fail
         else
@@ -155,10 +153,10 @@ test_sign_verify_pkeyutl() {
     use_wolf_provider
     echo "Test 2: Sign and verify with wolfProvider"
     local wolf_sig_file="ecc_outputs/ecc_${curve}_wolf_sig.bin"
-    if sign_ecc "$key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
+    if sign_ecc "$key_file" "$data_file" "$wolf_sig_file"; then
         echo "[PASS] Signing with wolfProvider successful"
         check_force_fail
-        if verify_ecc "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
+        if verify_ecc "$pub_key_file" "$data_file" "$wolf_sig_file"; then
             echo "[PASS] wolfProvider sign/verify successful"
             check_force_fail
         else
@@ -174,7 +172,7 @@ test_sign_verify_pkeyutl() {
     if [ $FAIL -eq 0 ]; then # only verify if previous tests passed
         use_wolf_provider
         echo "Test 3: Cross-provider verification (default sign, wolf verify)"
-        if verify_ecc "$pub_key_file" "$data_file" "$default_sig_file" "$provider_args"; then
+        if verify_ecc "$pub_key_file" "$data_file" "$default_sig_file"; then
             echo "[PASS] wolfProvider can verify OpenSSL default signature"
             check_force_fail
         else
@@ -185,7 +183,7 @@ test_sign_verify_pkeyutl() {
         # Test 4: Cross-provider verification (wolf sign, default verify)
         use_default_provider
         echo "Test 4: Cross-provider verification (wolf sign, default verify)"
-        if verify_ecc "$pub_key_file" "$data_file" "$wolf_sig_file" "$provider_args"; then
+        if verify_ecc "$pub_key_file" "$data_file" "$wolf_sig_file"; then
             echo "[PASS] OpenSSL default can verify wolfProvider signature"
             check_force_fail
         else
@@ -200,11 +198,8 @@ test_sign_verify_pkeyutl() {
 # Function to generate and test ECC keys
 generate_and_test_key() {
     local curve=$1
-    local provider_args=$2
+    local provider_name=$2
     local output_file="ecc_outputs/ecc_${curve}.pem"
-
-    # Get the provider name
-    provider_name=$(get_provider_name "$provider_args")
     
     echo -e "\n=== Testing ECC Key Generation (${curve}) with ${provider_name} ==="
 
@@ -213,10 +208,9 @@ generate_and_test_key() {
         rm -f "$output_file"
     fi
 
-    echo "Generating ECC key (${curve})..."
-    
+    echo "Generating ECC key with default provider (${curve})..."
+    use_provider_by_name "$provider_name"
     if $OPENSSL_BIN genpkey -algorithm EC \
-        ${provider_args} \
         -pkeyopt ec_paramgen_curve:${curve} \
         -out "$output_file" 2>/dev/null; then
         echo "[PASS] ECC key generation successful"
@@ -236,15 +230,16 @@ generate_and_test_key() {
     fi
     
     # Validate key
-    validate_key "$curve" "$output_file" "$provider_args"
+    validate_key "$curve" "$output_file"
 
     # Try to use the key with different providers
     echo -e "\n=== Testing ECC Key (${curve}) with ${provider_name} ==="
     echo "Checking if ${provider_name} can use the key..."
     
     # Try to use the key with wolfProvider (just check if it loads)
+    use_wolf_provider
     if $OPENSSL_BIN pkey -in "$output_file" -check \
-        ${provider_args} -passin pass: >/dev/null; then
+        -passin pass: >/dev/null; then
         echo "[PASS] ${provider_name} can use ECC key (${curve})"
         check_force_fail
     else
@@ -255,7 +250,7 @@ generate_and_test_key() {
 
 # Test key generation for each curve and provider
 for curve in "${CURVES[@]}"; do
-    for test_provider in "${PROVIDER_ARGS[@]}"; do
+    for test_provider in "${PROVIDER_NAMES[@]}"; do
         # Generate key with current provider
         generate_and_test_key "$curve" "$test_provider"
 

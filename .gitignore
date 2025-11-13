@@ -84,8 +84,12 @@ test/**/*.trs
 test/**/*.o
 test/**/.deps/
 test/**/.dirstamp
+aes_outputs
+ecc_outputs
+hash_outputs
 req_outputs
-scripts/cmd_test/req-test.log
+rsa_outputs
+scripts/cmd_test/*.log
 
 IDE/Android/android-ndk-r26b/
 IDE/Android/openssl-source/

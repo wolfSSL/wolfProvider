@@ -19,9 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "${SCRIPT_DIR}/cmd-test-common.sh"
-source "${SCRIPT_DIR}/clean-cmd-test.sh"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/clean-cmd-test.sh"
 
 if [ -z "${DO_CMD_TESTS:-}" ]; then
     echo "This script is designed to be called from do-cmd-tests.sh"
@@ -36,7 +36,7 @@ mkdir -p req_outputs
 
 CURVES=("prime256v1" "secp384r1" "secp521r1") 
 HASH_ALGORITHMS=("sha256" "sha384" "sha512")
-PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
+PROVIDER_NAMES=("libwolfprov" "default")
 
 # Skip tests for FIPS mode (unless force-failing)
 if [ "${WOLFSSL_ISFIPS}" = "1" ] && [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
@@ -50,9 +50,8 @@ fi
 test_cert_creation() {
     local curve=$1
     local hash_alg=$2
-    local req_provider_args=$3
+    local req_provider_name=$3
     
-    req_provider_name=$(get_provider_name "$req_provider_args")
     local key_file="req_outputs/key_${curve}_${hash_alg}.pem"
     local cert_file="req_outputs/cert_${curve}_${hash_alg}_${req_provider_name//lib/}.pem"
     
@@ -71,14 +70,9 @@ test_cert_creation() {
     # Generate EC key with default provider
     echo "Generating EC key with curve ${curve} using default provider..."
     use_default_provider
-    if $OPENSSL_BIN ecparam -genkey -name ${curve} -out "$key_file" \
-        -provider default 2>/dev/null; then
+    if $OPENSSL_BIN ecparam -genkey -name ${curve} -out "$key_file" 2>/dev/null; then
         echo "[PASS] EC key generation successful"
-        # Don't call check_force_fail for default provider operations in force fail mode
-        # as default provider operations are expected to succeed
-        if [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
-            check_force_fail
-        fi
+        check_force_fail
     else
         echo "[FAIL] EC key generation failed"
         FAIL=1
@@ -86,21 +80,14 @@ test_cert_creation() {
     fi
     
     # Set provider for req command
-    if [[ "$req_provider_args" == *"libwolfprov"* ]]; then
-        use_wolf_provider
-    else
-        use_default_provider
-    fi
+    use_provider_by_name "$req_provider_name"
     
     # Create certificate with specified provider
     echo "Creating self-signed certificate with ${hash_alg} using ${req_provider_name}..."
     if $OPENSSL_BIN req -x509 -new -key "$key_file" -${hash_alg} -days 365 \
-        -out "$cert_file" -subj "/CN=test-${curve}-${hash_alg}" ${req_provider_args} 2>/dev/null; then
+        -out "$cert_file" -subj "/CN=test-${curve}-${hash_alg}"2>/dev/null; then
         echo "[PASS] Certificate creation successful"
-        # Only call check_force_fail for wolfProvider operations, or when not in force fail mode
-        if [[ "$req_provider_args" == *"libwolfprov"* ]] || [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
-            check_force_fail
-        fi
+        check_force_fail
     else
         echo "[FAIL] Certificate creation failed"
         FAIL=1
@@ -110,10 +97,7 @@ test_cert_creation() {
     # Check if certificate file exists and is non-empty
     if [ -s "$cert_file" ]; then
         echo "[PASS] Certificate file exists and is non-empty"
-        # Only call check_force_fail for wolfProvider operations, or when not in force fail mode
-        if [[ "$req_provider_args" == *"libwolfprov"* ]] || [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
-            check_force_fail
-        fi
+        check_force_fail
     else
         echo "[FAIL] Certificate file does not exist or is empty"
         FAIL=1
@@ -125,8 +109,8 @@ echo "Starting certificate request tests..."
 
 for curve in "${CURVES[@]}"; do
     for hash_alg in "${HASH_ALGORITHMS[@]}"; do
-        for provider_arg in "${PROVIDER_ARGS[@]}"; do
-            test_cert_creation "$curve" "$hash_alg" "$provider_arg"
+        for provider_name in "${PROVIDER_NAMES[@]}"; do
+            test_cert_creation "$curve" "$hash_alg" "$provider_name"
         done
     done
 done
