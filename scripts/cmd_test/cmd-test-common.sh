@@ -23,6 +23,12 @@ WOLFPROV_REPLACE_DEFAULT=${WOLFPROV_REPLACE_DEFAULT:-0}
 WOLFPROV_FIPS=${WOLFPROV_FIPS:-0}
 WOLFPROV_INSTALLED=${WOLFPROV_INSTALLED:-0}
 
+if [ -z "${DO_CMD_TESTS:-}" ]; then
+    echo "This script is designed to be called from do-cmd-tests.sh"
+    echo "Do not run this script directly - use do-cmd-tests.sh instead"
+    exit 1
+fi
+
 # Function to detect wolfProvider installation mode
 detect_wolfprovider_mode() {
     if [ -z "${REPO_ROOT:-}" ]; then

@@ -24,6 +24,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
 UTILS_DIR="${REPO_ROOT}/scripts"
 
+# Flag to indicate that this script is being called from do-cmd-tests.sh
+export DO_CMD_TESTS=1
+
 # Parse command-line arguments
 RUN_HASH=0
 RUN_AES=0

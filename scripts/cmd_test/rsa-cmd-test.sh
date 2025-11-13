@@ -2,9 +2,6 @@
 # rsa-cmd-test.sh
 # RSA and RSA-PSS key generation test for wolfProvider
 #
-# NOTE: This script is designed to be called from do-cmd-tests.sh
-# Do not run this script directly - use do-cmd-tests.sh instead
-#
 # Copyright (C) 2006-2025 wolfSSL Inc.
 #
 # This file is part of wolfProvider.
@@ -27,6 +24,12 @@ source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
 cmd_test_init "rsa-test.log"
 clean_cmd_test "rsa"
+
+if [ -z "${DO_CMD_TESTS:-}" ]; then
+    echo "This script is designed to be called from do-cmd-tests.sh"
+    echo "Do not run this script directly - use do-cmd-tests.sh instead"
+    exit 1
+fi
 
 # Create test data and output directories
 mkdir -p rsa_outputs
