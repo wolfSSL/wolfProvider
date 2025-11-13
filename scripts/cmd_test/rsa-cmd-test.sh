@@ -19,9 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "${SCRIPT_DIR}/cmd-test-common.sh"
-source "${SCRIPT_DIR}/clean-cmd-test.sh"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/clean-cmd-test.sh"
 cmd_test_init "rsa-test.log"
 clean_cmd_test "rsa"
 
@@ -41,19 +41,6 @@ KEY_SIZES=("2048" "3072" "4096")
 PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
 
 OPENSSL_BIN=${OPENSSL_BIN:-openssl}
-
-rsa_check_force_fail() {
-    local openssl_providers=$($OPENSSL_BIN list -providers)
-    is_openssl_default_provider=$(echo "$openssl_providers" | grep -qi "OpenSSL Default Provider" && echo 1 || echo 0)
-    if [ $is_openssl_default_provider -eq 1 ]; then
-        # With the OpenSSL provider, don't expect failures
-        echo "OPENSSL Default provider active, no forced failures expected."
-    elif [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
-        echo "[PASS] Test passed when force fail was enabled"
-        FORCE_FAIL_PASSED=1
-        exit 1
-    fi
-}
 
 # Function to validate key
 validate_key() {

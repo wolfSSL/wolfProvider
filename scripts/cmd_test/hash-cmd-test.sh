@@ -19,9 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "${SCRIPT_DIR}/cmd-test-common.sh"
-source "${SCRIPT_DIR}/clean-cmd-test.sh"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/clean-cmd-test.sh"
 
 if [ -z "${DO_CMD_TESTS:-}" ]; then
     echo "This script is designed to be called from do-cmd-tests.sh"

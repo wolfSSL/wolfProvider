@@ -20,8 +20,8 @@
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
 # Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd )"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+REPO_ROOT="$( cd "${CMD_TEST_DIR}/../.." &> /dev/null && pwd )"
 UTILS_DIR="${REPO_ROOT}/scripts"
 
 # Flag to indicate that this script is being called from do-cmd-tests.sh
@@ -110,7 +110,7 @@ if [ $RUN_ALL -eq 1 ]; then
     RUN_REQ=1
 fi
 
-source "${SCRIPT_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
 cmd_test_env_setup
 
 echo "==========================================
@@ -119,9 +119,6 @@ wolfProvider Command-Line Tests
 echo ""
 echo "Running command-line test suite..."
 echo ""
-
-# Detect installation mode and setup environment
-cmd_test_env_setup
 
 echo ""
 echo "=== Running wolfProvider Command-Line Tests ==="
