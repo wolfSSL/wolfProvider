@@ -22,6 +22,9 @@ show_help() {
   echo "  --debian --enable-fips     Build a Debian package with FIPS support"
   echo "  --quicktest                Disable some tests for a faster testing suite"
   echo "  --replace-default          Patch OpenSSL and build it so that wolfProvider is the default provider"
+  echo "  --enable-replace-default-testing"
+  echo "                             Enable direct provider loading in unit tests. This option patches openssl to export additional symbols."
+  echo "                             Note: This should only be used for test builds, and not in production."
   echo "  --leave-silent             Enable leave silent mode to suppress logging of return 0 in probing functions where expected failures may occur."
   echo "                             Note: This only affects logging; the calling function is still responsible for handling all return values appropriately."
   echo ""
@@ -37,6 +40,7 @@ show_help() {
   echo "  WOLFPROV_LOG_FILE          Path to log file for wolfProvider debug output (alternative to stderr)"
   echo "  WOLFPROV_QUICKTEST         If set to 1, disables some tests in the test suite to increase test speed"
   echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
+  echo "  WOLFPROV_REPLACE_DEFAULT_TESTING If set to 1, enables direct provider loading in unit tests"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
   echo ""
 }
@@ -117,6 +121,9 @@ for arg in "$@"; do
             ;;
         --replace-default)
             WOLFPROV_REPLACE_DEFAULT=1
+            ;;
+        --enable-replace-default-testing)
+            WOLFPROV_REPLACE_DEFAULT_TESTING=1
             ;;
         --leave-silent)
             WOLFPROV_LEAVE_SILENT=1
