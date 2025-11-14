@@ -22,11 +22,15 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
-cmd_test_env_setup "hash-test.log"
-clean_cmd_test "hash"
 
-# Redirect all output to log file
-exec > >(tee -a "$LOG_FILE") 2>&1
+if [ -z "${DO_CMD_TESTS:-}" ]; then
+    echo "This script is designed to be called from do-cmd-tests.sh"
+    echo "Do not run this script directly - use do-cmd-tests.sh instead"
+    exit 1
+fi
+
+cmd_test_init "hash-test.log"
+clean_cmd_test "hash"
 
 # Create test data and output directories
 mkdir -p hash_outputs
@@ -34,8 +38,6 @@ echo "This is test data for hash cmd test." > hash_outputs/test_data.txt
 
 # Array of hash algorithms to test
 HASH_ALGOS=("sha1" "sha224" "sha256" "sha384" "sha512")
-
-echo "=== Running Hash Algorithm Comparisons ==="
 
 # Function to run hash test with specified provider options
 run_hash_test() {

@@ -22,11 +22,15 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/cmd-test-common.sh"
 source "${SCRIPT_DIR}/clean-cmd-test.sh"
-cmd_test_env_setup "aes-test.log"
-clean_cmd_test "aes"
 
-# Redirect all output to log file
-exec > >(tee -a "$LOG_FILE") 2>&1
+if [ -z "${DO_CMD_TESTS:-}" ]; then
+    echo "This script is designed to be called from do-cmd-tests.sh"
+    echo "Do not run this script directly - use do-cmd-tests.sh instead"
+    exit 1
+fi
+
+cmd_test_init "aes-test.log"
+clean_cmd_test "aes"
 
 # Create test data and output directories
 mkdir -p aes_outputs
@@ -41,8 +45,6 @@ if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
 else
     MODES=("ecb" "cbc" "ctr" "cfb")
 fi
-
-echo "=== Running AES Algorithm Comparisons ==="
 
 # Run tests for each key size and mode
 for key_size in "${KEY_SIZES[@]}"; do
