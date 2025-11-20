@@ -1,0 +1,111 @@
+name: librelp Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ matrix.replace_default }}
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true ]
+
+  test_librelp:
+    runs-on: ubuntu-22.04
+    needs: build_wolfprovider
+    # Run inside Debian Bookworm to match packaging environment
+    container:
+      image: debian:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        # Dont test osp master since it might be unstable
+        librelp_ref: [ 'v1.12.0' ]
+        wolfssl_ref: [ 'v5.8.2-stable' ]
+        openssl_ref: [ 'openssl-3.5.2' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y git build-essential autoconf automake \
+            libtool pkg-config libgnutls28-dev net-tools iproute2 python3
+
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          apt install --reinstall -y \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
+
+      - name: Download librelp
+        uses: actions/checkout@v4
+        with:
+          repository: rsyslog/librelp
+          ref: ${{ matrix.librelp_ref }}
+          path: librelp
+          fetch-depth: 1
+
+      - name: Build librelp
+        working-directory: librelp
+        run: |
+          autoreconf -fi
+          ./configure
+          make
+
+      - name: Run librelp tests
+        working-directory: librelp
+        run: |
+          ${{ matrix.force_fail }} make check 2>&1 | tee librelp-test.log
+          TEST_RESULT=$(grep -q "# FAIL:  0" librelp-test.log && echo "0" || echo "1")
+          echo "TEST_RESULT = $TEST_RESULT"
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} librelp
