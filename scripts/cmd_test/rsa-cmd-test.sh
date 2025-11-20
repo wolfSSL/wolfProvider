@@ -19,14 +19,17 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "${SCRIPT_DIR}/cmd-test-common.sh"
-source "${SCRIPT_DIR}/clean-cmd-test.sh"
-cmd_test_env_setup "rsa-test.log"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/clean-cmd-test.sh"
+cmd_test_init "rsa-test.log"
 clean_cmd_test "rsa"
 
-# Redirect all output to log file
-exec > >(tee -a "$LOG_FILE") 2>&1
+if [ -z "${DO_CMD_TESTS:-}" ]; then
+    echo "This script is designed to be called from do-cmd-tests.sh"
+    echo "Do not run this script directly - use do-cmd-tests.sh instead"
+    exit 1
+fi
 
 # Create test data and output directories
 mkdir -p rsa_outputs
@@ -37,7 +40,7 @@ KEY_TYPES=("RSA" "RSA-PSS")
 KEY_SIZES=("2048" "3072" "4096")
 PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
 
-echo "=== Running RSA Key Generation Tests ==="
+OPENSSL_BIN=${OPENSSL_BIN:-openssl}
 
 # Function to validate key
 validate_key() {
@@ -324,7 +327,7 @@ for key_type in "${KEY_TYPES[@]}"; do
 
             # If WPFF is set, we need to run again to actually create the 
             # key files
-            if [ $WOLFPROV_FORCE_FAIL -ne 0 ]; then
+            if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
                 WOLFPROV_FORCE_FAIL=0
                 generate_and_test_key "$key_type" "$key_size" "$test_provider"
                 WOLFPROV_FORCE_FAIL=1
