@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         openssl_ref: [ 'master', 'openssl-3.5.0' ]
-        wolfssl_ref: [ 'v5.8.2-stable' ]
+        wolfssl_ref: [ 'v5.8.4-stable' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         debug: ['WOLFPROV_DEBUG=1', '']
     steps:

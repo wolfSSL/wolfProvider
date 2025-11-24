@@ -21,10 +21,10 @@ jobs:
       matrix:
         wolfssl_ref: [ 
           'master', 
-          'v5.8.2-stable']
+          'v5.8.4-stable']
         # Test against the newest of each minor version
         openssl_ref: [
-          'openssl-3.5.2',
+          'openssl-3.5.4',
           'openssl-3.4.2',
           'openssl-3.3.4',
           'openssl-3.2.5',

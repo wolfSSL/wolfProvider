@@ -1,13 +1,16 @@
-name: tcpdump Tests
+name: librelp Tests
 
+# START OF COMMON SECTION
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+# END OF COMMON SECTION
 
 jobs:
   build_wolfprovider:
@@ -24,18 +27,20 @@ jobs:
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
-  test_tcpdump:
+  test_librelp:
     runs-on: ubuntu-22.04
     needs: build_wolfprovider
-    continue-on-error: true
+    # Run inside Debian Bookworm to match packaging environment
     container:
       image: debian:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    timeout-minutes: 15
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 20
     strategy:
       matrix:
-        tcpdump_ref: [ 'tcpdump-4.99.3' ]
+        # Dont test osp master since it might be unstable
+        librelp_ref: [ 'v1.12.0' ]
         wolfssl_ref: [ 'v5.8.4-stable' ]
         openssl_ref: [ 'openssl-3.5.4' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
@@ -46,6 +51,12 @@ jobs:
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y git build-essential autoconf automake \
+            libtool pkg-config libgnutls28-dev net-tools iproute2 python3
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -59,7 +70,7 @@ jobs:
 
       - name: Install wolfSSL/OpenSSL/wolfprov packages
         run: |
-          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+          apt install --reinstall -y \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
@@ -67,7 +78,7 @@ jobs:
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
             ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
 
-          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+          apt install --reinstall -y \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
 
       - name: Verify wolfProvider is properly installed
@@ -76,57 +87,25 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install test dependencies
-        run: |
-          apt-get update
-          apt-get install -y build-essential flex bison autoconf libtool\
-            libpcap-dev
-
-      - name: Checkout tcpdump
+      - name: Download librelp
         uses: actions/checkout@v4
         with:
-          repository: the-tcpdump-group/tcpdump
-          path: tcpdump_repo
-          ref: ${{ matrix.tcpdump_ref }}
-
-      - name: Checkout OSP
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/osp
-          path: osp
+          repository: rsyslog/librelp
+          ref: ${{ matrix.librelp_ref }}
+          path: librelp
           fetch-depth: 1
-      - run: |
-          cd tcpdump_repo
-          if [ "${{ matrix.fips_ref }}" = "FIPS" ]; then
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/tcpdump/tcpdump-FIPS-${{ matrix.tcpdump_ref }}-wolfprov.patch
-          fi
 
-      - name: Build and install tcpdump
-        working-directory: tcpdump_repo
+      - name: Build librelp
+        working-directory: librelp
         run: |
-          if [ -f ./autogen.sh ]; then
-            ./autogen.sh
-          elif [ ! -f ./configure ]; then
-            autoreconf -fiv
-          fi
-          export PKG_CONFIG_PATH=$GITHUB_WORKSPACE/libpcap-install/lib/pkgconfig:$PKG_CONFIG_CONFIG:$PKG_CONFIG_PATH
-          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
-            ./configure --prefix=$GITHUB_WORKSPACE/tcpdump-install --with-pcap=$GITHUB_WORKSPACE/libpcap-install --enable-wolfprov-fips
-          else
-            ./configure --prefix=$GITHUB_WORKSPACE/tcpdump-install --with-pcap=$GITHUB_WORKSPACE/libpcap-install
-          fi
-          make -j$(nproc)
-          make install
+          autoreconf -fi
+          ./configure
+          make
 
-      - name: Run tcpdump tests
-        working-directory: tcpdump_repo
-        shell: bash
+      - name: Run librelp tests
+        working-directory: librelp
         run: |
-          set +o pipefail # ignore errors from make check
-          export ${{ matrix.force_fail }}
-
-          # Run tests
-          make check 2>&1 | tee tcpdump-test.log
-          # Capture the test result using PIPESTATUS (Bash only)
-          TEST_RESULT=${PIPESTATUS[0]}
-          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} tcpdump
+          ${{ matrix.force_fail }} make check 2>&1 | tee librelp-test.log
+          TEST_RESULT=$(grep -q "# FAIL:  0" librelp-test.log && echo "0" || echo "1")
+          echo "TEST_RESULT = $TEST_RESULT"
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} librelp

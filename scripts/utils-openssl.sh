@@ -26,7 +26,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-general.sh
 
 OPENSSL_GIT_URL="https://github.com/openssl/openssl.git"
-OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.5.2"}
+OPENSSL_TAG=${OPENSSL_TAG:-"openssl-3.5.4"}
 OPENSSL_SOURCE_DIR=${SCRIPT_DIR}/../openssl-source
 OPENSSL_INSTALL_DIR=${SCRIPT_DIR}/../openssl-install
 OPENSSL_BIN=${OPENSSL_INSTALL_DIR}/bin/openssl
