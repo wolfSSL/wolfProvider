@@ -30,7 +30,10 @@ jobs:
           'openssl-3.2.5',
           'openssl-3.1.8',
           'openssl-3.0.17']
-        debug: ['', 'WOLFPROV_DEBUG=1']
+        debug: ['', '--debug']
+        replace_default: [
+          '',
+          '--replace-default --enable-replace-default-testing']
 
     steps:
       - name: Checkout wolfProvider
@@ -40,7 +43,7 @@ jobs:
 
       - name: Build and test wolfProvider
         run: |
-             OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ${{ matrix.debug }} ./scripts/build-wolfprovider.sh
+             OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh ${{ matrix.debug }} ${{ matrix.replace_default }}
 
       - name: Print errors
         if: ${{ failure() }}
