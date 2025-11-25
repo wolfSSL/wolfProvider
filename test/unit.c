@@ -49,9 +49,8 @@ void print_buffer(const char *desc, const unsigned char *buffer, size_t len)
 }
 #endif
 
-#ifdef WP_ENABLE_REPLACE_DEFAULT_UNIT_TEST
+#ifdef WOLFPROV_REPLACE_DEFAULT_UNIT_TEST
 
-#include <dlfcn.h>
 #include <openssl/crypto.h>
 
 /* Forward declarations for OpenSSL internal DSO functions. */
@@ -165,7 +164,7 @@ static OSSL_PROVIDER* wp_load_default_provider_direct(OSSL_LIB_CTX* libctx)
     return actual;
 }
 
-#endif /* ifdef WP_ENABLE_REPLACE_DEFAULT_UNIT_TEST */
+#endif /* ifdef WOLFPROV_REPLACE_DEFAULT_UNIT_TEST */
 
 static int debug = 1;
 static unsigned long flags = 0;
@@ -772,7 +771,7 @@ int main(int argc, char* argv[])
         }
 
         osslLibCtx = OSSL_LIB_CTX_new();
-#ifdef WP_ENABLE_REPLACE_DEFAULT_UNIT_TEST
+#ifdef WOLFPROV_REPLACE_DEFAULT_UNIT_TEST
         /* If enabled, directly load the default provider for unit testing
          * with default replace.  */
         osslProv = wp_load_default_provider_direct(osslLibCtx);

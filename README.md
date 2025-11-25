@@ -153,6 +153,54 @@ Then use the following command to build wolfProvider with FIPS enabled.
 ./scripts/build-wolfprovider.sh --fips-bundle="path/to/fips-bundle" --fips-check=ready --distclean
 ```
 
+## Building with Replace Default
+
+wolfProvider can be configured to replace OpenSSL's default provider, making wolfProvider the default cryptographic provider for all OpenSSL operations. This is useful for testing and for applications that want to use wolfSSL's cryptographic implementations without modifying their code.
+
+### Basic Replace Default
+
+To build wolfProvider as a replacement for OpenSSL's default provider:
+
+```bash
+./scripts/build-wolfprovider.sh --replace-default
+```
+
+This patches OpenSSL so that wolfProvider becomes the default provider.
+
+### Replace Default with Testing Support
+
+For unit testing with replace-default enabled, you need additional support to load the real OpenSSL default provider alongside wolfProvider. This requires both flags:
+
+```bash
+./scripts/build-wolfprovider.sh --replace-default --enable-replace-default-testing
+```
+
+**Important:** `--enable-replace-default-testing` requires `--replace-default` to be set. Using `--enable-replace-default-testing` alone will result in an error.
+
+### Examples
+
+Build with replace-default only:
+```bash
+./scripts/build-wolfprovider.sh --replace-default
+```
+
+Build with replace-default and unit testing support:
+```bash
+./scripts/build-wolfprovider.sh --replace-default --enable-replace-default-testing
+```
+
+### Important Notes
+
+**For `--replace-default`:**
+- Can be used standalone in production or testing environments
+- Makes wolfProvider the default cryptographic provider
+
+**For `--enable-replace-default-testing`:**
+**Warning:** This option patches OpenSSL to export internal symbols that are not part of the public API. This configuration:
+- **Requires** `--replace-default` to also be set
+- Should only be used for development and testing
+- Is not suitable for production deployments
+
 ## Testing
 
 ### Unit Tests

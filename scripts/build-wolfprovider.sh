@@ -24,7 +24,7 @@ show_help() {
   echo "  --replace-default          Patch OpenSSL and build it so that wolfProvider is the default provider"
   echo "  --enable-replace-default-testing"
   echo "                             Enable direct provider loading in unit tests. This option patches openssl to export additional symbols."
-  echo "                             Note: This should only be used for test builds, and not in production."
+  echo "                             Note: Requires --replace-default. Only for test builds, not for production."
   echo "  --leave-silent             Enable leave silent mode to suppress logging of return 0 in probing functions where expected failures may occur."
   echo "                             Note: This only affects logging; the calling function is still responsible for handling all return values appropriately."
   echo ""
@@ -40,7 +40,8 @@ show_help() {
   echo "  WOLFPROV_LOG_FILE          Path to log file for wolfProvider debug output (alternative to stderr)"
   echo "  WOLFPROV_QUICKTEST         If set to 1, disables some tests in the test suite to increase test speed"
   echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
-  echo "  WOLFPROV_REPLACE_DEFAULT_TESTING If set to 1, enables direct provider loading in unit tests"
+  echo "  WOLFPROV_REPLACE_DEFAULT   If set to 1, patches OpenSSL so wolfProvider is the default provider"
+  echo "  WOLFPROV_REPLACE_DEFAULT_TESTING If set to 1, enables direct provider loading in unit tests (requires WOLFPROV_REPLACE_DEFAULT=1)"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
   echo ""
 }
@@ -149,6 +150,12 @@ fi
 
 if [ -n "$WOLFPROV_LOG_FILE" ] && [ -z "$WOLFPROV_DEBUG" ]; then
     echo "Error: --debug-log requires --debug to be set."
+    exit 1
+fi
+
+# Check for consistency between replace-default options
+if [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ]; then
+    echo "Error: --enable-replace-default-testing requires --replace-default to also be set."
     exit 1
 fi
 

@@ -190,7 +190,7 @@ patch_openssl() {
     fi
 
     # Patch libcrypto.num for replace-default-testing mode
-    if [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" = "1" ]; then
+    if [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
         if [ -d "${OPENSSL_INSTALL_DIR}" ]; then
             # OpenSSL already installed, skip patching
             return 0
