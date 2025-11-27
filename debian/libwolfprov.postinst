@@ -1,12 +1,6 @@
 #!/bin/sh
 set -e
 
-# Define the include line to add to the openssl.cnf file
-INCLUDE_LINE=".include /etc/ssl/openssl.cnf.d/wolfprovider.conf"
-
-# Search for the openssl.cnf file in /usr, /lib and /etc
-CONF_FILES=$(find /usr /lib /etc -name openssl.cnf 2>/dev/null)
-
 # Check if we are in replace-default mode by reading the openssl version
 REPLACE_DEFAULT=0
 if command -v openssl >/dev/null 2>&1; then
@@ -16,29 +10,97 @@ if command -v openssl >/dev/null 2>&1; then
     fi  
 fi
 
-if [ $REPLACE_DEFAULT -eq 1 ]; then
-    # Remove INCLUDE_LINE from each CONF_FILE
-    # Replace default mode should automatically find wolfProvider.
-    # Using the config file or OPENSSL_CONF will cause:
-    #   1. the provider name to be 'libwolfprov' instead of 'default'
-    #   2. the provider init call to happen twice
-    # Neither of these is harmful, but it's not ideal.
-    for CONF_FILE in $CONF_FILES; do
-        # Remove any line containing both ".include" and "wolfprovider.conf"
-        sed -i '/\.include/ { /wolfprovider\.conf/ d; }' "$CONF_FILE"
-        printf "Removed wolfprovider include line(s) from %s\n" "$CONF_FILE"
-    done
-else
-    # For each CONF_FILE, apply the include line to the openssl.cnf file, if not already applied
-    for CONF_FILE in $CONF_FILES; do
-        if grep -qF "$INCLUDE_LINE" "$CONF_FILE"; then
-            echo "Include line already exists in $CONF_FILE"
-        else 
-            echo "Adding include for wolfprovider to $CONF_FILE..."
-            echo "$INCLUDE_LINE" >> "$CONF_FILE"
-        fi
-    done
+if [ "$1" = "configure" ]; then
+    if [ $REPLACE_DEFAULT -eq 1 ]; then
+        cat <<'EOF'
+============================================================
+                 wolfProvider Installation Notes
+============================================================
+
+wolfProvider is installed in replace-default mode with a 
+patched version of OpenSSL that uses wolfProvider as the 
+crypto backend. wolfProvider will appear as the 'default' 
+provider.
+
+No other conf file modifications or environment variables 
+are required.
+
+To verify installation, run:
+  openssl version
+  openssl list -providers
+
+wolfProvider configuration file installed at:
+  /etc/ssl/openssl.cnf.d/wolfprovider.conf
+
+============================================================
+EOF
+    else
+        cat <<'EOF'
+============================================================
+                 wolfProvider Installation Notes
+============================================================
+
+To use wolfProvider with OpenSSL, choose ONE of the options
+below depending on your use case.
+
+  1) System-wide enable:
+
+     Add the following line to your /etc/ssl/openssl.cnf:
+
+         .include /etc/ssl/openssl.cnf.d/wolfprovider.conf
+
+     This makes wolfProvider available to all applications 
+     that utilize the standard system openssl configuration.
+
+
+  2) Per-command enable (no system-wide changes)
+
+     Set OPENSSL_CONF when running a program:
+
+         OPENSSL_CONF=/etc/ssl/openssl.cnf.d/wolfprovider.conf \
+             <command>
+
+     This enables use of wolfProvider whenever the
+     environment variable is set for the current shell.
+
+
+  3) Application-level integration (for developers)
+
+     In your application, you can create a dedicated OpenSSL
+     library context and explicitly load wolfProvider, e.g.:
+
+         OSSL_LIB_CTX *wpLibCtx = OSSL_LIB_CTX_new();
+         OSSL_PROVIDER *wpProv = OSSL_PROVIDER_load(wpLibCtx, "wolfprovider");
+         /* Use wpLibCtx with EVP, etc. */
+         EVP_function(wpLibCtx, ...);
+         OSSL_PROVIDER_unload(wpProv);
+         OSSL_LIB_CTX_free(wpLibCtx);
+
+     This keeps wolfProvider usage scoped to specific code paths
+     without requiring any system-wide configuration changes.
+
+To verify installation and configuration, run:
+  openssl version
+  openssl list -providers
+
+wolfProvider configuration file installed at:
+  /etc/ssl/openssl.cnf.d/wolfprovider.conf
+
+============================================================
+EOF
+    fi
 fi
+
+# Search for the openssl.cnf file in /usr, /lib and /etc
+CONF_FILES=$(find /usr /lib /etc -name openssl.cnf 2>/dev/null)
+
+# Warn user on install or removal if our config file is already included.
+for CONF_FILE in $CONF_FILES; do
+    if grep '.include' "$CONF_FILE" | grep -q "wolfprovider.conf"; then
+        echo "WARNING: wolfprovider.conf is already included in $CONF_FILE"
+    fi
+done
+
 
 #DEBHELPER#
 exit 0

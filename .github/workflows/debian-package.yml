@@ -62,18 +62,35 @@ jobs:
           name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
           path: /tmp
 
-      - name: Install wolfSSL/OpenSSL/wolfprov packages
+      - name: Install OpenSSL packages
+        run: |
+          if [ "${{ matrix.replace_default }}" = "true" ]; then
+            # Install OpenSSL packages for replace-default mode
+            apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+              ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+                ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+                ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+          else 
+            # Install standard OpenSSL packages
+            apt-get update
+            apt-get install -y \
+              openssl libssl3 libssl-dev
+          fi
+
+      - name: Install wolfSSL and wolfProvider packages
         run: |
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
 
           apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
-            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
-
-          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
             ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+          # In standalone mode, use OPENSSL_CONF to enable wolfProvider.
+          if [ "${{ matrix.replace_default }}" = "false" ]; then
+            echo "Setting OPENSSL_CONF to /etc/ssl/openssl.cnf.d/wolfprovider.conf"
+            # export OPENSSL_CONF=/etc/ssl/openssl.cnf.d/wolfprovider.conf
+            echo "OPENSSL_CONF=/etc/ssl/openssl.cnf.d/wolfprovider.conf" >> "$GITHUB_ENV"
+          fi
 
       - name: Verify wolfProvider is properly installed
         run: |
