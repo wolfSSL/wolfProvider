@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        wolfssl_ref: ['v5.8.2-stable']
+        wolfssl_ref: ['v5.8.4-stable']
         openssl_ref: [
           'openssl-3.0.3',
           'openssl-3.0.5',

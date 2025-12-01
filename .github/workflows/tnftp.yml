@@ -22,8 +22,8 @@ jobs:
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.5.4' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
@@ -39,8 +39,8 @@ jobs:
     strategy:
       matrix:
         tnftp_ref: [ 'tnftp-20210827' ]
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.5.4' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]

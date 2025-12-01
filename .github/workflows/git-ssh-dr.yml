@@ -20,8 +20,8 @@ jobs:
       replace_default: ${{ matrix.replace_default }}
     strategy:
       matrix:
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.5.4' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
@@ -36,8 +36,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        wolfssl_ref: [ 'v5.8.2-stable' ]
-        openssl_ref: [ 'openssl-3.5.2' ]
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.5.4' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
         key_type: [ 'rsa', 'ecdsa', 'ed25519', 'chacha20-poly1305' ]
