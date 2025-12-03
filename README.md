@@ -4,7 +4,7 @@ This branch is **dedicated exclusively to CI/CD and packaging automation**. It i
 
 ## Purpose
 
-The `wics` branch serves as a **storage and publishing branch** for generated WICS (WolfSSL Integrated Cryptographic System) artifacts produced by the wolfProvider CI pipelines. These artifacts are automatically uploaded here for testing, validation, and distribution workflows.
+The `wics` branch serves as a **storage and publishing branch** for generated `.wic` Disk Images produced by the wolfProvider CI pipelines. These artifacts are automatically uploaded here for testing, validation, and distribution workflows.
 
 ## Usage
 
