@@ -1,0 +1,19 @@
+# wolfProvider — `wics`
+
+This branch is **dedicated exclusively to CI/CD and packaging automation**. It is **not part of the main source code** and is **not intended for development or code contributions**.
+
+## Purpose
+
+The `wics` branch serves as a **storage and publishing branch** for generated WICS (WolfSSL Integrated Cryptographic System) artifacts produced by the wolfProvider CI pipelines. These artifacts are automatically uploaded here for testing, validation, and distribution workflows.
+
+## Usage
+
+- **Do not submit pull requests** to this branch.
+- **Do not modify files manually** — all updates are performed by automated CI jobs (e.g., Jenkins, GitHub Actions).
+- **Do not consume these artifacts in production** — These are for testing purposes only and should not be used in real applications.
+
+## Notes
+
+- This branch does **not contain any source code** or build logic.
+- It is maintained automatically by the wolfSSL build infrastructure.
+
