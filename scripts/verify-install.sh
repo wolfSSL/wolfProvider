@@ -310,17 +310,17 @@ verify_wolfprovider() {
 #     version: 1.0.2
 #     status: active
 
-# When replace-default is 0, expect:
-# $ openssl version        
+# When using base openssl, expect:
+# $ openssl version
 # OpenSSL 3.0.17 1 Jul 2025 (Library: OpenSSL 3.0.17 1 Jul 2025
 
-# When replace-default is 1 and fips is 0, expect:
-# $ openssl version        
-# OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025 (Library: OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025)
+# When using wolfProvider's openssl with replace-default 0, expect:
+# openssl version
+# OpenSSL 3.0.17+wolfProvider 03 Nov 2025 (Library: OpenSSL 3.0.17+wolfProvider 03 Nov 2025)
 
-# When fips is 1, expect:
-# $ openssl version        
-# OpenSSL 3.0.17+wolfProvider-fips 11 Oct 2025 (Library: OpenSSL 3.0.17+wolfProvider-fips 11 Oct 2025)
+# When replace-default is 1 and fips is 0, expect:
+# $ openssl version
+# OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025 (Library: OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025)
 
 # When fips is 1, expect:
 # $ dpkg -l | grep libwolfssl
@@ -341,8 +341,8 @@ self_test() {
 
     # Mock strings for openssl version
     local ver_base="OpenSSL 3.0.17 1 Jul 2025 (Library: OpenSSL 3.0.17 1 Jul 2025)"
-    local ver_replace_default_nonfips="OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025 (Library: OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025)"
-    local ver_replace_default_fips="OpenSSL 3.0.17+wolfProvider-fips 11 Oct 2025 (Library: OpenSSL 3.0.17+wolfProvider-fips 11 Oct 2025)"
+    local ver_wp="OpenSSL 3.0.17+wolfProvider 03 Nov 2025 (Library: OpenSSL 3.0.17+wolfProvider 03 Nov 2025)"
+    local ver_replace_default="OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025 (Library: OpenSSL 3.0.17+wolfProvider-nonfips 30 Sep 2025)"
 
     # Mock strings for provider listings
     read -r -d '' providers_libwolfprov_nonfips <<'EOF'
@@ -446,27 +446,26 @@ EOF
 
     # Positive cases per comment expectations
     run_case "pos: replace_default=0,fips=0" 0 0 0 0 ver_base providers_libwolfprov_nonfips dpkg_installed_nonfips
-    run_case "pos: replace_default=1,fips=0" 0 0 1 0 ver_replace_default_nonfips providers_default_wolf_nonfips dpkg_installed_nonfips
-    run_case "pos: replace_default=1,fips=1" 0 1 1 0 ver_replace_default_fips providers_default_wolf_fips dpkg_installed_fips
+    run_case "pos: replace_default=1,fips=0" 0 0 1 0 ver_replace_default providers_default_wolf_nonfips dpkg_installed_nonfips
     run_case "pos: replace_default=0,fips=1" 0 1 0 0 ver_base providers_libwolfprov_fips dpkg_installed_fips
     # run positive test cases with providers_default_openssl_only
     run_case "pos: no_wp true with OpenSSL default, default provider" 0 0 0 1 ver_base providers_default_openssl_only dpkg_installed_nonfips
-    run_case "pos: no_wp true but wolfProvider active" 1 0 0 1 ver_base providers_libwolfprov_nonfips  dpkg_installed_nonfips
+    run_case "pos: no_wp true but wolfProvider active" 1 0 0 1 ver_wp providers_libwolfprov_nonfips  dpkg_installed_nonfips
 
     # Negative cases
-    run_case "neg: rd=0 but OpenSSL replace-default" 1 0 0 0 ver_replace_default_nonfips providers_libwolfprov_nonfips dpkg_installed_nonfips
+    run_case "neg: rd=0 but OpenSSL replace-default" 1 0 0 0 ver_replace_default providers_libwolfprov_nonfips dpkg_installed_nonfips
+    run_case "neg: rd=0 but OpenSSL wp metadata" 1 0 0 0 ver_wp providers_libwolfprov_nonfips dpkg_installed_nonfips
     run_case "neg: rd=0 but provider default" 1 0 0 0 ver_base providers_both_default_and_libwolfprov dpkg_installed_nonfips
     run_case "neg: rd=0 but no providers listed" 1 0 0 0 ver_base providers_none dpkg_installed_nonfips
     run_case "neg: rd=0 missing provider" 1 0 0 0 ver_base providers_default_openssl_only dpkg_installed_nonfips
-    run_case "neg: rd=1,fips=0 but OpenSSL FIPS" 1 0 1 0 ver_replace_default_fips providers_default_wolf_nonfips dpkg_installed_nonfips
-    run_case "neg: rd=1,fips=0 but provider FIPS" 1 0 1 0 ver_replace_default_nonfips providers_default_wolf_fips dpkg_installed_nonfips
-    run_case "neg: rd=1,fips=0 but no providers listed" 1 0 1 0 ver_replace_default_nonfips providers_none dpkg_installed_nonfips
-    run_case "neg: rd=1,fips=1 but OpenSSL non-FIPS" 1 1 1 0 ver_replace_default_nonfips providers_default_wolf_fips dpkg_installed_fips
+    run_case "neg: rd=1,fips=0 but provider FIPS" 1 0 1 0 ver_replace_default providers_default_wolf_fips dpkg_installed_nonfips
+    run_case "neg: rd=1,fips=0 but no providers listed" 1 0 1 0 ver_replace_default providers_none dpkg_installed_nonfips
+    run_case "neg: rd=1,fips=1 but OpenSSL non-FIPS" 1 1 1 0 ver_replace_default providers_default_wolf_fips dpkg_installed_fips
     run_case "neg: fips=1 but wolfSSL non-FIPS" 1 1 0 0 ver_base providers_libwolfprov_fips dpkg_installed_nonfips
 
     # no_wp positive and negative cases
     run_case "neg: no_wp true with OpenSSL default, default provider" 1 0 0 1 ver_base providers_none dpkg_installed_nonfips
-    run_case "neg: no_wp true but wolfProvider active" 1 0 0 1 ver_base providers_libwolfprov_nonfips dpkg_installed_nonfips
+    run_case "neg: no_wp true but wolfProvider active" 1 0 0 1 ver_wp providers_libwolfprov_nonfips dpkg_installed_nonfips
 
     log_info "self_test results: ${pass_count} passed, ${fail_count} failed"
     if [ "$fail_count" -gt 0 ]; then
