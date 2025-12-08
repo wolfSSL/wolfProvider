@@ -49,6 +49,123 @@ void print_buffer(const char *desc, const unsigned char *buffer, size_t len)
 }
 #endif
 
+#ifdef WOLFPROV_REPLACE_DEFAULT_UNIT_TEST
+
+#include <openssl/crypto.h>
+
+/* Forward declarations for OpenSSL internal DSO functions. */
+typedef struct dso_st DSO;
+DSO *DSO_dsobyaddr(void *addr, int flags);
+void *DSO_bind_func(DSO *dso, const char *symname);
+int DSO_free(DSO *dso);
+
+/* Forward declarations for OpenSSL internal provider functions.
+ * These are not part of the public API but are needed to manually
+ * construct and register a provider with a specific init function. */
+OSSL_PROVIDER *ossl_provider_new(OSSL_LIB_CTX *libctx, const char *name,
+                                  OSSL_provider_init_fn *init_fn,
+                                  int no_config);
+int ossl_provider_activate(OSSL_PROVIDER *prov, int retain_fallbacks,
+                            int upcalls);
+int ossl_provider_deactivate(OSSL_PROVIDER *prov, int removechildren);
+int ossl_provider_add_to_store(OSSL_PROVIDER *prov, OSSL_PROVIDER **actualprov,
+                                int retain_fallbacks);
+void ossl_provider_free(OSSL_PROVIDER *prov);
+
+/*
+ * Get the ossl_default_provider_init function pointer from OpenSSL's
+ * libcrypto. This allows us to directly initialize the real OpenSSL default
+ * provider, bypassing the name-based lookup that would trigger replace-default
+ * behavior in patched OpenSSL builds.
+ *
+ * @return  Function pointer to ossl_default_provider_init on success.
+ * @return  NULL on failure.
+ */
+static OSSL_provider_init_fn* wp_get_default_provider_init_sym(void)
+{
+    DSO *dso = NULL;
+    OSSL_provider_init_fn* init_fn = NULL;
+
+    /* Get a DSO handle for the library containing OPENSSL_init_crypto.*/
+    dso = DSO_dsobyaddr((void *)&OPENSSL_init_crypto, 0);
+    if (dso == NULL) {
+        PRINT_ERR_MSG("DSO_dsobyaddr() failed to get handle to libcrypto");
+        return NULL;
+    }
+
+    /* Directly get the init function of the default provider */
+    init_fn = (OSSL_provider_init_fn*)DSO_bind_func(dso, "ossl_default_provider_init");
+    if (init_fn == NULL) {
+        PRINT_ERR_MSG("Failed to find ossl_default_provider_init symbol via DSO API");
+        DSO_free(dso);
+        return NULL;
+    }
+
+    /* Don't free the DSO - we need the symbol to remain valid */
+    return init_fn;
+}
+
+/*
+ * Load the real OpenSSL default provider directly, bypassing the name-based
+ * lookup that would trigger replace-default behavior in patched OpenSSL builds.
+ *
+ * This function replicates the logic from OpenSSL's OSSL_PROVIDER_try_load_ex(),
+ * but instead of loading a provider by name, it directly uses the
+ * ossl_default_provider_init function obtained via wp_get_default_provider_init_sym().
+ *
+ * @param [in] libctx  Library context to load the provider into.
+ * @return  Provider handle on success.
+ * @return  NULL on failure.
+ */
+static OSSL_PROVIDER* wp_load_default_provider_direct(OSSL_LIB_CTX* libctx)
+{
+    OSSL_provider_init_fn* init_fn = NULL;
+    OSSL_PROVIDER* prov = NULL;
+    OSSL_PROVIDER* actual = NULL;
+
+    /* Get the real default provider init function */
+    init_fn = wp_get_default_provider_init_sym();
+    if (init_fn == NULL) {
+        PRINT_ERR_MSG("Failed to get default provider init function");
+        return NULL;
+    }
+
+    /* Create a new provider structure with the name "real-default" */
+    prov = ossl_provider_new(libctx, "real-default", init_fn, 0);
+    if (prov == NULL) {
+        PRINT_ERR_MSG("ossl_provider_new() failed");
+        return NULL;
+    }
+
+    /* Activate the provider */
+    if (!ossl_provider_activate(prov, 1, 0)) {
+        PRINT_ERR_MSG("ossl_provider_activate() failed");
+        ossl_provider_free(prov);
+        return NULL;
+    }
+
+    /* Add provider to the store */
+    actual = prov;
+    if (!ossl_provider_add_to_store(prov, &actual, 0)) {
+        PRINT_ERR_MSG("ossl_provider_add_to_store() failed");
+        ossl_provider_deactivate(prov, 1);
+        ossl_provider_free(prov);
+        return NULL;
+    }
+
+    if (actual != prov) {
+        if (!ossl_provider_activate(actual, 1, 0)) {
+            PRINT_ERR_MSG("ossl_provider_activate() failed");
+            ossl_provider_free(actual);
+            return NULL;
+        }
+    }
+
+    return actual;
+}
+
+#endif /* ifdef WOLFPROV_REPLACE_DEFAULT_UNIT_TEST */
+
 static int debug = 1;
 static unsigned long flags = 0;
 
@@ -645,19 +762,28 @@ int main(int argc, char* argv[])
         OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG, NULL);
 
         wpLibCtx = OSSL_LIB_CTX_new();
+
         OSSL_PROVIDER_set_default_search_path(wpLibCtx, dir);
         wpProv = OSSL_PROVIDER_load(wpLibCtx, name);
         if (wpProv == NULL) {
             PRINT_ERR_MSG("Failed to find wolf provider!\n");
-            ERR_print_errors_fp(stderr);
             err = 1;
         }
 
         osslLibCtx = OSSL_LIB_CTX_new();
+#ifdef WOLFPROV_REPLACE_DEFAULT_UNIT_TEST
+        /* If enabled, directly load the default provider for unit testing
+         * with default replace.  */
+        osslProv = wp_load_default_provider_direct(osslLibCtx);
+        if (osslProv == NULL) {
+            PRINT_ERR_MSG("Failed to load default provider directly!\n");
+            err = 1;
+        }
+#else
         osslProv = OSSL_PROVIDER_load(osslLibCtx, "default");
+#endif
         if (osslProv == NULL) {
             PRINT_ERR_MSG("Failed to find default provider!\n");
-            ERR_print_errors_fp(stderr);
             err = 1;
         }
     }

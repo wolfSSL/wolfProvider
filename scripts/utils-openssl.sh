@@ -117,6 +117,23 @@ is_openssl_patched() {
     return 1
 }
 
+is_libcrypto_num_patched() {
+    # Return 0 if patched with provider symbols, 1 if not
+    local dir="${OPENSSL_SOURCE_DIR:?OPENSSL_SOURCE_DIR not set}"
+    local file="${dir%/}/util/libcrypto.num"
+
+    # File must exist to be patched
+    [[ -f "$file" ]] || return 1
+
+    # Check for our provider symbol exports
+    if grep -q '^ossl_provider_new' -- "$file"; then
+        return 0
+    fi
+
+    # Not patched
+    return 1
+}
+
 patch_openssl_version() {
     # Patch the OpenSSL version (wolfProvider/openssl-source/VERSION.dat)
     # with our BUILD_METADATA, depending on the FIPS flag. Either "wolfProvider" or "wolfProvider-fips".
@@ -171,6 +188,41 @@ patch_openssl() {
         printf "Done.\n"
         popd &> /dev/null
     fi
+
+    # Patch libcrypto.num for replace-default-testing mode
+    if [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        if [ -d "${OPENSSL_INSTALL_DIR}" ]; then
+            # OpenSSL already installed, skip patching
+            return 0
+        fi
+
+        printf "\tPatching libcrypto.num for provider symbol exports ... "
+        export OPENSSL_SOURCE_DIR
+        ${SCRIPT_DIR}/patch-libcrypto-exports.sh >>$LOG_FILE 2>&1
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            printf "\n\nLibcrypto.num patch failed. Last 40 lines of log:\n"
+            tail -n 40 $LOG_FILE
+            do_cleanup
+            exit 1
+        fi
+        printf "Done.\n"
+
+        printf "\n"
+        printf "    ╔════════════════════════════════════════════════════════════════════╗\n"
+        printf "    ║                            *** WARNING ***                         ║\n"
+        printf "    ╠════════════════════════════════════════════════════════════════════╣\n"
+        printf "    ║  OpenSSL has been PATCHED to export internal provider symbols      ║\n"
+        printf "    ║  for unit testing purposes.                                        ║\n"
+        printf "    ║                                                                    ║\n"
+        printf "    ║  >> DO NOT USE THIS BUILD IN PRODUCTION                            ║\n"
+        printf "    ║  >> This build is for TESTING ONLY                                 ║\n"
+        printf "    ║                                                                    ║\n"
+        printf "    ║  Internal symbols exported: ossl_provider_new, ossl_provider_*    ║\n"
+        printf "    ║                             ossl_default_provider_init             ║\n"
+        printf "    ╚════════════════════════════════════════════════════════════════════╝\n"
+        printf "\n"
+    fi
 }
 
 check_openssl_replace_default_mismatch() {
@@ -200,11 +252,40 @@ check_openssl_replace_default_mismatch() {
     fi
 }
 
+check_replace_default_testing_mismatch() {
+    local libcrypto_is_patched=0
+
+    # Check if libcrypto.num was patched for --enable-replace-default-testing
+    if is_libcrypto_num_patched; then
+        libcrypto_is_patched=1
+        printf "INFO: OpenSSL libcrypto.num patched with internal provider symbol exports (testing build).\n"
+    fi
+
+    # Check for mismatch
+    if [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" = "1" ] && [ "$libcrypto_is_patched" = "0" ]; then
+        printf "ERROR: --enable-replace-default-testing build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITHOUT libcrypto.num patch\n"
+        printf "Current request: --enable-replace-default-testing build\n\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
+        exit 1
+    elif [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" != "1" ] && [ "$libcrypto_is_patched" = "1" ]; then
+        printf "ERROR: Standard build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITH libcrypto.num patch (testing mode)\n"
+        printf "Current request: standard build\n\n"
+        printf "This OpenSSL build exports internal provider symbols and should NOT be used.\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
+        exit 1
+    fi
+}
+
 install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
     patch_openssl
     check_openssl_replace_default_mismatch
+    check_replace_default_testing_mismatch
 
     pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
 

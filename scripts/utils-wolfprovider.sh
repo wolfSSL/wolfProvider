@@ -49,6 +49,10 @@ if [ "${WOLFPROV_QUICKTEST}" = "1" ]; then
     WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_QUICKTEST"
 fi
 
+if [ "${WOLFPROV_REPLACE_DEFAULT_TESTING}" = "1" ]; then
+    WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_REPLACE_DEFAULT_UNIT_TEST"
+fi
+
 if [ "$WOLFSSL_ISFIPS" -eq "1" ] || [ -n "$WOLFSSL_FIPS_BUNDLE" ]; then
     WOLFPROV_CONFIG=${WOLFPROV_CONFIG:-"$WOLFPROV_SOURCE_DIR/provider-fips.conf"}
 else
@@ -143,8 +147,8 @@ install_wolfprov() {
 
     # Build the replacement default library after wolfprov to avoid linker errors
     # but before testing so that the library is present if needed
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then 
-        printf "\tWARNING: Skipping tests in replace mode...\n"
+    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" != "1" ]; then
+        printf "\tWARNING: Skipping tests in replace mode (use --enable-replace-default-testing to enable)...\n"
     else
         # Setup the environment to ensure we use the local builds of wolfprov, wolfssl, and openssl.
         if ! source ${SCRIPT_DIR}/env-setup >/dev/null 2>&1; then
@@ -164,6 +168,23 @@ install_wolfprov() {
             exit 1
         fi
         printf "Done.\n"
+    fi
+
+    # Final warning for replace-default-testing builds
+    if [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" = "1" ]; then
+        printf "\n"
+        printf "╔══════════════════════════════════════════════════════════════════════════╗\n"
+        printf "║                    *** TESTING BUILD COMPLETE ***                        ║\n"
+        printf "╠══════════════════════════════════════════════════════════════════════════╣\n"
+        printf "║  This OpenSSL build has been patched with INTERNAL SYMBOL EXPORTS       ║\n"
+        printf "║  for unit testing with --enable-replace-default-testing                 ║\n"
+        printf "║                                                                          ║\n"
+        printf "║  >> DO NOT DEPLOY TO PRODUCTION                                          ║\n"
+        printf "║  >> FOR DEVELOPMENT AND TESTING USE ONLY                                 ║\n"
+        printf "║                                                                          ║\n"
+        printf "║  To build a production version, rebuild WITHOUT this flag.              ║\n"
+        printf "╚══════════════════════════════════════════════════════════════════════════╝\n"
+        printf "\n"
     fi
 
     popd &> /dev/null
