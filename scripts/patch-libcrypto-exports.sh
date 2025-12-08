@@ -33,6 +33,10 @@ if [ -z "$OPENSSL_SOURCE_DIR" ]; then
     exit 1
 fi
 
+# Source utils-openssl.sh to use is_libcrypto_num_patched function
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/utils-openssl.sh"
+
 LIBCRYPTO_NUM="${OPENSSL_SOURCE_DIR}/util/libcrypto.num"
 
 # Check if file exists
@@ -41,8 +45,8 @@ if [ ! -f "$LIBCRYPTO_NUM" ]; then
     exit 1
 fi
 
-# Check if already patched
-if grep -q "^ossl_provider_new" "$LIBCRYPTO_NUM"; then
+# Check if already patched using shared function
+if is_libcrypto_num_patched; then
     echo "libcrypto.num already patched (provider symbols present)"
     exit 0
 fi

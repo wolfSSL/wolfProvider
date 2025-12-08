@@ -155,7 +155,27 @@ Then use the following command to build wolfProvider with FIPS enabled.
 
 ## Building with Replace Default
 
-wolfProvider can be configured to replace OpenSSL's default provider, making wolfProvider the default cryptographic provider for all OpenSSL operations. This is useful for testing and for applications that want to use wolfSSL's cryptographic implementations without modifying their code.
+wolfProvider can be configured to replace OpenSSL's default provider, making wolfProvider the default cryptographic provider for all OpenSSL operations. This is useful for applications that want to use wolfSSL's cryptographic implementations without modifying their code.
+
+### Replace Default vs. Standard Provider Mode
+
+Replace default mode is fundamentally different from the standard provider approach:
+
+**Standard Provider Mode:** When wolfProvider is loaded as a standard provider alongside OpenSSL's default provider, applications can still access OpenSSL's native crypto implementations in several ways:
+- When an application explicitly requests a specific provider (e.g., "default") for an algorithm
+- When wolfProvider doesn't implement a particular algorithm, OpenSSL falls back to its built-in implementations
+- If the execution environment does not pick up the specified configuration file enabling
+use of wolfProvider
+
+**Replace Default Mode:** This mode patches OpenSSL to disable many of these fallback paths.
+When replace default is enabled:
+- wolfProvider becomes the primary cryptographic provider
+- Requests for the "default" provider are redirected to wolfProvider
+- Requests for the "fips" provider are redirected to wolfProvider
+- Requests for the "wolfProvider" provider are redirected to wolfProvider
+- This ensures maximum use of wolfSSL's cryptographic implementations for testing and validation
+
+This makes replace default mode particularly useful for comprehensive testing scenarios where you want to ensure that wolfSSL's implementations are being used throughout the entire system.
 
 ### Basic Replace Default
 
@@ -175,7 +195,16 @@ For unit testing with replace-default enabled, you need additional support to lo
 ./scripts/build-wolfprovider.sh --replace-default --enable-replace-default-testing
 ```
 
-**Important:** `--enable-replace-default-testing` requires `--replace-default` to be set. Using `--enable-replace-default-testing` alone will result in an error.
+### Important Notes
+
+**For `--replace-default`:**
+- Can be used standalone in production or testing environments
+- Makes wolfProvider the default cryptographic provider
+
+**For `--enable-replace-default-testing`:**
+**Warning:** This option patches OpenSSL to export internal symbols that are not part of the public API. This configuration:
+- Should only be used for development and testing
+- Is not suitable for production deployments
 
 ### Examples
 
@@ -188,18 +217,6 @@ Build with replace-default and unit testing support:
 ```bash
 ./scripts/build-wolfprovider.sh --replace-default --enable-replace-default-testing
 ```
-
-### Important Notes
-
-**For `--replace-default`:**
-- Can be used standalone in production or testing environments
-- Makes wolfProvider the default cryptographic provider
-
-**For `--enable-replace-default-testing`:**
-**Warning:** This option patches OpenSSL to export internal symbols that are not part of the public API. This configuration:
-- **Requires** `--replace-default` to also be set
-- Should only be used for development and testing
-- Is not suitable for production deployments
 
 ## Testing
 
