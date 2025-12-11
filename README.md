@@ -4,7 +4,7 @@ This branch is **dedicated exclusively to CI/CD and packaging automation**. It i
 
 #### Purpose
 
-The `wics` branch serves as a **storage and publishing branch** for generated `.wic` Disk Images produced by the wolfProvider CI pipelines. These artifacts are automatically uploaded here for testing, validation, and distribution workflows.
+The `wics` branch serves as a **storage and publishing branch** for generated `.wic.xz` Disk Images produced by the wolfProvider CI pipelines. These files get converted to `.xz` files so that we can successfully compress and export them to Github. These artifacts are then automatically uploaded here for decompression, testing, validation, and testing in workflows.
 
 #### Usage
 
