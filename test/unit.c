@@ -280,7 +280,9 @@ TEST_CASE test_case[] = {
 #endif
 #ifdef WP_HAVE_DH
     TEST_DECL(test_dh_pgen_pkey, NULL),
+#if !defined(HAVE_FIPS) && !defined(HAVE_FIPS_VERSION)
     TEST_DECL(test_dh_pkey, NULL),
+#endif
     TEST_DECL(test_dh_decode, NULL),
     TEST_DECL(test_dh_krb5_keygen, NULL),
 #ifndef WOLFPROV_QUICKTEST
