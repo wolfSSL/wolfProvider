@@ -17,3 +17,20 @@ The `wics` branch serves as a **storage and publishing branch** for generated `.
 - This branch does **not contain any source code** or build logic.
 - It is maintained automatically by the wolfSSL build infrastructure.
 
+#### CI Usage
+
+CI builds
+```
+.github/workflows/yocto-curl.yml
+.github/workflows/yocto-librelp.yml
+.github/workflows/yocto-test.yml
+.github/workflows/yocto-verify.yml
+.github/workflows/yocto-xmlsec1.yml
+```
+
+Nightly Builds - (2-3hrs)
+```
+.github/workflows/yocto-openssh.yml
+.github/workflows/yocto-openssl.yml
+.github/workflows/yocto-rsyslog.yml
+```
