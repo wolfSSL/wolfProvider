@@ -23,7 +23,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.6.0' ]
+        openssl_ref: [ 'master' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
@@ -48,7 +48,7 @@ jobs:
               test_core_security_ssl_credentials_test test_cpp_end2end_ssl_credentials_test
               h2_ssl_cert_test h2_ssl_session_reuse_test
         wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.6.0' ]
+        openssl_ref: [ 'master' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
