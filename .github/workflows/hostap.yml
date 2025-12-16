@@ -23,7 +23,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        openssl_ref: [ 'openssl-3.6.0' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
@@ -42,7 +42,7 @@ jobs:
       matrix:
         hostap_ref: [ 'main' ]
         wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        openssl_ref: [ 'openssl-3.6.0' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
