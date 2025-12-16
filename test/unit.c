@@ -355,6 +355,7 @@ TEST_CASE test_case[] = {
     #endif
     TEST_DECL(test_ec_decode, NULL),
     TEST_DECL(test_ec_import, NULL),
+    TEST_DECL(test_ec_auto_derive_pubkey, NULL),
     TEST_DECL(test_ec_null_init, NULL),
 #endif
 #ifdef WP_HAVE_EC_P384
