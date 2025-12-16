@@ -1168,6 +1168,9 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
                     ecc->key.type = ECC_PRIVATEKEY;
                     ecc->hasPub = 1;
                 }
+                /* If derivation fails, continue.
+                 * The key is still valid for private key operations.
+                 * We will fail later if public key is accessed. */
             }
         }
 #endif /* OPENSSL_VERSION_NUMBER > 0x30600000L 3.6.0+ */
