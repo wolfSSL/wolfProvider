@@ -23,7 +23,7 @@ jobs:
     strategy:
       matrix:
         wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'master' ]
+        openssl_ref: [ 'openssl-3.5.4' ]
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
@@ -50,7 +50,7 @@ jobs:
       matrix:
         openssh_ref: [ 'V_10_0_P2', 'V_9_9_P1' ]
         wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'master' ]
+        openssl_ref: [ 'openssl-3.5.4' ]
         fips_ref: [ 'non-FIPS' ] # FIPS is not yet supported for OpenSSH
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]

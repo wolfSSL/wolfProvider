@@ -16,7 +16,7 @@ jobs:
       matrix:
         tpm2_tss_ref: [ '4.1.3']
         wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'master' ]
+        openssl_ref: [ 'openssl-3.5.4' ]
         force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
         replace_default: [ true ]
     env:
