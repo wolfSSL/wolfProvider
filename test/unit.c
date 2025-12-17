@@ -346,6 +346,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_kem_prefix_match, NULL),
     TEST_DECL(test_rsa_pss_mgf1_get_params, NULL),
     TEST_DECL(test_rsa_kem, NULL),
+    TEST_DECL(test_rsa_key_integrity, NULL),
 #endif /* WP_HAVE_RSA */
 #ifdef WP_HAVE_EC_P192
     #ifdef WP_HAVE_ECKEYGEN
