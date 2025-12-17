@@ -40,6 +40,12 @@
 /** Maximum size of the group name string. */
 #define WP_MAX_DH_GROUP_NAME_SZ     10
 
+/* Min accepted bitlen for keygen */
+#ifdef HAVE_FIPS
+#define WP_DH_MIN_BITS 2048
+#else
+#define WP_DH_MIN_BITS 1024
+#endif
 
 /**
  * DH key.
@@ -1776,7 +1782,7 @@ static int wp_dh_params_validate(wp_Dh* dh)
     if (ok) {
         /* Ensure p is a minimum size. */
         sz = mp_count_bits(&dh->key.p);
-        if (sz < 1024) {
+        if (sz < WP_DH_MIN_BITS) {
             ok = 0;
         }
 

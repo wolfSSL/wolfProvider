@@ -242,8 +242,10 @@ install_wolfssl() {
                     exit 1
                 fi
             fi
-            # Change to test directory for FIPS builds
-            if [ -n "$WOLFSSL_FIPS_BUNDLE" ] || [ "$WOLFSSL_ISFIPS" = "1" ]; then
+            # Change to test directory for FIPS builds (only when cloning, not for bundles)
+            # XXX-fips-test is created by fips-check.sh when cloning from GitHub.
+            # Pre-packaged FIPS bundles don't have this directory - they ARE the source tree.
+            if [ -z "$WOLFSSL_FIPS_BUNDLE" ] && [ "$WOLFSSL_ISFIPS" = "1" ]; then
                 cd XXX-fips-test
             fi
         fi
