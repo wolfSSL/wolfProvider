@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      build_type:
+        required: false
+        type: string
+        default: debian
 
 jobs:
   build_wolfprovider_common:
@@ -42,20 +46,46 @@ jobs:
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
       DEBS_PATH: debs
+      WICS_PATH: wics
+      YOCTO_IMAGES_PATH: /tmp/yocto-images
     steps:
       # Check if artifact already exists from another job in the same workflow run
       # When multiple matrix jobs run in parallel, the first one to finish uploads the artifact
       # Other jobs can then find it and skip rebuilding (no need to download it, just check it exists)
+      - name: Prepare artifact name for check
+        id: prepare_artifact_name
+        run: |
+          if [ "${{ inputs.build_type }}" = "yocto" ]; then
+            # For Yocto, create unique name based on matrix values
+            if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
+              FIPS_STR="fips"
+            else
+              FIPS_STR="nonfips"
+            fi
+            
+            if [ "${{ inputs.replace_default }}" = "true" ]; then
+              REPLACE_DEFAULT_STR="replace-default"
+            else
+              REPLACE_DEFAULT_STR="standalone"
+            fi
+            
+            ARTIFACT_NAME="yocto-image-${FIPS_STR}-${REPLACE_DEFAULT_STR}"
+          else
+            # For Debian, use existing format
+            ARTIFACT_NAME="debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}"
+          fi
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+
       - name: Check for existing artifact from same run
         id: check_artifact
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
+          name: ${{ steps.prepare_artifact_name.outputs.artifact_name }}
 
-      # Download pre-built packages from debs branch
+      # Download pre-built packages from debs branch (for Debian builds)
       - name: Checkout debs branch
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         uses: actions/checkout@v4
         with:
           repository: wolfSSL/wolfProvider
@@ -67,8 +97,146 @@ jobs:
           sparse-checkout-cone-mode: false
           path: ${{ env.DEBS_PATH }}
 
+      # Download pre-built WIC images from wics branch (for Yocto builds)
+      # Files may be split into parts (>100MB) to comply with GitHub's file size limits
+      - name: Install xz-utils
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        run: |
+          apt-get update
+          apt-get install -y xz-utils
+
+      - name: Checkout wics branch
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/wolfProvider
+          ref: wics
+          sparse-checkout: |
+            fips
+            nonfips
+          sparse-checkout-cone-mode: false
+          path: ${{ env.WICS_PATH }}
+
+      - name: Setup WIC images from wics branch
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        run: |
+          mkdir -p ${{ env.YOCTO_IMAGES_PATH }}
+
+          echo "Available directories in wics branch:"
+          ls -la ${{ env.WICS_PATH }}/
+
+          # Determine which WIC file to download based on matrix values
+          # Each matrix job downloads ONLY its specific WIC file
+          if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
+            FIPS_DIR="fips"
+          else
+            FIPS_DIR="nonfips"
+          fi
+          
+          # Directory uses hyphen, not underscore
+          if [ "${{ inputs.replace_default }}" = "true" ]; then
+            CONFIG_DIR="replace-default"
+          else
+            CONFIG_DIR="standalone"
+          fi
+
+          echo "Looking for WIC file in: $FIPS_DIR/$CONFIG_DIR"
+          
+          # Files are in nested directories: fips/replace-default/, fips/standalone/, etc.
+          nested_path="${{ env.WICS_PATH }}/$FIPS_DIR/$CONFIG_DIR"
+          if [ -d "$nested_path" ]; then
+            echo "Found nested directory: $nested_path"
+            echo "Contents:"
+            ls -lah "$nested_path"
+            
+            cd "$nested_path"
+            
+            # Check for split files (.wic.xz.part-*) or single file
+            PART_FILES=$(find . -name "*.wic.xz.part-*" -type f | sort)
+            SINGLE_FILE=$(find . -name "*.wic.xz" -type f ! -name "*.wic.xz.part-*" | head -1)
+            
+            if [ -n "$PART_FILES" ]; then
+              echo "Found split WIC files, reassembling..."
+              
+              # Determine the base filename from the first part file
+              FIRST_PART=$(echo "$PART_FILES" | head -1)
+              BASE_NAME=$(basename "$FIRST_PART" | sed 's/\.part-[0-9]*$//')
+              
+              echo "Base filename: $BASE_NAME"
+              echo "Part files found:"
+              echo "$PART_FILES"
+              
+              # Reassemble split files by concatenating parts in order
+              # The glob pattern *.wic.xz.part-* will expand in sorted order
+              echo "Reassembling split files by concatenating parts in order..."
+              cat *.wic.xz.part-* > "$BASE_NAME"
+              echo "Reassembly complete"
+              
+              # Verify the reassembled file exists
+              if [ ! -f "$BASE_NAME" ]; then
+                echo "ERROR: Failed to reassemble $BASE_NAME"
+                exit 1
+              fi
+              
+              # Copy the reassembled file to output directory
+              cp "$BASE_NAME" ${{ env.YOCTO_IMAGES_PATH }}/
+              echo "Copied reassembled file: $BASE_NAME"
+              
+            elif [ -n "$SINGLE_FILE" ]; then
+              echo "Found single WIC file: $SINGLE_FILE"
+              cp "$SINGLE_FILE" ${{ env.YOCTO_IMAGES_PATH }}/
+              echo "Copied single file: $SINGLE_FILE"
+            else
+              echo "ERROR: No WIC files found (neither split parts nor single file)"
+              echo "Searched for:"
+              echo "  - Split files: *.wic.xz.part-*"
+              echo "  - Single file: *.wic.xz"
+              exit 1
+            fi
+            
+            # Decompress .wic.xz files to .wic files
+            cd ${{ env.YOCTO_IMAGES_PATH }}
+            if ls *.wic.xz 1> /dev/null 2>&1; then
+              echo "Decompressing .wic.xz files..."
+              for xz_file in *.wic.xz; do
+                echo "Decompressing: $xz_file"
+                unxz -v "$xz_file"
+                echo "Decompressed to: ${xz_file%.xz}"
+              done
+            else
+              echo "ERROR: No .wic.xz files found to decompress"
+              exit 1
+            fi
+            
+            echo "Copied and decompressed WIC file(s) for matrix: fips_ref=${{ inputs.fips_ref }}, replace_default=${{ inputs.replace_default }}"
+          else
+            echo "ERROR: Directory not found: $nested_path"
+            echo "Available directories in $FIPS_DIR:"
+            ls -la "${{ env.WICS_PATH }}/$FIPS_DIR/" || true
+            exit 1
+          fi
+          
+          # Verify we found the decompressed WIC file
+          WIC_COUNT=$(find ${{ env.YOCTO_IMAGES_PATH }} -name "*.wic" -type f ! -name "*.wic.xz" | wc -l)
+          if [ "$WIC_COUNT" -eq 0 ]; then
+            echo "ERROR: No decompressed WIC image found for $FIPS_DIR/$CONFIG_DIR"
+            echo "Searched in:"
+            ls -laR ${{ env.WICS_PATH }}/$FIPS_DIR/ || echo "Directory $FIPS_DIR not found"
+            echo "Files in YOCTO_IMAGES_PATH:"
+            ls -la ${{ env.YOCTO_IMAGES_PATH }} || true
+            exit 1
+          fi
+
+          if [ "$WIC_COUNT" -gt 1 ]; then
+            echo "WARNING: Found multiple WIC files ($WIC_COUNT), expected 1"
+          fi
+
+          echo ""
+          echo "WIC image ready for use ($WIC_COUNT decompressed file(s)):"
+          ls -lah ${{ env.YOCTO_IMAGES_PATH }}
+
       - name: Setup packages from debs branch
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
           mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
@@ -120,7 +288,7 @@ jobs:
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
 
       - name: Install OpenSSL and wolfSSL packages
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           echo "Installing OpenSSL and wolfSSL packages (${{ inputs.fips_ref }})..."
 
@@ -147,7 +315,7 @@ jobs:
           dpkg -l | grep wolfssl || echo "  No wolfSSL packages found"
 
       - name: Checkout wolfProvider
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -155,24 +323,24 @@ jobs:
 
       # Avoid "detected dubious ownership" warning
       - name: Ensure the working directory safe
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # When running on a fork the upstream tags are not present, so fetch them explicitly
       - name: Fetch tags from upstream(for Debian versioning)
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
       - name: Install wolfProvider
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           $GITHUB_WORKSPACE/debian/install-wolfprov.sh ${{ inputs.fips_ref == 'FIPS' && '--fips' || '' }} ${{ env.WOLFPROV_PACKAGES_PATH }}
 
       - name: Setup packages directory
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           mkdir -p ${{ env.WOLFPROV_PACKAGES_PATH }}
           
@@ -193,10 +361,10 @@ jobs:
           echo "OpenSSL packages:"
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
 
-      # Save all packages as artifacts for consumers
+      # Save all packages as artifacts for consumers (Debian)
       # Skip upload if artifact already exists (from a parallel run)
       - name: Upload wolfProvider packages
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         uses: actions/upload-artifact@v4
         with:
           name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
@@ -204,4 +372,15 @@ jobs:
             ${{ env.WOLFSSL_PACKAGES_PATH }}
             ${{ env.OPENSSL_PACKAGES_PATH }}
             ${{ env.WOLFPROV_PACKAGES_PATH }}
+          retention-days: 1
+
+      # Save WIC images as artifacts
+      # Each matrix job uploads its unique WIC file with a unique artifact name
+      - name: Upload Yocto WIC images
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yocto-image-${{ inputs.fips_ref == 'FIPS' && 'fips' || 'nonfips' }}-${{ inputs.replace_default && 'replace-default' || 'standalone' }}
+          path: |
+            ${{ env.YOCTO_IMAGES_PATH }}
           retention-days: 1
