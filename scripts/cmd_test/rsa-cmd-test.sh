@@ -37,6 +37,8 @@ KEY_TYPES=("RSA" "RSA-PSS")
 KEY_SIZES=("2048" "3072" "4096")
 PROVIDER_ARGS=("-provider-path $WOLFPROV_PATH -provider libwolfprov" "-provider default")
 
+WOLFPROV_FORCE_FAIL=${WOLFPROV_FORCE_FAIL:-0}
+
 echo "=== Running RSA Key Generation Tests ==="
 
 # Function to validate key
@@ -305,8 +307,9 @@ generate_and_test_key() {
     echo "Checking if ${provider_name} can use the key..."
     
     # Try to use the key with wolfProvider (just check if it loads)
-    if $OPENSSL_BIN pkey -in "$output_file" -check \
-        ${provider_args} -passin pass: >/dev/null; then
+    # Use -noout to avoid encoder lookup which we don't support with selection mask 133 (0x85)
+    if $OPENSSL_BIN pkey -in "$output_file" -check -noout \
+        ${provider_args} -passin pass: ; then
         echo "[PASS] ${provider_name} can use ${key_type} key (${key_size})"
         check_force_fail
     else
