@@ -893,13 +893,23 @@ static int wp_rsa_get_params_key_data(wp_Rsa* rsa,  OSSL_PARAM params[])
         if (p != NULL) {
             size_t oLen;
             mp_int* mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[i]);
-            oLen = mp_unsigned_bin_size(mp);
-            if (oLen > p->data_size) {
-                ok = 0;
+            if (mp_iszero(mp) == MP_YES) {
+                /* not sure if this should be set to NULL or not.
+                 * setting this to NULL can follow OSSL's output better, but it
+                 * feels like a memory leak
+                 * Would be good to check OSSL's implementation */
+                p->data = NULL;
+                oLen = 0;
             }
-            if (ok && (p->data != NULL) &&
-                      (!wp_mp_to_unsigned_bin_le(mp, p->data, oLen))) {
-                ok = 0;
+            else {
+                oLen = mp_unsigned_bin_size(mp);
+                if (oLen > p->data_size) {
+                    ok = 0;
+                }
+                if (ok && (p->data != NULL) &&
+                        (!wp_mp_to_unsigned_bin_le(mp, p->data, oLen))) {
+                    ok = 0;
+                }
             }
             p->return_size = oLen;
         }
@@ -1074,6 +1084,27 @@ static int wp_rsa_match(const wp_Rsa* rsa1, const wp_Rsa* rsa2, int selection)
     return ok;
 }
 
+#define VALIDATE_PRIMES_SIZE 133
+static const mp_digit validate_primes[VALIDATE_PRIMES_SIZE] = {
+   0x0002, 0x0003, 0x0005, 0x0007, 0x000B, 0x000D, 0x0011, 0x0013,
+   0x0017, 0x001D, 0x001F, 0x0025, 0x0029, 0x002B, 0x002F, 0x0035,
+   0x003B, 0x003D, 0x0043, 0x0047, 0x0049, 0x004F, 0x0053, 0x0059,
+   0x0061, 0x0065, 0x0067, 0x006B, 0x006D, 0x0071, 0x007F, 0x0083,
+   0x0089, 0x008B, 0x0095, 0x0097, 0x009D, 0x00A3, 0x00A7, 0x00AD,
+   0x00B3, 0x00B5, 0x00BF, 0x00C1, 0x00C5, 0x00C7, 0x00D3, 0x00DF,
+   0x00E3, 0x00E5, 0x00E9, 0x00EF, 0x00F1, 0x00FB, 0x0101, 0x0107,
+   0x010D, 0x010F, 0x0115, 0x0119, 0x011B, 0x0125, 0x0133, 0x0137,
+   0x0139, 0x013D, 0x014B, 0x0151, 0x015B, 0x015D, 0x0161, 0x0167,
+   0x016F, 0x0175, 0x017B, 0x017F, 0x0185, 0x018D, 0x0191, 0x0199,
+   0x01A3, 0x01A5, 0x01AF, 0x01B1, 0x01B7, 0x01BB, 0x01C1, 0x01C9,
+   0x01CD, 0x01CF, 0x01D3, 0x01DF, 0x01E7, 0x01EB, 0x01F3, 0x01F7,
+   0x01FD, 0x0209, 0x020B, 0x021D, 0x0223, 0x022D, 0x0233, 0x0239,
+   0x023B, 0x0241, 0x024B, 0x0251, 0x0257, 0x0259, 0x025F, 0x0265,
+   0x0269, 0x026B, 0x0277, 0x0281, 0x0283, 0x0287, 0x028D, 0x0293,
+   0x0295, 0x02A1, 0x02A5, 0x02AB, 0x02B3, 0x02BD, 0x02C5, 0x02CF,
+   0x02D7, 0x02DD, 0x02E3, 0x02E7, 0x02EF,
+};
+
 /**
  * Validate the RSA key.
  *
@@ -1106,15 +1137,37 @@ static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
     else
 #endif
     if (checkPriv) {
-        if (mp_isone(&rsa->key.d) || mp_iszero((mp_int*)&rsa->key.d) ||
+        if (mp_iszero((mp_int*)&rsa->key.d) ||
             (mp_cmp((mp_int*)&rsa->key.d, (mp_int*)&rsa->key.n) != MP_LT)) {
             ok = 0;
         }
     }
     else if (checkPub) {
-        if (mp_iseven(&rsa->key.e) || mp_iszero((mp_int*)&rsa->key.e) ||
-            mp_isone(&rsa->key.e)) {
+        int prime;
+        mp_int res;
+
+        if (mp_iszero((mp_int*)&rsa->key.e) || mp_iszero((mp_int*)&rsa->key.n) ||
+                mp_isone((mp_int*)&rsa->key.e) || mp_isone((mp_int*)&rsa->key.n) ||
+                mp_iseven((mp_int*)&rsa->key.e) || mp_iseven((mp_int*)&rsa->key.n)) {
             ok = 0;
+        }
+
+        if (ok && mp_init(&res) != MP_OKAY){
+            ok = 0;
+        }
+        else if (ok){
+            /* seems like it would be better to use mp_prime_is_prime but I
+             * could not get it to work
+             * Still need miller-rabin test, GCD, and size constraints on e
+             * though it passes the test for now */
+            for(prime = 0; prime < VALIDATE_PRIMES_SIZE; prime++) {
+                if (mp_set_int(&res, validate_primes[prime]) != MP_OKAY ||
+                        mp_mod((mp_int*)&rsa->key.n, &res, &res) != MP_OKAY ||
+                        mp_iszero(&res)) {
+                    ok = 0;
+                    break;
+                }
+            }
         }
     }
 
@@ -1144,8 +1197,12 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
 
     /* N and E params are the only ones required by OSSL, so match that.
      * See ossl_rsa_fromdata() and RSA_set0_key() in OpenSSL. */
-    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N) == NULL || 
-        OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E) == NULL) {
+    /* May actually be fine if p->data is NULL, not sure if OSSL fails if
+     * N and/or E are NULL */
+    if ((p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N)) == NULL ||
+            p->data == NULL ||
+            (p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E)) == NULL ||
+            p->data == NULL){
         WOLFPROV_MSG(WP_LOG_COMP_RSA, "Param N or E is missing");
         ok = 0;
     }
@@ -1160,7 +1217,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             index = -1;
             for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
                 if (XSTRNCMP(p->key, wp_rsa_param_key[j], XSTRLEN(p->key)) == 0) {
-                    index = j; 
+                    index = j;
                     break;
                 }
             }
@@ -1170,11 +1227,18 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
                     p->key);
                 continue;
             }
-
             /* Read the value into the rsa struct */
             if (ok) {
                 mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[index]);
-                if (!wp_mp_read_unsigned_bin_le(mp, p->data, p->data_size)) {
+                /* OSSL doesn't fail when p->data is NULL, input data is
+                 * converted as follows by OSSL:
+                 *   NULL -> 0
+                 *   negative -> NULL
+                 * Mimic this behavior by setting both to 0 */
+                if (p->data == NULL || p->data_type != OSSL_PARAM_UNSIGNED_INTEGER){
+                    ok = mp_set(mp, 0) == MP_OKAY;
+                }
+                else if (!wp_mp_read_unsigned_bin_le(mp, p->data, p->data_size)) {
                     WOLFPROV_MSG(WP_LOG_COMP_RSA,
                         "Failed to read %s from parameters", p->key);
                     ok = 0;
