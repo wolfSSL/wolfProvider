@@ -773,6 +773,7 @@ int main(int argc, char* argv[])
 
         osslLibCtx = OSSL_LIB_CTX_new();
 #ifdef WOLFPROV_REPLACE_DEFAULT_UNIT_TEST
+        PRINT_MSG("Testing unit tests in replace default mode");
         /* If enabled, directly load the default provider for unit testing
          * with default replace.  */
         osslProv = wp_load_default_provider_direct(osslLibCtx);
