@@ -23,7 +23,7 @@ else
     exit 1
 fi
 
-pushd $SCRIPT_DIR
+pushd $SCRIPT_DIR >/dev/null
 if [ -n "${GITHUB_WORKSPACE:-}" ]; then
     # In a GitHub Actions workflow, GITHUB_WORKSPACE is set to the root of the repository
     REPO_ROOT="$GITHUB_WORKSPACE"
@@ -34,7 +34,7 @@ else
     # Fallback: use parent directory of scripts folder
     REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 fi
-popd
+popd >/dev/null
 
 echo "SCRIPT_DIR: $SCRIPT_DIR"
 echo "REPO_ROOT: $REPO_ROOT"

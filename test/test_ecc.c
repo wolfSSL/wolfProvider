@@ -1688,7 +1688,7 @@ static int test_ec_decode1(void)
     EVP_PKEY_CTX *ctx = NULL;
     PKCS8_PRIV_KEY_INFO* p8inf = NULL;
     const unsigned char *p = NULL;
-    int len = 0;
+    size_t len = 0;
     EVP_PKEY* pkey1 = NULL;
     EC_KEY* eckey1 = NULL;
     const EC_GROUP* grp1 = NULL;
@@ -1828,7 +1828,7 @@ int test_ec_decode(void* data)
 static int test_ec_import_priv(void)
 {
     int err = 0;
-    int len = 0;
+    size_t len = 0;
     EVP_PKEY_CTX *ctx1 = NULL;
     EVP_PKEY_CTX *ctx2 = NULL;
     EVP_PKEY* pkey1 = NULL;
@@ -1896,13 +1896,13 @@ static int test_ec_import_priv(void)
     /* Verify public key is available */
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 1) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 1) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
@@ -1910,13 +1910,13 @@ static int test_ec_import_priv(void)
     /* Verify encoded public key is available */
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 1) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 1) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
@@ -1938,13 +1938,13 @@ static int test_ec_import_priv(void)
     /* Attempts to get the public key len should fail */
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 0) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 0) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
@@ -1952,13 +1952,13 @@ static int test_ec_import_priv(void)
 #if OPENSSL_VERSION_NUMBER >= 0x30006000L
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 0) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 0) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
