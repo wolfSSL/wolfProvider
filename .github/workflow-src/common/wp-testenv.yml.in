@@ -1,0 +1,10 @@
+runs-on: ubuntu-22.04
+needs: build_wolfprovider
+# Run inside Debian Bookworm to match packaging environment
+container:
+  image: debian:bookworm
+  env:
+    DEBIAN_FRONTEND: noninteractive
+
+# This should be a safe limit for the tests to run.
+timeout-minutes: 20

@@ -1,0 +1,4 @@
+wolfssl_ref: [ 'v5.8.4-stable' ]
+openssl_ref: [ 'openssl-3.5.4' ]
+fips_ref: [ 'FIPS', 'non-FIPS' ]
+replace_default: [ true ]
