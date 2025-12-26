@@ -197,7 +197,7 @@ int test_pkcs7_x509_sign_verify(void* data)
     return 0; /* Success */
 }
 
-static int test_x509_name(X509_NAME *name) {
+static int test_x509_name(const X509_NAME *name) {
     int count = X509_NAME_entry_count(name);
     PRINT_MSG("X509_NAME has %d entries", count);
     if (count < 0) {
@@ -224,9 +224,9 @@ static int test_x509_name(X509_NAME *name) {
     return 0;
 }
 
-static int test_x509_algor(X509 *cert) {
+static int test_x509_algor(const X509 *cert) {
     X509_ALGOR *alg = NULL;
-    X509_PUBKEY *pubkey = X509_get_X509_PUBKEY(cert);
+    const X509_PUBKEY *pubkey = X509_get_X509_PUBKEY(cert);
     if (!pubkey) {
         PRINT_MSG("No public key found");
         return -1;
@@ -263,7 +263,7 @@ int test_x509_cert(void* data) {
 
     if (err == 0) {
         PRINT_MSG("Subject:");
-        X509_NAME *subject = X509_get_subject_name(cert);
+        const X509_NAME *subject = X509_get_subject_name(cert);
         err = test_x509_name(subject);
         if (err) {
             PRINT_MSG("Failed to test subject name");
