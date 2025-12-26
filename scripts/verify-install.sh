@@ -73,9 +73,8 @@ if ! command -v $OPENSSL_BIN >/dev/null 2>&1; then
     handle_error "$OPENSSL_BIN not found"
 fi
 
-openssl_version=$($OPENSSL_BIN version 2> /dev/null)
-openssl_providers=$($OPENSSL_BIN list -providers 2> /dev/null)
-dpkg_output=$(dpkg -l 2> /dev/null | grep wolf)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${SCRIPT_DIR}/utils-general.sh"
 
 handle_error() {
     local message="$1"
@@ -200,13 +199,8 @@ verify_wolfprovider() {
     local replace_default="$2"
     local no_wp="$3"
 
-    is_openssl_replace_default=$(echo "$openssl_version" | grep -qi "wolfProvider-replace-default" && echo 1 || echo 0)
-    is_openssl_default_provider=$(echo "$openssl_providers" | grep -qi "OpenSSL Default Provider" && echo 1 || echo 0)
-
-    is_wp_active=$(echo "$openssl_providers" | grep -qi "wolfSSL Provider" && echo 1 || echo 0)
-    is_wp_default=$(echo "$openssl_providers" | grep -q -Pzo 'Providers:\s*\n\s*default\s*\n\s*name:\s*wolfSSL Provider' && echo 1 || echo 0)
-    is_wp_fips=$(echo "$openssl_providers" | grep -qi "wolfSSL Provider FIPS" && echo 1 || echo 0)
-
+    detect_wolfprovider_mode
+    dpkg_output=$(dpkg -l 2> /dev/null | grep wolf)
     is_wolfssl_installed=$(echo "$dpkg_output" | grep -Eq '^ii\s+libwolfssl\s' && echo 1 || echo 0)
     is_wolfssl_fips=$(echo "$dpkg_output" | grep -E '^ii\s+libwolfssl\s' | grep -qi "fips" && echo 1 || echo 0)
 

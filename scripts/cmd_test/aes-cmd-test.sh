@@ -19,14 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "${SCRIPT_DIR}/cmd-test-common.sh"
-source "${SCRIPT_DIR}/clean-cmd-test.sh"
-cmd_test_env_setup "aes-test.log"
-clean_cmd_test "aes"
+CMD_TEST_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${CMD_TEST_DIR}/cmd-test-common.sh"
+source "${CMD_TEST_DIR}/clean-cmd-test.sh"
 
-# Redirect all output to log file
-exec > >(tee -a "$LOG_FILE") 2>&1
+if [ -z "${DO_CMD_TESTS:-}" ]; then
+    echo "This script is designed to be called from do-cmd-tests.sh"
+    echo "Do not run this script directly - use do-cmd-tests.sh instead"
+    exit 1
+fi
+
+cmd_test_init "aes-test.log"
+clean_cmd_test "aes"
 
 # Create test data and output directories
 mkdir -p aes_outputs
@@ -41,8 +45,6 @@ if [ "${WOLFSSL_ISFIPS}" = "1" ]; then
 else
     MODES=("ecb" "cbc" "ctr" "cfb")
 fi
-
-echo "=== Running AES Algorithm Comparisons ==="
 
 # Run tests for each key size and mode
 for key_size in "${KEY_SIZES[@]}"; do
@@ -67,14 +69,16 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Interop testing (encrypt with default, decrypt with wolfProvider):"
         
         # Encryption with OpenSSL default provider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider default \
+        use_default_provider
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv \
             -in aes_outputs/test_data.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL encrypt failed"
             FAIL=1
         fi
         
         # Decryption with wolfProvider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider-path "$WOLFPROV_PATH" -provider libwolfprov \
+        use_wolf_provider
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv \
             -in "$enc_file" -out "$dec_file" -d -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider decrypt failed"
             FAIL=1
@@ -96,14 +100,16 @@ for key_size in "${KEY_SIZES[@]}"; do
         echo "Interop testing (encrypt with wolfProvider, decrypt with default):"
         
         # Encryption with wolfProvider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider-path "$WOLFPROV_PATH" -provider libwolfprov \
+        use_wolf_provider
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv \
             -in aes_outputs/test_data.txt -out "$enc_file" -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: wolfProvider encrypt failed"
             FAIL=1
         fi
         
         # Decryption with OpenSSL default provider
-        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv -provider default \
+        use_default_provider
+        if ! $OPENSSL_BIN enc -aes-${key_size}-${mode} -K "$key" $iv \
             -in "$enc_file" -out "$dec_file" -d -p; then
             echo "[FAIL] Interop AES-${key_size}-${mode}: OpenSSL decrypt failed"
             FAIL=1
