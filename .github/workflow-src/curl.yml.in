@@ -1,0 +1,57 @@
+name: Curl Tests
+
+include: "./common/wp-trigger.yml.in"
+
+jobs:
+  include: "./common/wp-build.yml.in"
+
+  test_curl:
+    include: "./common/wp-testenv.yml.in"
+
+    strategy:
+      matrix:
+        curl_ref: [ 'curl-8_4_0', 'curl-7_88_1' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        include: "./common/wp-matrix.yml.in"
+    steps:
+      include: "./common/wp-install.yml.in"
+
+      - name: Install curl dependencies
+        run: |
+          apt-get update
+          apt-get install -y nghttp2 libpsl5 libpsl-dev python3-impacket \
+            build-essential autoconf automake libtool
+
+      - name: Build curl
+        uses: wolfSSL/actions-build-autotools-project@v1
+        with:
+          repository: curl/curl
+          path: curl
+          ref: ${{ matrix.curl_ref }}
+          configure: --with-openssl
+          check: false
+
+      - name: Generate certificates for curl master force-fail tests
+        run: |
+          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ] &&
+             [ "${{ matrix.curl_ref }}" = "master" ]; then
+            cd curl/tests/certs
+            make test-ca.cacert
+            cd ../..
+          fi
+      - name: Test curl with wolfProvider
+        working-directory: curl
+        shell: bash
+        run: |
+          set +o pipefail # ignore errors from make check
+          export ${{ matrix.force_fail }}
+          export CURL_REF=${{ matrix.curl_ref }}
+
+          # Tests rely on $USER being set
+          export USER=testuser
+
+          # Run tests and save output to test.log
+          make -j$(nproc) test-ci 2>&1 | tee curl-test.log
+          # Capture the test result using PIPESTATUS (Bash only)
+          TEST_RESULT=${PIPESTATUS[0]}
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} curl

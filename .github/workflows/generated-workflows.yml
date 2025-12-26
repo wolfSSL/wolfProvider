@@ -1,0 +1,28 @@
+name: Generated workflow sync
+
+on:
+  pull_request:
+
+# This workflow fails if any generated workflows are not up to date.
+# Re-run 'make' in .github/workflow-src to update them.
+jobs:
+  check-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        run: | 
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Generate workflows
+        run: |
+          cd .github/workflow-src
+          make
+
+      - name: Verify no diffs
+        run: |
+          git diff --exit-code .github/workflows
