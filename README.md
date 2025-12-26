@@ -1,66 +1,20 @@
-# Yocto WIC Image Downloads
+### wolfProvider — `wics`
 
-This branch contains compressed Yocto disk images (.wic.xz files) for testing purposes.
+This branch is **dedicated exclusively to CI/CD and packaging automation**.
+It is **not part of the main source code** and is **not intended for development or code contributions**.
 
-## File Structure
+#### Purpose
 
-- `fips/standalone/` - FIPS standalone images
-- `fips/replace-default/` - FIPS replace-default images  
-- `nonfips/standalone/` - Non-FIPS standalone images
-- `nonfips/replace-default/` - Non-FIPS replace-default images
+The `wics` branch serves as a **storage and publishing branch** for generated Disk Images (`.wic`) packages produced by the wolfProvider CI pipelines.
+These artifacts are automatically uploaded here for testing, validation, and distribution workflows.
 
-## Downloading Files
+#### Usage
 
-### Option 1: Complete Files (< 100MB)
+* **Do not submit pull requests** to this branch.
+* **Do not modify files manually** — all updates are performed by automated CI jobs (e.g., Jenkins, GitHub Actions).
+* **Do not consume these wics** - These are for testing purposes only and should not be used in real application.
 
-If the file is under 100MB, it will be stored as a single `.wic.xz` file:
+#### Notes
 
-```bash
-# Download and decompress
-xz -d core-image-minimal.wic.xz
-```
-
-### Option 2: Split Files (> 100MB)
-
-If the file exceeds 100MB, it will be split into chunks (`.wic.xz.part-000`, `.wic.xz.part-001`, etc.) to comply with GitHub's 100MB file size limit.
-
-**To reassemble and decompress:**
-
-```bash
-# Method 1: Use the provided reassembly script
-bash core-image-minimal.wic.xz.reassemble.sh
-xz -d core-image-minimal.wic.xz
-
-# Method 2: Manual reassembly
-cat core-image-minimal.wic.xz.part-* > core-image-minimal.wic.xz
-xz -d core-image-minimal.wic.xz
-```
-
-**Important:** Make sure all part files are downloaded before reassembling. The parts must be combined in order.
-
-## Verification
-
-After decompression, verify the file:
-
-```bash
-file core-image-minimal.wic
-# Should show: core-image-minimal.wic: DOS/MBR boot sector
-```
-
-## Usage
-
-These images can be written to SD cards or used with QEMU:
-
-```bash
-# Write to SD card (replace /dev/sdX with your device)
-sudo dd if=core-image-minimal.wic of=/dev/sdX bs=4M status=progress
-
-# Or use with QEMU
-qemu-system-x86_64 -drive file=core-image-minimal.wic,format=raw
-```
-
-## Notes
-
-- Files are compressed using xz with extreme mode (-9e) for maximum compression
-- Files over 100MB are automatically split into 90MB chunks
-- All files are for testing purposes only, not for production use
+* This branch does **not contain any source code** or build logic.
+* It is maintained automatically by the wolfSSL build infrastructure.
