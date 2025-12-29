@@ -1,0 +1,140 @@
+name: Yocto wolfProviderTests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: ['*']
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ matrix.replace_default }}
+      build_type: 'yocto'
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.6' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true, false ]
+
+  verify_yocto_env:
+    needs: build_wolfprovider
+    uses: ./.github/workflows/yocto-verify.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ matrix.replace_default }}
+    strategy:
+        matrix:
+          wolfssl_ref: [ 'v5.8.4-stable' ]
+          openssl_ref: [ 'openssl-3.2.6' ]
+          fips_ref: [ 'FIPS', 'non-FIPS' ]
+          replace_default: [ true, false ]
+
+  yocto_test:
+    name: Run wolfProvider tests - ${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ matrix.fips_ref }}-${{ matrix.replace_default }}
+    needs: [build_wolfprovider, verify_yocto_env]
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.6' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true, false ]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/crops/poky:ubuntu-22.04
+      options: --user root
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Download Yocto image
+        uses: actions/download-artifact@v4
+        with:
+          name: yocto-image-${{ matrix.fips_ref == 'FIPS' && 'fips' || 'nonfips' }}-${{ matrix.replace_default && 'replace-default' || 'standalone' }}
+          path: /tmp/yocto-image
+
+      - name: Install QEMU, expect, and xz-utils
+        run: |
+          apt-get update
+          apt-get install -y qemu-system-x86 expect xz-utils
+
+      - name: Setup Yocto image (reuse from verify workflow)
+        run: |
+          echo "=== Downloaded Yocto image ==="
+          ls -lah /tmp/yocto-image/
+          cd /tmp/yocto-image
+
+          # Extract if compressed
+          if ls *.wic.xz 1> /dev/null 2>&1; then
+            echo "Extracting xz-compressed Yocto image..."
+            unxz -v *.wic.xz || true
+          fi
+
+          # Verify the WIC file is found
+          WIC_FILE=$(ls *.wic 2>/dev/null | grep -v "\.wic\." | head -1)
+
+          if [ -z "$WIC_FILE" ] || [ ! -f "$WIC_FILE" ]; then
+            echo "ERROR: No decompressed WIC file found"
+            echo "Available files:"
+            ls -la /tmp/yocto-image/
+            exit 1
+          fi
+
+          echo "Using WIC file: $WIC_FILE"
+          echo "Expected configuration: fips_ref=${{ matrix.fips_ref }}, replace_default=${{ matrix.replace_default }}"
+          echo "WIC_PATH=/tmp/yocto-image/$WIC_FILE" >> $GITHUB_ENV
+
+      - name: Boot QEMU, run wolfProvider tests
+        timeout-minutes: 60
+        run: |
+          # WIC image has been verified - now run wolfProvider tests
+          echo "=== Running wolfProvider tests for ${{ matrix.fips_ref }}-${{ matrix.replace_default }} ==="
+          echo "WIC file: $WIC_PATH"
+
+          OUTPUT_FILE="/tmp/yocto-wolfprovider-tests-output-${{ matrix.fips_ref }}-${{ matrix.replace_default }}.txt"
+
+          export EXPECT_TIMEOUT=3600 # 1 hour
+          $GITHUB_WORKSPACE/.github/scripts/boot-qemu.sh \
+            "$WIC_PATH" \
+            "echo '=== Running wolfproviderenv ==='" \
+            "wolfproviderenv" \
+            "echo '=== Running wolfprovidercmd ==='" \
+            "wolfprovidercmd" \
+            "echo '=== Running wolfprovidertest ==='" \
+            "wolfprovidertest" > "$OUTPUT_FILE" 2>&1 || true
+
+          # Display the output
+          echo "=== wolfProvider tests output ==="
+          cat "$OUTPUT_FILE"
+          echo ""
+
+          echo "=== Verifying test results ==="
+          source $GITHUB_WORKSPACE/.github/scripts/yocto-verify-common.sh
+          yocto_test_verify "wolfProvider" "$OUTPUT_FILE" || exit 1
+
+      - name: Upload wolfProvider tests logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yocto-wolfprovider-tests-logs-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ matrix.fips_ref == 'FIPS' && 'fips' || 'nonfips' }}-${{ matrix.replace_default && 'replace-default' || 'standalone' }}
+          path: |
+            /tmp/yocto-wolfprovider-tests-output-*.txt
+          retention-days: 7
+          if-no-files-found: ignore
