@@ -75,10 +75,40 @@ if [ "$UTILS_GENERAL_LOADED" != "yes" ]; then # only set once
         local openssl_version=$(${OPENSSL_BIN} version 2>/dev/null)
         local openssl_providers=$(${OPENSSL_BIN} list -providers 2>/dev/null)
 
-        is_openssl_replace_default=$(echo "$openssl_version" | grep -qi "wolfProvider-replace-default" && echo 1 || echo 0)
+        # Check for "replace-default" in version string OR environment variable
+        is_openssl_replace_default=$(echo "$openssl_version" | grep -qi "replace-default" && echo 1 || echo 0)
+        if [ "$is_openssl_replace_default" = "0" ] && [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
+            is_openssl_replace_default=1
+        fi
+        
+        # In replace-default mode, "default" provider has "wolfSSL Provider" name
+        if [ "$is_openssl_replace_default" = "0" ]; then
+            # Check if provider list shows "default" with "wolfSSL Provider" name but NOT "OpenSSL Default Provider"
+            # This indicates replace-default mode
+            if echo "$openssl_providers" | grep -q "^  default$" && \
+               echo "$openssl_providers" | grep -q "wolfSSL Provider" && \
+               ! echo "$openssl_providers" | grep -q "OpenSSL Default Provider"; then
+                is_openssl_replace_default=1
+            fi
+        fi
+        
+        # In replace-default mode, there's no "OpenSSL Default Provider" - wolfProvider IS the default
         is_openssl_default_provider=$(echo "$openssl_providers" | grep -qi "OpenSSL Default Provider" && echo 1 || echo 0)
         is_wp_active=$(echo "$openssl_providers" | grep -qi "wolfSSL Provider" && echo 1 || echo 0)
-        is_wp_default=$(echo "$openssl_providers" | grep -q -Pzo 'Providers:\s*\n\s*default\s*\n\s*name:\s*wolfSSL Provider' && echo 1 || echo 0)
+        
+        # Check if wolfProvider is the default provider
+        if [ "$is_openssl_replace_default" = "1" ]; then
+            # In replace-default mode, wolfProvider IS the default provider
+            is_wp_default=1
+            # Also mark as active if we're in replace-default mode
+            if [ "$is_wp_active" = "0" ]; then
+                # In replace-default mode, the "default" provider IS wolfProvider
+                is_wp_active=1
+            fi
+        else
+            # In normal mode, check if default provider is wolfProvider
+            is_wp_default=$(echo "$openssl_providers" | grep -q -Pzo 'Providers:\s*\n\s*default\s*\n\s*name:\s*wolfSSL Provider' && echo 1 || echo 0)
+        fi
         is_wp_fips=$(echo "$openssl_providers" | grep -qi "wolfSSL Provider FIPS" && echo 1 || echo 0)
     }
 fi

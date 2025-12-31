@@ -57,5 +57,6 @@ jobs:
           # Run cmd tests to verify functionality
           export WOLFSSL_ISFIPS=1
           export ${{matrix.force_fail}}
+          source scripts/env-setup
 
           ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh

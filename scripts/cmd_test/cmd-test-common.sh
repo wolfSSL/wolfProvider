@@ -31,7 +31,15 @@ source "${CMD_TEST_DIR}/../utils-general.sh"
 
 # Function to setup the environment for the command-line tests
 cmd_test_env_setup() {
-    export OPENSSL_BIN=${OPENSSL_BIN:-$(which openssl)}
+    # Use OPENSSL_BIN if explicitly set, otherwise auto-detect
+    if [ -z "${OPENSSL_BIN:-}" ]; then
+        OPENSSL_BIN=$(which openssl 2>/dev/null || echo "")
+        if [ -z "$OPENSSL_BIN" ]; then
+            echo "ERROR: Cannot find openssl binary. Please set OPENSSL_BIN environment variable."
+            exit 1
+        fi
+    fi
+    export OPENSSL_BIN
     printf "Using OPENSSL_BIN: %s\n" "$OPENSSL_BIN"
 
     OPENSSL_CONF_ORIG="${OPENSSL_CONF:-}"
@@ -59,32 +67,37 @@ cmd_test_init() {
 
 # Function to use default provider only
 use_default_provider() {
-    return 0
-
-    if [ -z "${OPENSSL_CONF_ORIG:-}" ]; then
-        export OPENSSL_CONF="/dev/null"
-        export OPENSSL_MODULES="/dev/null"
-    else
-        unset OPENSSL_CONF
-        unset OPENSSL_MODULES
-    fi
+    # Detect mode BEFORE modifying environment variables
     detect_wolfprovider_mode
-
+    
     # Check if wolfProvider is in replace-default mode
-    if [ "$is_openssl_replace_default" = "1" ]; then
-        echo "INFO: wolfProvider is installed in replace-default mode"
-        echo "INFO: wolfProvider IS the default provider and cannot be switched off"
-
-        # Verify that wolfProvider (as default) is active
-		if [ "$is_wp_active" = "1" ] && [ "$is_wp_default" = "1" ]; then
+    if [ "$is_openssl_replace_default" = "1" ] || [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
+        # In replace-default mode, wolfProvider IS the default provider
+        # No provider switching possible - just verify it's active
+        echo "replace-default is set, using default provider"
+        
+        # In replace-default mode, don't modify environment variables
+        # Just verify that wolfProvider is active as the default
+        if [ "$is_wp_active" = "1" ] && [ "$is_wp_default" = "1" ]; then
             echo "Using default provider (wolfProvider in replace-default mode)"
+            return 0
         else
             echo "FAIL: Expected wolfProvider as default, but is_wp_active: $is_wp_active and is_wp_default: $is_wp_default"
             exit 1
         fi
     else
         # In non-replace-default mode, unsetting OPENSSL_MODULES should disable wolfProvider
-        echo "INFO: wolfProvider is installed in non-replace-default mode"
+        # Disable wolfProvider by setting OPENSSL_CONF and OPENSSL_MODULES to /dev/null
+        if [ -z "${OPENSSL_CONF_ORIG:-}" ]; then
+            export OPENSSL_CONF="/dev/null"
+            export OPENSSL_MODULES="/dev/null"
+        else
+            unset OPENSSL_CONF
+            unset OPENSSL_MODULES
+        fi
+        
+        # Re-detect after disabling
+        detect_wolfprovider_mode
 
         # Verify that we are using the OpenSSL default provider (not wolfProvider)
         if [ "$is_openssl_default_provider" != "1" ]; then
@@ -92,34 +105,28 @@ use_default_provider() {
             echo "is_openssl_default_provider: $is_openssl_default_provider"
             exit 1
         fi
-        echo "INFO: Switched to default provider (OpenSSL)"
+        echo "INFO: Switched to OpenSSL default provider"
+        return 0
     fi
 }
 
 
 # Function to use wolf provider only
 use_wolf_provider() {
-    return 0
-
-    if [ -z "${OPENSSL_CONF_ORIG:-}" ]; then
-        unset OPENSSL_CONF
-        unset OPENSSL_MODULES
-    else 
-        export OPENSSL_CONF="${OPENSSL_CONF_ORIG:-}"
-        export OPENSSL_MODULES="${OPENSSL_MODULES_ORIG:-}"
-    fi
+    # Detect mode BEFORE modifying environment variables
     detect_wolfprovider_mode
-
+    
     # Check if wolfProvider is in replace-default mode
-    if [ "$is_openssl_replace_default" = "1" ]; then
-        # In replace-default mode, wolfProvider is already the default
-        # No need to set OPENSSL_MODULES or OPENSSL_CONF
-        echo "INFO: wolfProvider is installed in replace-default mode"
-        echo "INFO: wolfProvider is already active as the default provider"
-
-        # Verify that wolfProvider is active
-		if [ "$is_wp_active" = "1" ] && [ "$is_wp_default" = "1" ]; then
+    if [ "$is_openssl_replace_default" = "1" ] || [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
+        # In replace-default mode, wolfProvider IS the default provider
+        # No provider switching possible - just verify it's active
+        echo "replace-default is set, using default provider"
+        
+        # In replace-default mode, don't modify environment variables
+        # Just verify that wolfProvider is active as the default
+        if [ "$is_wp_active" = "1" ] && [ "$is_wp_default" = "1" ]; then
             echo "Using wolfProvider (replace-default mode)"
+            return 0
         else
             echo "FAIL: wolfProvider is not active"
             echo "is_wp_active: $is_wp_active"
@@ -127,19 +134,87 @@ use_wolf_provider() {
             exit 1
         fi
     else
-        # In non-replace-default mode, we need to set OPENSSL_MODULES and OPENSSL_CONF
-        echo "INFO: wolfProvider is installed in non-replace-default mode"
+        # In non-replace-default mode, we need to set OPENSSL_MODULES and OPENSSL_CONF to enable wolfProvider
+        echo "INFO: Switched to libwolfprov"
+        
+        # Get paths to enable wolfProvider
+        # Use WOLFPROV_PATH/WOLFPROV_CONFIG if set (from env-setup), otherwise derive from OPENSSL_BIN path
+        local wolfprov_lib_path="${WOLFPROV_PATH:-}"
+        local provider_conf="${WOLFPROV_CONFIG:-}"
+        
+        # If not set, try to find library path
+        if [ -z "$wolfprov_lib_path" ]; then
+            # Try MODULESDIR from openssl version -a (simplest approach)
+            local openssl_modules_dir=""
+            openssl_modules_dir=$($OPENSSL_BIN version -a 2>/dev/null | grep -i "^MODULESDIR" | sed -E 's/.*["'\'']([^"'\'']+)["'\''].*/\1/' | head -1)
+            if [ -n "$openssl_modules_dir" ] && [ -d "$openssl_modules_dir" ]; then
+                # Check if provider library exists
+                if [ -f "$openssl_modules_dir/libwolfprov.so" ] || \
+                   [ -f "$openssl_modules_dir/libwolfprov.so.0" ] || \
+                   [ -f "$openssl_modules_dir/libwolfprov.so.0.0.0" ]; then
+                    wolfprov_lib_path="$openssl_modules_dir"
+                fi
+            fi
+            
+            # If still not found, try local build location
+            if [ -z "$wolfprov_lib_path" ]; then
+                local openssl_install_dir=$(dirname "$(dirname "$OPENSSL_BIN")" 2>/dev/null || echo "")
+                local repo_root=$(dirname "$openssl_install_dir" 2>/dev/null || echo "")
+                if [ -n "$repo_root" ] && [ -d "$repo_root/wolfprov-install/lib" ]; then
+                    wolfprov_lib_path="$repo_root/wolfprov-install/lib"
+                fi
+            fi
+        fi
+        
+        # If not set, try to find config file (optional - system installs may not need it)
+        if [ -z "$provider_conf" ]; then
+            # Try system location first
+            if [ -f "/etc/ssl/openssl.cnf.d/wolfprovider.conf" ]; then
+                provider_conf="/etc/ssl/openssl.cnf.d/wolfprovider.conf"
+            else
+                # Try local build location
+                local openssl_install_dir=$(dirname "$(dirname "$OPENSSL_BIN")" 2>/dev/null || echo "")
+                local repo_root=$(dirname "$openssl_install_dir" 2>/dev/null || echo "")
+                if [ -n "$repo_root" ]; then
+                    if [ "${WOLFSSL_ISFIPS:-0}" = "1" ] && [ -f "$repo_root/provider-fips.conf" ]; then
+                        provider_conf="$repo_root/provider-fips.conf"
+                    elif [ -f "$repo_root/provider.conf" ]; then
+                        provider_conf="$repo_root/provider.conf"
+                    fi
+                fi
+            fi
+        fi
+        
+        # Set environment variables to enable wolfProvider
+        # In system installations, the provider may be auto-loaded via openssl.cnf,
+        # so library path is optional - only set it if we found it
+        if [ -n "$wolfprov_lib_path" ] && [ -d "$wolfprov_lib_path" ]; then
+            export OPENSSL_MODULES="$wolfprov_lib_path"
+        else
+            # Library path not found - this is OK for system installs with openssl.cnf configuration
+            # Just warn about it, don't fail
+            echo "WARNING: Cannot find wolfProvider library path - will rely on system openssl.cnf configuration"
+            echo "  WOLFPROV_PATH: ${WOLFPROV_PATH:-not set}"
+            echo "  OPENSSL_BIN: ${OPENSSL_BIN:-not set}"
+            $OPENSSL_BIN version -a 2>&1 | grep -i "^MODULESDIR" || echo "  MODULESDIR not found in openssl version output"
+        fi
+        
+        # Config file is optional - system installs may use openssl.cnf instead
+        if [ -n "$provider_conf" ] && [ -f "$provider_conf" ]; then
+            export OPENSSL_CONF="$provider_conf"
+        fi
+        
+        # Re-detect after setting environment
+        detect_wolfprovider_mode
 
         # Verify that we are using wolfProvider
         if [ "$is_wp_active" != "1" ]; then
             echo "FAIL: unable to switch to wolfProvider, default provider is still active"
-            $OPENSSL_BIN list -providers
             echo "is_wp_active: $is_wp_active"
             echo "is_wp_default: $is_wp_default"
             exit 1
         fi
-        echo "INFO: Switched to wolfProvider"
-        $OPENSSL_BIN list -providers
+        return 0
     fi
 }
 

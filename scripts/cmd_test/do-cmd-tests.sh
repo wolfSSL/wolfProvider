@@ -51,10 +51,11 @@ TESTS (if none specified, all tests run):
     ecc                 Run ECC key generation test
     req                 Run certificate request test
 
-ENVIRONMENT VARIABLES (env vars get detected from verify-install.sh):
-    OPENSSL_BIN         Path to OpenSSL binary (auto-detected with which(openssl) if not set)
-    WOLFSSL_ISFIPS      Set to 1 for FIPS mode (or use --fips flag)
-    WOLFPROV_FORCE_FAIL Set to 1 for force-fail mode (or use --force-fail flag)
+ENVIRONMENT VARIABLES:
+    OPENSSL_BIN              Path to OpenSSL binary (auto-detected with which(openssl) if not set)
+    WOLFSSL_ISFIPS           Set to 1 for FIPS mode (auto-detected from OpenSSL if not set)
+    WOLFPROV_REPLACE_DEFAULT Set to 1 to force replace-default mode (auto-detected from OpenSSL version if not set)
+    WOLFPROV_FORCE_FAIL      Set to 1 for force-fail mode
 
 EOF
     exit 0
