@@ -49,19 +49,26 @@ below depending on your use case.
 
          .include /etc/ssl/openssl.cnf.d/wolfprovider.conf
 
-     This makes wolfProvider available to all applications 
-     that utilize the standard system openssl configuration.
+     This makes wolfProvider available to applications that 
+     execute with the standard system OpenSSL configuration. 
+     Note that many applications, such as anything executing 
+     from systemd, will ignore the global configuration 
+     entirely and will not use wolfProvider.
 
 
   2) Per-command enable (no system-wide changes)
 
-     Set OPENSSL_CONF when running a program:
+     Set OPENSSL_CONF environment variable when running applications:
 
-         OPENSSL_CONF=/etc/ssl/openssl.cnf.d/wolfprovider.conf \
-             <command>
+         OPENSSL_CONF=/etc/ssl/openssl.cnf.d/wolfprovider.conf <your-application>
 
-     This enables use of wolfProvider whenever the
-     environment variable is set for the current shell.
+     Most applications with standard environment variable handling will
+     be able to use this method, not just the openssl binary. For example:
+
+         OPENSSL_CONF=/etc/ssl/openssl.cnf.d/wolfprovider.conf openssl <command>
+
+     This enables use of wolfProvider whenever the environment variable 
+     is set for the current shell.
 
 
   3) Application-level integration (for developers)
