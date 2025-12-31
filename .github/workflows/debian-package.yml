@@ -86,7 +86,7 @@ jobs:
         run: |
           # Run the do-cmd-test.sh script to execute interoperability tests
           echo "Running OpenSSL provider interoperability tests..."
-          OPENSSL_BIN=$(eval which openssl) ${{ matrix.force_fail }} ${{ matrix.fips_ref == 'FIPS' && 'WOLFSSL_ISFIPS=1' || '' }} ./scripts/cmd_test/do-cmd-tests.sh
+          OPENSSL_BIN=$(eval which openssl) ${{ matrix.replace_default && 'WOLFPROV_REPLACE_DEFAULT=1' || '' }} ${{ matrix.force_fail }} ${{ matrix.fips_ref == 'FIPS' && 'WOLFSSL_ISFIPS=1' || '' }} ./scripts/cmd_test/do-cmd-tests.sh
           echo "PASS: All provider interoperability tests successful"
 
       - name: Uninstall package and verify cleanup

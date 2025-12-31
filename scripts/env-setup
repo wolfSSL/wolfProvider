@@ -3,6 +3,8 @@
 # 'source' this file, don't run it directly
 # To disable wolfProvider, run 'unset OPENSSL_CONF'
 # To enable FIPS mode, set WOLFSSL_ISFIPS=1 before sourcing this file
+# To use replace-default mode, set WOLFPROV_REPLACE_DEFAULT=1 before sourcing this file
+#   (or the script will auto-detect replace-default mode from OpenSSL version)
 
 if [[ -n "${ZSH_VERSION:-}" ]]; then
     [[ $ZSH_EVAL_CONTEXT =~ :file$ ]] && is_sourced=1 || is_sourced=0
@@ -57,22 +59,58 @@ WOLFPROV_LIB_PATH="$REPO_ROOT/wolfprov-install/lib"
 # ${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} expands to :$LD_LIBRARY_PATH only if LD_LIBRARY_PATH was already set
 export LD_LIBRARY_PATH="$WOLFPROV_LIB_PATH:$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-# Auto-detect FIPS mode and use appropriate config
-if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
-    DEFAULT_PROVIDER_CONF="$REPO_ROOT/provider-fips.conf"
-    echo "FIPS mode detected, using provider-fips.conf"
-else
-    DEFAULT_PROVIDER_CONF="$REPO_ROOT/provider.conf"
+# Set OPENSSL_BIN - use existing if set, otherwise use local build
+if [ -z "${OPENSSL_BIN:-}" ]; then
+    export OPENSSL_BIN="${REPO_ROOT}/openssl-install/bin/openssl"
 fi
-export OPENSSL_CONF="${OPENSSL_CONF:=$DEFAULT_PROVIDER_CONF}"
-
-export OPENSSL_MODULES="${OPENSSL_MODULES:=$WOLFPROV_LIB_PATH}"
-export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
 
 # Other variables used by test scripts
 export WOLFPROV_PATH="${WOLFPROV_LIB_PATH}"
-export WOLFPROV_CONFIG="${DEFAULT_PROVIDER_CONF}"
-export OPENSSL_BIN="${REPO_ROOT}/openssl-install/bin/openssl"
+
+# Detect if we're in replace-default mode
+# Check environment variable first, then check OpenSSL version string and providers
+WOLFPROV_IN_REPLACE_DEFAULT_MODE=0
+if [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
+    WOLFPROV_IN_REPLACE_DEFAULT_MODE=1
+else
+    # Try to detect from OpenSSL version and provider list if OPENSSL_BIN exists
+    if [ -f "$OPENSSL_BIN" ]; then
+        openssl_version=$($OPENSSL_BIN version 2>/dev/null)
+        openssl_providers=$($OPENSSL_BIN list -providers 2>/dev/null)
+        # Check for "replace-default" in version string
+        if echo "$openssl_version" | grep -qi "replace-default"; then
+            WOLFPROV_IN_REPLACE_DEFAULT_MODE=1
+        # Or check if provider list shows "default" with "wolfSSL Provider" name but NOT "OpenSSL Default Provider"
+        elif echo "$openssl_providers" | grep -q "^  default$" && \
+             echo "$openssl_providers" | grep -q "wolfSSL Provider" && \
+             ! echo "$openssl_providers" | grep -q "OpenSSL Default Provider"; then
+            WOLFPROV_IN_REPLACE_DEFAULT_MODE=1
+        fi
+    fi
+fi
+
+if [ "$WOLFPROV_IN_REPLACE_DEFAULT_MODE" = "1" ]; then
+    echo "using default provider"
+    # In replace-default mode, don't set OPENSSL_CONF or OPENSSL_MODULES
+    # Let OpenSSL use the default provider behavior (wolfProvider IS the default)
+    unset OPENSSL_CONF
+    unset OPENSSL_MODULES
+    export WOLFPROV_CONFIG=""
+else
+    echo "loading wolfProvider as a module provider"
+    # Auto-detect FIPS mode and use appropriate config
+    if [ "${WOLFSSL_ISFIPS:-0}" = "1" ]; then
+        DEFAULT_PROVIDER_CONF="$REPO_ROOT/provider-fips.conf"
+        echo "FIPS mode detected, using provider-fips.conf"
+    else
+        DEFAULT_PROVIDER_CONF="$REPO_ROOT/provider.conf"
+    fi
+    export OPENSSL_CONF="${OPENSSL_CONF:=$DEFAULT_PROVIDER_CONF}"
+    export OPENSSL_MODULES="${OPENSSL_MODULES:=$WOLFPROV_LIB_PATH}"
+    export WOLFPROV_CONFIG="${DEFAULT_PROVIDER_CONF}"
+fi
+
+export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:=$OPENSSL_LIB_PATH/pkgconfig}"
 
 # If openssl-install does not exist, exit with failure status to terminate 
 # any workflows which depend on the result.
@@ -87,12 +125,31 @@ fi
 
 echo "Checking OpenSSL providers:"
 PROVIDER_LIST=$(mktemp -t provider-list.XXXXXX)
-$OPENSSL_BIN list -providers | tee $PROVIDER_LIST
-if grep -q libwolfprov $PROVIDER_LIST; then
-  echo "libwolfprov found in OpenSSL providers"
+$OPENSSL_BIN list -providers 2>&1 | tee $PROVIDER_LIST
+
+# Check if wolfProvider is available
+# In replace-default mode: provider appears as "default" with name "wolfSSL Provider"
+# In normal mode: provider appears as "libwolfprov" with name "wolfSSL Provider"
+if [ "$WOLFPROV_IN_REPLACE_DEFAULT_MODE" = "1" ]; then
+    # In replace-default mode, check for "default" provider with "wolfSSL Provider" name
+    # Or just check that "default" provider exists (since it IS wolfProvider)
+    if grep -qi "wolfSSL Provider" $PROVIDER_LIST || grep -q "^  default$" $PROVIDER_LIST; then
+        echo "wolfProvider found as default provider"
+    else
+        echo "ERROR: wolfProvider (default provider) not found in OpenSSL providers"
+        rm -f $PROVIDER_LIST
+        return 1
+    fi
 else
-  echo "ERROR: libwolfprov not found in OpenSSL providers"
-  return 1
-fi 
+    # In normal mode, check for "libwolfprov" or "wolfSSL Provider"
+    if grep -qi "wolfSSL Provider" $PROVIDER_LIST || grep -q libwolfprov $PROVIDER_LIST; then
+        echo "wolfProvider found in OpenSSL providers"
+    else
+        echo "ERROR: wolfProvider not found in OpenSSL providers"
+        rm -f $PROVIDER_LIST
+        return 1
+    fi
+fi
+rm -f $PROVIDER_LIST 
 
 echo "Done!"
