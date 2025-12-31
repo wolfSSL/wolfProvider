@@ -74,9 +74,27 @@ clone_openssl() {
         DEPTH_ARG=${WOLFPROV_DEBUG:+""}
         DEPTH_ARG=${DEPTH_ARG:---depth=1}
 
-        printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
-        git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
-        RET=$?
+        # Check if tag is actually a commit hash
+        if [[ "$CLONE_TAG" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            git clone ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+            pushd ${OPENSSL_SOURCE_DIR} >/dev/null
+            printf "\tCheckout OpenSSL commit ${CLONE_TAG} ... "
+            git checkout ${CLONE_TAG}
+            RET=$?
+            if [ $RET != 0 ]; then
+                printf "ERROR.\n"
+                tail -n 100 $LOG_FILE
+                do_cleanup
+                exit 1
+            fi
+            printf "Done.\n"
+            popd >/dev/null
+        else
+            printf "\tClone OpenSSL ${CLONE_TAG} from ${OPENSSL_GIT_URL} ... "
+            git clone ${DEPTH_ARG} -b ${CLONE_TAG} ${OPENSSL_GIT_URL} ${OPENSSL_SOURCE_DIR} >>$LOG_FILE 2>&1
+            RET=$?
+        fi
 
         if [ $RET != 0 ]; then
             printf "ERROR.\n"

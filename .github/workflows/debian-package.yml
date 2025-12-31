@@ -99,31 +99,11 @@ jobs:
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
       - name: Test OpenSSL provider functionality
+        shell: bash
         run: |
-          WOLFPROV_CONF_BACKUP="/tmp/wolfprovider.conf.backup"
-
-          # Temporarily move wolfprovider config so we can toggle between providers
-          echo "Temporarily disabling wolfprovider for default provider tests:"
-          mkdir -p /tmp/openssl-test
-          if [ -f $WOLFPROV_CONF_FILE ]; then
-            mv $WOLFPROV_CONF_FILE $WOLFPROV_CONF_BACKUP
-            echo "   - Moved $WOLFPROV_CONF_FILE to $WOLFPROV_CONF_BACKUP"
-          else
-            echo "$WOLFPROV_CONF_FILE not found!"
-            exit 1
-          fi
-
           # Run the do-cmd-test.sh script to execute interoperability tests
           echo "Running OpenSSL provider interoperability tests..."
-          OPENSSL_BIN=$(eval which openssl) ${{ matrix.force_fail }} ${{ matrix.fips_ref == 'FIPS' && 'WOLFSSL_ISFIPS=1' || '' }} ./scripts/cmd_test/do-cmd-tests.sh
-
-          # Restore wolfprovider configuration
-          echo "Restoring wolfprovider configuration:"
-          if [ -f $WOLFPROV_CONF_BACKUP ]; then
-            mv $WOLFPROV_CONF_BACKUP $WOLFPROV_CONF_FILE
-            echo "   - Restored $WOLFPROV_CONF_FILE from $WOLFPROV_CONF_BACKUP"
-          fi
-
+          OPENSSL_BIN=$(eval which openssl) ${{ matrix.replace_default && 'WOLFPROV_REPLACE_DEFAULT=1' || '' }} ${{ matrix.force_fail }} ${{ matrix.fips_ref == 'FIPS' && 'WOLFSSL_ISFIPS=1' || '' }} ./scripts/cmd_test/do-cmd-tests.sh
           echo "PASS: All provider interoperability tests successful"
 
       - name: Uninstall package and verify cleanup
