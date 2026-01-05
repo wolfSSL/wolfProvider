@@ -207,12 +207,12 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
 {
     int ok = 1;
     int done = 0;
-    int rc;
-    int algoId;
-    int type;
+    int rc = 0;
+    int algoId = 0;
+    int type = 0;
     const char* dataType = NULL;
     const char* dataFormat = NULL;
-    int obj;
+    int obj = 0;
     EncryptedInfo info;
     DerBuffer* der = NULL;
     OSSL_PARAM params[5];

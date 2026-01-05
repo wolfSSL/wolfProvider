@@ -187,10 +187,10 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
     wp_Mac *mac, const OSSL_PARAM params[])
 {
     int ok = 1;
-    unsigned char* priv;
-    size_t privLen;
-    const char* cipherName;
-    const char* properties;
+    unsigned char* priv = NULL;
+    size_t privLen = 0;
+    const char* cipherName = NULL;
+    const char* properties = NULL;
     OSSL_PARAM lParams[4];
     int lParamSz = 0;
 

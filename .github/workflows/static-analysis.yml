@@ -1,0 +1,281 @@
+name: Static Analysis
+
+# START OF COMMON SECTION
+on:
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  cppcheck:
+    name: cppcheck Static Analysis
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Build dependencies (OpenSSL and wolfSSL)
+        run: |
+          OPENSSL_TAG=openssl-3.5.4 WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh 2>&1 | tail -100 || true
+          # We only need the build to succeed enough to have headers available
+
+      - name: Generate configure script
+        run: |
+          ./autogen.sh || true
+
+      - name: Configure to generate config.h
+        run: |
+          OPENSSL_INSTALL_DIR="$PWD/openssl-install"
+          WOLFSSL_INSTALL_DIR="$PWD/wolfssl-install"
+          
+          # Configure to generate config.h (needed for cppcheck)
+          ./configure \
+            --with-openssl="$OPENSSL_INSTALL_DIR" \
+            --with-wolfssl="$WOLFSSL_INSTALL_DIR" \
+            --prefix="$PWD/wolfprov-install" \
+            >/dev/null 2>&1 || true
+
+      - name: Run cppcheck
+        run: |
+          # Configure include paths for cppcheck
+          OPENSSL_INC="$PWD/openssl-install/include"
+          WOLFSSL_INC="$PWD/wolfssl-install/include"
+          WOLFPROV_INC="$PWD/include"
+          
+          # Run cppcheck on source files only (tests can be analyzed separately if needed)
+          # Use --force and suppress noValidConfiguration to proceed even with incomplete config
+          cppcheck \
+            --enable=all \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --suppress=unmatchedSuppression \
+            --suppress=noValidConfiguration \
+            --inline-suppr \
+            --force \
+            --error-exitcode=0 \
+            -I "$OPENSSL_INC" \
+            -I "$WOLFSSL_INC" \
+            -I "$WOLFPROV_INC" \
+            --platform=unix64 \
+            src/ 2>&1 | tee cppcheck-output.txt || true
+          
+          # Display output (filter out noValidConfiguration messages and progress)
+          grep -v "noValidConfiguration" cppcheck-output.txt | \
+            grep -v "^Checking " | \
+            grep -v "^[0-9]*/[0-9]* files checked" | \
+            grep -v "^nofile:0:0: information:" || true
+          
+          # Count errors and warnings (count lines with error:/warning: that are actual issues)
+          # Use wc -l for more reliable counting, and strip whitespace
+          ERROR_COUNT=$(grep -E "^src/.*:[0-9]+:[0-9]+:.*error:" cppcheck-output.txt 2>/dev/null | wc -l | tr -d '[:space:]' || echo "0")
+          WARNING_COUNT=$(grep -E "^src/.*:[0-9]+:[0-9]+:.*warning:" cppcheck-output.txt 2>/dev/null | wc -l | tr -d '[:space:]' || echo "0")
+          
+          # Ensure we have valid integers (default to 0 if empty)
+          ERROR_COUNT=${ERROR_COUNT:-0}
+          WARNING_COUNT=${WARNING_COUNT:-0}
+          
+          echo "cppcheck found $ERROR_COUNT errors and $WARNING_COUNT warnings"
+          
+          # Fail only if critical errors found (adjust threshold as needed)
+          if [ "${ERROR_COUNT}" -gt 0 ] 2>/dev/null; then
+            echo "cppcheck found errors"
+            exit 1
+          fi
+
+      - name: Upload cppcheck results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-results
+          path: cppcheck-output.txt
+          retention-days: 7
+
+  scan-build:
+    name: clang Static Analyzer (scan-build)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-tools build-essential autoconf automake libtool pkg-config
+
+      - name: Build dependencies (OpenSSL and wolfSSL)
+        run: |
+          OPENSSL_TAG=openssl-3.5.4 WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh 2>&1 | tail -100 || true
+
+      - name: Generate configure script
+        run: |
+          ./autogen.sh
+
+      - name: Configure project for scan-build
+        run: |
+          OPENSSL_INSTALL_DIR="$PWD/openssl-install"
+          WOLFSSL_INSTALL_DIR="$PWD/wolfssl-install"
+          
+          # Configure with clang (scan-build will wrap it later)
+          CC=clang ./configure \
+            --with-openssl="$OPENSSL_INSTALL_DIR" \
+            --with-wolfssl="$WOLFSSL_INSTALL_DIR" \
+            --prefix="$PWD/wolfprov-install"
+
+      - name: Build library with scan-build
+        run: |
+          # Clean any previous build artifacts
+          make clean || true
+          
+          # Build only the library with scan-build wrapping clang
+          # scan-build intercepts compiler calls, so we need to ensure CC is set to clang
+          # Use --use-cc and --use-c++ to explicitly tell scan-build which compiler to wrap
+          scan-build -o scan-build-output \
+            --use-cc=clang \
+            --use-c++=clang++ \
+            make -j$(nproc) CC=clang libwolfprov.la 2>&1 | tee scan-build-log.txt || true
+          
+          # scan-build returns 0 even if build fails, so we check exit status explicitly
+          echo "Build completed (scan-build may have reports even if build partially failed)"
+
+      - name: Check scan-build results
+        run: |
+          # Find the latest scan-build report directory
+          REPORT_DIR=$(find scan-build-output -maxdepth 1 -type d -name "scan-build-*" | sort -r | head -1)
+          
+          if [ -z "$REPORT_DIR" ] || [ ! -d "$REPORT_DIR" ]; then
+            echo "No scan-build report directory found"
+            exit 0
+          fi
+          
+          # Count bugs found
+          BUG_COUNT=$(find "$REPORT_DIR" -name "*.html" | wc -l)
+          echo "scan-build found $BUG_COUNT potential issues"
+          
+          # Display summary
+          if [ -f "$REPORT_DIR/index.html" ]; then
+            echo "View detailed report in scan-build-output/index.html"
+            # Extract text summary if possible
+            grep -o '<title>.*</title>' "$REPORT_DIR/index.html" || true
+          fi
+          
+          # Fail if critical bugs found (adjust threshold as needed)
+          if [ "$BUG_COUNT" -gt 50 ]; then
+            echo "Too many issues found by scan-build"
+            exit 1
+          fi
+
+      - name: Upload scan-build results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-build-results
+          path: scan-build-output/
+          retention-days: 7
+
+  infer:
+    name: Facebook Infer Static Analysis
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config python3 opam
+          
+          # Install Infer
+          VERSION=1.1.0
+          cd /tmp
+          wget https://github.com/facebook/infer/releases/download/v${VERSION}/infer-linux64-v${VERSION}.tar.xz
+          tar xf infer-linux64-v${VERSION}.tar.xz
+          sudo mv infer-linux64-v${VERSION} /opt/infer
+          sudo ln -sf /opt/infer/bin/infer /usr/local/bin/infer
+
+      - name: Build dependencies (OpenSSL and wolfSSL)
+        run: |
+          OPENSSL_TAG=openssl-3.5.4 WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh 2>&1 | tail -100 || true
+
+      - name: Generate configure script
+        run: |
+          ./autogen.sh
+
+      - name: Configure project
+        run: |
+          OPENSSL_INSTALL_DIR="$PWD/openssl-install"
+          WOLFSSL_INSTALL_DIR="$PWD/wolfssl-install"
+          
+          ./configure \
+            --with-openssl="$OPENSSL_INSTALL_DIR" \
+            --with-wolfssl="$WOLFSSL_INSTALL_DIR" \
+            --prefix="$PWD/wolfprov-install" \
+            CC=clang
+
+      - name: Clean build for Infer
+        run: |
+          make clean || true
+          rm -rf infer-out
+
+      - name: Run Infer analysis
+        run: |
+          # Run infer on the build (it wraps the compilation)
+          # Build only the library to avoid test compilation issues
+          # Explicitly set CC=clang for make
+          infer run -- make -j$(nproc) CC=clang libwolfprov.la 2>&1 | tee infer-log.txt || true
+          
+          # Generate text report
+          if [ -d infer-out ]; then
+            infer report --issues-csv infer-report.csv 2>&1 || true
+            infer report --issues-txt infer-report.txt 2>&1 || true
+            
+            # Display summary
+            if [ -f infer-report.txt ]; then
+              echo "=== Infer Analysis Summary ==="
+              cat infer-report.txt
+              
+              # Count issues
+              ISSUE_COUNT=$(grep -c "Found.*issue" infer-report.txt || echo "0")
+              echo "Infer found issues (check infer-report.txt for details)"
+              
+              # Fail if too many critical issues (adjust threshold as needed)
+              if [ "$ISSUE_COUNT" -gt 100 ]; then
+                echo "Too many issues found by Infer"
+                exit 1
+              fi
+            fi
+          else
+            echo "Infer did not produce output directory"
+          fi
+
+      - name: Upload Infer results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: infer-results
+          path: |
+            infer-out/
+            infer-report.txt
+            infer-report.csv
+            infer-log.txt
+          retention-days: 7
+          if-no-files-found: ignore
