@@ -2206,4 +2206,93 @@ int test_ec_auto_derive_pubkey(void* data)
     return err;
 }
 
+#ifdef WP_HAVE_EC_P256
+int test_ec_print_public(void* data)
+{
+    int err = 0;
+    EVP_PKEY *osslPkey = NULL;
+    EVP_PKEY *wpPkey = NULL;
+    BIO *osslBio = NULL;
+    BIO *wpBio = NULL;
+    const unsigned char *p;
+    char *osslBuf = NULL;
+    char *wpBuf = NULL;
+    long osslLen = 0;
+    long wpLen = 0;
+
+    (void)data;
+
+    /* First, load key and print with OpenSSL default provider */
+    PRINT_MSG("Load ECC P-256 key with OpenSSL default provider");
+    p = ecc_key_der_256;
+    osslPkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
+                                 osslLibCtx, NULL);
+    err = osslPkey == NULL;
+    if (err == 0) {
+        PRINT_MSG("Create BIO for OpenSSL output");
+        err = (osslBio = BIO_new(BIO_s_mem())) == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Print public key with OpenSSL default provider");
+        err = EVP_PKEY_print_public(osslBio, osslPkey, 0, NULL) != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("EVP_PKEY_print_public failed for OpenSSL key");
+        }
+    }
+    if (err == 0) {
+        osslLen = BIO_get_mem_data(osslBio, &osslBuf);
+        err = osslLen <= 0;
+    }
+
+    /* Now load key and print with wolfProvider */
+    if (err == 0) {
+        PRINT_MSG("Load ECC P-256 key with wolfProvider");
+        p = ecc_key_der_256;
+        wpPkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p,
+                                   sizeof(ecc_key_der_256), wpLibCtx, NULL);
+        err = wpPkey == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Create BIO for wolfProvider output");
+        err = (wpBio = BIO_new(BIO_s_mem())) == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Print public key with wolfProvider");
+        err = EVP_PKEY_print_public(wpBio, wpPkey, 0, NULL) != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("EVP_PKEY_print_public failed for wolfProvider key");
+        }
+    }
+    if (err == 0) {
+        wpLen = BIO_get_mem_data(wpBio, &wpBuf);
+        err = wpLen <= 0;
+    }
+
+    /* Compare outputs */
+    if (err == 0) {
+        PRINT_MSG("Compare OpenSSL and wolfProvider outputs");
+        if (osslLen != wpLen) {
+            PRINT_ERR_MSG("Output lengths differ: OpenSSL=%ld, wolfProvider=%ld",
+                          osslLen, wpLen);
+            PRINT_BUFFER("OpenSSL output", (unsigned char*)osslBuf, osslLen);
+            PRINT_BUFFER("wolfProvider output", (unsigned char*)wpBuf, wpLen);
+            err = 1;
+        }
+        else if (memcmp(osslBuf, wpBuf, osslLen) != 0) {
+            PRINT_ERR_MSG("Output contents differ");
+            PRINT_BUFFER("OpenSSL output", (unsigned char*)osslBuf, osslLen);
+            PRINT_BUFFER("wolfProvider output", (unsigned char*)wpBuf, wpLen);
+            err = 1;
+        }
+    }
+
+    BIO_free(wpBio);
+    BIO_free(osslBio);
+    EVP_PKEY_free(wpPkey);
+    EVP_PKEY_free(osslPkey);
+
+    return err;
+}
+#endif /* WP_HAVE_EC_P256 */
+
 #endif /* WP_HAVE_ECC */

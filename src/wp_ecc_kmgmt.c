@@ -2934,6 +2934,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         OPENSSL_free(pemData);
     }
     OPENSSL_free(cipherInfo);
+    BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -3475,6 +3476,292 @@ const OSSL_DISPATCH wp_ecc_x9_62_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecc_encode                  },
     { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecc_import                  },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecc_free                    },
+    { 0, NULL }
+};
+
+/*
+ * ECC Text Encoder
+ */
+
+/**
+ * Create a new ECC text encoder context.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  New ECC encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_EccEncDecCtx* wp_ecc_text_enc_new(WOLFPROV_CTX* provCtx)
+{
+    return wp_ecc_enc_dec_new(provCtx, WP_ENC_FORMAT_TEXT, WP_FORMAT_TEXT);
+}
+
+/**
+ * Return whether the ECC text encoder handles this part of the key.
+ *
+ * @param [in] provCtx   Provider context. Unused.
+ * @param [in] selection Parts of key to handle.
+ * @return  1 when supported.
+ * @return  0 when not supported.
+ */
+static int wp_ecc_text_enc_does_selection(WOLFPROV_CTX* provCtx, int selection)
+{
+    int ok;
+
+    (void)provCtx;
+
+    /* Text encoder supports both public and private key parts */
+    if (selection == 0) {
+        ok = 1;
+    }
+    else {
+        ok = ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) ||
+             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0);
+    }
+
+    return ok;
+}
+
+/**
+ * Get the NIST curve name for the given curve ID.
+ *
+ * @param [in] curveId  wolfSSL curve identifier.
+ * @return  NIST curve name string on success.
+ * @return  NULL if not a NIST curve.
+ */
+static const char* wp_ecc_get_nist_curve_name(int curveId)
+{
+    const char* name = NULL;
+
+    switch (curveId) {
+        case ECC_SECP192R1:
+            name = "P-192";
+            break;
+        case ECC_SECP224R1:
+            name = "P-224";
+            break;
+        case ECC_SECP256R1:
+            name = "P-256";
+            break;
+        case ECC_SECP384R1:
+            name = "P-384";
+            break;
+        case ECC_SECP521R1:
+            name = "P-521";
+            break;
+        default:
+            break;
+    }
+
+    return name;
+}
+
+/** Number of bytes per line when printing labeled hex data (matches OpenSSL) */
+#define WP_ECC_TEXT_PRINT_WIDTH    15
+
+/**
+ * Print a labeled buffer in hex format matching OpenSSL's output.
+ *
+ * Format:
+ *   label:
+ *       xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:
+ *       xx:xx:xx:xx:xx
+ *
+ * @param [in] out    BIO to write output to.
+ * @param [in] label  Label string to print before the hex data.
+ * @param [in] buf    Buffer containing data to print.
+ * @param [in] bufLen Length of buffer in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecc_encode_text_labeled_buf(BIO* out, const char* label,
+    const unsigned char* buf, size_t bufLen)
+{
+    int ok = 1;
+    size_t i;
+
+    if (BIO_printf(out, "%s\n", label) <= 0) {
+        ok = 0;
+    }
+
+    for (i = 0; ok && (i < bufLen); i++) {
+        if ((i % WP_ECC_TEXT_PRINT_WIDTH) == 0) {
+            if (i > 0 && BIO_printf(out, "\n") <= 0) {
+                ok = 0;
+                break;
+            }
+            if (BIO_printf(out, "    ") <= 0) {
+                ok = 0;
+                break;
+            }
+        }
+
+        if (BIO_printf(out, "%02x%s", buf[i],
+                (i == bufLen - 1) ? "" : ":") <= 0) {
+            ok = 0;
+            break;
+        }
+    }
+
+    if (ok && BIO_printf(out, "\n") <= 0) {
+        ok = 0;
+    }
+
+    return ok;
+}
+
+/**
+ * Encode the ECC key in text format.
+ *
+ * @param [in]      ctx        ECC encoder/decoder context object.
+ * @param [in, out] cBio       Core BIO to write data to.
+ * @param [in]      key        ECC key object.
+ * @param [in]      params     Key parameters. Unused.
+ * @param [in]      selection  Parts of key to encode.
+ * @param [in]      pwCb       Password callback. Unused.
+ * @param [in]      pwCbArg    Argument to pass to password callback. Unused.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecc_encode_text(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
+    const wp_Ecc* key, const OSSL_PARAM* params, int selection,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    int ok = 1;
+    BIO* out = wp_corebio_get_bio(ctx->provCtx, cBio);
+    int hasPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
+    int hasPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
+    unsigned char* privBuf = NULL;
+    word32 privLen = 0;
+    unsigned char* pubBuf = NULL;
+    word32 pubLen = 0;
+    const char* curveName = NULL;
+    const char* nistName = NULL;
+    int rc;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_encode_text");
+
+    (void)params;
+    (void)pwCb;
+    (void)pwCbArg;
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+
+    if (ok && (out == NULL)) {
+        ok = 0;
+    }
+
+    /* Print header line */
+    if (ok) {
+        if (hasPriv) {
+            if (BIO_printf(out, "Private-Key: (%d bit)\n", key->bits) <= 0) {
+                ok = 0;
+            }
+        }
+        else if (hasPub) {
+            if (BIO_printf(out, "Public-Key: (%d bit)\n", key->bits) <= 0) {
+                ok = 0;
+            }
+        }
+    }
+
+    /* Export and print private key if present */
+    if (ok && hasPriv && key->hasPriv) {
+        mp_int* priv;
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && \
+    LIBWOLFSSL_VERSION_HEX >= 0x05006002
+        priv = wc_ecc_key_get_priv((ecc_key*)&key->key);
+#else
+        priv = (mp_int*)&key->key.k;
+#endif
+        privLen = (word32)mp_unsigned_bin_size(priv);
+        if (privLen > 0) {
+            privBuf = (unsigned char*)OPENSSL_malloc(privLen);
+            if (privBuf == NULL) {
+                ok = 0;
+            }
+            else if (mp_to_unsigned_bin(priv, privBuf) != MP_OKAY) {
+                ok = 0;
+            }
+            else {
+                ok = wp_ecc_encode_text_labeled_buf(out, "priv:", privBuf,
+                    privLen);
+            }
+        }
+    }
+
+    /* Export and print public key if present */
+    if (ok && (hasPriv || hasPub) && key->hasPub) {
+        /* Get size first */
+        PRIVATE_KEY_UNLOCK();
+        rc = wc_ecc_export_x963_ex((ecc_key*)&key->key, NULL, &pubLen, 0);
+        PRIVATE_KEY_LOCK();
+        if (rc != LENGTH_ONLY_E) {
+            ok = 0;
+        }
+        else {
+            pubBuf = (unsigned char*)OPENSSL_malloc(pubLen);
+            if (pubBuf == NULL) {
+                ok = 0;
+            }
+            else {
+                PRIVATE_KEY_UNLOCK();
+                rc = wc_ecc_export_x963_ex((ecc_key*)&key->key, pubBuf,
+                    &pubLen, 0);
+                PRIVATE_KEY_LOCK();
+                if (rc != 0) {
+                    ok = 0;
+                }
+                else {
+                    ok = wp_ecc_encode_text_labeled_buf(out, "pub:", pubBuf,
+                        pubLen);
+                }
+            }
+        }
+    }
+
+    /* Print ASN1 OID (curve short name) */
+    if (ok) {
+        curveName = wp_ecc_get_group_name((wp_Ecc*)key);
+        if (curveName != NULL) {
+            if (BIO_printf(out, "ASN1 OID: %s\n", curveName) <= 0) {
+                ok = 0;
+            }
+        }
+    }
+
+    /* Print NIST CURVE name if applicable */
+    if (ok) {
+        nistName = wp_ecc_get_nist_curve_name(key->curveId);
+        if (nistName != NULL) {
+            if (BIO_printf(out, "NIST CURVE: %s\n", nistName) <= 0) {
+                ok = 0;
+            }
+        }
+    }
+
+    /* Clean up */
+    if (privBuf != NULL) {
+        OPENSSL_clear_free(privBuf, privLen);
+    }
+    OPENSSL_free(pubBuf);
+    BIO_free(out);
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
+    return ok;
+}
+
+/**
+ * Dispatch table for ECC text encoder.
+ */
+const OSSL_DISPATCH wp_ecc_text_encoder_functions[] = {
+    { OSSL_FUNC_ENCODER_NEWCTX,         (DFUNC)wp_ecc_text_enc_new            },
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_ecc_enc_dec_free            },
+    { OSSL_FUNC_ENCODER_DOES_SELECTION,
+                                     (DFUNC)wp_ecc_text_enc_does_selection    },
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecc_encode_text             },
     { 0, NULL }
 };
 
