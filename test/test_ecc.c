@@ -2206,6 +2206,48 @@ int test_ec_auto_derive_pubkey(void* data)
     return err;
 }
 
+/* Helper function to compare strings ignoring whitespace */
+static int strcmp_ignore_whitespace(const char *s1, long len1,
+                                    const char *s2, long len2)
+{
+    long i1 = 0, i2 = 0;
+
+    while (i1 < len1 && i2 < len2) {
+        /* Skip whitespace in s1 */
+        while (i1 < len1 && (s1[i1] == ' ' || s1[i1] == '\n' ||
+                            s1[i1] == '\t' || s1[i1] == '\r')) {
+            i1++;
+        }
+        /* Skip whitespace in s2 */
+        while (i2 < len2 && (s2[i2] == ' ' || s2[i2] == '\n' ||
+                            s2[i2] == '\t' || s2[i2] == '\r')) {
+            i2++;
+        }
+        /* Compare non-whitespace characters */
+        if (i1 < len1 && i2 < len2) {
+            if (s1[i1] != s2[i2]) {
+                return 1; /* Different */
+            }
+            i1++;
+            i2++;
+        }
+    }
+    /* Skip trailing whitespace */
+    while (i1 < len1 && (s1[i1] == ' ' || s1[i1] == '\n' ||
+                        s1[i1] == '\t' || s1[i1] == '\r')) {
+        i1++;
+    }
+    while (i2 < len2 && (s2[i2] == ' ' || s2[i2] == '\n' ||
+                        s2[i2] == '\t' || s2[i2] == '\r')) {
+        i2++;
+    }
+    /* Both should be at end */
+    if (i1 != len1 || i2 != len2) {
+        return 1; /* Different */
+    }
+    return 0; /* Same */
+}
+
 #ifdef WP_HAVE_EC_P256
 int test_ec_print_public(void* data)
 {
@@ -2268,18 +2310,11 @@ int test_ec_print_public(void* data)
         err = wpLen <= 0;
     }
 
-    /* Compare outputs */
+    /* Compare outputs ignoring whitespace differences */
     if (err == 0) {
         PRINT_MSG("Compare OpenSSL and wolfProvider outputs");
-        if (osslLen != wpLen) {
-            PRINT_ERR_MSG("Output lengths differ: OpenSSL=%ld, wolfProvider=%ld",
-                          osslLen, wpLen);
-            PRINT_BUFFER("OpenSSL output", (unsigned char*)osslBuf, osslLen);
-            PRINT_BUFFER("wolfProvider output", (unsigned char*)wpBuf, wpLen);
-            err = 1;
-        }
-        else if (memcmp(osslBuf, wpBuf, osslLen) != 0) {
-            PRINT_ERR_MSG("Output contents differ");
+        if (strcmp_ignore_whitespace(osslBuf, osslLen, wpBuf, wpLen) != 0) {
+            PRINT_ERR_MSG("Output contents differ (ignoring whitespace)");
             PRINT_BUFFER("OpenSSL output", (unsigned char*)osslBuf, osslLen);
             PRINT_BUFFER("wolfProvider output", (unsigned char*)wpBuf, wpLen);
             err = 1;

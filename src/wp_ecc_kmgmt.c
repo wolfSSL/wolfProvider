@@ -3556,7 +3556,7 @@ static const char* wp_ecc_get_nist_curve_name(int curveId)
 }
 
 /** Number of bytes per line when printing labeled hex data (matches OpenSSL) */
-#define WP_ECC_TEXT_PRINT_WIDTH    15
+#define WP_ECC_TEXT_PRINT_WIDTH    16
 
 /**
  * Print a labeled buffer in hex format matching OpenSSL's output.
