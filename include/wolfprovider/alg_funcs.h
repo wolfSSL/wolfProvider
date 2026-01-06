@@ -408,6 +408,7 @@ extern const OSSL_DISPATCH wp_ecc_epki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_ecc_epki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_ecc_x9_62_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_ecc_x9_62_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_ecc_text_encoder_functions[];
 extern const OSSL_DISPATCH wp_x25519_spki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_x25519_spki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_x25519_pki_der_encoder_functions[];
