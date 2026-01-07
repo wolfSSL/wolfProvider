@@ -47,32 +47,68 @@
  * DRBG context structure.
  */
 typedef struct wp_DrbgCtx {
+    /** Provider context. */
+    WOLFPROV_CTX* provCtx;
     /** wolfSSL random number generator. HASH DRBG implementation. */
     WC_RNG* rng;
 #ifndef WP_SINGLE_THREADED
     /** Mutex for multithreading access to this DRBG context. */
     wolfSSL_Mutex* mutex;
 #endif
+    /** Parent DRBG context for getting entropy. */
+    void* parent;
+    /** Parent's get_seed function. */
+    OSSL_FUNC_rand_get_seed_fn* parentGetSeed;
+    /** Parent's clear_seed function. */
+    OSSL_FUNC_rand_clear_seed_fn* parentClearSeed;
+    /** Whether we have a parent DRBG. */
+    int hasParent;
 } wp_DrbgCtx;
 
 
 /**
  * Create a new DRBG context object.
  *
- * @param [in] provCtx  Provider context.
+ * @param [in] provCtx         Provider context.
+ * @param [in] parent          Parent DRBG context for getting entropy.
+ * @param [in] parentDispatch  Parent's dispatch table.
  * @return  DRBG object on success.
  * @return  NULL on failure.
  */
-static wp_DrbgCtx* wp_drbg_new(WOLFPROV_CTX* provCtx)
+static wp_DrbgCtx* wp_drbg_new(void* provCtx, void* parent,
+    const OSSL_DISPATCH* parentDispatch)
 {
     wp_DrbgCtx* ctx = NULL;
 
-    (void)provCtx;
+    WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_new");
 
     if (wolfssl_prov_is_running()) {
         ctx = OPENSSL_zalloc(sizeof(*ctx));
     }
+    if (ctx != NULL) {
+        ctx->provCtx = (WOLFPROV_CTX*)provCtx;
+        ctx->parent = parent;
 
+        /* Extract parent dispatch functions if available */
+        if (parentDispatch != NULL) {
+            for (; parentDispatch->function_id != 0; parentDispatch++) {
+                switch (parentDispatch->function_id) {
+                    case OSSL_FUNC_RAND_GET_SEED:
+                        ctx->parentGetSeed =
+                            OSSL_FUNC_rand_get_seed(parentDispatch);
+                        ctx->hasParent = 1;
+                        break;
+                    case OSSL_FUNC_RAND_CLEAR_SEED:
+                        ctx->parentClearSeed =
+                            OSSL_FUNC_rand_clear_seed(parentDispatch);
+                        break;
+                }
+            }
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ctx != NULL);
     return ctx;
 }
 
@@ -110,23 +146,71 @@ static void wp_drbg_free(wp_DrbgCtx* ctx)
  * @param [in]      pStrLen     Length of personalization string in bytes.
  * @param [in]      params      Other parameters. Unused.
  * @return  1 on success.
- * @return  0 on success.
+ * @return  0 on failure.
  */
 static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
     int predResist, const unsigned char* pStr, size_t pStrLen,
     const OSSL_PARAM params[])
 {
     int ok = 1;
+    unsigned char* seed = NULL;
+    size_t seedLen = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_instantiate");
 
-    (void)predResist;
     (void)params;
 
     if (strength > WP_DRBG_STRENGTH) {
         ok = 0;
     }
-    if (ok ) {
+
+    if (ok && ctx->hasParent && ctx->parentGetSeed != NULL) {
+        /* Get entropy from parent DRBG (no file I/O needed) */
+        WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+            "Getting entropy from parent DRBG");
+
+        seedLen = ctx->parentGetSeed(ctx->parent, &seed,
+            256,  /* entropy bits */
+            32,   /* min_len */
+            256,  /* max_len */
+            predResist, pStr, pStrLen);
+
+        if (seedLen == 0 || seed == NULL) {
+            WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+                "Failed to get seed from parent");
+            ok = 0;
+        }
+
+        if (ok) {
+            /* Initialize wolfCrypt RNG with parent-provided seed */
+            ctx->rng = OPENSSL_zalloc(sizeof(WC_RNG));
+            if (ctx->rng == NULL) {
+                ok = 0;
+            }
+        }
+
+        if (ok) {
+            int rc = wc_InitRngNonce(ctx->rng, seed, (word32)seedLen);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_InitRngNonce", rc);
+                OPENSSL_free(ctx->rng);
+                ctx->rng = NULL;
+                ok = 0;
+            }
+        }
+
+        /* Clear the seed from parent */
+        if (seed != NULL && ctx->parentClearSeed != NULL) {
+            ctx->parentClearSeed(ctx->parent, seed, seedLen);
+        }
+    }
+    else if (ok) {
+        /* No parent - this is the root DRBG, use /dev/urandom directly.
+         * This path should only be taken before sandbox activation. */
+        WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+            "No parent DRBG, using direct seeding");
+
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         ctx->rng = wc_rng_new((byte*)pStr, (word32)pStrLen, NULL);
         if (ctx->rng == NULL) {
@@ -466,60 +550,59 @@ static int wp_drbg_verify_zeroization(wp_DrbgCtx* ctx)
 /**
  * Get secure seed.
  *
- * @param [in, out] ctx         DRBG context object.
- * @param [out]     pSeed       Handle to seed buffer.
- * @param [in]      entropy     Number of bits of required in seed.
- * @param [in]      minLen      Minimum length of buffer to create in bytes.
- * @param [in]      minLen      Maximum length of buffer to create in bytes.
- * @param [in]      predResist  Prediction resistance required.
- * @param [in]      addIn       Additional input to seed with.
- * @param [in]      addInLen    Additional input to seed with.
+ * @param [in, out] ctx                    DRBG context object.
+ * @param [out]     pSeed                  Handle to seed buffer.
+ * @param [in]      entropy                Number of bits of required in seed.
+ * @param [in]      minLen                 Minimum length of buffer to create in bytes.
+ * @param [in]      maxLen                 Maximum length of buffer to create in bytes.
+ * @param [in]      prediction_resistance  Prediction resistance required.
+ * @param [in]      addIn                  Additional input to seed with.
+ * @param [in]      addInLen               Length of additional input.
+ * @return  Number of bytes of seed on success.
+ * @return  0 on failure.
  */
 static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
     int entropy, size_t minLen, size_t maxLen, int prediction_resistance,
     const unsigned char* addIn, size_t addInLen)
 {
-    int ok = 1;
+    size_t ret = 0;
     int rc;
-    unsigned char* buffer;
+    unsigned char* buffer = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_get_seed");
 
     (void)entropy;
     (void)maxLen;
     (void)prediction_resistance;
+    (void)addIn;
+    (void)addInLen;
+
+    if (ctx->rng == NULL) {
+        WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+            "DRBG not instantiated");
+        goto end;
+    }
 
     buffer = OPENSSL_secure_malloc(minLen);
     if (buffer == NULL) {
-        ok = 0;
-    }
-#if 0
-    if (ok && (addInLen > 0)) {
-        rc = wc_RNG_DRBG_Reseed(ctx->rng, addIn, addInLen);
-        if (rc != 0) {
-            ok = 0;
-        }
-    }
-#else
-    (void)addIn;
-    (void)addInLen;
-#endif
-    if (ok) {
-        rc = wc_RNG_GenerateBlock(ctx->rng, buffer, (word32)minLen);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RNG_GenerateBlock", rc);
-            ok = 0;
-        }
-    }
-    if (ok) {
-        *pSeed = buffer;
-    }
-    if (!ok) {
-        OPENSSL_secure_free(buffer);
+        goto end;
     }
 
-    WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
+    rc = wc_RNG_GenerateBlock(ctx->rng, buffer, (word32)minLen);
+    if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+            "wc_RNG_GenerateBlock", rc);
+        OPENSSL_secure_free(buffer);
+        goto end;
+    }
+
+    *pSeed = buffer;
+    ret = minLen;
+
+end:
+    WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ret > 0);
+    return ret;
 }
 
 /**

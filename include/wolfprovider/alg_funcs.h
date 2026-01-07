@@ -170,6 +170,7 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_DHX            "DHX"
 
 /* DRBG names. */
+#define WP_NAMES_SEED_SRC       "SEED-SRC"
 #define WP_NAMES_CTR_DRBG       "CTR-DRBG"
 #define WP_NAMES_HASH_DRBG      "HASH-DRBG"
 
@@ -351,6 +352,9 @@ extern const OSSL_DISPATCH wp_hkdf_keyexch_functions[];
 extern const OSSL_DISPATCH wp_tls1_prf_keyexch_functions[];
 
 /* DRBG implementations. */
+#ifdef WP_HAVE_SEED_SRC
+extern const OSSL_DISPATCH wp_seed_src_functions[];
+#endif
 extern const OSSL_DISPATCH wp_drbg_functions[];
 
 /* Decode implementations. */

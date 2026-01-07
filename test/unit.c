@@ -278,6 +278,8 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_RANDOM
     TEST_DECL(test_random, NULL),
 #endif
+    TEST_DECL(test_drbg_seed_src, NULL),
+    TEST_DECL(test_seccomp_sandbox, NULL),
 #ifdef WP_HAVE_DH
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),

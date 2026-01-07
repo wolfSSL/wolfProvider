@@ -294,6 +294,9 @@ install_openssl() {
 
         # Build configure command
         CONFIG_CMD="./config shared --prefix=${OPENSSL_INSTALL_DIR}"
+        # Force /dev/urandom seeding only (no getrandom syscall) to match
+        # wolfSSL configuration and ensure consistent sandbox behavior testing
+        CONFIG_CMD+=" --with-rand-seed=devrandom"
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
             CONFIG_CMD+=" enable-trace --debug"
         fi

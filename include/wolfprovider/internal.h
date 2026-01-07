@@ -155,6 +155,24 @@ typedef struct WOLFPROV_CTX {
    BIO_METHOD *coreBioMethod;
 } WOLFPROV_CTX;
 
+#ifdef WP_HAVE_SEED_SRC
+/*
+ * Global /dev/urandom subsystem functions.
+ *
+ * These manage a cached file handle to /dev/urandom that is opened lazily
+ * on first entropy request (matching OpenSSL's default provider behavior).
+ * The file stays open so child processes inherit it and can read even
+ * in sandboxed environments that block openat().
+ */
+int wp_urandom_init(void);
+void wp_urandom_cleanup(void);
+int wp_urandom_read(unsigned char* buf, size_t len);
+
+#ifndef WP_SINGLE_THREADED
+wolfSSL_Mutex *wp_get_urandom_mutex(void);
+#endif
+#endif /* WP_HAVE_SEED_SRC */
+
 
 WC_RNG* wp_provctx_get_rng(WOLFPROV_CTX* provCtx);
 #ifndef WP_SINGLE_THREADED
