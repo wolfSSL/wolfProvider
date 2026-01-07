@@ -166,7 +166,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
 
     if (ok && ctx->hasParent && ctx->parentGetSeed != NULL) {
         /* Get entropy from parent DRBG (no file I/O needed) */
-        WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "Getting entropy from parent DRBG");
 
         seedLen = ctx->parentGetSeed(ctx->parent, &seed,
@@ -176,7 +176,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
             predResist, pStr, pStrLen);
 
         if (seedLen == 0 || seed == NULL) {
-            WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
                 "Failed to get seed from parent");
             ok = 0;
         }
@@ -192,7 +192,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
         if (ok) {
             int rc = wc_InitRngNonce(ctx->rng, seed, (word32)seedLen);
             if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG,
                     "wc_InitRngNonce", rc);
                 OPENSSL_free(ctx->rng);
                 ctx->rng = NULL;
@@ -208,7 +208,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
     else if (ok) {
         /* No parent - this is the root DRBG, use /dev/urandom directly.
          * This path should only be taken before sandbox activation. */
-        WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "No parent DRBG, using direct seeding");
 
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
@@ -227,7 +227,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
         if (ok) {
             int rc = wc_InitRng(ctx->rng);
             if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRng", rc);
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_InitRng", rc);
                 OPENSSL_clear_free(ctx->rng, sizeof(*ctx->rng));
                 ok = 0;
             }
@@ -299,7 +299,7 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
     if (ok) {
         rc = wc_RNG_GenerateBlock(ctx->rng, out, (word32)outLen);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RNG_GenerateBlock", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_RNG_GenerateBlock", rc);
             ok = 0;
         }
     }
@@ -379,7 +379,7 @@ static int wp_drbg_enable_locking(wp_DrbgCtx* ctx)
         if (ok) {
             int rc = wc_InitMutex(ctx->mutex);
             if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitMutex", rc);
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_InitMutex", rc);
                 OPENSSL_free(ctx->mutex);
                 ok = 0;
             }
@@ -410,7 +410,7 @@ static int wp_drbg_lock(wp_DrbgCtx* ctx)
     if (ctx->mutex != NULL) {
         rc = wc_LockMutex(ctx->mutex);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_LockMutex", rc);
             ok = 0;
         }
     }
@@ -578,7 +578,7 @@ static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
     (void)addInLen;
 
     if (ctx->rng == NULL) {
-        WOLFPROV_MSG(WP_LOG_COMP_RNG, WP_LOG_LEVEL_DEBUG,
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "DRBG not instantiated");
         goto end;
     }
@@ -590,7 +590,7 @@ static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
 
     rc = wc_RNG_GenerateBlock(ctx->rng, buffer, (word32)minLen);
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG,
             "wc_RNG_GenerateBlock", rc);
         OPENSSL_secure_free(buffer);
         goto end;
