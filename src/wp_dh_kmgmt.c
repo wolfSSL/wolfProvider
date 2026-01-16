@@ -1156,6 +1156,9 @@ static int wp_dh_import(wp_Dh* dh, int selection, const OSSL_PARAM params[])
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
+    if (ok) {
+        WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_DH);
+    }
     if (ok && (dh == NULL)) {
         ok = 0;
     }
@@ -1832,6 +1835,8 @@ static wp_Dh* wp_dh_gen(wp_DhGenCtx *ctx, OSSL_CALLBACK *cb, void *cbArg)
     (void)cb;
     (void)cbArg;
 
+    WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_DH);
+
     /* Create a new DH key object to hold generated data. */
     dh = wp_dh_new(ctx->provCtx);
     if (dh != NULL) {
@@ -2064,6 +2069,8 @@ static int wp_dh_decode_spki(wp_Dh* dh, unsigned char* data, word32 len)
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
 
+    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_DH);
+
     rc = wc_DhPublicKeyDecode(data, &idx, &dh->key, len);
     if (rc != 0) {
         ok = 0;
@@ -2126,6 +2133,8 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
     unsigned char* base = NULL;
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
+
+    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_DH);
 
     rc = wc_DhKeyDecode(data, &idx, &dh->key, len);
     if (rc != 0) {

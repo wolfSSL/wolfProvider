@@ -126,6 +126,8 @@ static int wp_hmac_set_key(wp_HmacCtx* macCtx, const unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_hmac_set_key");
 
+    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_HMAC);
+
     if (macCtx->keyLen > 0) {
         OPENSSL_secure_clear_free(macCtx->key, macCtx->keyLen);
     }

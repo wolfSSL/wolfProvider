@@ -212,6 +212,8 @@ static int wp_rsaa_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsaa_init");
 
+    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_RSA);
+
     if (ctx->rsa != rsa) {
         if (wp_rsa_get_type(rsa) != RSA_FLAG_TYPE_RSA) {
             ERR_raise_data(ERR_LIB_PROV,

@@ -266,7 +266,9 @@ static int wp_aes_wrap_init(wp_AesWrapCtx *ctx, const unsigned char *key,
         }
         if (ok) {
         #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-            int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
+            int rc;
+            WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
+            rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
                 wrap ? AES_ENCRYPTION : AES_DECRYPTION);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesSetKey", rc);

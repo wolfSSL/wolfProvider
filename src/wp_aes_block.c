@@ -328,7 +328,9 @@ static int wp_aes_block_init(wp_AesBlockCtx *ctx, const unsigned char *key,
             ok = 0;
         }
         if (ok) {
-            int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, ctx->iv,
+            int rc;
+            WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
+            rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, ctx->iv,
                 enc ? AES_ENCRYPTION : AES_DECRYPTION);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesSetKey", rc);

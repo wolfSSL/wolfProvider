@@ -1513,6 +1513,7 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
     (void)cbArg;
 
     if (wolfssl_prov_is_running() && wp_rsagen_check_key_size(ctx)) {
+        WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_RSA);
         rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
         if (rsa != NULL) {
             /* wolfCrypt FIPS RSA keygen has a small chance it simply will not
@@ -2236,7 +2237,6 @@ static int wp_rsa_decode_spki(wp_Rsa* rsa, unsigned char* data, word32 len)
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
-
     if (ok) {
         rc = wc_RsaPublicKeyDecode(data, &idx, &rsa->key, len);
         if (rc != 0) {
@@ -2283,7 +2283,6 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
-
     if (ok) {
         rc = wc_RsaPrivateKeyDecode(data, &idx, &rsa->key, len);
         if (rc != 0) {

@@ -1767,6 +1767,9 @@ static wp_Ecc* wp_ecc_gen(wp_EccGenCtx *ctx, OSSL_CALLBACK *cb, void *cbArg)
     (void)cb;
     (void)cbArg;
 
+    WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_ECDSA);
+    WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_ECDH);
+
     if (ctx->curveName[0] != '\0') {
         ecc = wp_ecc_new(ctx->provCtx);
     }
