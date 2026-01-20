@@ -61,17 +61,25 @@ typedef struct wp_DrbgCtx {
     OSSL_FUNC_rand_get_seed_fn* parentGetSeed;
     /** Parent's clear_seed function. */
     OSSL_FUNC_rand_clear_seed_fn* parentClearSeed;
-    /** Whether we have a parent DRBG. */
-    int hasParent;
 } wp_DrbgCtx;
 
 
 /**
  * Create a new DRBG context object.
  *
+ * The parent and parentDispatch parameters are supplied by OpenSSL when
+ * creating a child DRBG in a hierarchy. When a child DRBG is created via
+ * EVP_RAND_CTX_new(child_rand, parent_ctx), OpenSSL internally calls the
+ * provider's OSSL_FUNC_RAND_NEWCTX with the parent context and its dispatch
+ * table. This allows the child DRBG to obtain entropy from its parent
+ * (via OSSL_FUNC_RAND_GET_SEED) instead of accessing /dev/urandom directly,
+ * which is critical for seccomp sandbox compatibility.
+ *
  * @param [in] provCtx         Provider context.
  * @param [in] parent          Parent DRBG context for getting entropy.
- * @param [in] parentDispatch  Parent's dispatch table.
+ *                             NULL for root DRBGs.
+ * @param [in] parentDispatch  Parent's dispatch table containing get_seed
+ *                             and clear_seed functions. NULL for root DRBGs.
  * @return  DRBG object on success.
  * @return  NULL on failure.
  */
@@ -96,7 +104,6 @@ static wp_DrbgCtx* wp_drbg_new(void* provCtx, void* parent,
                     case OSSL_FUNC_RAND_GET_SEED:
                         ctx->parentGetSeed =
                             OSSL_FUNC_rand_get_seed(parentDispatch);
-                        ctx->hasParent = 1;
                         break;
                     case OSSL_FUNC_RAND_CLEAR_SEED:
                         ctx->parentClearSeed =
@@ -164,7 +171,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
         ok = 0;
     }
 
-    if (ok && ctx->hasParent && ctx->parentGetSeed != NULL) {
+    if (ok && ctx->parentGetSeed != NULL) {
         /* Get entropy from parent DRBG (no file I/O needed) */
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "Getting entropy from parent DRBG");

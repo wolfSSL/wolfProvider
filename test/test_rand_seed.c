@@ -1,4 +1,4 @@
-/* test_drbg_seed_src.c
+/* test_rand_seed.c
  *
  * Copyright (C) 2006-2025 wolfSSL Inc.
  *
@@ -33,7 +33,7 @@
 
 #include "unit.h"
 
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
@@ -424,7 +424,7 @@ cleanup:
 /**
  * Main test entry point - runs tests with OpenSSL default provider and wolfProvider.
  */
-int test_drbg_seed_src(void *data)
+int test_rand_seed(void *data)
 {
     int err = 0;
 
@@ -470,9 +470,9 @@ int test_drbg_seed_src(void *data)
     return err;
 }
 
-#else /* !WP_HAVE_SEED_SRC */
+#else /* !(WP_HAVE_SEED_SRC && WP_HAVE_RANDOM) */
 
-int test_drbg_seed_src(void *data)
+int test_rand_seed(void *data)
 {
     (void)data;
     PRINT_MSG("SEED-SRC test skipped - not enabled");
@@ -480,5 +480,5 @@ int test_drbg_seed_src(void *data)
     return 0;
 }
 
-#endif /* WP_HAVE_SEED_SRC */
+#endif /* WP_HAVE_SEED_SRC && WP_HAVE_RANDOM */
 

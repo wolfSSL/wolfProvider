@@ -248,7 +248,7 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
         }
     }
 
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
     /* Initialize urandom subsystem (registers seed callback, lazy file open) */
     if (ctx != NULL) {
         if (wp_urandom_init() != 0) {
@@ -269,7 +269,7 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
  */
 static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
 {
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
     /* Clean up urandom subsystem */
     wp_urandom_cleanup();
 #endif
@@ -587,7 +587,7 @@ static const OSSL_ALGORITHM wolfprov_kdfs[] = {
 
 /* List of RNG algorithm implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_rands[] = {
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
     { WP_NAMES_SEED_SRC, WOLFPROV_PROPERTIES, wp_seed_src_functions,
       "" },
 #endif

@@ -352,7 +352,7 @@ extern const OSSL_DISPATCH wp_hkdf_keyexch_functions[];
 extern const OSSL_DISPATCH wp_tls1_prf_keyexch_functions[];
 
 /* DRBG implementations. */
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
 extern const OSSL_DISPATCH wp_seed_src_functions[];
 #endif
 extern const OSSL_DISPATCH wp_drbg_functions[];

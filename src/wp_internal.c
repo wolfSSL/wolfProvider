@@ -32,7 +32,7 @@
 
 #ifndef WP_SINGLE_THREADED
 
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
 /* Global mutex for urandom file access (used by seed callback) */
 static wolfSSL_Mutex urandomMutex;
 
@@ -57,7 +57,7 @@ wolfSSL_Mutex *wp_get_urandom_mutex(void)
 {
     return &urandomMutex;
 }
-#endif /* WP_HAVE_SEED_SRC */
+#endif /* WP_HAVE_SEED_SRC && WP_HAVE_RANDOM */
 
 #ifdef HAVE_FIPS
 static wolfSSL_Mutex castMutex;

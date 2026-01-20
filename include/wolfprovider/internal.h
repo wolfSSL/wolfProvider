@@ -155,7 +155,7 @@ typedef struct WOLFPROV_CTX {
    BIO_METHOD *coreBioMethod;
 } WOLFPROV_CTX;
 
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
 /*
  * Global /dev/urandom subsystem functions.
  *

@@ -20,7 +20,7 @@
 
 #include <wolfprovider/settings.h>
 
-#ifdef WP_HAVE_SEED_SRC
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
 
 #include <string.h>
 #include <errno.h>
@@ -47,6 +47,18 @@
  */
 
 #define URANDOM_PATH "/dev/urandom"
+
+/*
+ * Helper macros for thread-safe urandom access.
+ * These expand to no-ops when WP_SINGLE_THREADED is defined.
+ */
+#ifndef WP_SINGLE_THREADED
+    #define WP_URANDOM_LOCK()   wc_LockMutex(wp_get_urandom_mutex())
+    #define WP_URANDOM_UNLOCK() wc_UnLockMutex(wp_get_urandom_mutex())
+#else
+    #define WP_URANDOM_LOCK()   (0)
+    #define WP_URANDOM_UNLOCK() (void)0
+#endif
 
 /*
  * Global cached /dev/urandom file handle.
@@ -81,23 +93,19 @@ static int wp_wolfssl_seed_cb(OS_Seed* os, byte* seed, word32 sz)
 
     (void)os;
 
-#ifndef WP_SINGLE_THREADED
     /* Lock before checking/opening file to prevent race conditions.
      * The urandom mutex is initialized via constructor at library load,
      * so it's guaranteed to be ready for use here.
      */
-    if (wc_LockMutex(wp_get_urandom_mutex()) != 0) {
+    if (WP_URANDOM_LOCK() != 0) {
         return -1;
     }
-#endif
 
     /* Lazy open: open file on first entropy request */
     if (g_urandom_file == XBADFILE) {
         g_urandom_file = XFOPEN(URANDOM_PATH, "rb");
         if (g_urandom_file == XBADFILE) {
-#ifndef WP_SINGLE_THREADED
-            wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+            WP_URANDOM_UNLOCK();
             return -1;
         }
     }
@@ -110,16 +118,12 @@ static int wp_wolfssl_seed_cb(OS_Seed* os, byte* seed, word32 sz)
         }
         else {
             /* EOF or error */
-#ifndef WP_SINGLE_THREADED
-            wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+            WP_URANDOM_UNLOCK();
             return -1;
         }
     }
 
-#ifndef WP_SINGLE_THREADED
-    wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+    WP_URANDOM_UNLOCK();
 
     return 0;
 }
@@ -137,14 +141,12 @@ static int wp_wolfssl_seed_cb(OS_Seed* os, byte* seed, word32 sz)
  */
 int wp_urandom_init(void)
 {
-#ifndef WP_SINGLE_THREADED
     /* Lock to ensure thread-safe initialization.
      * The urandom mutex is initialized via constructor at library load.
      */
-    if (wc_LockMutex(wp_get_urandom_mutex()) != 0) {
+    if (WP_URANDOM_LOCK() != 0) {
         return -1;
     }
-#endif
 
     /* Initialize global file handle to invalid - will be opened lazily */
     g_urandom_file = XBADFILE;
@@ -169,9 +171,7 @@ int wp_urandom_init(void)
     }
 #endif
 
-#ifndef WP_SINGLE_THREADED
-    wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+    WP_URANDOM_UNLOCK();
 
     return 0;
 }
@@ -184,14 +184,12 @@ int wp_urandom_init(void)
  */
 void wp_urandom_cleanup(void)
 {
-#ifndef WP_SINGLE_THREADED
     /* Lock to ensure thread-safe cleanup.
      * The urandom mutex is initialized via constructor at library load.
      */
-    if (wc_LockMutex(wp_get_urandom_mutex()) != 0) {
+    if (WP_URANDOM_LOCK() != 0) {
         return;
     }
-#endif
 
 #ifdef WC_RNG_SEED_CB
     /* Unregister seed callback */
@@ -209,9 +207,7 @@ void wp_urandom_cleanup(void)
             "wp_urandom_cleanup: closed " URANDOM_PATH);
     }
 
-#ifndef WP_SINGLE_THREADED
-    wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+    WP_URANDOM_UNLOCK();
 
     /* Note: global urandom mutex is managed via constructor/destructor */
 }
@@ -237,11 +233,9 @@ int wp_urandom_read(unsigned char* buf, size_t len)
         return -1;
     }
 
-#ifndef WP_SINGLE_THREADED
-    if (wc_LockMutex(wp_get_urandom_mutex()) != 0) {
+    if (WP_URANDOM_LOCK() != 0) {
         return -1;
     }
-#endif
 
     /* Lazy open: open file on first entropy request */
     if (g_urandom_file == XBADFILE) {
@@ -249,9 +243,7 @@ int wp_urandom_read(unsigned char* buf, size_t len)
         if (g_urandom_file == XBADFILE) {
             WOLFPROV_MSG_DEBUG(WP_LOG_LEVEL_DEBUG,
                 "wp_urandom_read: failed to open " URANDOM_PATH);
-#ifndef WP_SINGLE_THREADED
-            wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+            WP_URANDOM_UNLOCK();
             return -1;
         }
         WOLFPROV_MSG_DEBUG(WP_LOG_LEVEL_DEBUG,
@@ -268,16 +260,12 @@ int wp_urandom_read(unsigned char* buf, size_t len)
             /* EOF or error - shouldn't happen with /dev/urandom */
             WOLFPROV_MSG_DEBUG(WP_LOG_LEVEL_DEBUG,
                 "wp_urandom_read: XFREAD failed");
-#ifndef WP_SINGLE_THREADED
-            wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+            WP_URANDOM_UNLOCK();
             return -1;
         }
     }
 
-#ifndef WP_SINGLE_THREADED
-    wc_UnLockMutex(wp_get_urandom_mutex());
-#endif
+    WP_URANDOM_UNLOCK();
 
     return (int)total;
 }
@@ -699,8 +687,10 @@ end:
 static void wp_seed_src_clear_seed(wp_SeedSrcCtx* ctx, unsigned char* seed,
     size_t seedLen)
 {
-    (void)ctx;
     OPENSSL_secure_clear_free(seed, seedLen);
+    if (ctx != NULL) {
+        ctx->state = EVP_RAND_STATE_UNINITIALISED;
+    }
 }
 
 /**
@@ -739,4 +729,4 @@ const OSSL_DISPATCH wp_seed_src_functions[] = {
     { 0, NULL }
 };
 
-#endif /* WP_HAVE_SEED_SRC */
+#endif /* WP_HAVE_SEED_SRC && WP_HAVE_RANDOM */
