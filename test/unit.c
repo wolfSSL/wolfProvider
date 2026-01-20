@@ -308,6 +308,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_fromdata, NULL),
     TEST_DECL(test_rsa_decode, NULL),
     TEST_DECL(test_rsa_null_init, NULL),
+    TEST_DECL(test_rsa_key_integrity, NULL),
 #endif /* WP_HAVE_RSA */
 #ifdef WP_HAVE_EC_P192
     #ifdef WP_HAVE_ECKEYGEN
