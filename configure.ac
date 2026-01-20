@@ -124,11 +124,23 @@ AS_IF([ test "x$ENABLED_SINGLETHREADED" = "xno" ],[
       ])
 
 # Replace default provider
+# Check if -DWOLFPROV_REPLACE_DEFAULT is in CFLAGS/CPPFLAGS first (for Yocto/CFLAGS usage)
+ENABLED_REPLACE_DEFAULT=no
+case " $CFLAGS $CPPFLAGS " in
+    *" -DWOLFPROV_REPLACE_DEFAULT "*|*" -DWOLFPROV_REPLACE_DEFAULT="*)
+        ENABLED_REPLACE_DEFAULT=yes
+        ;;
+esac
+
 AC_ARG_ENABLE([replace-default],
-    [AS_HELP_STRING([--enable-replace-default],[Build real libdefault.so from wp_default_replace.c (default: disabled).])],
+    [AS_HELP_STRING([--enable-replace-default],[Build real libdefault.so from wp_default_replace.c (default: disabled). Can also be enabled via -DWOLFPROV_REPLACE_DEFAULT in CFLAGS.])],
     [ ENABLED_REPLACE_DEFAULT=$enableval ],
-    [ ENABLED_REPLACE_DEFAULT=no ]
+    [ ]
     )
+
+if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_REPLACE_DEFAULT"
+fi
 
 AM_CONDITIONAL([BUILD_REPLACE_DEFAULT], [test "x$ENABLED_REPLACE_DEFAULT" = "xyes"])
 

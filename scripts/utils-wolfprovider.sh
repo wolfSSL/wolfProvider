@@ -103,7 +103,7 @@ install_wolfprov() {
     fi
 
     if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
-        WOLFPROV_CONFIG_OPTS+=" --enable-replace-default"
+        WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_REPLACE_DEFAULT"
     fi
 
     if [ "$WOLFPROV_SEED_SRC" = "1" ]; then

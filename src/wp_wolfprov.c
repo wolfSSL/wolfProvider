@@ -849,6 +849,9 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     { WP_NAMES_EC, WP_ENCODER_PROPERTIES(X9_62, pem),
       wp_ecc_x9_62_pem_encoder_functions,
       "" },
+    { WP_NAMES_EC, WP_ENCODER_PROPERTIES(type-specific, text),
+      wp_ecc_text_encoder_functions,
+      "" },
 #endif
 
 #ifdef WP_HAVE_X25519

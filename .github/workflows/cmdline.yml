@@ -35,4 +35,5 @@ jobs:
 
       - name: Run tests
         run: |
+          source scripts/env-setup
           ${{ matrix.force_fail }} ${{ matrix.debug }} ./scripts/cmd_test/do-cmd-tests.sh

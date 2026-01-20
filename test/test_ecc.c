@@ -1688,7 +1688,7 @@ static int test_ec_decode1(void)
     EVP_PKEY_CTX *ctx = NULL;
     PKCS8_PRIV_KEY_INFO* p8inf = NULL;
     const unsigned char *p = NULL;
-    int len = 0;
+    size_t len = 0;
     EVP_PKEY* pkey1 = NULL;
     EC_KEY* eckey1 = NULL;
     const EC_GROUP* grp1 = NULL;
@@ -1828,7 +1828,7 @@ int test_ec_decode(void* data)
 static int test_ec_import_priv(void)
 {
     int err = 0;
-    int len = 0;
+    size_t len = 0;
     EVP_PKEY_CTX *ctx1 = NULL;
     EVP_PKEY_CTX *ctx2 = NULL;
     EVP_PKEY* pkey1 = NULL;
@@ -1896,13 +1896,13 @@ static int test_ec_import_priv(void)
     /* Verify public key is available */
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 1) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 1) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
@@ -1910,13 +1910,13 @@ static int test_ec_import_priv(void)
     /* Verify encoded public key is available */
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 1) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 1) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 1) {
             err = 1;
         }
     }
@@ -1938,13 +1938,13 @@ static int test_ec_import_priv(void)
     /* Attempts to get the public key len should fail */
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 0) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, (size_t *)&len) != 0) {
+                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
@@ -1952,13 +1952,13 @@ static int test_ec_import_priv(void)
 #if OPENSSL_VERSION_NUMBER >= 0x30006000L
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey1,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 0) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
     if (err == 0) {
         if (EVP_PKEY_get_octet_string_param(pkey2,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, (size_t *)&len) != 0) {
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 0) {
             err = 1;
         }
     }
@@ -2205,5 +2205,104 @@ int test_ec_auto_derive_pubkey(void* data)
 
     return err;
 }
+
+#ifdef WP_HAVE_EC_P256
+int test_ec_print_public(void* data)
+{
+    int err = 0;
+    EVP_PKEY *osslPkey = NULL;
+    EVP_PKEY *wpPkey = NULL;
+    BIO *osslBio = NULL;
+    BIO *wpBio = NULL;
+    const unsigned char *p;
+    char *osslBuf = NULL;
+    char *wpBuf = NULL;
+    long osslLen = 0;
+    long wpLen = 0;
+
+    (void)data;
+
+    /* First, load key and print with OpenSSL default provider */
+    PRINT_MSG("Load ECC P-256 key with OpenSSL default provider");
+    p = ecc_key_der_256;
+    osslPkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
+                                 osslLibCtx, NULL);
+    err = osslPkey == NULL;
+    if (err == 0) {
+        PRINT_MSG("Create BIO for OpenSSL output");
+        err = (osslBio = BIO_new(BIO_s_mem())) == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Print public key with OpenSSL default provider");
+        err = EVP_PKEY_print_public(osslBio, osslPkey, 0, NULL) != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("EVP_PKEY_print_public failed for OpenSSL key");
+        }
+    }
+    if (err == 0) {
+        osslLen = BIO_get_mem_data(osslBio, &osslBuf);
+        err = osslLen <= 0;
+    }
+
+    /* Now load key and print with wolfProvider */
+    if (err == 0) {
+        PRINT_MSG("Load ECC P-256 key with wolfProvider");
+        p = ecc_key_der_256;
+        wpPkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p,
+                                   sizeof(ecc_key_der_256), wpLibCtx, NULL);
+        err = wpPkey == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Create BIO for wolfProvider output");
+        err = (wpBio = BIO_new(BIO_s_mem())) == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Print public key with wolfProvider");
+        err = EVP_PKEY_print_public(wpBio, wpPkey, 0, NULL) != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("EVP_PKEY_print_public failed for wolfProvider key");
+        }
+    }
+    if (err == 0) {
+        wpLen = BIO_get_mem_data(wpBio, &wpBuf);
+        err = wpLen <= 0;
+    }
+
+    /* Verify both outputs contain expected key content.
+     * We check for key components rather than exact formatting to avoid
+     * breaking when OpenSSL changes output format (e.g., adding security
+     * level info to the header line).
+     */
+    if (err == 0) {
+        PRINT_MSG("Verify both outputs contain public key header");
+        if (strstr(osslBuf, "pub:") == NULL) {
+            PRINT_ERR_MSG("OpenSSL output missing 'pub:' header");
+            err = 1;
+        }
+        else if (strstr(wpBuf, "pub:") == NULL) {
+            PRINT_ERR_MSG("wolfProvider output missing 'pub:' header");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        PRINT_MSG("Verify both outputs contain curve identifier");
+        if (strstr(osslBuf, "prime256v1") == NULL) {
+            PRINT_ERR_MSG("OpenSSL output missing curve OID 'prime256v1'");
+            err = 1;
+        }
+        else if (strstr(wpBuf, "prime256v1") == NULL) {
+            PRINT_ERR_MSG("wolfProvider output missing curve OID 'prime256v1'");
+            err = 1;
+        }
+    }
+
+    BIO_free(wpBio);
+    BIO_free(osslBio);
+    EVP_PKEY_free(wpPkey);
+    EVP_PKEY_free(osslPkey);
+
+    return err;
+}
+#endif /* WP_HAVE_EC_P256 */
 
 #endif /* WP_HAVE_ECC */
