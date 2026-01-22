@@ -60,214 +60,6 @@ static void wolfprov_init_cast_mutex(void)
     }
 }
 
-/**
- * Get the cast mutex for a specific algorithm.
- *
- * @param [in] algo  Algorithm category (WP_CAST_ALGO_*).
- * @return  Pointer to the mutex for the specified algorithm.
- * @return  NULL if algo is out of range.
- */
-wolfSSL_Mutex *wp_get_cast_mutex(int algo)
-{
-    if (algo < 0 || algo >= WP_CAST_ALGO_COUNT) {
-        return NULL;
-    }
-    return &castAlgos[algo].mutex;
-}
-
-/**
- * Get the initialization state for a specific algorithm's CAST.
- *
- * @param [in] algo  Algorithm category (WP_CAST_ALGO_*).
- * @return  Initialization state (0 = not initialized, 1 = initialized).
- * @return  0 if algo is out of range.
- */
-int wp_get_cast_init(int algo)
-{
-    if (algo < 0 || algo >= WP_CAST_ALGO_COUNT) {
-        return 0;
-    }
-    return castAlgos[algo].init;
-}
-
-/**
- * Set the initialization state for a specific algorithm's CAST.
- *
- * @param [in] algo  Algorithm category (WP_CAST_ALGO_*).
- * @param [in] init  Initialization state to set.
- */
-void wp_set_cast_init(int algo, int init)
-{
-    if (algo >= 0 && algo < WP_CAST_ALGO_COUNT) {
-        castAlgos[algo].init = init;
-    }
-}
-
-#ifdef WP_HAVE_RSA
-/**
- * Run the RSA CAST self-tests.
- *
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_rsa_init_cast_inner(void)
-{
-    int ret;
-
-    ret = wc_RunCast_fips(FIPS_CAST_RSA_SIGN_PKCS1v15);
-    if (ret != 0) {
-        return 0;
-    }
-    return 1;
-}
-#endif
-
-#ifdef WP_HAVE_ECDSA
-/**
- * Run the ECDSA CAST self-tests.
- *
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ecdsa_init_cast_inner(void)
-{
-    int ret;
-
-    ret = wc_RunCast_fips(FIPS_CAST_ECDSA);
-    if (ret != 0) {
-        return 0;
-    }
-    return 1;
-}
-#endif
-
-#ifdef WP_HAVE_ECDH
-/**
- * Run the ECDH CAST self-tests.
- *
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ecdh_init_cast_inner(void)
-{
-    int ok = 1;
-    int ret;
-
-    ret = wc_RunCast_fips(FIPS_CAST_ECC_CDH);
-    if (ret != 0) {
-        ok = 0;
-    }
-    if (ok) {
-        ret = wc_RunCast_fips(FIPS_CAST_ECC_PRIMITIVE_Z);
-        if (ret != 0) {
-            ok = 0;
-        }
-    }
-    return ok;
-}
-#endif
-
-#ifdef WP_HAVE_DH
-/**
- * Run the DH CAST self-tests.
- *
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_dh_init_cast_inner(void)
-{
-    int ret;
-
-    ret = wc_RunCast_fips(FIPS_CAST_DH_PRIMITIVE_Z);
-    if (ret != 0) {
-        return 0;
-    }
-    return 1;
-}
-#endif
-
-#ifdef WP_HAVE_RANDOM
-/**
- * Run the DRBG CAST self-tests.
- *
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_drbg_init_cast_inner(void)
-{
-    int ret;
-
-    ret = wc_RunCast_fips(FIPS_CAST_DRBG);
-    if (ret != 0) {
-        return 0;
-    }
-    return 1;
-}
-#endif
-
-#ifdef WP_HAVE_AES
-/**
- * Run the AES CAST self-tests.
- *
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_aes_init_cast_inner(void)
-{
-    int ret;
-    int ok = 1;
-
-    ret = wc_RunCast_fips(FIPS_CAST_AES_CBC);
-    if (ret != 0) {
-        ok = 0;
-    }
-    if (ok) {
-        ret = wc_RunCast_fips(FIPS_CAST_AES_GCM);
-        if (ret != 0) {
-            ok = 0;
-        }
-    }
-    return ok;
-}
-#endif
-
-#ifdef WP_HAVE_HMAC
-/**
- * Run the HMAC CAST self-tests.
- *
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_hmac_init_cast_inner(void)
-{
-    int ret;
-    int ok = 1;
-
-    ret = wc_RunCast_fips(FIPS_CAST_HMAC_SHA1);
-    if (ret != 0) {
-        ok = 0;
-    }
-    if (ok) {
-        ret = wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_256);
-        if (ret != 0) {
-            ok = 0;
-        }
-    }
-    if (ok) {
-        ret = wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_512);
-        if (ret != 0) {
-            ok = 0;
-        }
-    }
-    if (ok) {
-        ret = wc_RunCast_fips(FIPS_CAST_HMAC_SHA3_256);
-        if (ret != 0) {
-            ok = 0;
-        }
-    }
-    return ok;
-}
-#endif
 
 /**
  * Initialize a CAST self-test for a specific algorithm.
@@ -284,66 +76,94 @@ int wp_init_cast(int algo)
     int ok = 1;
 
     if (algo < 0 || algo >= WP_CAST_ALGO_COUNT) {
+        WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+            "FIPS CAST initialization failed: invalid algorithm");
         return 0;
     }
 
     if (castAlgos[algo].init == 0) {
-        if (wp_lock(wp_get_cast_mutex(algo)) != 1) {
+        if (wp_lock(&castAlgos[algo].mutex) != 1) {
+            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+                "FIPS CAST initialization failed: unable to acquire lock");
             return 0;
         }
         /* Make sure another thread did not complete already while we waited
          * to acquire per algo lock */
         if (castAlgos[algo].init == 0) {
-            /* Dispatch to algorithm-specific inner function */
             switch (algo) {
 #ifdef WP_HAVE_AES
-        case WP_CAST_ALGO_AES:
-            ok = wp_aes_init_cast_inner();
-            break;
+                case WP_CAST_ALGO_AES:
+                    if (wc_RunCast_fips(FIPS_CAST_AES_CBC) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_AES_GCM) != 0) {
+                        ok = 0;
+                    }
+                    break;
 #endif
 #ifdef WP_HAVE_HMAC
-        case WP_CAST_ALGO_HMAC:
-            ok = wp_hmac_init_cast_inner();
-            break;
+                case WP_CAST_ALGO_HMAC:
+                    if (wc_RunCast_fips(FIPS_CAST_HMAC_SHA1) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_256) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_512) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA3_256) != 0) {
+                        ok = 0;
+                    }
+                    break;
 #endif
 #ifdef WP_HAVE_RSA
-        case WP_CAST_ALGO_RSA:
-            ok = wp_rsa_init_cast_inner();
-            break;
+                case WP_CAST_ALGO_RSA:
+                    if (wc_RunCast_fips(FIPS_CAST_RSA_SIGN_PKCS1v15) != 0) {
+                        ok = 0;
+                    }
+                    break;
 #endif
 #ifdef WP_HAVE_ECDSA
-        case WP_CAST_ALGO_ECDSA:
-            ok = wp_ecdsa_init_cast_inner();
-            break;
+                case WP_CAST_ALGO_ECDSA:
+                    if (wc_RunCast_fips(FIPS_CAST_ECDSA) != 0) {
+                        ok = 0;
+                    }
+                    break;
 #endif
 #ifdef WP_HAVE_ECDH
-        case WP_CAST_ALGO_ECDH:
-            ok = wp_ecdh_init_cast_inner();
-            break;
+                case WP_CAST_ALGO_ECDH:
+                    if (wc_RunCast_fips(FIPS_CAST_ECC_CDH) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_ECC_PRIMITIVE_Z) != 0) {
+                        ok = 0;
+                    }
+                    break;
 #endif
 #ifdef WP_HAVE_DH
-        case WP_CAST_ALGO_DH:
-            ok = wp_dh_init_cast_inner();
-            break;
+                case WP_CAST_ALGO_DH:
+                    if (wc_RunCast_fips(FIPS_CAST_DH_PRIMITIVE_Z) != 0) {
+                        ok = 0;
+                    }
+                    break;
 #endif
 #ifdef WP_HAVE_RANDOM
-        case WP_CAST_ALGO_DRBG:
-            ok = wp_drbg_init_cast_inner();
-            break;
+                case WP_CAST_ALGO_DRBG:
+                    if (wc_RunCast_fips(FIPS_CAST_DRBG) != 0) {
+                        ok = 0;
+                    }
+                    break;
 #endif
-        default:
-            ok = 0;
-            break;
-        }
+                default:
+                    ok = 0;
+                    break;
+            }
 
             if (ok) {
                 castAlgos[algo].init = 1;
             }
         }
-        if (wp_unlock(wp_get_cast_mutex(algo)) != 1) {
+        if (wp_unlock(&castAlgos[algo].mutex) != 1) {
             ok = 0;
         }
     }
+
+    if (!ok) {
+        WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+            "FIPS CAST initialization failed");
+    }
+
     return ok;
 }
 #endif

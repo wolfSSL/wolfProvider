@@ -172,9 +172,6 @@ void wp_provctx_unlock_rng(WOLFPROV_CTX* provCtx);
 #define WP_CAST_ALGO_DH     6
 #define WP_CAST_ALGO_COUNT  7
 
-wolfSSL_Mutex *wp_get_cast_mutex(int algo);
-int wp_get_cast_init(int algo);
-void wp_set_cast_init(int algo, int init);
 int wp_init_cast(int algo);
 
 /**
@@ -184,8 +181,6 @@ int wp_init_cast(int algo);
 #define WP_CHECK_FIPS_ALGO(algo) \
     do { \
         if (wp_init_cast(algo) != 1) { \
-            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER, \
-                "FIPS CAST initialization failed"); \
             return 0; \
         } \
     } while (0)
@@ -197,8 +192,6 @@ int wp_init_cast(int algo);
 #define WP_CHECK_FIPS_ALGO_PTR(algo) \
     do { \
         if (wp_init_cast(algo) != 1) { \
-            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER, \
-                "FIPS CAST initialization failed"); \
             return NULL; \
         } \
     } while (0)
