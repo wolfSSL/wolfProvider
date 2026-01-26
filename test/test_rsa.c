@@ -1569,12 +1569,17 @@ static int test_rsa_decode_pkcs8(void)
         int pnum = RSA_get_multi_prime_extra_count(rsakey1);
         BIGNUM **primes1 = malloc(sizeof(BIGNUM *) * pnum);
         BIGNUM **primes2 = malloc(sizeof(BIGNUM *) * pnum);
-        for (int i = 0; i < pnum; i++) {
-            primes1[i] = BN_new();
-            primes2[i] = BN_new();
-            if (primes1[i] == NULL || primes2[i] == NULL) {
-                err = 1;
-                break;
+        if (primes1 == NULL || primes2 == NULL) {
+            err = 1;
+        }
+        if (err == 0) {
+            for (int i = 0; i < pnum; i++) {
+                primes1[i] = BN_new();
+                primes2[i] = BN_new();
+                if (primes1[i] == NULL || primes2[i] == NULL) {
+                    err = 1;
+                    break;
+                }
             }
         }
         if (err == 0) {
@@ -1587,12 +1592,18 @@ static int test_rsa_decode_pkcs8(void)
                 }
             }
         }
-        for (int i = 0; i < pnum; i++) {
-            BN_free(primes1[i]);
-            BN_free(primes2[i]);
+        if (primes1 != NULL && primes2 != NULL) {
+            for (int i = 0; i < pnum; i++) {
+                if (primes1[i] != NULL) {
+                    BN_free(primes1[i]);
+                }
+                if (primes2[i] != NULL) {
+                    BN_free(primes2[i]);
+                }
+            }
+            free(primes1);
+            free(primes2);
         }
-        free(primes1);
-        free(primes2);
     }
 
     if (err == 0) {
