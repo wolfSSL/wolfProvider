@@ -29,6 +29,7 @@
 
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
+#include <wolfssl/wolfcrypt/kdf.h>
 
 /**
  * Define WP_HKDF_NULL_SALT_ALLOWED for OpenSSL versions that allow NULL salt in HKDF.
@@ -571,7 +572,6 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     size_t keyLen)
 {
     int ok = 1;
-    size_t idx = 0;
     int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_tls13_hkdf_expand");
@@ -582,32 +582,17 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
         "TLS1.3 HKDF expand: prefixLen=%zu, labelLen=%zu",
         ctx->prefixLen, ctx->labelLen);
 
-    /* Construct info to expand from:
-     *  - output key length
-     *  - label
-     *  - prefix/protocol
-     *  - data
-     */
-    ctx->info[idx++] = (byte)(keyLen >> 8);
-    ctx->info[idx++] = (byte)keyLen;
-    ctx->info[idx++] = (byte)(ctx->prefixLen + ctx->labelLen);
-    XMEMCPY(ctx->info + idx, ctx->prefix, ctx->prefixLen);
-    idx += ctx->prefixLen;
-    XMEMCPY(ctx->info + idx, ctx->label, ctx->labelLen);
-    idx += ctx->labelLen;
-    ctx->info[idx++] = (byte)(dataLen);
-    if (dataLen > 0) {
-        XMEMCPY(ctx->info + idx, data, dataLen);
-        idx += dataLen;
-    }
-    ctx->infoSz = idx;
-
     PRIVATE_KEY_UNLOCK();
-    rc = wc_HKDF_Expand(ctx->mdType, inKey, (word32)inKeyLen, ctx->info,
-        (word32)ctx->infoSz, key, (word32)keyLen);
+    rc = wc_Tls13_HKDF_Expand_Label(key, (word32)keyLen,
+        inKey, (word32)inKeyLen,
+        ctx->prefix, (word32)ctx->prefixLen,
+        ctx->label, (word32)ctx->labelLen,
+        data, (word32)dataLen,
+        ctx->mdType);
     PRIVATE_KEY_LOCK();
     if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HKDF_Expand", rc);
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+            "wc_Tls13_HKDF_Expand_Label", rc);
         ok = 0;
     }
 
@@ -674,16 +659,17 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
         (void)keyLen;
         PRIVATE_KEY_UNLOCK();
         if (saltLen == 0) {
-            rc = wc_HKDF_Extract(ctx->mdType, NULL, 0, inKey,
-                (word32)inKeyLen, key);
+            rc = wc_Tls13_HKDF_Extract(key, NULL, 0, inKey,
+                (word32)inKeyLen, ctx->mdType);
         }
         else {
-            rc = wc_HKDF_Extract(ctx->mdType, salt, (word32)saltLen, inKey,
-                (word32)inKeyLen, key);
+            rc = wc_Tls13_HKDF_Extract(key, salt, (word32)saltLen, inKey,
+                (word32)inKeyLen, ctx->mdType);
         }
         PRIVATE_KEY_LOCK();
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HKDF_Extract", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                "wc_Tls13_HKDF_Extract", rc);
             ok = 0;
         }
     }
