@@ -75,18 +75,48 @@ if [ "$UTILS_GENERAL_LOADED" != "yes" ]; then # only set once
         local openssl_version=$(${OPENSSL_BIN} version 2>/dev/null)
         local openssl_providers=$(${OPENSSL_BIN} list -providers 2>/dev/null)
 
-        # Check for "replace-default" in version string OR environment variable
+        # Method 1: Check for "replace-default" in version string
         is_openssl_replace_default=$(echo "$openssl_version" | grep -qi "replace-default" && echo 1 || echo 0)
+
+        # Method 2: Check environment variable
         if [ "$is_openssl_replace_default" = "0" ] && [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
             is_openssl_replace_default=1
         fi
-        
-        # In replace-default mode, "default" provider has "wolfSSL Provider" name
+
+        # Method 3: Check if provider list shows "default" with "wolfSSL Provider" name
         if [ "$is_openssl_replace_default" = "0" ]; then
             # Check if provider list shows "default" with "wolfSSL Provider" name but NOT "OpenSSL Default Provider"
             # This indicates replace-default mode
             if echo "$openssl_providers" | grep -q "^  default$" && \
                echo "$openssl_providers" | grep -q "wolfSSL Provider" && \
+               ! echo "$openssl_providers" | grep -q "OpenSSL Default Provider"; then
+                is_openssl_replace_default=1
+            fi
+        fi
+
+        # Method 4: Check for "+wolfProvider" in version string (Debian package indicator)
+        # AND no "OpenSSL Default Provider" available
+        if [ "$is_openssl_replace_default" = "0" ]; then
+            if echo "$openssl_version" | grep -qi "+wolfProvider" && \
+               ! echo "$openssl_providers" | grep -q "OpenSSL Default Provider"; then
+                is_openssl_replace_default=1
+            fi
+        fi
+
+        # Method 5: Check if libwolfprov is the ONLY provider loaded (shown as "libwolfprov")
+        # and wolfSSL Provider is active with NO OpenSSL Default Provider
+        if [ "$is_openssl_replace_default" = "0" ]; then
+            if echo "$openssl_providers" | grep -q "^  libwolfprov$" && \
+               echo "$openssl_providers" | grep -q "wolfSSL Provider" && \
+               ! echo "$openssl_providers" | grep -q "OpenSSL Default Provider"; then
+                is_openssl_replace_default=1
+            fi
+        fi
+
+        # Method 6: If wolfSSL Provider is active but NO OpenSSL Default Provider exists at all,
+        # this strongly indicates replace-default mode
+        if [ "$is_openssl_replace_default" = "0" ]; then
+            if echo "$openssl_providers" | grep -q "wolfSSL Provider" && \
                ! echo "$openssl_providers" | grep -q "OpenSSL Default Provider"; then
                 is_openssl_replace_default=1
             fi

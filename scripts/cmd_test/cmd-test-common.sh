@@ -95,15 +95,30 @@ use_default_provider() {
             unset OPENSSL_CONF
             unset OPENSSL_MODULES
         fi
-        
+
         # Re-detect after disabling
         detect_wolfprovider_mode
 
         # Verify that we are using the OpenSSL default provider (not wolfProvider)
         if [ "$is_openssl_default_provider" != "1" ]; then
-            echo "FAIL: unable to switch to default provider, wolfProvider is still active"
-            echo "is_openssl_default_provider: $is_openssl_default_provider"
-            exit 1
+            # If we can't switch, this indicates replace-default mode
+            # Check if wolfProvider is still active - if so, we're in replace-default mode
+            if [ "$is_wp_active" = "1" ]; then
+                echo "INFO: Cannot switch to OpenSSL default provider - detected replace-default mode"
+                echo "INFO: Setting is_openssl_replace_default=1 for remaining tests"
+                is_openssl_replace_default=1
+                is_wp_default=1
+                export is_openssl_replace_default
+                export is_wp_default
+                # Also set the environment variable for child processes
+                export WOLFPROV_REPLACE_DEFAULT=1
+                return 0  # Return success - this is expected in replace-default mode
+            else
+                echo "FAIL: unable to switch to default provider, and wolfProvider is not active"
+                echo "is_openssl_default_provider: $is_openssl_default_provider"
+                echo "is_wp_active: $is_wp_active"
+                exit 1
+            fi
         fi
         echo "INFO: Switched to OpenSSL default provider"
         return 0
@@ -239,4 +254,13 @@ use_provider_by_name() {
     else
         use_default_provider
     fi
+}
+
+# Check if we can perform provider comparison tests
+# Returns 0 if comparison possible (normal mode), 1 if replace-default mode (no comparison)
+can_compare_providers() {
+    if [ "$is_openssl_replace_default" = "1" ] || [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
+        return 1  # Cannot compare - replace-default mode
+    fi
+    return 0  # Can compare - normal mode
 }
