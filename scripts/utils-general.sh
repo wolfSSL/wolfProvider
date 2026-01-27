@@ -75,13 +75,15 @@ if [ "$UTILS_GENERAL_LOADED" != "yes" ]; then # only set once
         local openssl_version=$(${OPENSSL_BIN} version 2>/dev/null)
         local openssl_providers=$(${OPENSSL_BIN} list -providers 2>/dev/null)
 
-        # Check for "replace-default" in version string OR environment variable
+        # Method 1: Check for "replace-default" in version string
         is_openssl_replace_default=$(echo "$openssl_version" | grep -qi "replace-default" && echo 1 || echo 0)
+
+        # Method 2: Check environment variable
         if [ "$is_openssl_replace_default" = "0" ] && [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
             is_openssl_replace_default=1
         fi
-        
-        # In replace-default mode, "default" provider has "wolfSSL Provider" name
+
+        # Method 3: Check if provider list shows "default" with "wolfSSL Provider" name
         if [ "$is_openssl_replace_default" = "0" ]; then
             # Check if provider list shows "default" with "wolfSSL Provider" name but NOT "OpenSSL Default Provider"
             # This indicates replace-default mode
@@ -91,6 +93,18 @@ if [ "$UTILS_GENERAL_LOADED" != "yes" ]; then # only set once
                 is_openssl_replace_default=1
             fi
         fi
+
+        # Note: We intentionally do NOT check for absence of "OpenSSL Default Provider"
+        # as an indicator of replace-default mode. In standalone mode, wolfProvider
+        # loads as "libwolfprov" and OpenSSL Default Provider may simply not be
+        # configured to load - this doesn't mean OpenSSL was patched.
+        #
+        # The key distinction:
+        # - Replace-default mode: Provider shows as "default" with name "wolfSSL Provider"
+        # - Standalone mode: Provider shows as "libwolfprov" with name "wolfSSL Provider"
+        #
+        # Method 3 above correctly detects replace-default by checking for "default"
+        # provider with "wolfSSL Provider" name.
         
         # In replace-default mode, there's no "OpenSSL Default Provider" - wolfProvider IS the default
         is_openssl_default_provider=$(echo "$openssl_providers" | grep -qi "OpenSSL Default Provider" && echo 1 || echo 0)
