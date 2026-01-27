@@ -36,6 +36,7 @@ libwolfprov_la_SOURCES += src/wp_ecx_sig.c
 libwolfprov_la_SOURCES += src/wp_dh_kmgmt.c
 libwolfprov_la_SOURCES += src/wp_dh_exch.c
 libwolfprov_la_SOURCES += src/wp_drbg.c
+libwolfprov_la_SOURCES += src/wp_seed_src.c
 libwolfprov_la_SOURCES += src/wp_dec_pem2der.c
 libwolfprov_la_SOURCES += src/wp_dec_epki2pki.c
 libwolfprov_la_SOURCES += src/wp_file_store.c

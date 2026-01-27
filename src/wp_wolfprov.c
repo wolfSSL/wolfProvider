@@ -20,6 +20,7 @@
 
 #include <string.h>
 #include <stdio.h>
+
 #include <openssl/opensslconf.h>
 #include <openssl/core.h>
 #include <openssl/core_dispatch.h>
@@ -192,14 +193,14 @@ static int bio_core_new(BIO *bio)
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
-        
+
 static int bio_core_free(BIO *bio)
 {
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "bio_core_free");
 
     BIO_set_init(bio, 0);
     wolfssl_prov_bio_free(BIO_get_data(bio));
-    
+
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
@@ -247,6 +248,17 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
         }
     }
 
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+    /* Initialize urandom subsystem (registers seed callback, lazy file open) */
+    if (ctx != NULL) {
+        if (wp_urandom_init() != 0) {
+            /* Non-fatal - fall back to normal RNG on platforms without urandom */
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                "wp_urandom_init failed, will use WC_RNG instead", 0);
+        }
+    }
+#endif
+
     return ctx;
 }
 
@@ -257,6 +269,11 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
  */
 static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
 {
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+    /* Clean up urandom subsystem */
+    wp_urandom_cleanup();
+#endif
+
     BIO_meth_free(ctx->coreBioMethod);
 #ifndef WP_SINGLE_THREADED
     wc_FreeMutex(&ctx->rng_mutex);
@@ -570,6 +587,10 @@ static const OSSL_ALGORITHM wolfprov_kdfs[] = {
 
 /* List of RNG algorithm implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_rands[] = {
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+    { WP_NAMES_SEED_SRC, WOLFPROV_PROPERTIES, wp_seed_src_functions,
+      "" },
+#endif
     { WP_NAMES_CTR_DRBG, WOLFPROV_PROPERTIES, wp_drbg_functions,
       "" },
     { WP_NAMES_HASH_DRBG, WOLFPROV_PROPERTIES, wp_drbg_functions,
@@ -766,7 +787,7 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
     /*{ WP_NAMES_RSA, WOLFPROV_PROPERTIES ",output=text", \*/
     { WP_NAMES_RSA, WP_ENCODER_PROPERTIES(type-specific, text), \
       wp_rsa_text_encoder_functions,
-      "" }, 
+      "" },
 #endif
 #endif /* WP_HAVE_RSA */
 
@@ -1377,4 +1398,3 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE* handle,
     return wolfssl_provider_init(handle, in, out, provCtx);
 }
 #endif
-

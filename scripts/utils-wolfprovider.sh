@@ -106,6 +106,10 @@ install_wolfprov() {
         WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_REPLACE_DEFAULT"
     fi
 
+    if [ "$WOLFPROV_SEED_SRC" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-seed-src"
+    fi
+
     if [ "${WOLFPROV_LEAVE_SILENT}" = "1" ]; then
         WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_LEAVE_SILENT_MODE"
     fi
