@@ -57,9 +57,9 @@ override_dh_auto_configure:
 		# ensure only our .pc dirs are searched: \
 		PKG_CONFIG_DIR= PKG_CONFIG_PATH= \
 		PKG_CONFIG_LIBDIR="$(PKG_CONFIG_LIBDIR)" \
-		dh_auto_configure -- $(DEBUG_FLAG); \
+		dh_auto_configure -- $(DEBUG_FLAG) --enable-seed-src; \
 	else \
-		./configure $(DEBUG_FLAG); \
+		./configure $(DEBUG_FLAG) --enable-seed-src; \
 	fi
 
 override_dh_auto_build:
