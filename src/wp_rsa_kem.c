@@ -296,8 +296,8 @@ static int wp_rsasve_generate(wp_RsaKemCtx* ctx, unsigned char* out,
     size_t* outLen, unsigned char* secret, size_t* secretLen)
 {
     int ok = 1;
-    word32 nLen;
-    word32 oLen;
+    word32 nLen = 0;
+    word32 oLen = 0;
     RsaKey* rsa = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsasve_generate");

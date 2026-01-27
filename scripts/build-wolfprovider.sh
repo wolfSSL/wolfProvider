@@ -27,6 +27,8 @@ show_help() {
   echo "                             Note: Requires --replace-default. Only for test builds, not for production."
   echo "  --leave-silent             Enable leave silent mode to suppress logging of return 0 in probing functions where expected failures may occur."
   echo "                             Note: This only affects logging; the calling function is still responsible for handling all return values appropriately."
+  echo "  --enable-seed-src          Enable SEED-SRC entropy source with /dev/urandom caching for fork-safe entropy."
+  echo "                             Note: This also enables WC_RNG_SEED_CB in wolfSSL."
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -43,6 +45,7 @@ show_help() {
   echo "  WOLFPROV_REPLACE_DEFAULT   If set to 1, patches OpenSSL so wolfProvider is the default provider"
   echo "  WOLFPROV_REPLACE_DEFAULT_TESTING If set to 1, enables direct provider loading in unit tests (requires WOLFPROV_REPLACE_DEFAULT=1)"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
+  echo "  WOLFPROV_SEED_SRC          If set to 1, enables SEED-SRC with /dev/urandom caching (also enables WC_RNG_SEED_CB in wolfSSL)"
   echo ""
 }
 
@@ -128,6 +131,9 @@ for arg in "$@"; do
             ;;
         --leave-silent)
             WOLFPROV_LEAVE_SILENT=1
+            ;;
+        --enable-seed-src)
+            WOLFPROV_SEED_SRC=1
             ;;
         *)
             args_wrong+="$arg, "

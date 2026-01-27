@@ -144,6 +144,17 @@ fi
 
 AM_CONDITIONAL([BUILD_REPLACE_DEFAULT], [test "x$ENABLED_REPLACE_DEFAULT" = "xyes"])
 
+# SEED-SRC entropy source with /dev/urandom caching
+AC_ARG_ENABLE([seed-src],
+    [AS_HELP_STRING([--enable-seed-src],[Enable SEED-SRC entropy source with /dev/urandom caching for fork-safe entropy (default: disabled).])],
+    [ ENABLED_SEED_SRC=$enableval ],
+    [ ENABLED_SEED_SRC=no ]
+    )
+
+if test "x$ENABLED_SEED_SRC" = "xyes"; then
+    AM_CFLAGS="$AM_CFLAGS -DWP_HAVE_SEED_SRC"
+fi
+
 # Set OpenSSL lib directory for installing libdefault.so
 if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then
     if test -d "$OPENSSL_INSTALL_DIR/lib64"; then

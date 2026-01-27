@@ -187,11 +187,11 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
 {
     int ok = 1;
     int done = 0;
-    int rc;
+    int rc = 0;
     unsigned char* data = NULL;
     word32 len = 0;
     char password[1024];
-    size_t passwordLen;
+    size_t passwordLen = 0;
     word32 tradIdx = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_epki2pki_decode");

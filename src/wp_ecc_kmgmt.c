@@ -2225,9 +2225,9 @@ static int wp_ecc_decode_pki(wp_Ecc* ecc, unsigned char* data, word32 len)
         /* Keys decoded from pki should always have public key */
         if (ecc->key.type == ECC_PRIVATEKEY_ONLY) {
 #ifdef ECC_TIMING_RESISTANT
-            rc = wc_ecc_make_pub_ex(&ecc->key, NULL, &ecc->rng);
+            (void)wc_ecc_make_pub_ex(&ecc->key, NULL, &ecc->rng);
 #else
-            rc = wc_ecc_make_pub_ex(&ecc->key, NULL, NULL);
+            (void)wc_ecc_make_pub_ex(&ecc->key, NULL, NULL);
 #endif
         }
         ecc->hasPub = 1;

@@ -90,15 +90,15 @@ compare_hashes() {
 # Run tests for each hash algorithm
 for algo in "${HASH_ALGOS[@]}"; do
     echo -e "\n=== Testing ${algo^^} ==="
-    
+
     # Test with OpenSSL default provider
     use_default_provider
     run_hash_test $algo "hash_outputs/openssl_${algo}.txt"
-    
+
     # Test with wolfProvider
     use_wolf_provider
     run_hash_test $algo "hash_outputs/wolf_${algo}.txt"
-    
+
     # Compare results
     compare_hashes $algo
 done

@@ -218,6 +218,12 @@ int test_random(void *data);
 
 #endif
 
+/* DRBG SEED-SRC hierarchy tests */
+int test_rand_seed(void *data);
+
+/* Seccomp sandbox test - mimics OpenSSH fork+sandbox behavior */
+int test_seccomp_sandbox(void *data);
+
 int test_digest_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *data,
     size_t len, const char *md, const EVP_MD *mgf1Md, unsigned char *sig,
     size_t *sigLen, int padMode, int saltlen);

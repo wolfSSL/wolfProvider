@@ -129,13 +129,38 @@ if [ "${WOLFPROV_FORCE_FAIL}" = "1" ]; then
     echo "Force-fail mode: ENABLED"
 fi
 
+# Detect mode first
+detect_wolfprovider_mode
+
+# Display mode information
+echo ""
+echo "Detected configuration:"
+echo "  is_openssl_replace_default: $is_openssl_replace_default"
+echo "  is_wp_active: $is_wp_active"
+echo "  is_wp_default: $is_wp_default"
+echo "  is_openssl_default_provider: $is_openssl_default_provider"
+echo ""
+
+if [ "$is_openssl_replace_default" = "1" ] || [ "${WOLFPROV_REPLACE_DEFAULT:-0}" = "1" ]; then
+    echo "INFO: Running in replace-default mode"
+    echo "INFO: Tests will run with wolfProvider only (no provider switching)"
+    # Just verify wolfProvider is active
+    use_wolf_provider
+else
+    echo "INFO: Running in normal mode"
+    echo "INFO: Tests will compare OpenSSL default vs wolfProvider"
+    # Ensure we can switch providers before proceeding
+    use_default_provider
+    use_wolf_provider
+fi
+
 # Export detection variables for child scripts
+export is_openssl_replace_default
+export is_wp_active
+export is_wp_default
+export is_openssl_default_provider
 export WOLFPROV_REPLACE_DEFAULT
 export WOLFPROV_FIPS
-
-# Ensure we can switch providers before proceeding
-use_default_provider
-use_wolf_provider
 
 # Initialize result variables
 HASH_RESULT=0

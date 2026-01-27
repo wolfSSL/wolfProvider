@@ -30,7 +30,36 @@
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
-#if defined(HAVE_FIPS) && (!defined(WP_SINGLE_THREADED))
+#ifndef WP_SINGLE_THREADED
+
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+/* Global mutex for urandom file access (used by seed callback) */
+static wolfSSL_Mutex urandomMutex;
+
+/**
+ * Initialize the urandom mutex on library load.
+ *
+ * This constructor runs when libwolfprov.so is loaded via dlopen() or at
+ * program startup. It ensures the urandomMutex is initialized before use.
+ */
+__attribute__((constructor))
+static void wolfprov_init_urandom_mutex(void)
+{
+    wc_InitMutex(&urandomMutex);
+}
+
+/**
+ * Get the global urandom mutex.
+ *
+ * @return  Pointer to the urandom mutex.
+ */
+wolfSSL_Mutex *wp_get_urandom_mutex(void)
+{
+    return &urandomMutex;
+}
+#endif /* WP_HAVE_SEED_SRC && WP_HAVE_RANDOM */
+
+#ifdef HAVE_FIPS
 /**
  * Structure to hold CAST self-test state for each algorithm.
  */
@@ -59,7 +88,6 @@ static void wolfprov_init_cast_mutex(void)
         castAlgos[i].init = 0;
     }
 }
-
 
 /**
  * Initialize a CAST self-test for a specific algorithm.
@@ -166,7 +194,8 @@ int wp_init_cast(int algo)
 
     return ok;
 }
-#endif
+#endif /* HAVE_FIPS */
+#endif /* !WP_SINGLE_THREADED */
 
 /**
  * Get the wolfSSL random number generator from the provider context.

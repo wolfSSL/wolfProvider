@@ -223,7 +223,7 @@ static int wp_aead_tls_init(wp_AeadCtx* ctx, unsigned char* aad, size_t aadLen)
 {
     int ok = 1;
     unsigned char *buf = ctx->buf;
-    size_t len;
+    size_t len = 0;
     /* CCM will have a tag length set. */
     size_t tagLen = (ctx->tagLen != UNINITIALISED_SIZET) ? ctx->tagLen :
         EVP_GCM_TLS_TAG_LEN;

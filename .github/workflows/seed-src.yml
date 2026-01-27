@@ -1,0 +1,55 @@
+name: SEED-SRC Tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  seed_src_test:
+    name: SEED-SRC Test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        wolfssl_ref: [
+          'master',
+          'v5.8.4-stable']
+        openssl_ref: [
+          'openssl-3.5.4',
+          'openssl-3.0.17']
+
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build and test wolfProvider with SEED-SRC
+        run: |
+             # Force wolfSSL to not use getrandom syscall via ac_cv_func_getrandom=no.
+             # This ensures /dev/urandom is used as the entropy source, which is
+             # required to test the SEED-SRC feature's fork-safe caching behavior.
+             WOLFSSL_CONFIG_OPTS="--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha ac_cv_func_getrandom=no" \
+             OPENSSL_TAG=${{ matrix.openssl_ref }} \
+             WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+             ./scripts/build-wolfprovider.sh --enable-seed-src
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi
+          if [ -f scripts/build-release.log ] ; then
+            echo "=== Build Release Log (last 100 lines) ==="
+            tail -100 scripts/build-release.log
+          fi
+
