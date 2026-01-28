@@ -314,12 +314,14 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
             ok = 0;
         }
         if (ok) {
+            int rc;
 #if defined(WP_HAVE_AESCTS)
             if (ctx->mode == EVP_CIPH_CBC_MODE && !enc) {
                 dir = AES_DECRYPTION;
             }
 #endif
-            int rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
+            WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
+            rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
                 dir);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesSetKey", rc);

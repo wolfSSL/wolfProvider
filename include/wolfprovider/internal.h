@@ -180,7 +180,44 @@ int wp_provctx_lock_rng(WOLFPROV_CTX* provCtx);
 void wp_provctx_unlock_rng(WOLFPROV_CTX* provCtx);
 
 #ifdef HAVE_FIPS
-wolfSSL_Mutex *wp_get_cast_mutex(void);
+/* CAST self-test algorithm categories */
+#define WP_CAST_ALGO_AES    0
+#define WP_CAST_ALGO_HMAC   1
+#define WP_CAST_ALGO_DRBG   2
+#define WP_CAST_ALGO_RSA    3
+#define WP_CAST_ALGO_ECDSA  4
+#define WP_CAST_ALGO_ECDH   5
+#define WP_CAST_ALGO_DH     6
+#define WP_CAST_ALGO_COUNT  7
+
+int wp_init_cast(int algo);
+
+/**
+ * Check FIPS CAST for algorithm. Returns 0 on failure.
+ * Use at function entry points that return int (1=success, 0=failure).
+ */
+#define WP_CHECK_FIPS_ALGO(algo) \
+    do { \
+        if (wp_init_cast(algo) != 1) { \
+            return 0; \
+        } \
+    } while (0)
+
+/**
+ * Check FIPS CAST for algorithm. Returns NULL on failure.
+ * Use at function entry points that return pointers (NULL=failure).
+ */
+#define WP_CHECK_FIPS_ALGO_PTR(algo) \
+    do { \
+        if (wp_init_cast(algo) != 1) { \
+            return NULL; \
+        } \
+    } while (0)
+
+#else
+/* Non-FIPS: no-op */
+#define WP_CHECK_FIPS_ALGO(algo) do { } while (0)
+#define WP_CHECK_FIPS_ALGO_PTR(algo) do { } while (0)
 #endif
 #endif
 

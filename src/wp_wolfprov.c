@@ -215,6 +215,8 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
 {
     WOLFPROV_CTX* ctx;
 
+    WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_DRBG);
+
     ctx = (WOLFPROV_CTX*)OPENSSL_zalloc(sizeof(WOLFPROV_CTX));
     if ((ctx != NULL) && (wc_InitRng(&ctx->rng) != 0)) {
         OPENSSL_free(ctx);
@@ -1336,25 +1338,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 #ifdef WC_RNG_SEED_CB
         wc_SetSeed_Cb(wc_GenerateSeed);
 #endif
-#if defined(HAVE_FIPS) && (!defined(WP_SINGLE_THREADED))
-        /* To avoid multi-threading issues in FIPS CAST tests, run all tests
-         * under a lock now */
-        if (wp_lock(wp_get_cast_mutex()) != 1) {
-            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
-              "Fatal Error: unable to acquire FIPS CAST lock");
-            ok = 0;
-        }
-        if (ok) {
-            if (wc_RunAllCast_fips() != 0) {
-                WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
-                  "Fatal Error: FIPS algo selftest failure");
-                ok = 0;
-            }
-            if (wp_unlock(wp_get_cast_mutex()) != 1) {
-                ok = 0;
-            }
-        }
-#endif
+        /* FIPS CAST tests are now run lazily per-algorithm via wp_init_cast() */
     }
 
     if (ok) {

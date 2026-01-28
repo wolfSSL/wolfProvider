@@ -156,6 +156,8 @@ static int wp_rsakem_init(wp_RsaKemCtx* ctx, wp_Rsa* rsa,
     /* TODO: check key type and size with operation. */
     (void)operation;
 
+    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_RSA);
+
     if (rsa != ctx->rsa) {
         wp_rsa_free(ctx->rsa);
         ctx->rsa = NULL;
