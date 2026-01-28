@@ -1828,7 +1828,6 @@ int test_ec_decode(void* data)
 static int test_ec_import_priv(void)
 {
     int err = 0;
-    size_t len = 0;
     EVP_PKEY_CTX *ctx1 = NULL;
     EVP_PKEY_CTX *ctx2 = NULL;
     EVP_PKEY* pkey1 = NULL;
@@ -1877,93 +1876,75 @@ static int test_ec_import_priv(void)
         err = EVP_PKEY_fromdata(ctx2, &pkey2, EVP_PKEY_KEYPAIR, params) != 1;
     }
 
-    /* For imported private only keys, public key params behavior depends on OpenSSL version */
-#if OPENSSL_VERSION_NUMBER > 0x30600000L
-    /* OpenSSL 3.6.0+ auto-derives public keys from private keys */
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_X, &x1) != 1;
+    /* For imported private only keys, public key params behavior depends on
+     * OpenSSL version. OpenSSL 4.0.0+ auto-derives public keys from private
+     * keys during fromdata() - see https://github.com/openssl/openssl/pull/29054 */
+#if OPENSSL_VERSION_NUMBER >= 0x40000000L
+    /* OpenSSL 4.0.0+ auto-derives public keys from private keys */
+    {
+        int ossl_x = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_X, &x1);
+        int wp_x = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_X, &x2);
+        if (err == 0 && ossl_x != 1) err = 1;
+        if (err == 0 && wp_x != 1) err = 1;
     }
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_X, &x2) != 1;
-    }
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_Y, &y1) != 1;
-    }
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_Y, &y2) != 1;
+    {
+        int ossl_y = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_Y, &y1);
+        int wp_y = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_Y, &y2);
+        if (err == 0 && ossl_y != 1) err = 1;
+        if (err == 0 && wp_y != 1) err = 1;
     }
 
     /* Verify public key is available */
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey1,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 1) {
-            err = 1;
-        }
-    }
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey2,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 1) {
-            err = 1;
-        }
+    {
+        size_t len1 = 0, len2 = 0;
+        int ossl_pub = EVP_PKEY_get_octet_string_param(pkey1, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len1);
+        int wp_pub = EVP_PKEY_get_octet_string_param(pkey2, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len2);
+        if (err == 0 && ossl_pub != 1) err = 1;
+        if (err == 0 && wp_pub != 1) err = 1;
     }
 
     /* Verify encoded public key is available */
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey1,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 1) {
-            err = 1;
-        }
-    }
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey2,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 1) {
-            err = 1;
-        }
+    {
+        size_t len1 = 0, len2 = 0;
+        int ossl_enc = EVP_PKEY_get_octet_string_param(pkey1, OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len1);
+        int wp_enc = EVP_PKEY_get_octet_string_param(pkey2, OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len2);
+        if (err == 0 && ossl_enc != 1) err = 1;
+        if (err == 0 && wp_enc != 1) err = 1;
     }
 #else
-    /* OpenSSL < 3.6.0: private-only keys should not have public components */
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_X, &x1) == 1;
+    /* OpenSSL < 4.0.0: private-only keys should not have public components */
+    {
+        int ossl_x = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_X, &x1);
+        int wp_x = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_X, &x2);
+        if (err == 0 && ossl_x == 1) err = 1;
+        if (err == 0 && wp_x == 1) err = 1;
     }
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_X, &x2) == 1;
-    }
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_Y, &y1) == 1;
-    }
-    if (err == 0) {
-        err = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_Y, &y2) == 1;
+    {
+        int ossl_y = EVP_PKEY_get_bn_param(pkey1, OSSL_PKEY_PARAM_EC_PUB_Y, &y1);
+        int wp_y = EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_EC_PUB_Y, &y2);
+        if (err == 0 && ossl_y == 1) err = 1;
+        if (err == 0 && wp_y == 1) err = 1;
     }
 
     /* Attempts to get the public key len should fail */
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey1,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 0) {
-            err = 1;
-        }
-    }
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey2,
-                OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 0) {
-            err = 1;
-        }
+    {
+        size_t len1 = 0, len2 = 0;
+        int ossl_pub = EVP_PKEY_get_octet_string_param(pkey1, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len1);
+        int wp_pub = EVP_PKEY_get_octet_string_param(pkey2, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len2);
+        if (err == 0 && ossl_pub != 0) err = 1;
+        if (err == 0 && wp_pub != 0) err = 1;
     }
     /* Older versions of OpenSSL will segfault on this */
 #if OPENSSL_VERSION_NUMBER >= 0x30006000L
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey1,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 0) {
-            err = 1;
-        }
-    }
-    if (err == 0) {
-        if (EVP_PKEY_get_octet_string_param(pkey2,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len) != 0) {
-            err = 1;
-        }
+    {
+        size_t len1 = 0, len2 = 0;
+        int ossl_enc = EVP_PKEY_get_octet_string_param(pkey1, OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len1);
+        int wp_enc = EVP_PKEY_get_octet_string_param(pkey2, OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0, &len2);
+        if (err == 0 && ossl_enc != 0) err = 1;
+        if (err == 0 && wp_enc != 0) err = 1;
     }
 #endif /* OPENSSL_VERSION_NUMBER >= 0x30006000L 3.0.6+ */
-#endif /* OPENSSL_VERSION_NUMBER > 0x30600000L 3.6.0+ */
+#endif /* OPENSSL_VERSION_NUMBER >= 0x40000000L */
 
     EVP_PKEY_free(pkey1);
     EVP_PKEY_free(pkey2);
@@ -2105,7 +2086,7 @@ int test_ec_null_init(void* data)
     return err;
 }
 
-#if OPENSSL_VERSION_NUMBER > 0x30600000L
+#if OPENSSL_VERSION_NUMBER >= 0x40000000L
 static int test_ec_auto_derive_pub(void)
 {
     int err = 0;
@@ -2190,14 +2171,14 @@ static int test_ec_auto_derive_pub(void)
 
     return err;
 }
-#endif /* OPENSSL_VERSION_NUMBER > 0x30600000L */
+#endif /* OPENSSL_VERSION_NUMBER >= 0x40000000L */
 
 int test_ec_auto_derive_pubkey(void* data)
 {
     int err = 0;
     (void)data;
 
-#if OPENSSL_VERSION_NUMBER > 0x30600000L
+#if OPENSSL_VERSION_NUMBER >= 0x40000000L
     err = test_ec_auto_derive_pub();
 #else
     err = 0;

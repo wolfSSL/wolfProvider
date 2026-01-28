@@ -1150,9 +1150,10 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
         ecc->key.type = ECC_PRIVATEKEY;
         ecc->hasPriv = 1;
 
-        /* Auto-derive public key if not already present and curve is 
-         * set with OpenSSL version newer than 3.6.0 */
-#if OPENSSL_VERSION_NUMBER > 0x30600000L
+        /* Auto-derive public key if not already present and curve is set.
+         * OpenSSL 4.0.0+ auto-derives public keys from private keys during
+         * fromdata() - see https://github.com/openssl/openssl/pull/29054 */
+#if OPENSSL_VERSION_NUMBER >= 0x40000000L
         if (!ecc->hasPub && ecc->curveId != 0) {
             int rc;
 
@@ -1173,7 +1174,7 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
                  * We will fail later if public key is accessed. */
             }
         }
-#endif /* OPENSSL_VERSION_NUMBER > 0x30600000L 3.6.0+ */
+#endif /* OPENSSL_VERSION_NUMBER >= 0x40000000L */
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
