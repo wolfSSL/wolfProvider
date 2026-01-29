@@ -184,6 +184,9 @@ static int wp_ecdh_init(wp_EcdhCtx* ctx, wp_Ecc* ecc, const OSSL_PARAM params[])
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
+    if (ok) {
+        WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_ECDH);
+    }
     if (ok && (ctx->key != ecc)) {
         /* Free old key and up reference new key. */
         wp_ecc_free(ctx->key);

@@ -1022,6 +1022,9 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
+    if (ok) {
+        WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
+    }
 #ifdef WOLFSSL_AESGCM_STREAM
     if (ok) {
         int rc;
@@ -1107,6 +1110,9 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
+    }
+    if (ok) {
+        WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
     }
 #ifdef WOLFSSL_AESGCM_STREAM
     if (ok && key != NULL) {
@@ -1753,6 +1759,9 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
+    }
+    if (ok) {
+        WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
     }
     if (ok && (key != NULL)) {
         rc = wc_AesCcmSetKey(&ctx->aes, key, (word32)keyLen);

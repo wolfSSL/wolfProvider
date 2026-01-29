@@ -60,28 +60,139 @@ wolfSSL_Mutex *wp_get_urandom_mutex(void)
 #endif /* WP_HAVE_SEED_SRC && WP_HAVE_RANDOM */
 
 #ifdef HAVE_FIPS
-static wolfSSL_Mutex castMutex;
+/**
+ * Structure to hold CAST self-test state for each algorithm.
+ */
+typedef struct wp_cast_algo_state {
+    /** Mutex for the algorithm's CAST self-test. */
+    wolfSSL_Mutex mutex;
+    /** Initialization state: 0 = not initialized, 1 = initialized. */
+    int init;
+} wp_cast_algo_state;
+
+static wp_cast_algo_state castAlgos[WP_CAST_ALGO_COUNT];
 
 /**
- * Initialize the cast mutex on library load.
+ * Initialize the cast mutexes on library load.
  *
  * This constructor runs when libwolfprov.so is loaded via dlopen() or at
- * program startup. It ensures the castMutex is initialized under lock.
+ * program startup. It ensures the castAlgos are initialized before any
+ * wolfProvider functions are called.
  */
 __attribute__((constructor))
 static void wolfprov_init_cast_mutex(void)
 {
-    wc_InitMutex(&castMutex);
+    int i;
+    for (i = 0; i < WP_CAST_ALGO_COUNT; i++) {
+        wc_InitMutex(&castAlgos[i].mutex);
+        castAlgos[i].init = 0;
+    }
 }
 
 /**
- * Get the FIPS CAST mutex.
+ * Initialize a CAST self-test for a specific algorithm.
  *
- * @return  Pointer to the CAST mutex.
+ * Runs the algorithm-specific CAST self-test if not already initialized.
+ * Uses mutex to ensure thread safety.
+ *
+ * @param [in] algo  Algorithm category (WP_CAST_ALGO_*).
+ * @return  1 on success or already initialized.
+ * @return  0 on failure.
  */
-wolfSSL_Mutex *wp_get_cast_mutex(void)
+int wp_init_cast(int algo)
 {
-    return &castMutex;
+    int ok = 1;
+
+    if (algo < 0 || algo >= WP_CAST_ALGO_COUNT) {
+        WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+            "FIPS CAST initialization failed: invalid algorithm");
+        return 0;
+    }
+
+    if (castAlgos[algo].init == 0) {
+        if (wp_lock(&castAlgos[algo].mutex) != 1) {
+            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+                "FIPS CAST initialization failed: unable to acquire lock");
+            return 0;
+        }
+        /* Make sure another thread did not complete already while we waited
+         * to acquire per algo lock */
+        if (castAlgos[algo].init == 0) {
+            switch (algo) {
+#ifdef WP_HAVE_AES
+                case WP_CAST_ALGO_AES:
+                    if (wc_RunCast_fips(FIPS_CAST_AES_CBC) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_AES_GCM) != 0) {
+                        ok = 0;
+                    }
+                    break;
+#endif
+#ifdef WP_HAVE_HMAC
+                case WP_CAST_ALGO_HMAC:
+                    if (wc_RunCast_fips(FIPS_CAST_HMAC_SHA1) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_256) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_512) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA3_256) != 0) {
+                        ok = 0;
+                    }
+                    break;
+#endif
+#ifdef WP_HAVE_RSA
+                case WP_CAST_ALGO_RSA:
+                    if (wc_RunCast_fips(FIPS_CAST_RSA_SIGN_PKCS1v15) != 0) {
+                        ok = 0;
+                    }
+                    break;
+#endif
+#ifdef WP_HAVE_ECDSA
+                case WP_CAST_ALGO_ECDSA:
+                    if (wc_RunCast_fips(FIPS_CAST_ECDSA) != 0) {
+                        ok = 0;
+                    }
+                    break;
+#endif
+#ifdef WP_HAVE_ECDH
+                case WP_CAST_ALGO_ECDH:
+                    if (wc_RunCast_fips(FIPS_CAST_ECC_CDH) != 0 ||
+                        wc_RunCast_fips(FIPS_CAST_ECC_PRIMITIVE_Z) != 0) {
+                        ok = 0;
+                    }
+                    break;
+#endif
+#ifdef WP_HAVE_DH
+                case WP_CAST_ALGO_DH:
+                    if (wc_RunCast_fips(FIPS_CAST_DH_PRIMITIVE_Z) != 0) {
+                        ok = 0;
+                    }
+                    break;
+#endif
+#ifdef WP_HAVE_RANDOM
+                case WP_CAST_ALGO_DRBG:
+                    if (wc_RunCast_fips(FIPS_CAST_DRBG) != 0) {
+                        ok = 0;
+                    }
+                    break;
+#endif
+                default:
+                    ok = 0;
+                    break;
+            }
+
+            if (ok) {
+                castAlgos[algo].init = 1;
+            }
+        }
+        if (wp_unlock(&castAlgos[algo].mutex) != 1) {
+            ok = 0;
+        }
+    }
+
+    if (!ok) {
+        WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+            "FIPS CAST initialization failed");
+    }
+
+    return ok;
 }
 #endif /* HAVE_FIPS */
 #endif /* !WP_SINGLE_THREADED */

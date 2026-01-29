@@ -190,7 +190,10 @@ static int wp_ecdsa_signverify_init(wp_EcdsaSigCtx *ctx, wp_Ecc* ecc,
     if (ctx == NULL || (ecc == NULL && ctx->ecc == NULL)) {
         ok = 0;
     }
-    else if (ecc != NULL) {
+    if (ok) {
+        WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_ECDSA);
+    }
+    if (ok && (ecc != NULL)) {
         if (!wp_ecc_up_ref(ecc)) {
             ok = 0;
         }

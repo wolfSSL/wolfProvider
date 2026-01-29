@@ -76,6 +76,9 @@
     #define WP_HAVE_GMAC
 #endif
 
+#ifndef NO_AES
+    #define WP_HAVE_AES
+#endif
 #ifdef HAVE_AES_ECB
     #define WP_HAVE_AESECB
 #endif
