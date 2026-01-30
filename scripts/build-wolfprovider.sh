@@ -27,6 +27,7 @@ show_help() {
   echo "                             Note: Requires --replace-default. Only for test builds, not for production."
   echo "  --leave-silent             Enable leave silent mode to suppress logging of return 0 in probing functions where expected failures may occur."
   echo "                             Note: This only affects logging; the calling function is still responsible for handling all return values appropriately."
+  echo "  --debug-silent             Debug logging compiled in but silent by default. Use WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS env vars to enable at runtime. Requires --debug."
   echo "  --enable-seed-src          Enable SEED-SRC entropy source with /dev/urandom caching for fork-safe entropy."
   echo "                             Note: This also enables WC_RNG_SEED_CB in wolfSSL."
   echo ""
@@ -39,6 +40,7 @@ show_help() {
   echo "  WOLFPROV_CLEAN             If set to 1, run make clean in OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DISTCLEAN         If set to 1, remove the source and install directories of OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DEBUG             If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"
+  echo "  WOLFPROV_DEBUG_SILENT      If set to 1, debug logging is silent by default (requires WOLFPROV_DEBUG=1)"
   echo "  WOLFPROV_LOG_FILE          Path to log file for wolfProvider debug output (alternative to stderr)"
   echo "  WOLFPROV_QUICKTEST         If set to 1, disables some tests in the test suite to increase test speed"
   echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
@@ -132,6 +134,9 @@ for arg in "$@"; do
         --leave-silent)
             WOLFPROV_LEAVE_SILENT=1
             ;;
+        --debug-silent)
+            WOLFPROV_DEBUG_SILENT=1
+            ;;
         --enable-seed-src)
             WOLFPROV_SEED_SRC=1
             ;;
@@ -151,6 +156,12 @@ fi
 # Check if --leave-silent was used without debug mode
 if [ "${WOLFPROV_LEAVE_SILENT}" = "1" ] && [ -z "$WOLFPROV_DEBUG" ] && [ -z "$debug" ]; then
     echo "Error: --leave-silent requires --debug to be set."
+    exit 1
+fi
+
+# Check if --debug-silent was used without debug mode
+if [ "${WOLFPROV_DEBUG_SILENT}" = "1" ] && [ -z "$WOLFPROV_DEBUG" ] && [ -z "$debug" ]; then
+    echo "Error: --debug-silent requires --debug to be set."
     exit 1
 fi
 

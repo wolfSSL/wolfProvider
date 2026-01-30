@@ -37,8 +37,15 @@
 static wolfProv_Logging_cb log_function = NULL;
 
 /* Flag indicating if logging is enabled, controlled via
- * wolfProv_Debugging_ON() and wolfProv_Debugging_OFF() */
+ * wolfProv_Debugging_ON() and wolfProv_Debugging_OFF(). */
 static int loggingEnabled = 1;
+
+#ifdef WOLFPROV_DEBUG_SILENT
+/* Silent mode gate - when active, blocks all logging output regardless of
+ * loggingEnabled. Only deactivated when WOLFPROV_LOG_LEVEL or
+ * WOLFPROV_LOG_COMPONENTS environment variables are set at runtime. */
+static int silentModeActive = 1;
+#endif
 
 /* Logging level. Bitmask of logging levels in wolfProv_LogLevels.
  * Default log level includes error, enter/leave, and info. Does not turn on
@@ -121,6 +128,13 @@ int wolfProv_LogInit(void)
     char* logLevelStr = XGETENV("WOLFPROV_LOG_LEVEL");
     char* logComponentsStr = XGETENV("WOLFPROV_LOG_COMPONENTS");
 
+#ifdef WOLFPROV_DEBUG_SILENT
+    /* In silent mode, deactivate the silent gate only if env vars are set */
+    if (logLevelStr != NULL || logComponentsStr != NULL) {
+        silentModeActive = 0;
+    }
+#endif
+
     if (logLevelStr != NULL) {
         if (wolfProv_TokenParse(logLevelStr, "()| \t", wolfProv_LogLevelToMask, 
                 &level) == 0) {
@@ -201,10 +215,22 @@ int wolfProv_SetLogComponents(int componentMask)
  * @param logLevel   [IN] Log level.
  */
 WP_PRINTF_FUNC(3, 0)
-static void wolfprovider_log(const int component, const int logLevel, 
+static void wolfprovider_log(const int component, const int logLevel,
         const char* fmt, va_list vlist)
 {
     char logMessage[WOLFPROV_MAX_LOG_WIDTH];
+
+    /* Don't log if logging is disabled */
+    if (!loggingEnabled) {
+        return;
+    }
+
+#ifdef WOLFPROV_DEBUG_SILENT
+    /* In silent mode, block all output until env vars unlock it */
+    if (silentModeActive) {
+        return;
+    }
+#endif
 
     /* Don't log messages that do not match our current logging level */
     if ((providerLogLevel & logLevel) != logLevel) {
