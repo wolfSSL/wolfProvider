@@ -40,21 +40,22 @@ static wolfProv_Logging_cb log_function = NULL;
  * wolfProv_Debugging_ON() and wolfProv_Debugging_OFF(). */
 static int loggingEnabled = 1;
 
-#ifdef WOLFPROV_DEBUG_SILENT
-/* Silent mode gate - when active, blocks all logging output regardless of
- * loggingEnabled. Only deactivated when WOLFPROV_LOG_LEVEL or
- * WOLFPROV_LOG_COMPONENTS environment variables are set at runtime. */
-static int silentModeActive = 1;
-#endif
-
 /* Logging level. Bitmask of logging levels in wolfProv_LogLevels.
  * Default log level includes error, enter/leave, and info. Does not turn on
  * verbose by default. */
+#ifdef WOLFPROV_DEBUG_SILENT
+static int providerLogLevel = 0;
+#else
 static int providerLogLevel = WP_LOG_LEVEL_ALL;
+#endif
 
 /* Components which will be logged when debug enabled. Bitmask of components
  * in wolfProv_LogComponents. Default components include all. */
+#ifdef WOLFPROV_DEBUG_SILENT
+static int providerLogComponents = 0;
+#else
 static int providerLogComponents = WP_LOG_COMP_ALL;
+#endif
 
 /* Callback functions to parse environment variables WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS */
 static void wolfProv_LogLevelToMask(const char* level, size_t len, void* ctx);
@@ -127,13 +128,6 @@ int wolfProv_LogInit(void)
     uint32_t components = 0;
     char* logLevelStr = XGETENV("WOLFPROV_LOG_LEVEL");
     char* logComponentsStr = XGETENV("WOLFPROV_LOG_COMPONENTS");
-
-#ifdef WOLFPROV_DEBUG_SILENT
-    /* In silent mode, deactivate the silent gate only if env vars are set */
-    if (logLevelStr != NULL || logComponentsStr != NULL) {
-        silentModeActive = 0;
-    }
-#endif
 
     if (logLevelStr != NULL) {
         if (wolfProv_TokenParse(logLevelStr, "()| \t", wolfProv_LogLevelToMask, 
@@ -224,13 +218,6 @@ static void wolfprovider_log(const int component, const int logLevel,
     if (!loggingEnabled) {
         return;
     }
-
-#ifdef WOLFPROV_DEBUG_SILENT
-    /* In silent mode, block all output until env vars unlock it */
-    if (silentModeActive) {
-        return;
-    }
-#endif
 
     /* Don't log messages that do not match our current logging level */
     if ((providerLogLevel & logLevel) != logLevel) {
