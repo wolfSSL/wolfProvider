@@ -247,7 +247,8 @@ static const unsigned char rsa_key_der_2048[] =
 * openssl pkcs8 -topk8 -in rsa_key.der -outform der -out rsa_key.pkcs8.der -nocrypt
 * python ./bin2c.py rsa_key.pkcs8.der
 */
-static const unsigned char rsa_key_der_2048_pkcs8[] = {
+static const unsigned char rsa_key_der_2048_pkcs8[] =
+{
     0x30, 0x82, 0x04, 0xbe, 0x02, 0x01, 0x00, 0x30, 0x0d, 0x06, 0x09, 0x2a,
     0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x04, 0x82,
     0x04, 0xa8, 0x30, 0x82, 0x04, 0xa4, 0x02, 0x01, 0x00, 0x02, 0x82, 0x01,
@@ -350,6 +351,127 @@ static const unsigned char rsa_key_der_2048_pkcs8[] = {
     0x38, 0xf5, 0x8b, 0xe2, 0x72, 0x24, 0x26, 0x83, 0x7f, 0x3f, 0xa1, 0xff,
     0xc1, 0xd2, 0xd7, 0xc1, 0x3a, 0x6b, 0x89, 0xde, 0x18, 0x0c, 0xe2, 0x1a,
     0x20, 0x74, 0x68, 0x3c, 0x7a, 0x72,
+};
+
+/* RSA-PSS 2048-bit private key */
+/*
+* 2048 bit RSA-PSS private key in PKCS#8 format. Generated as follows:
+* openssl genpkey -algorithm RSA-PSS -out rsa_pss_key.der -outform der \
+    -pkeyopt rsa_keygen_bits:2048 \
+    -pkeyopt rsa_pss_keygen_md:sha512 \
+    -pkeyopt rsa_pss_keygen_mgf1_md:sha512 \
+    -pkeyopt rsa_pss_keygen_saltlen:64
+* openssl pkcs8 -topk8 -in rsa_pss_key.der -outform der -out rsa_pss_key.pkcs8.der -nocrypt
+* hexdump -v -e '12/1 "0x%02x, " "\n"' rsa_pss_key.pkcs8.der
+*/
+static const unsigned char rsa_pss_key_der_2048_pkcs8_512[] =
+{
+    0x30, 0x82, 0x04, 0xf3, 0x02, 0x01, 0x00, 0x30, 0x41, 0x06, 0x09, 0x2a,
+    0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a, 0x30, 0x34, 0xa0, 0x0f,
+    0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
+    0x03, 0x05, 0x00, 0xa1, 0x1c, 0x30, 0x1a, 0x06, 0x09, 0x2a, 0x86, 0x48,
+    0x86, 0xf7, 0x0d, 0x01, 0x01, 0x08, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86,
+    0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0xa2, 0x03, 0x02,
+    0x01, 0x40, 0x04, 0x82, 0x04, 0xa9, 0x30, 0x82, 0x04, 0xa5, 0x02, 0x01,
+    0x00, 0x02, 0x82, 0x01, 0x01, 0x00, 0xb0, 0xb7, 0x07, 0x7b, 0xf9, 0xf4,
+    0xca, 0x0a, 0xe9, 0x2e, 0x48, 0x80, 0xff, 0xbd, 0x00, 0x99, 0x76, 0x81,
+    0x0d, 0xa9, 0xcb, 0xe8, 0xa9, 0x3e, 0xa2, 0x3b, 0x10, 0xca, 0x28, 0xa5,
+    0xcb, 0x03, 0x7b, 0x1f, 0xa7, 0x5f, 0x30, 0xe3, 0x4c, 0xa4, 0x67, 0x92,
+    0xef, 0x6b, 0xd0, 0x81, 0xa9, 0xa4, 0xbd, 0x78, 0x12, 0x6b, 0x1c, 0xf6,
+    0xe3, 0xbd, 0x1a, 0x18, 0x96, 0xcb, 0xad, 0x74, 0x3c, 0x1b, 0x8c, 0x12,
+    0x50, 0x03, 0x2f, 0x2c, 0x97, 0x5f, 0xc3, 0x61, 0x45, 0x69, 0x88, 0xc3,
+    0x5b, 0x87, 0xc3, 0xae, 0x23, 0x1d, 0xe6, 0x8f, 0xb3, 0xa5, 0x27, 0x70,
+    0x3b, 0x38, 0xf1, 0xa7, 0xd4, 0x3d, 0x1a, 0xd6, 0x88, 0x5d, 0xbe, 0x97,
+    0xaf, 0x14, 0x3e, 0xc8, 0x47, 0x9d, 0x46, 0x05, 0xba, 0x32, 0x3a, 0x60,
+    0x3e, 0xa3, 0x1b, 0x8b, 0x9e, 0x53, 0x65, 0x1f, 0x0b, 0x66, 0x60, 0x76,
+    0xf0, 0x55, 0x97, 0xe0, 0xd2, 0x73, 0xed, 0x66, 0x30, 0xdc, 0xcf, 0x58,
+    0xd9, 0xdd, 0xa2, 0x6f, 0x48, 0x5e, 0x94, 0xd9, 0xb9, 0xa7, 0x4f, 0xbd,
+    0xcd, 0xfb, 0x60, 0x80, 0x4d, 0xc4, 0x0d, 0xaf, 0x54, 0x06, 0xf9, 0x7b,
+    0xa1, 0x36, 0x35, 0xbf, 0xa9, 0x45, 0xe4, 0x3d, 0x63, 0x36, 0xe4, 0x63,
+    0xb6, 0xb9, 0x4a, 0x92, 0xe4, 0x63, 0xce, 0x6b, 0x71, 0xf3, 0x17, 0x5e,
+    0xb2, 0xf4, 0x58, 0x72, 0xce, 0x9a, 0x95, 0xee, 0x91, 0xb2, 0x3b, 0x43,
+    0xe5, 0x99, 0x85, 0x13, 0x0f, 0x80, 0x19, 0x1e, 0x8a, 0x7d, 0xf4, 0x94,
+    0x44, 0x24, 0x56, 0x4b, 0x24, 0x2b, 0xad, 0x1d, 0xf1, 0x35, 0xdf, 0xaf,
+    0x0a, 0xe6, 0x28, 0x6e, 0x44, 0x2e, 0x39, 0x2c, 0x26, 0xf9, 0x10, 0x2c,
+    0xe4, 0x2a, 0x2b, 0x46, 0x1d, 0xe3, 0xfc, 0x01, 0xde, 0x10, 0xfe, 0x09,
+    0xc3, 0xf2, 0xc4, 0x7a, 0xe6, 0xba, 0xa1, 0x15, 0xa8, 0xf5, 0x02, 0x03,
+    0x01, 0x00, 0x01, 0x02, 0x82, 0x01, 0x00, 0x00, 0xee, 0xaa, 0x43, 0xb1,
+    0x6d, 0x24, 0xee, 0xbb, 0x4d, 0xb2, 0xf4, 0xb9, 0x44, 0xac, 0x3e, 0xe3,
+    0x04, 0xe9, 0xc7, 0x4a, 0x4b, 0xdb, 0x2e, 0xb9, 0x28, 0xe2, 0x1d, 0x0a,
+    0xeb, 0x5a, 0xff, 0x94, 0xf3, 0xf5, 0x0c, 0x57, 0xc3, 0xef, 0x38, 0xd3,
+    0xd2, 0x0e, 0xe0, 0xcc, 0xfc, 0x0e, 0x22, 0xd0, 0x1c, 0x14, 0xce, 0xcb,
+    0x5b, 0x93, 0x16, 0x81, 0x8f, 0x7d, 0x26, 0x2c, 0x6f, 0x57, 0x4c, 0xd6,
+    0xe7, 0x96, 0xd3, 0xf9, 0x78, 0xfd, 0x00, 0x74, 0x95, 0xac, 0x09, 0xd3,
+    0x3e, 0xa2, 0x9a, 0x3c, 0x02, 0x4c, 0x6d, 0xa1, 0x34, 0x83, 0x60, 0x5c,
+    0xed, 0xa6, 0xe6, 0x55, 0x42, 0x0b, 0x28, 0xda, 0x5e, 0x24, 0xe0, 0x87,
+    0xbb, 0xa1, 0xa1, 0x13, 0xf6, 0xb7, 0x08, 0x01, 0xa1, 0x50, 0x9a, 0xe8,
+    0xbb, 0x6e, 0xc1, 0x2a, 0x09, 0x49, 0xc7, 0xcb, 0x5a, 0x07, 0x53, 0x9e,
+    0x31, 0x2a, 0x71, 0xea, 0xe2, 0xce, 0x86, 0x04, 0x62, 0x08, 0x03, 0xf6,
+    0xe9, 0x7d, 0xc6, 0x3f, 0xff, 0xeb, 0x68, 0x22, 0xbf, 0x6b, 0xc9, 0x3e,
+    0xe8, 0xd6, 0x19, 0xee, 0xa7, 0x4f, 0xcc, 0xe9, 0xac, 0x0e, 0x35, 0xa2,
+    0x5f, 0x0f, 0x25, 0x66, 0xe2, 0x81, 0x1d, 0xf5, 0x42, 0xee, 0xb2, 0x54,
+    0x37, 0x0f, 0xb7, 0xa4, 0xb3, 0xe3, 0x58, 0x68, 0xb1, 0xc7, 0xbb, 0xbf,
+    0x0d, 0x16, 0x62, 0x49, 0xc1, 0xd8, 0x75, 0x62, 0x9c, 0x6d, 0x81, 0x3b,
+    0xe0, 0x28, 0xc0, 0x82, 0xec, 0xa0, 0x59, 0x3a, 0x6c, 0x82, 0xc0, 0x89,
+    0xb6, 0xe3, 0xbd, 0x1d, 0x07, 0xd2, 0x88, 0xaf, 0xef, 0xd3, 0x7b, 0x92,
+    0x63, 0x82, 0x02, 0xa3, 0x72, 0xa3, 0x75, 0x83, 0x6a, 0x05, 0x32, 0x35,
+    0x56, 0xc6, 0xa8, 0xe1, 0xfc, 0xcc, 0xb6, 0x5c, 0x0a, 0x11, 0xa2, 0x34,
+    0x3c, 0x8b, 0x7d, 0x0b, 0x81, 0x5f, 0xbf, 0x91, 0x0d, 0xb4, 0x71, 0x02,
+    0x81, 0x81, 0x00, 0xf7, 0x8a, 0xc4, 0x4b, 0xbb, 0x2d, 0xe1, 0x24, 0xba,
+    0x59, 0xd1, 0x15, 0x4a, 0x9c, 0x9f, 0x0f, 0xab, 0x0b, 0x18, 0x33, 0x0d,
+    0xb1, 0xeb, 0xdd, 0x9c, 0xdf, 0x2f, 0x96, 0x81, 0x17, 0x8f, 0xcb, 0x51,
+    0x67, 0xec, 0x39, 0xad, 0x87, 0x5b, 0x1e, 0x5f, 0x4d, 0x6e, 0x64, 0x00,
+    0xe4, 0x7b, 0x05, 0x3e, 0x7d, 0x9d, 0x30, 0x35, 0x58, 0xb8, 0x49, 0x31,
+    0x8d, 0xfc, 0x47, 0x28, 0x59, 0xde, 0x70, 0x5e, 0x0f, 0xd2, 0x6e, 0x8c,
+    0x8a, 0x32, 0x24, 0xab, 0xb5, 0x06, 0x20, 0xe7, 0x49, 0xf1, 0x39, 0x83,
+    0xcd, 0xfc, 0x91, 0x97, 0x66, 0x47, 0x5b, 0x61, 0x11, 0xbf, 0xb3, 0x17,
+    0x5e, 0xc3, 0xa8, 0x00, 0x90, 0x66, 0x02, 0x7a, 0x98, 0x4e, 0x5a, 0xe1,
+    0x46, 0xb7, 0x86, 0x7d, 0x57, 0xa2, 0xa1, 0xb3, 0x27, 0x0c, 0xc2, 0x46,
+    0x9e, 0x8c, 0x26, 0xfa, 0x42, 0xf4, 0xf2, 0xe9, 0x27, 0x29, 0x91, 0x02,
+    0x81, 0x81, 0x00, 0xb6, 0xc0, 0xbe, 0x23, 0x15, 0x1f, 0x65, 0xbf, 0xe8,
+    0xf9, 0x57, 0xd4, 0x2c, 0x03, 0x3a, 0x63, 0xb7, 0x3b, 0x43, 0x1c, 0xbe,
+    0x60, 0x48, 0x77, 0x2a, 0x8d, 0x58, 0x81, 0x3c, 0xa6, 0xa9, 0x9f, 0x5e,
+    0x43, 0x14, 0xb6, 0xe8, 0xea, 0x01, 0x2d, 0xb7, 0xbc, 0xb6, 0x9e, 0xc1,
+    0x26, 0x10, 0x0d, 0x53, 0xb2, 0x06, 0xc0, 0x10, 0x23, 0xfe, 0x51, 0x64,
+    0x5d, 0x70, 0xfb, 0xf0, 0x23, 0x24, 0xef, 0x1e, 0x47, 0x6e, 0x40, 0xfe,
+    0x95, 0xb2, 0x38, 0x30, 0x73, 0x1f, 0x23, 0x04, 0xdb, 0xaf, 0xff, 0xca,
+    0x9a, 0xa1, 0x29, 0x68, 0x20, 0x9a, 0x89, 0xfa, 0x97, 0x73, 0xab, 0x3b,
+    0x05, 0x03, 0xf0, 0xff, 0x7e, 0x6c, 0x38, 0x0e, 0x25, 0xcf, 0xef, 0x0c,
+    0x4b, 0xcc, 0x44, 0x6d, 0x31, 0xe5, 0x93, 0x8b, 0x5c, 0x43, 0x50, 0xa9,
+    0xe8, 0x2e, 0xa8, 0xcf, 0x46, 0xc0, 0x07, 0xe9, 0x56, 0xb7, 0x25, 0x02,
+    0x81, 0x81, 0x00, 0xa9, 0xae, 0x22, 0x2d, 0xf3, 0x29, 0x58, 0xc9, 0xef,
+    0x3e, 0xff, 0xd6, 0x03, 0x65, 0xe6, 0x96, 0x3b, 0xdd, 0x88, 0x01, 0xfe,
+    0xe2, 0x35, 0xd6, 0x9b, 0xe0, 0x54, 0xe3, 0x6a, 0xab, 0xb6, 0xf2, 0x5c,
+    0x63, 0xcb, 0x06, 0x22, 0x4f, 0xc5, 0x02, 0xc5, 0xba, 0xf2, 0xef, 0x73,
+    0xb9, 0x2a, 0x26, 0x87, 0x16, 0x5d, 0xb8, 0x1c, 0xe9, 0x2a, 0xb1, 0x69,
+    0x59, 0x75, 0x53, 0x65, 0x72, 0x6c, 0xca, 0x43, 0x7f, 0xbe, 0xf3, 0xee,
+    0x3c, 0x10, 0x71, 0x18, 0x8e, 0x26, 0x9c, 0x49, 0x4e, 0x63, 0x1e, 0xd4,
+    0x9d, 0x4f, 0x02, 0x91, 0x70, 0x17, 0x7b, 0xa8, 0xc7, 0x1c, 0xcb, 0x6b,
+    0x3a, 0x97, 0x0d, 0x43, 0x0d, 0xb8, 0x0e, 0xfc, 0xf0, 0x07, 0xcd, 0xbd,
+    0xdb, 0xd6, 0x93, 0x46, 0xb9, 0xda, 0x8d, 0xd2, 0x9a, 0xf2, 0xe0, 0xfc,
+    0xbd, 0x53, 0x3e, 0xa8, 0x8f, 0x5b, 0x0e, 0x63, 0x09, 0x68, 0x31, 0x02,
+    0x81, 0x81, 0x00, 0xb5, 0x7a, 0x81, 0x55, 0xe5, 0x4b, 0xe0, 0x86, 0xca,
+    0x9b, 0x91, 0x14, 0x29, 0x00, 0xab, 0xa3, 0x09, 0xf9, 0xd7, 0x93, 0x5b,
+    0x99, 0xd1, 0x5c, 0x44, 0xed, 0x47, 0xce, 0x4e, 0xa4, 0x52, 0x1c, 0xe8,
+    0x46, 0x44, 0xf3, 0xbe, 0x27, 0x62, 0x34, 0x3c, 0x19, 0x32, 0x60, 0x43,
+    0xfd, 0xc0, 0x42, 0xfb, 0xb1, 0xf5, 0xf2, 0x14, 0x15, 0x2a, 0x1f, 0x39,
+    0x43, 0x71, 0x47, 0x3e, 0x18, 0x28, 0x3d, 0x2c, 0x1c, 0x52, 0xe8, 0x47,
+    0xe7, 0xef, 0xaa, 0xcc, 0xb2, 0x05, 0x61, 0x89, 0x19, 0x7f, 0x94, 0xcb,
+    0x64, 0xf2, 0x55, 0x64, 0x09, 0xbc, 0x6c, 0xf8, 0x64, 0x1d, 0x81, 0x14,
+    0x82, 0xce, 0x7f, 0x2b, 0xb8, 0x27, 0x4f, 0x22, 0xfd, 0x79, 0x97, 0x30,
+    0xe6, 0xb4, 0x59, 0xde, 0xf5, 0x85, 0xbd, 0x16, 0xce, 0xf0, 0x29, 0xd2,
+    0x0f, 0xb7, 0x05, 0xfb, 0x8f, 0x8e, 0x72, 0x4c, 0xcc, 0xc7, 0xe1, 0x02,
+    0x81, 0x81, 0x00, 0xd8, 0xb8, 0x81, 0xb9, 0x78, 0x23, 0x5c, 0xcc, 0x7b,
+    0xf0, 0xab, 0xa6, 0xb2, 0xa4, 0x68, 0x56, 0x6a, 0xdf, 0xf9, 0x27, 0xfb,
+    0xb9, 0x9d, 0xe0, 0x69, 0xd8, 0x3a, 0xb2, 0x2c, 0xa6, 0xda, 0x69, 0x86,
+    0x4d, 0x18, 0x85, 0x0e, 0xf8, 0x56, 0x17, 0x18, 0x94, 0xe1, 0x8e, 0x5d,
+    0x25, 0x66, 0x50, 0x37, 0x46, 0xcc, 0x9f, 0x0f, 0x8f, 0x2a, 0x84, 0x6d,
+    0x16, 0x4b, 0xa6, 0x1c, 0xd7, 0x1d, 0x15, 0x5e, 0xee, 0x50, 0xa2, 0xe1,
+    0x76, 0x99, 0xcb, 0x58, 0x57, 0x85, 0x29, 0x5b, 0x30, 0x83, 0x41, 0xec,
+    0xe0, 0x7f, 0xfd, 0x5e, 0xb0, 0x1a, 0x27, 0x19, 0x84, 0x2a, 0x07, 0xd1,
+    0xc7, 0xf0, 0xee, 0x03, 0x27, 0x1b, 0x99, 0xe9, 0xc0, 0xc1, 0xe2, 0xcc,
+    0x81, 0x88, 0xf0, 0xf1, 0xd7, 0x40, 0x03, 0x83, 0x90, 0xa0, 0x01, 0xa9,
+    0x7c, 0xf4, 0x75, 0x37, 0x70, 0x1f, 0x51, 0xe8, 0x55, 0x61, 0x32,
 };
 
 static int test_rsa_sign_verify_pad(int padMode, const EVP_MD *md,
@@ -1456,9 +1578,9 @@ int test_rsa_fromdata(void* data)
 
         for (unsigned i = 0; i < ARRAY_SIZE(selections); i++) {
             for (unsigned j = 0; j < ARRAY_SIZE(params_table); j++) {
-                int status_wolf = EVP_PKEY_fromdata(ctx_wolf, &pkey_wolf, 
+                int status_wolf = EVP_PKEY_fromdata(ctx_wolf, &pkey_wolf,
                                     selections[i], &params_table[j][0]);
-                int status_ossl = EVP_PKEY_fromdata(ctx_ossl, &pkey_ossl, 
+                int status_ossl = EVP_PKEY_fromdata(ctx_ossl, &pkey_ossl,
                                     selections[i], &params_table[j][0]);
 
                 if (status_wolf != status_ossl) {
@@ -1470,16 +1592,16 @@ int test_rsa_fromdata(void* data)
                 else if (status_wolf == 1) {
                     PRINT_MSG("EVP_PKEY_fromdata (wolf) succeeded for "
                               "selection %d (0x%08X) and params %d",
-                                i, selections[i], j); 
+                                i, selections[i], j);
 
                     if (EVP_PKEY_cmp(pkey_wolf, pkey_ossl) != 1) {
                         PRINT_MSG("EVP_PKEY_cmp failed for selection %d "
-                                  "(0x%08X)", i, selections[i]); 
+                                  "(0x%08X)", i, selections[i]);
                         err = 1;
                     }
                     if (EVP_PKEY_cmp_parameters(pkey_wolf, pkey_ossl) != 1) {
                         PRINT_MSG("EVP_PKEY_cmp_parameters failed for "
-                                  "selection %d (0x%08X)", i, selections[i]); 
+                                  "selection %d (0x%08X)", i, selections[i]);
                         err = 1;
                     }
                 }
@@ -1497,7 +1619,7 @@ int test_rsa_fromdata(void* data)
     return err;
 }
 
-static int test_rsa_decode_pkcs8(void)
+static int test_rsa_decode_pkcs8_old(void)
 {
     int err = 0;
     PKCS8_PRIV_KEY_INFO* p8inf = NULL;
@@ -1525,7 +1647,7 @@ static int test_rsa_decode_pkcs8(void)
     if (err == 0) {
         rsakey1 = EVP_PKEY_get0_RSA(pkey1);
         rsakey2 = EVP_PKEY_get0_RSA(pkey2);
-        err = rsakey1 == NULL || rsakey2 == NULL; 
+        err = rsakey1 == NULL || rsakey2 == NULL;
     }
 
     /* Compare the two RSA keys */
@@ -1534,16 +1656,16 @@ static int test_rsa_decode_pkcs8(void)
         const BIGNUM *e1, *e2;
         const BIGNUM *d1, *d2;
         PRINT_MSG("Compare OpenSSL and Wolfprovider RSA keys");
-        RSA_get0_key(rsakey1, 
-            (const BIGNUM **)&n1, 
-            (const BIGNUM **)&e1, 
+        RSA_get0_key(rsakey1,
+            (const BIGNUM **)&n1,
+            (const BIGNUM **)&e1,
             (const BIGNUM **)&d1);
-        RSA_get0_key(rsakey2, 
-            (const BIGNUM **)&n2, 
-            (const BIGNUM **)&e2, 
+        RSA_get0_key(rsakey2,
+            (const BIGNUM **)&n2,
+            (const BIGNUM **)&e2,
             (const BIGNUM **)&d2);
-        err = (BN_cmp(n1, n2) != 0 || 
-               BN_cmp(e1, e2) != 0 || 
+        err = (BN_cmp(n1, n2) != 0 ||
+               BN_cmp(e1, e2) != 0 ||
                BN_cmp(d1, d2) != 0);
     }
 
@@ -1551,17 +1673,17 @@ static int test_rsa_decode_pkcs8(void)
     if (err == 0) {
         const BIGNUM *p1, *p2;
         const BIGNUM *q1, *q2;
-        RSA_get0_factors(rsakey1, 
-            (const BIGNUM **)&p1, 
+        RSA_get0_factors(rsakey1,
+            (const BIGNUM **)&p1,
             (const BIGNUM **)&q1);
-        RSA_get0_factors(rsakey2, 
-            (const BIGNUM **)&p2, 
+        RSA_get0_factors(rsakey2,
+            (const BIGNUM **)&p2,
             (const BIGNUM **)&q2);
         err = (BN_cmp(p1, p2) != 0 || BN_cmp(q1, q2) != 0);
     }
 
     if (err == 0) {
-        err = (RSA_get_multi_prime_extra_count(rsakey1) != 
+        err = (RSA_get_multi_prime_extra_count(rsakey1) !=
             RSA_get_multi_prime_extra_count(rsakey2));
     }
 
@@ -1614,8 +1736,8 @@ static int test_rsa_decode_pkcs8(void)
             (const BIGNUM **)&d1);
         RSA_get0_crt_params(rsakey2, (const BIGNUM **)&p2, (const BIGNUM **)&q2,
             (const BIGNUM **)&d2);
-        err = (BN_cmp(p1, p2) != 0 || 
-               BN_cmp(q1, q2) != 0 || 
+        err = (BN_cmp(p1, p2) != 0 ||
+               BN_cmp(q1, q2) != 0 ||
                BN_cmp(d1, d2) != 0);
     }
 
@@ -1637,7 +1759,7 @@ static int test_rsa_decode_pkcs8(void)
             }
         }
         if (err == 0) {
-            RSA_get0_multi_prime_crt_params(rsakey1, 
+            RSA_get0_multi_prime_crt_params(rsakey1,
                 (const BIGNUM**)exps1, (const BIGNUM**)coeffs1);
             RSA_get0_multi_prime_crt_params(rsakey2,
                 (const BIGNUM**)exps2, (const BIGNUM**)coeffs2);
@@ -1714,99 +1836,84 @@ static int test_rsa_decode_pkcs8(void)
     return err;
 }
 
-static int test_rsa_decode_pkcs8_evp_pkey(void)
+static int test_rsa_decode_evp_pkey(EVP_PKEY* pkey1, EVP_PKEY* pkey2)
 {
     int err = 0;
-    PKCS8_PRIV_KEY_INFO* p8inf = NULL;
-    const unsigned char *p = NULL;
-    int len = 0;
-    EVP_PKEY* pkey1 = NULL;
-    EVP_PKEY* pkey2 = NULL;
+    int err1;
+    int err2;
+    BIGNUM *bn1 = NULL;
+    BIGNUM *bn2 = NULL;
+    char *str1 = NULL;
+    char *str2 = NULL;
+    size_t str1_len;
+    size_t str2_len;
 
-    p = rsa_key_der_2048_pkcs8;
-    len = sizeof(rsa_key_der_2048_pkcs8);
-    p8inf = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&p, len);
-    err = p8inf == NULL;
+    /* List of parameter keys to compare */
+    static const char* bn_keys[] = {
+        OSSL_PKEY_PARAM_PRIV_KEY,
+        OSSL_PKEY_PARAM_PUB_KEY,
+        OSSL_PKEY_PARAM_RSA_BITS,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT1,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT2,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT3,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT4,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT5,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT6,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT7,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT8,
+        OSSL_PKEY_PARAM_RSA_COEFFICIENT9,
+        OSSL_PKEY_PARAM_RSA_D,
+        OSSL_PKEY_PARAM_RSA_E,
+        OSSL_PKEY_PARAM_RSA_EXPONENT,
+        OSSL_PKEY_PARAM_RSA_EXPONENT1,
+        OSSL_PKEY_PARAM_RSA_EXPONENT10,
+        OSSL_PKEY_PARAM_RSA_EXPONENT2,
+        OSSL_PKEY_PARAM_RSA_EXPONENT3,
+        OSSL_PKEY_PARAM_RSA_EXPONENT4,
+        OSSL_PKEY_PARAM_RSA_EXPONENT5,
+        OSSL_PKEY_PARAM_RSA_EXPONENT6,
+        OSSL_PKEY_PARAM_RSA_EXPONENT7,
+        OSSL_PKEY_PARAM_RSA_EXPONENT8,
+        OSSL_PKEY_PARAM_RSA_EXPONENT9,
+        OSSL_PKEY_PARAM_RSA_FACTOR,
+        OSSL_PKEY_PARAM_RSA_FACTOR1,
+        OSSL_PKEY_PARAM_RSA_FACTOR10,
+        OSSL_PKEY_PARAM_RSA_FACTOR2,
+        OSSL_PKEY_PARAM_RSA_FACTOR3,
+        OSSL_PKEY_PARAM_RSA_FACTOR4,
+        OSSL_PKEY_PARAM_RSA_FACTOR5,
+        OSSL_PKEY_PARAM_RSA_FACTOR6,
+        OSSL_PKEY_PARAM_RSA_FACTOR7,
+        OSSL_PKEY_PARAM_RSA_FACTOR8,
+        OSSL_PKEY_PARAM_RSA_FACTOR9,
+        OSSL_PKEY_PARAM_RSA_N,
+        OSSL_PKEY_PARAM_RSA_PRIMES,
+        OSSL_PKEY_PARAM_RSA_PSS_SALTLEN,
+        OSSL_PKEY_PARAM_RSA_TEST_P1,
+        OSSL_PKEY_PARAM_RSA_TEST_P2,
+        OSSL_PKEY_PARAM_RSA_TEST_Q1,
+        OSSL_PKEY_PARAM_RSA_TEST_Q2,
+        OSSL_PKEY_PARAM_RSA_TEST_XP,
+        OSSL_PKEY_PARAM_RSA_TEST_XP1,
+        OSSL_PKEY_PARAM_RSA_TEST_XP2,
+        OSSL_PKEY_PARAM_RSA_TEST_XQ,
+        OSSL_PKEY_PARAM_RSA_TEST_XQ1,
+        OSSL_PKEY_PARAM_RSA_TEST_XQ2,
+    };
 
-    if (err == 0) {
-        PRINT_MSG("Decode with OpenSSL and Wolfprovider");
-        pkey1 = EVP_PKCS82PKEY_ex(p8inf, osslLibCtx, NULL);
-        pkey2 = EVP_PKCS82PKEY_ex(p8inf, wpLibCtx, NULL);
-        PKCS8_PRIV_KEY_INFO_free(p8inf);
-        err = (pkey1 == NULL || pkey2 == NULL);
-    }
+    for (unsigned i = 0; err == 0 &&
+            i < sizeof(bn_keys) / sizeof(*bn_keys); i++) {
+        err1 = EVP_PKEY_get_bn_param(pkey1, bn_keys[i], &bn1);
+        err2 = EVP_PKEY_get_bn_param(pkey2, bn_keys[i], &bn2);
 
-    if (err == 0) {
-        BIGNUM *bn1 = NULL;
-        BIGNUM *bn2 = NULL;
-        int err1, err2;
+        PRINT_MSG("Comparing key %s (%d %d)", bn_keys[i], err1, err2);
 
-        /* List of parameter keys to compare */
-        static const char* keys[] = {
-            OSSL_PKEY_PARAM_PRIV_KEY,
-            OSSL_PKEY_PARAM_PUB_KEY,
-            OSSL_PKEY_PARAM_RSA_BITS,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT1,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT2,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT3,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT4,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT5,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT6,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT7,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT8,
-            OSSL_PKEY_PARAM_RSA_COEFFICIENT9,
-            OSSL_PKEY_PARAM_RSA_D,
-            OSSL_PKEY_PARAM_RSA_E,
-            OSSL_PKEY_PARAM_RSA_EXPONENT,
-            OSSL_PKEY_PARAM_RSA_EXPONENT1,
-            OSSL_PKEY_PARAM_RSA_EXPONENT10,
-            OSSL_PKEY_PARAM_RSA_EXPONENT2,
-            OSSL_PKEY_PARAM_RSA_EXPONENT3,
-            OSSL_PKEY_PARAM_RSA_EXPONENT4,
-            OSSL_PKEY_PARAM_RSA_EXPONENT5,
-            OSSL_PKEY_PARAM_RSA_EXPONENT6,
-            OSSL_PKEY_PARAM_RSA_EXPONENT7,
-            OSSL_PKEY_PARAM_RSA_EXPONENT8,
-            OSSL_PKEY_PARAM_RSA_EXPONENT9,
-            OSSL_PKEY_PARAM_RSA_FACTOR,
-            OSSL_PKEY_PARAM_RSA_FACTOR1,
-            OSSL_PKEY_PARAM_RSA_FACTOR10,
-            OSSL_PKEY_PARAM_RSA_FACTOR2,
-            OSSL_PKEY_PARAM_RSA_FACTOR3,
-            OSSL_PKEY_PARAM_RSA_FACTOR4,
-            OSSL_PKEY_PARAM_RSA_FACTOR5,
-            OSSL_PKEY_PARAM_RSA_FACTOR6,
-            OSSL_PKEY_PARAM_RSA_FACTOR7,
-            OSSL_PKEY_PARAM_RSA_FACTOR8,
-            OSSL_PKEY_PARAM_RSA_FACTOR9,
-            OSSL_PKEY_PARAM_RSA_N,
-            OSSL_PKEY_PARAM_RSA_PRIMES,
-            OSSL_PKEY_PARAM_RSA_PSS_SALTLEN,
-            OSSL_PKEY_PARAM_RSA_TEST_P1,
-            OSSL_PKEY_PARAM_RSA_TEST_P2,
-            OSSL_PKEY_PARAM_RSA_TEST_Q1,
-            OSSL_PKEY_PARAM_RSA_TEST_Q2,
-            OSSL_PKEY_PARAM_RSA_TEST_XP,
-            OSSL_PKEY_PARAM_RSA_TEST_XP1,
-            OSSL_PKEY_PARAM_RSA_TEST_XP2,
-            OSSL_PKEY_PARAM_RSA_TEST_XQ,
-            OSSL_PKEY_PARAM_RSA_TEST_XQ1,
-            OSSL_PKEY_PARAM_RSA_TEST_XQ2,
-        };
-
-        for (unsigned i = 0; i < sizeof(keys) / sizeof(*keys); i++) {
-            err1 = EVP_PKEY_get_bn_param(pkey1, keys[i], &bn1);
-            err2 = EVP_PKEY_get_bn_param(pkey2, keys[i], &bn2);
-
-            PRINT_MSG("Comparing key %s (%d %d)", keys[i], err1, err2);
-
-            if (err1 != err2) {
-                err = 1;
-            }
-            else if (err1 == 0) {
-                err = BN_cmp(bn1, bn2) != 0;
-            }
+        if (err1 != err2) {
+            err = 1;
+        }
+        else if (err1 == 1) {
+            err = BN_cmp(bn1, bn2) != 0;
         }
 
         BN_free(bn1);
@@ -1815,20 +1922,167 @@ static int test_rsa_decode_pkcs8_evp_pkey(void)
         bn2 = NULL;
     }
 
+    if (err == 0) {
+        static const char* str_keys[] = {
+            OSSL_PKEY_PARAM_RSA_DIGEST,
+            OSSL_PKEY_PARAM_MGF1_DIGEST,
+        };
+
+        for (unsigned i = 0; err == 0 &&
+                i < sizeof(str_keys) / sizeof(*str_keys); i++) {
+            err1 = EVP_PKEY_get_utf8_string_param(pkey1, str_keys[i], NULL,
+                    0, &str1_len);
+            err2 = EVP_PKEY_get_utf8_string_param(pkey2, str_keys[i], NULL,
+                    0, &str2_len);
+
+            err = err1 != err2;
+            if (err == 0 && err1 == 1){
+                str1 = OPENSSL_malloc(++str1_len);
+                str2 = OPENSSL_malloc(++str2_len);
+                err = (str1 == NULL) || (str2 == NULL);
+            }
+            if (err == 0 && err1 == 1) {
+                err1 = EVP_PKEY_get_utf8_string_param(pkey1, str_keys[i], str1,
+                        str1_len, NULL);
+                err2 = EVP_PKEY_get_utf8_string_param(pkey2, str_keys[i], str2,
+                        str2_len, NULL);
+                err = err1 != err2;
+            }
+
+            PRINT_MSG("Comparing key %s (%d %d)", str_keys[i], err1, err2);
+
+            if (err == 0 && err1 == 1) {
+                err = OPENSSL_strcasecmp(str1, str2) != 0;
+            }
+
+            OPENSSL_free(str1);
+            OPENSSL_free(str2);
+            str1 = NULL;
+            str2 = NULL;
+        }
+    }
+
+    return err;
+}
+
+static int test_rsa_decode_pkcs8_evp_pkey(const unsigned char *p1, long len1,
+    OSSL_LIB_CTX *c1, const unsigned char *p2, long len2, OSSL_LIB_CTX *c2)
+{
+    int err = 0;
+    PKCS8_PRIV_KEY_INFO* p8inf1 = NULL;
+    PKCS8_PRIV_KEY_INFO* p8inf2 = NULL;
+    EVP_PKEY* pkey1 = NULL;
+    EVP_PKEY* pkey2 = NULL;
+
+    p8inf1 = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&p1, len1);
+    p8inf2 = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&p2, len2);
+    err = (p8inf1 == NULL) || (p8inf2 == NULL);
+    if (err == 0) {
+        pkey1 = EVP_PKCS82PKEY_ex(p8inf1, c1, NULL);
+        pkey2 = EVP_PKCS82PKEY_ex(p8inf2, c2, NULL);
+        err = (pkey1 == NULL || pkey2 == NULL);
+    }
+
+    if (err == 0) {
+        err = test_rsa_decode_evp_pkey(pkey1, pkey2);
+    }
+
+    PKCS8_PRIV_KEY_INFO_free(p8inf1);
+    PKCS8_PRIV_KEY_INFO_free(p8inf2);
     EVP_PKEY_free(pkey1);
     EVP_PKEY_free(pkey2);
 
     return err;
 }
 
-int test_rsa_decode(void* data)
+int test_rsa_decode_pkcs8(void* data)
 {
     int err = 0;
     (void)data;
 
-    err = test_rsa_decode_pkcs8();
+    PRINT_MSG("Decode RSA key (old):");
+    err = test_rsa_decode_pkcs8_old();
     if (err == 0) {
-        err = test_rsa_decode_pkcs8_evp_pkey();
+        PRINT_MSG("Decode RSA key:");
+        err = test_rsa_decode_pkcs8_evp_pkey(
+                rsa_key_der_2048_pkcs8, sizeof(rsa_key_der_2048_pkcs8),
+                osslLibCtx, rsa_key_der_2048_pkcs8,
+                sizeof(rsa_key_der_2048_pkcs8), wpLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decode RSASSA-PSS key:");
+        err = test_rsa_decode_pkcs8_evp_pkey(
+                rsa_pss_key_der_2048_pkcs8_512,
+                sizeof(rsa_pss_key_der_2048_pkcs8_512), osslLibCtx,
+                rsa_pss_key_der_2048_pkcs8_512,
+                sizeof(rsa_pss_key_der_2048_pkcs8_512), wpLibCtx);
+    }
+
+    return err;
+}
+
+static int test_rsa_encode_pkcs8_evp_pkey(const unsigned char *p, long len)
+{
+    int err = 0;
+    PKCS8_PRIV_KEY_INFO* p8inf1 = NULL;
+    PKCS8_PRIV_KEY_INFO* p8inf2 = NULL;
+    EVP_PKEY* pkey1 = NULL;
+    EVP_PKEY* pkey2 = NULL;
+    unsigned char* der1 = NULL;
+    unsigned char* der2 = NULL;
+    int der1_len;
+    int der2_len;
+
+    p8inf1 = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&p, len);
+    err = p8inf1 == NULL;
+    if (err == 0) {
+        pkey1 = EVP_PKCS82PKEY_ex(p8inf1, osslLibCtx, NULL);
+        pkey2 = EVP_PKCS82PKEY_ex(p8inf1, wpLibCtx, NULL);
+        PKCS8_PRIV_KEY_INFO_free(p8inf1);
+        p8inf1 = NULL;
+        err = (pkey1 == NULL) || (pkey2 == NULL);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Encode key to PKCS8");
+        p8inf1 = EVP_PKEY2PKCS8(pkey1);
+        p8inf2 = EVP_PKEY2PKCS8(pkey2);
+        err = (p8inf1 == NULL) || (p8inf2 == NULL);
+    }
+    if (err == 0) {
+        der1_len = i2d_PKCS8_PRIV_KEY_INFO(p8inf1, &der1);
+        der2_len = i2d_PKCS8_PRIV_KEY_INFO(p8inf2, &der2);
+        err = (der1_len <= 0) || (der2_len <= 0);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Decode key");
+        err = test_rsa_decode_pkcs8_evp_pkey(der1, der1_len, osslLibCtx,
+                der2, der2_len, osslLibCtx);
+    }
+
+    PKCS8_PRIV_KEY_INFO_free(p8inf1);
+    PKCS8_PRIV_KEY_INFO_free(p8inf2);
+    EVP_PKEY_free(pkey1);
+    EVP_PKEY_free(pkey2);
+    OPENSSL_free(der1);
+    OPENSSL_free(der2);
+
+    return err;
+}
+
+int test_rsa_encode_pkcs8(void* data)
+{
+    int err = 0;
+    (void)data;
+
+    PRINT_MSG("Encode RSA key:");
+    err = test_rsa_encode_pkcs8_evp_pkey(rsa_key_der_2048_pkcs8,
+            sizeof(rsa_key_der_2048_pkcs8));
+    if (err == 0) {
+        PRINT_MSG("Encode RSASSA-PSS key:");
+        err = test_rsa_encode_pkcs8_evp_pkey(rsa_pss_key_der_2048_pkcs8_512,
+                sizeof(rsa_pss_key_der_2048_pkcs8_512));
     }
 
     return err;
@@ -1852,10 +2106,12 @@ static int test_rsa_null_sign_init_ex(OSSL_LIB_CTX *libCtx)
         err = pkey == NULL;
     }
     if (err == 0) {
-        err = EVP_DigestSignInit_ex(ctx, NULL, "SHA256", libCtx, NULL, pkey, NULL) != 1;
+        err = EVP_DigestSignInit_ex(ctx, NULL, "SHA256", libCtx, NULL, pkey,
+                                                                     NULL) != 1;
     }
     if (err == 0) {
-        err = EVP_DigestSignInit_ex(ctx, NULL, "SHA256", libCtx, NULL, NULL, NULL) != 1;
+        err = EVP_DigestSignInit_ex(ctx, NULL, "SHA256", libCtx, NULL, NULL,
+                                                                     NULL) != 1;
     }
 
     EVP_PKEY_free(pkey);

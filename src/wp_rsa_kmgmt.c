@@ -910,6 +910,72 @@ static int wp_rsa_get_params_key_data(wp_Rsa* rsa,  OSSL_PARAM params[])
 }
 
 /**
+ * Convert a wolfCrypt hashType to the equivalent OpenSSL digest name.
+ *
+ * @param [in]  hashType    WolfProvider digest id.
+ * @param [out] osslDigest  Corresponding OpenSSL digest name.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_digest_to_ossl_digest(enum wc_HashType hashType,
+        const char** osslDigest)
+{
+    int ok = 1;
+
+    switch (hashType) {
+    case WC_HASH_TYPE_MD5:
+        *osslDigest = OSSL_DIGEST_NAME_MD5;
+        break;
+
+    case WC_HASH_TYPE_SHA:
+        *osslDigest = OSSL_DIGEST_NAME_SHA1;
+        break;
+
+    case WC_HASH_TYPE_SHA256:
+        *osslDigest = OSSL_DIGEST_NAME_SHA2_256;
+        break;
+
+    case WC_HASH_TYPE_SHA384:
+        *osslDigest = OSSL_DIGEST_NAME_SHA2_384;
+        break;
+
+    case WC_HASH_TYPE_SHA512:
+        *osslDigest = OSSL_DIGEST_NAME_SHA2_512;
+        break;
+
+    case WC_HASH_TYPE_NONE:
+    case WC_HASH_TYPE_MD2:
+    case WC_HASH_TYPE_MD4:
+    case WC_HASH_TYPE_SHA224:
+    case WC_HASH_TYPE_MD5_SHA:
+    case WC_HASH_TYPE_SHA3_224:
+    case WC_HASH_TYPE_SHA3_256:
+    case WC_HASH_TYPE_SHA3_384:
+    case WC_HASH_TYPE_SHA3_512:
+    case WC_HASH_TYPE_BLAKE2B:
+    case WC_HASH_TYPE_BLAKE2S:
+#ifndef WOLFSSL_NOSHA512_224
+    case WC_HASH_TYPE_SHA512_224:
+#endif
+#ifndef WOLFSSL_NOSHA512_256
+    case WC_HASH_TYPE_SHA512_256:
+#endif
+#ifdef WOLFSSL_SHAKE128
+    case WC_HASH_TYPE_SHAKE128:
+#endif
+#ifdef WOLFSSL_SHAKE256
+    case WC_HASH_TYPE_SHAKE256:
+#endif
+#ifdef WOLFSSL_SM3
+    case WC_HASH_TYPE_SM3:
+#endif
+        ok = 0;
+    }
+
+    return ok;
+}
+
+/**
  * Get the PSS parameters into the parameters array.
  *
  * @param [in]      pss     PSS object.
@@ -921,19 +987,22 @@ static int wp_rsa_get_params_pss(wp_RsaPssParams* pss,  OSSL_PARAM params[])
 {
     int ok = 1;
     OSSL_PARAM* p;
+    const char* osslDigest = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_get_params_pss");
 
     if (pss->hashType != WP_RSA_PSS_DIGEST_DEF) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_RSA_DIGEST);
-        if ((p != NULL) && !OSSL_PARAM_set_utf8_string(p, pss->mdName)) {
+        if ((p != NULL) && wp_digest_to_ossl_digest(pss->hashType, &osslDigest)
+                && !OSSL_PARAM_set_utf8_string(p, osslDigest)) {
             ok = 0;
         }
     }
     /* MGF is default so don't set. */
     if (ok && (pss->mgf != WP_RSA_PSS_MGF_DEF)) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_RSA_MGF1_DIGEST);
-        if ((p != NULL) && !OSSL_PARAM_set_utf8_string(p, pss->mgfMdName)) {
+        if ((p != NULL) && wp_digest_to_ossl_digest(pss->hashType, &osslDigest)
+                && !OSSL_PARAM_set_utf8_string(p, osslDigest)) {
             ok = 0;
         }
     }
@@ -1144,7 +1213,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
 
     /* N and E params are the only ones required by OSSL, so match that.
      * See ossl_rsa_fromdata() and RSA_set0_key() in OpenSSL. */
-    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N) == NULL || 
+    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N) == NULL ||
         OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E) == NULL) {
         WOLFPROV_MSG(WP_LOG_COMP_RSA, "Param N or E is missing");
         ok = 0;
@@ -1160,7 +1229,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             index = -1;
             for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
                 if (XSTRNCMP(p->key, wp_rsa_param_key[j], XSTRLEN(p->key)) == 0) {
-                    index = j; 
+                    index = j;
                     break;
                 }
             }
@@ -2374,7 +2443,7 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     size_t passwordSz = sizeof(password);
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_RSA, WOLFPROV_FUNC_NAME);
-    
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -2567,7 +2636,7 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_pss_encode_alg_id");
 
     if (pssAlgId == NULL) {
-        /* Length opf header without optional parts. */
+        /* Length of header without optional parts. */
         i = 2 + sizeof(rsa_pss_oid) + 2;
     }
     else {
@@ -2928,6 +2997,14 @@ static int wp_rsa_encode_pki_size(const wp_Rsa* rsa, size_t* keyLen, int algoId)
     if (ok) {
         *keyLen = len;
     }
+    if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS)) {
+        word32 pssLen = 0;
+        ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
+            rsa->pssParams.mgfMdName, rsa->pssParams.saltLen, NULL, &pssLen);
+        if (ok) {
+            *keyLen += pssLen;
+        }
+    }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -2979,6 +3056,36 @@ static int wp_rsa_encode_pki(const wp_Rsa* rsa, unsigned char* keyData,
             algoId, NULL, 0);
         if (ret <= 0) {
             ok = 0;
+        }
+    }
+    if (ok && rsa->type == RSA_FLAG_TYPE_RSASSAPSS) {
+        word32 pssLen = 0;
+        word32 i;
+
+        /* Find where Algorithm ID is by looking for RSA PKCS#1 OID. */
+        ok = wp_rsa_find_oid(keyData, ret, rsa_pkcs1_oid, RSA_PKCS1_OID_SZ,
+            &i);
+        if (ok) {
+            i += 11;
+            /* Get length of encoded RSA-PSS Algorithm ID. */
+            ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
+                rsa->pssParams.mgfMdName, rsa->pssParams.saltLen, NULL,
+                &pssLen);
+        }
+        if (ok) {
+            /* Move rest of key to after RSA-PSS Algorithm ID. */
+            XMEMMOVE(keyData + 7 + pssLen, keyData + i, ret - i);
+            /* Encode RSA-PSS Algorithm ID. */
+            ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
+                rsa->pssParams.mgfMdName, rsa->pssParams.saltLen,
+                keyData + 7, &pssLen);
+        }
+        if (ok) {
+            /* Update return length. */
+            ret += pssLen - 13;
+            /* Update first sequence. */
+            keyData[2] = (byte)((ret - 4) >> 8);
+            keyData[3] = (byte)((ret - 4) & 0xff);
         }
     }
     if (ok) {

@@ -189,7 +189,7 @@ main() {
     fi
 
     if [ -n "$output_dir" ]; then
-        output_dir=$(realpath $output_dir)
+        output_dir=$(realpath "$output_dir")
     fi
 
     work_dir=$(mktemp -d)
