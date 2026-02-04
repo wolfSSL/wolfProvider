@@ -1,0 +1,37 @@
+--- a/providers/implementations/signature/ecdsa_sig.c
++++ b/providers/implementations/signature/ecdsa_sig.c
+@@ -144,6 +144,17 @@
+     if (ec != NULL) {
+         if (!ossl_ec_check_key(ctx->libctx, ec, operation == EVP_PKEY_OP_SIGN))
+             return 0;
++        /* FIPS baseline: enforce minimum key strength (112 bits) for signing */
++        if (operation == EVP_PKEY_OP_SIGN) {
++            const EC_GROUP *group = EC_KEY_get0_group(ec);
++            if (group != NULL) {
++                int strength = EC_GROUP_order_bits(group) / 2;
++                if (strength < 112) {
++                    ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
++                    return 0;
++                }
++            }
++        }
+         if (!EC_KEY_up_ref(ec))
+             return 0;
+         EC_KEY_free(ctx->ec);
+--- a/providers/implementations/keymgmt/ec_kmgmt.c
++++ b/providers/implementations/keymgmt/ec_kmgmt.c
+@@ -1275,6 +1275,14 @@
+         }
+     }
+
++    /* FIPS baseline: enforce minimum key strength (112 bits) for keygen */
++    if (gctx->gen_group != NULL) {
++        int strength = EC_GROUP_order_bits(gctx->gen_group) / 2;
++        if (strength < 112) {
++            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
++            goto err;
++        }
++    }
+     /* We must always assign a group, no matter what */
+     ret = ec_gen_assign_group(ec, gctx->gen_group);
+

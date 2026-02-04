@@ -10,8 +10,8 @@ noinst_HEADERS += test/standalone/test_common.h
 # Standalone test programs
 # Each test compiles to its own binary for isolated execution
 # Note: These are NOT in check_PROGRAMS because they must be run through scripts, not directly
-noinst_PROGRAMS += test/sha256_simple.test test/hardload.test
-DISTCLEANFILES += test/.libs/sha256_simple.test test/.libs/hardload.test
+noinst_PROGRAMS += test/sha256_simple.test test/hardload.test test/fips_baseline.test
+DISTCLEANFILES += test/.libs/sha256_simple.test test/.libs/hardload.test test/.libs/fips_baseline.test
 
 # Common flags for all standalone tests
 STANDALONE_COMMON_CPPFLAGS = -DCERTS_DIR='"$(abs_top_srcdir)/certs"' \
@@ -26,6 +26,19 @@ test_sha256_simple_test_LDADD = $(STANDALONE_COMMON_LDADD)
 test_hardload_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
 test_hardload_test_SOURCES = test/standalone/tests/hardload/test_hardload.c
 test_hardload_test_LDADD = $(STANDALONE_COMMON_LDADD)
+
+test_fips_baseline_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
+test_fips_baseline_test_SOURCES = test/standalone/tests/fips_baseline/test_fips_baseline_main.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_digest.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_ciphers.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_ecx.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_rsa.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_ecdsa.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_ecdh.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_dh.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_hmac.c \
+                                  test/standalone/tests/fips_baseline/test_fips_baseline_pbkdf2.c
+test_fips_baseline_test_LDADD = $(STANDALONE_COMMON_LDADD)
 
 # Common test utilities are built automatically by automake
 

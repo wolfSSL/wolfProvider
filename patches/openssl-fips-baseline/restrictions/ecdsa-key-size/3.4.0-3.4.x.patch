@@ -1,0 +1,112 @@
+--- a/providers/implementations/signature/ecdsa_sig.c
++++ b/providers/implementations/signature/ecdsa_sig.c
+@@ -286,14 +286,21 @@
+     OSSL_FIPS_IND_SET_APPROVED(ctx)
+     if (!set_ctx_params(ctx, params))
+         return 0;
+-#ifdef FIPS_MODULE
+-    if (!ossl_fips_ind_ec_key_check(OSSL_FIPS_IND_GET(ctx),
+-                                    OSSL_FIPS_IND_SETTABLE0, ctx->libctx,
+-                                    EC_KEY_get0_group(ctx->ec), desc,
+-                                    (operation & (EVP_PKEY_OP_SIGN
+-                                                  | EVP_PKEY_OP_SIGNMSG)) != 0))
+-        return 0;
+-#endif
++    /* Enforce EC key security strength (FIPS baseline) */
++    {
++        int is_signing = ((operation
++                           & (EVP_PKEY_OP_SIGN | EVP_PKEY_OP_SIGNMSG)) != 0);
++        const EC_GROUP *group = EC_KEY_get0_group(ctx->ec);
++
++        if (group != NULL && is_signing) {
++            int strength = EC_GROUP_order_bits(group) / 2;
++            /* OSSL_FIPS_MIN_SECURITY_STRENGTH_BITS = 112 */
++            if (strength < 112) {
++                ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
++                return 0;
++            }
++        }
++    }
+     return 1;
+ }
+
+--- a/providers/implementations/keymgmt/ec_kmgmt.c
++++ b/providers/implementations/keymgmt/ec_kmgmt.c
+@@ -1307,15 +1307,14 @@
+             EC_GROUP_set_point_conversion_form(gctx->gen_group, format);
+         }
+     }
+-#ifdef FIPS_MODULE
+-    if (!ossl_ec_check_security_strength(gctx->gen_group, 1)) {
+-        if (!OSSL_FIPS_IND_ON_UNAPPROVED(gctx, OSSL_FIPS_IND_SETTABLE0,
+-                                         gctx->libctx, "EC KeyGen", "key size",
+-                                         ossl_fips_config_securitycheck_enabled)) {
+-            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
+-            goto err;
+-        }
++    /* Enforce EC key security strength for keygen (FIPS baseline) */
++    if (gctx->gen_group != NULL) {
++        int strength = EC_GROUP_order_bits(gctx->gen_group) / 2;
++        /* OSSL_FIPS_MIN_SECURITY_STRENGTH_BITS = 112 */
++        if (strength < 112) {
++            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
++            goto err;
++        }
+     }
+-#endif
+
+     /* We must always assign a group, no matter what */
+     ret = ec_gen_assign_group(ec, gctx->gen_group);
+--- a/providers/implementations/exchange/ecdh_exch.c
++++ b/providers/implementations/exchange/ecdh_exch.c
+@@ -119,12 +119,18 @@
+     OSSL_FIPS_IND_SET_APPROVED(pecdhctx)
+     if (!ecdh_set_ctx_params(pecdhctx, params))
+         return 0;
+-#ifdef FIPS_MODULE
+-    if (!ossl_fips_ind_ec_key_check(OSSL_FIPS_IND_GET(pecdhctx),
+-                                    OSSL_FIPS_IND_SETTABLE0, pecdhctx->libctx,
+-                                    EC_KEY_get0_group(vecdh), "ECDH Init", 1))
+-        return 0;
+-#endif
++    /* Enforce EC key security strength for ECDH init (FIPS baseline) */
++    {
++        const EC_GROUP *group = EC_KEY_get0_group(vecdh);
++        if (group != NULL) {
++            int strength = EC_GROUP_order_bits(group) / 2;
++            /* OSSL_FIPS_MIN_SECURITY_STRENGTH_BITS = 112 */
++            if (strength < 112) {
++                ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
++                return 0;
++            }
++        }
++    }
+     return 1;
+ }
+
+@@ -160,13 +166,18 @@
+             || vecdh == NULL
+             || !ecdh_match_params(pecdhctx->k, vecdh))
+         return 0;
+-#ifdef FIPS_MODULE
+-    if (!ossl_fips_ind_ec_key_check(OSSL_FIPS_IND_GET(pecdhctx),
+-                                    OSSL_FIPS_IND_SETTABLE0, pecdhctx->libctx,
+-                                    EC_KEY_get0_group(vecdh), "ECDH Set Peer",
+-                                    1))
+-        return 0;
+-#endif
++    /* Enforce EC key security strength for ECDH set peer (FIPS baseline) */
++    {
++        const EC_GROUP *group = EC_KEY_get0_group(vecdh);
++        if (group != NULL) {
++            int strength = EC_GROUP_order_bits(group) / 2;
++            /* OSSL_FIPS_MIN_SECURITY_STRENGTH_BITS = 112 */
++            if (strength < 112) {
++                ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
++                return 0;
++            }
++        }
++    }
+     if (!EC_KEY_up_ref(vecdh))
+         return 0;
+

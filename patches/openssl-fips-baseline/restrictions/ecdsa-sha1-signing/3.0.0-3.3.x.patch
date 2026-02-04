@@ -1,0 +1,17 @@
+--- a/providers/implementations/signature/ecdsa_sig.c
++++ b/providers/implementations/signature/ecdsa_sig.c
+@@ -254,6 +254,14 @@
+     sha1_allowed = (ctx->operation != EVP_PKEY_OP_SIGN);
+     md_nid = ossl_digest_get_approved_nid_with_sha1(ctx->libctx, md,
+                                                     sha1_allowed);
++
++    /* FIPS baseline: hard block SHA1 for signing operations */
++    if (ctx->operation == EVP_PKEY_OP_SIGN && md_nid == NID_sha1) {
++        ERR_raise_data(ERR_LIB_PROV, PROV_R_DIGEST_NOT_ALLOWED,
++                       "SHA1 signing not allowed");
++        EVP_MD_free(md);
++        return 0;
++    }
+     if (md_nid < 0) {
+         ERR_raise_data(ERR_LIB_PROV, PROV_R_DIGEST_NOT_ALLOWED,
+                        "digest=%s", mdname);
