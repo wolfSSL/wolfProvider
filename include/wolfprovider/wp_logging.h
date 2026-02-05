@@ -56,6 +56,12 @@
 /* wolfProv debug logging support can be compiled in by defining
  * WOLFPROV_DEBUG or by using the --enable-debug configure option.
  *
+ * By default, when debug is enabled, logging is active immediately.
+ * Use --enable-debug-silent to compile in debug support but keep it
+ * silent by default. In silent mode, logging is only activated when
+ * WOLFPROV_LOG_LEVEL or WOLFPROV_LOG_COMPONENTS environment variables
+ * are set at runtime.
+ *
  * wolfProv supports the log levels as mentioned in wolfProv_LogLevels
  * enum below. The default logging level when debug logging is compiled in
  * and enabled at runtime is WP_LOG_LEVEL_DEFAULT.

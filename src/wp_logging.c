@@ -37,17 +37,25 @@
 static wolfProv_Logging_cb log_function = NULL;
 
 /* Flag indicating if logging is enabled, controlled via
- * wolfProv_Debugging_ON() and wolfProv_Debugging_OFF() */
+ * wolfProv_Debugging_ON() and wolfProv_Debugging_OFF(). */
 static int loggingEnabled = 1;
 
 /* Logging level. Bitmask of logging levels in wolfProv_LogLevels.
  * Default log level includes error, enter/leave, and info. Does not turn on
  * verbose by default. */
+#ifdef WOLFPROV_DEBUG_SILENT
+static int providerLogLevel = 0;
+#else
 static int providerLogLevel = WP_LOG_LEVEL_ALL;
+#endif
 
 /* Components which will be logged when debug enabled. Bitmask of components
  * in wolfProv_LogComponents. Default components include all. */
+#ifdef WOLFPROV_DEBUG_SILENT
+static int providerLogComponents = 0;
+#else
 static int providerLogComponents = WP_LOG_COMP_ALL;
+#endif
 
 /* Callback functions to parse environment variables WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS */
 static void wolfProv_LogLevelToMask(const char* level, size_t len, void* ctx);
@@ -201,10 +209,15 @@ int wolfProv_SetLogComponents(int componentMask)
  * @param logLevel   [IN] Log level.
  */
 WP_PRINTF_FUNC(3, 0)
-static void wolfprovider_log(const int component, const int logLevel, 
+static void wolfprovider_log(const int component, const int logLevel,
         const char* fmt, va_list vlist)
 {
     char logMessage[WOLFPROV_MAX_LOG_WIDTH];
+
+    /* Don't log if logging is disabled */
+    if (!loggingEnabled) {
+        return;
+    }
 
     /* Don't log messages that do not match our current logging level */
     if ((providerLogLevel & logLevel) != logLevel) {

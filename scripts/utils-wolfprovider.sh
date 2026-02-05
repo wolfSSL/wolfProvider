@@ -114,6 +114,10 @@ install_wolfprov() {
         WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_LEAVE_SILENT_MODE"
     fi
 
+    if [ "${WOLFPROV_DEBUG_SILENT}" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-debug-silent"
+    fi
+
     if [ -n "${WOLFPROV_LOG_FILE}" ]; then
         WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_LOG_FILE=\\\"${WOLFPROV_LOG_FILE}\\\""
     fi

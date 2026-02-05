@@ -73,6 +73,16 @@ AS_IF([test "$ax_enable_debug" = "yes"],
       [AM_CFLAGS="$DEBUG_CFLAGS $AM_CFLAGS"],
       [])
 
+# Debug silent mode - logging compiled in but silent until env vars activate
+AC_ARG_ENABLE([debug-silent],
+    [AS_HELP_STRING([--enable-debug-silent],[Debug logging compiled in but silent by default. Use WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS env vars to enable at runtime (default: disabled)])],
+    [ ENABLED_DEBUG_SILENT=$enableval ],
+    [ ENABLED_DEBUG_SILENT=no ]
+    )
+
+AS_IF([test "$ENABLED_DEBUG_SILENT" = "yes"],
+      [AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_DEBUG_SILENT"])
+
 # COVERAGE
 COVERAGE_CFLAGS="--coverage"
 AX_COVERAGE
@@ -207,6 +217,7 @@ echo "   * Host CPU:                   $host_cpu"
 echo "   * C Compiler:                 $CC"
 echo "   * C Flags:                    $CFLAGS"
 echo "   * Debug enabled:              $ax_enable_debug"
+echo "   * Debug silent mode:          $ENABLED_DEBUG_SILENT"
 echo
 echo "   Features "
 echo "   * User settings:              $ENABLED_USERSETTINGS"
