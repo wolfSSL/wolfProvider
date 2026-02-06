@@ -126,7 +126,7 @@ static int test_modp_2048_blocked(void)
     TEST_INFO("  Test 1: modp_2048 named group (must be BLOCKED)");
 
     /* wolfProvider should block */
-    wolf_blocked = (try_dh_named_group(g_wolfprov_libctx, "modp_2048") == 0);
+    wolf_blocked = (try_dh_named_group(wpLibCtx, "modp_2048") == 0);
     TEST_INFO("    [wolfProvider] modp_2048: %s",
               wolf_blocked ? "BLOCKED" : "ALLOWED");
 
@@ -136,7 +136,7 @@ static int test_modp_2048_blocked(void)
     }
 
     /* Baseline should also block (after patch) */
-    baseline_blocked = (try_dh_named_group(g_default_libctx, "modp_2048") == 0);
+    baseline_blocked = (try_dh_named_group(osslLibCtx, "modp_2048") == 0);
     TEST_INFO("    [baseline] modp_2048: %s",
               baseline_blocked ? "BLOCKED" : "ALLOWED");
 
@@ -160,7 +160,7 @@ static int test_small_custom_dh_blocked(void)
     TEST_INFO("  Test 2: 1024-bit custom DH keygen (must be BLOCKED)");
 
     /* wolfProvider should block */
-    wolf_blocked = (try_dh_custom_keygen(g_wolfprov_libctx, 1024) == 0);
+    wolf_blocked = (try_dh_custom_keygen(wpLibCtx, 1024) == 0);
     TEST_INFO("    [wolfProvider] 1024-bit custom DH: %s",
               wolf_blocked ? "BLOCKED" : "ALLOWED");
 
@@ -170,7 +170,7 @@ static int test_small_custom_dh_blocked(void)
     }
 
     /* Baseline should also block (after patch) */
-    baseline_blocked = (try_dh_custom_keygen(g_default_libctx, 1024) == 0);
+    baseline_blocked = (try_dh_custom_keygen(osslLibCtx, 1024) == 0);
     TEST_INFO("    [baseline] 1024-bit custom DH: %s",
               baseline_blocked ? "BLOCKED" : "ALLOWED");
 
@@ -200,7 +200,7 @@ static int test_ffdhe2048_allowed(void)
     TEST_INFO("  Test 3: ffdhe2048 named group (must be ALLOWED)");
 
     /* wolfProvider should allow */
-    wolf_allowed = (try_dh_named_group(g_wolfprov_libctx, "ffdhe2048") == 1);
+    wolf_allowed = (try_dh_named_group(wpLibCtx, "ffdhe2048") == 1);
     TEST_INFO("    [wolfProvider] ffdhe2048: %s",
               wolf_allowed ? "ALLOWED" : "BLOCKED");
 
@@ -210,7 +210,7 @@ static int test_ffdhe2048_allowed(void)
     }
 
     /* Baseline should also allow */
-    baseline_allowed = (try_dh_named_group(g_default_libctx, "ffdhe2048") == 1);
+    baseline_allowed = (try_dh_named_group(osslLibCtx, "ffdhe2048") == 1);
     TEST_INFO("    [baseline] ffdhe2048: %s",
               baseline_allowed ? "ALLOWED" : "BLOCKED");
 

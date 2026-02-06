@@ -232,38 +232,38 @@ int test_ecdsa_key_size_restrictions(void)
     /* Test 1: P-192 keygen blocked */
     TEST_INFO("  Test 1: P-192 keygen (should fail)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_p192_keygen_blocked(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_p192_keygen_blocked(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_p192_keygen_blocked(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_p192_keygen_blocked(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     /* Test 2: P-256 keygen allowed */
     TEST_INFO("  Test 2: P-256 keygen (should succeed)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_p256_keygen_allowed(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_p256_keygen_allowed(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_p256_keygen_allowed(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_p256_keygen_allowed(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     /* Test 3: P-256 + SHA1 signing - should be BLOCKED by both providers */
     TEST_INFO("  Test 3: P-256 + SHA1 signing (should be blocked)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_p256_sha1_signing(g_wolfprov_libctx, "wolfProvider", 1) != TEST_SUCCESS)
+    if (test_p256_sha1_signing(wpLibCtx, "wolfProvider", 1) != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_p256_sha1_signing(g_default_libctx, "default", 1) != TEST_SUCCESS)
+    if (test_p256_sha1_signing(osslLibCtx, "default", 1) != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    ✓ Both providers correctly block ECDSA+SHA1 signing");
 
     /* Test 4: P-256 + SHA256 signing - should WORK with both providers */
     TEST_INFO("  Test 4: P-256 + SHA256 signing (should succeed)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_p256_sha256_signing(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_p256_sha256_signing(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_p256_sha256_signing(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_p256_sha256_signing(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     TEST_INFO("✓ All ECDSA key size restrictions properly enforced");

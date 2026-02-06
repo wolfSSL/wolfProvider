@@ -183,29 +183,29 @@ int test_pbkdf2_restrictions(void)
     /* Test 1: Small password (80-bit) - MUST be blocked by both providers */
     TEST_INFO("    Test 1: 80-bit password (< 112-bit minimum, should be BLOCKED)");
     TEST_INFO("      Testing with wolfProvider...");
-    if (test_pbkdf2_small_password(g_wolfprov_libctx, "wolfProvider", 1) != TEST_SUCCESS)
+    if (test_pbkdf2_small_password(wpLibCtx, "wolfProvider", 1) != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("      Testing with default (baseline)...");
-    if (test_pbkdf2_small_password(g_default_libctx, "default", 1) != TEST_SUCCESS)
+    if (test_pbkdf2_small_password(osslLibCtx, "default", 1) != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Both providers correctly block 80-bit passwords");
 
     /* Test 2: Minimum acceptable password (112-bit) */
     TEST_INFO("    Test 2: 112-bit password (minimum acceptable)");
     TEST_INFO("      Testing with wolfProvider...");
-    if (test_pbkdf2_min_password(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_pbkdf2_min_password(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("      Testing with default (baseline)...");
-    if (test_pbkdf2_min_password(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_pbkdf2_min_password(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     /* Test 3: Good password (256-bit) */
     TEST_INFO("    Test 3: 256-bit password (adequate)");
     TEST_INFO("      Testing with wolfProvider...");
-    if (test_pbkdf2_good_password(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_pbkdf2_good_password(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("      Testing with default (baseline)...");
-    if (test_pbkdf2_good_password(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_pbkdf2_good_password(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     TEST_INFO("");

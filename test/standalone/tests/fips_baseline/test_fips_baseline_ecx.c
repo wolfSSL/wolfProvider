@@ -68,13 +68,13 @@ static int test_ed25519_restriction(void)
     TEST_INFO("  Testing Ed25519 signature restriction:");
 
     /* Test with wolfProvider */
-    if (test_signature_unavailable(g_wolfprov_libctx, "ED25519", "wolfProvider") != TEST_SUCCESS) {
+    if (test_signature_unavailable(wpLibCtx, "ED25519", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    Ed25519 restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_signature_unavailable(g_default_libctx, "ED25519", "default (baseline)") != TEST_SUCCESS) {
+    if (test_signature_unavailable(osslLibCtx, "ED25519", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    Ed25519 restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }
@@ -93,13 +93,13 @@ static int test_ed448_restriction(void)
     TEST_INFO("  Testing Ed448 signature restriction:");
 
     /* Test with wolfProvider */
-    if (test_signature_unavailable(g_wolfprov_libctx, "ED448", "wolfProvider") != TEST_SUCCESS) {
+    if (test_signature_unavailable(wpLibCtx, "ED448", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    Ed448 restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_signature_unavailable(g_default_libctx, "ED448", "default (baseline)") != TEST_SUCCESS) {
+    if (test_signature_unavailable(osslLibCtx, "ED448", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    Ed448 restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }
@@ -118,13 +118,13 @@ static int test_x25519_restriction(void)
     TEST_INFO("  Testing X25519 key exchange restriction:");
 
     /* Test with wolfProvider */
-    if (test_signature_unavailable(g_wolfprov_libctx, "X25519", "wolfProvider") != TEST_SUCCESS) {
+    if (test_signature_unavailable(wpLibCtx, "X25519", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    X25519 restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_signature_unavailable(g_default_libctx, "X25519", "default (baseline)") != TEST_SUCCESS) {
+    if (test_signature_unavailable(osslLibCtx, "X25519", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    X25519 restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }
@@ -143,13 +143,13 @@ static int test_x448_restriction(void)
     TEST_INFO("  Testing X448 key exchange restriction:");
 
     /* Test with wolfProvider */
-    if (test_signature_unavailable(g_wolfprov_libctx, "X448", "wolfProvider") != TEST_SUCCESS) {
+    if (test_signature_unavailable(wpLibCtx, "X448", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    X448 restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_signature_unavailable(g_default_libctx, "X448", "default (baseline)") != TEST_SUCCESS) {
+    if (test_signature_unavailable(osslLibCtx, "X448", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    X448 restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }

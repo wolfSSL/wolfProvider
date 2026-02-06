@@ -42,8 +42,8 @@ OSSL_PROVIDER *g_default_prov = NULL;
 OSSL_PROVIDER *g_wolfprov = NULL;
 
 /* Global library contexts - one for each provider */
-OSSL_LIB_CTX *g_default_libctx = NULL;
-OSSL_LIB_CTX *g_wolfprov_libctx = NULL;
+OSSL_LIB_CTX *osslLibCtx = NULL;
+OSSL_LIB_CTX *wpLibCtx = NULL;
 
 /**
  * Setup and verify both providers for FIPS baseline testing.
@@ -51,6 +51,12 @@ OSSL_LIB_CTX *g_wolfprov_libctx = NULL;
  * 1. Loads the "default" provider and verifies it's FIPS baseline patched
  * 2. Loads the "libwolfprov" provider and verifies it's in FIPS mode
  * 3. Creates library contexts for each provider
+ *
+ * Both providers are loaded so that each test can verify that the FIPS baseline
+ * patched OpenSSL enforces the same restrictions as wolfProvider in FIPS mode.
+ * This comparison confirms that the baseline patches accurately reflect
+ * wolfProvider's FIPS behavior, giving users confidence that passing baseline
+ * tests means their application will work with wolfProvider FIPS.
  *
  * @return TEST_SUCCESS if both providers are properly configured, TEST_FAILURE otherwise.
  */
@@ -130,30 +136,30 @@ int setup_and_verify_providers(void)
     /* Step 3: Create library contexts for each provider */
     TEST_INFO("Step 3: Creating library contexts for each provider...");
 
-    g_default_libctx = OSSL_LIB_CTX_new();
-    if (g_default_libctx == NULL) {
+    osslLibCtx = OSSL_LIB_CTX_new();
+    if (osslLibCtx == NULL) {
         TEST_ERROR("  ✗ Failed to create library context for default provider");
         goto cleanup_fail;
     }
-    if (!OSSL_PROVIDER_add_builtin(g_default_libctx, "default",
+    if (!OSSL_PROVIDER_add_builtin(osslLibCtx, "default",
                                     OSSL_PROVIDER_get_params(g_default_prov, NULL) ? NULL : NULL)) {
         /* Note: This is a simplified approach - we're just creating a new libctx */
     }
     /* Load default provider into its context */
-    OSSL_PROVIDER *default_in_ctx = OSSL_PROVIDER_load(g_default_libctx, "default");
+    OSSL_PROVIDER *default_in_ctx = OSSL_PROVIDER_load(osslLibCtx, "default");
     if (default_in_ctx == NULL) {
         TEST_ERROR("  ✗ Failed to load default provider into its context");
         goto cleanup_fail;
     }
     TEST_INFO("  ✓ Default provider library context created");
 
-    g_wolfprov_libctx = OSSL_LIB_CTX_new();
-    if (g_wolfprov_libctx == NULL) {
+    wpLibCtx = OSSL_LIB_CTX_new();
+    if (wpLibCtx == NULL) {
         TEST_ERROR("  ✗ Failed to create library context for wolfProvider");
         goto cleanup_fail;
     }
     /* Load wolfProvider into its context */
-    OSSL_PROVIDER *wolfprov_in_ctx = OSSL_PROVIDER_load(g_wolfprov_libctx, "libwolfprov");
+    OSSL_PROVIDER *wolfprov_in_ctx = OSSL_PROVIDER_load(wpLibCtx, "libwolfprov");
     if (wolfprov_in_ctx == NULL) {
         TEST_ERROR("  ✗ Failed to load wolfProvider into its context");
         goto cleanup_fail;
@@ -181,13 +187,13 @@ cleanup_fail:
  */
 void cleanup_providers(void)
 {
-    if (g_default_libctx != NULL) {
-        OSSL_LIB_CTX_free(g_default_libctx);
-        g_default_libctx = NULL;
+    if (osslLibCtx != NULL) {
+        OSSL_LIB_CTX_free(osslLibCtx);
+        osslLibCtx = NULL;
     }
-    if (g_wolfprov_libctx != NULL) {
-        OSSL_LIB_CTX_free(g_wolfprov_libctx);
-        g_wolfprov_libctx = NULL;
+    if (wpLibCtx != NULL) {
+        OSSL_LIB_CTX_free(wpLibCtx);
+        wpLibCtx = NULL;
     }
     if (g_default_prov != NULL) {
         OSSL_PROVIDER_unload(g_default_prov);
@@ -239,6 +245,21 @@ int main(int argc, char *argv[])
     cleanup_providers();
     return TEST_SUCCESS;
 #endif
+
+    /* Test 0: Sanity check - verify a basic FIPS operation works */
+    TEST_INFO("========================================");
+    TEST_INFO("Test 0: FIPS Sanity Check (SHA-256)");
+    TEST_INFO("========================================");
+    TEST_INFO("Expected: SHA-256 should work in FIPS mode");
+    TEST_INFO("");
+    if (test_fips_sanity() != TEST_SUCCESS) {
+        TEST_ERROR("TEST 0 FAILED");
+        TEST_ERROR("========================================");
+        cleanup_providers();
+        return TEST_FAILURE;
+    }
+    TEST_INFO("TEST 0 PASSED");
+    TEST_INFO("");
 
     /* Test 1: MD5 should be unavailable in FIPS mode */
     TEST_INFO("========================================");
@@ -388,8 +409,8 @@ int main(int argc, char *argv[])
     TEST_INFO("Providers tested:");
     TEST_INFO("  • default (FIPS baseline patched OpenSSL)");
     TEST_INFO("  • libwolfprov (wolfProvider FIPS mode)");
-    TEST_INFO("Total tests: 9");
-    TEST_INFO("Passed: 9");
+    TEST_INFO("Total tests: 10");
+    TEST_INFO("Passed: 10");
     TEST_INFO("Failed: 0");
     TEST_INFO("========================================");
 

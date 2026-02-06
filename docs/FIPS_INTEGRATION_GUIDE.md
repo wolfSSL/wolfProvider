@@ -23,7 +23,7 @@ For non-FIPS builds and general wolfProvider setup, see the [Integration Guide](
 
 ### Patch OpenSSL
 
-Apply FIPS baseline restrictions to your OpenSSL source tree. See [FIPS Baseline Patches](../patches/openssl-fips-baseline/README.md) for detailed options and common errors.
+Apply FIPS baseline restrictions to your OpenSSL source tree. This mode disables non-FIPS approved algorithms so one can evaluate their application before integrating wolfProvider. See [FIPS Baseline Patches](../patches/openssl-fips-baseline/README.md) for detailed options and common errors.
 
 ```bash
 ./scripts/patch-openssl-fips.sh --openssl-src=/path/to/openssl-3.x
@@ -50,7 +50,7 @@ openssl list -providers
 | Restriction | Requirement |
 |-------------|-------------|
 | RSA Key Size | 2048 bits minimum |
-| SHA1 Signing | Blocked (verification allowed) |
+| SHA1 Signing | Blocked for signing (verification and hashing/digests still allowed) |
 | ECDSA Curves | P-256, P-384, P-521 only |
 | PBKDF2 Password | 14 bytes minimum |
 | DH Groups | FFDHE only (no MODP) |
@@ -60,6 +60,9 @@ openssl list -providers
 Run your application's test suite against the baseline build. Fix any failures before proceeding.
 The goal should be an application test suite that only uses FIPS compliant algorithms.
 
+If you encounter failures, consult the **Common Failures** table below for quick fixes. For additional
+assistance, contact [wolfSSL support](mailto:support@wolfssl.com) for consulting.
+
 ```bash
 # Example tests
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048  # Should succeed
@@ -67,16 +70,6 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:1024  # Should fail
 
 /path/to/your/application/test-suite # Ensure your application test suite works properly
 ```
-
-### Important Limitations
-
-> **Note:** FIPS baseline testing filters non-approved algorithms at the OpenSSL provider level, but passing these tests does not guarantee full FIPS compliance. You should also review your application for:
->
-> - **Inline cryptography** - Custom crypto implementations that don't use OpenSSL APIs
-> - **Legacy OpenSSL 1.x APIs** - Some older APIs bypass the provider architecture entirely
-> - **Non-provider operations** - Direct calls to low-level OpenSSL functions
->
-> A thorough code review is recommended to ensure all cryptographic operations route through OpenSSL's provider interface.
 
 ### Common Failures
 
@@ -88,12 +81,21 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:1024  # Should fail
 | Short PBKDF2 password | `invalid salt length` | Use 14+ byte passwords |
 | MODP DH groups | Group not available | Use FFDHE groups |
 
+### Important Limitations
+
+> **Note:** FIPS baseline testing filters non-approved algorithms at the OpenSSL provider level, but passing these tests does not guarantee full FIPS compliance. You should also review your application for:
+>
+> - **Inline cryptography** - Custom crypto implementations that don't use OpenSSL APIs
+> - **Legacy OpenSSL 1.x APIs** - Some older APIs bypass the provider architecture entirely
+> - **Non-provider operations** - Direct calls to low-level OpenSSL functions
+>
+> A thorough code review is recommended to ensure all cryptographic operations route through OpenSSL's provider interface.
+
 ---
 
 ## Replace Default Mode (Recommended for FIPS)
 
-FIPS certification applies system-wide, meaning all cryptographic operations should use the FIPS-validated module. wolfProvider's replace-default mode ensures this by making wolfProvider the primary cryptographic provider for all OpenSSL operations. In this model it is impossible for an application
-to use the default provider, any attempts to do so will yield wolfProvider instead.
+FIPS certification applies system-wide, meaning all cryptographic operations should use the FIPS-validated module. wolfProvider's replace-default mode ensures this by making wolfProvider the primary cryptographic provider for all OpenSSL operations. In this model it is impossible for an application to use the default provider, any attempts to do so will yield wolfProvider instead.
 
 **Why use replace-default for FIPS:**
 - Ensures all crypto operations use wolfSSL's FIPS-validated implementations
@@ -106,12 +108,12 @@ to use the default provider, any attempts to do so will yield wolfProvider inste
 
 Once baseline testing passes, build wolfProvider with your FIPS bundle. You have two options:
 
-- **Build Script** - A convenience wrapper that fetches dependencies (OpenSSL, wolfSSL) and handles configuration automatically
+- **Build Script (Recommended)** - A convenience wrapper that fetches dependencies (OpenSSL, wolfSSL) and handles configuration automatically
 - **Manual Build** - Build each component directly using autotools
 
 Choose the approach that fits your workflow.
 
-### Build Script
+### Option A: Build Script (Recommended)
 
 The build script (`scripts/build-wolfprovider.sh`) is a convenience wrapper that automates:
 

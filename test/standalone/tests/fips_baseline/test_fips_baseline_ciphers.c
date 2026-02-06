@@ -68,13 +68,13 @@ static int test_des_restriction(void)
     TEST_INFO("  Testing DES cipher restriction:");
 
     /* Test with wolfProvider */
-    if (test_cipher_unavailable(g_wolfprov_libctx, "DES-CBC", "wolfProvider") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(wpLibCtx, "DES-CBC", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    DES restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_cipher_unavailable(g_default_libctx, "DES-CBC", "default (baseline)") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(osslLibCtx, "DES-CBC", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    DES restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }
@@ -93,13 +93,13 @@ static int test_3des_restriction(void)
     TEST_INFO("  Testing 3DES cipher restriction:");
 
     /* Test with wolfProvider */
-    if (test_cipher_unavailable(g_wolfprov_libctx, "DES-EDE3-CBC", "wolfProvider") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(wpLibCtx, "DES-EDE3-CBC", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    3DES restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_cipher_unavailable(g_default_libctx, "DES-EDE3-CBC", "default (baseline)") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(osslLibCtx, "DES-EDE3-CBC", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    3DES restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }
@@ -118,13 +118,13 @@ static int test_chacha20_restriction(void)
     TEST_INFO("  Testing ChaCha20 cipher restriction:");
 
     /* Test with wolfProvider */
-    if (test_cipher_unavailable(g_wolfprov_libctx, "ChaCha20", "wolfProvider") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(wpLibCtx, "ChaCha20", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    ChaCha20 restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_cipher_unavailable(g_default_libctx, "ChaCha20", "default (baseline)") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(osslLibCtx, "ChaCha20", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    ChaCha20 restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }
@@ -143,13 +143,13 @@ static int test_chacha20_poly1305_restriction(void)
     TEST_INFO("  Testing ChaCha20-Poly1305 cipher restriction:");
 
     /* Test with wolfProvider */
-    if (test_cipher_unavailable(g_wolfprov_libctx, "ChaCha20-Poly1305", "wolfProvider") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(wpLibCtx, "ChaCha20-Poly1305", "wolfProvider") != TEST_SUCCESS) {
         TEST_ERROR("    ChaCha20-Poly1305 restriction test failed for wolfProvider");
         return TEST_FAILURE;
     }
 
     /* Test with default (baseline) provider */
-    if (test_cipher_unavailable(g_default_libctx, "ChaCha20-Poly1305", "default (baseline)") != TEST_SUCCESS) {
+    if (test_cipher_unavailable(osslLibCtx, "ChaCha20-Poly1305", "default (baseline)") != TEST_SUCCESS) {
         TEST_ERROR("    ChaCha20-Poly1305 restriction test failed for default (baseline) provider");
         return TEST_FAILURE;
     }

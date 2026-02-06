@@ -168,13 +168,13 @@ int test_hmac_key_restrictions(void)
      * rather than the original key size. This allows short keys through.
      * Pass 0 to indicate we expect it to be allowed.
      */
-    if (test_hmac_small_key(g_wolfprov_libctx, "wolfProvider", 0) != TEST_SUCCESS)
+    if (test_hmac_small_key(wpLibCtx, "wolfProvider", 0) != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Testing with default (baseline)...");
     /* Baseline OpenSSL doesn't have HMAC key size patches - this restriction
      * comes from wolfSSL FIPS only. Pass 0 to indicate we expect it to be allowed.
      */
-    if (test_hmac_small_key(g_default_libctx, "default", 0) != TEST_SUCCESS)
+    if (test_hmac_small_key(osslLibCtx, "default", 0) != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Note: Both providers allow short HMAC keys");
     TEST_INFO("    (wolfProvider: padding bypasses check; baseline: no HMAC patch)");
@@ -182,19 +182,19 @@ int test_hmac_key_restrictions(void)
     /* Test 2: Minimum acceptable key (112-bit) */
     TEST_INFO("  Test 2: 112-bit HMAC key (minimum acceptable)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_hmac_min_key(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_hmac_min_key(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_hmac_min_key(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_hmac_min_key(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     /* Test 3: Good key (256-bit) */
     TEST_INFO("  Test 3: 256-bit HMAC key (adequate)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_hmac_good_key(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_hmac_good_key(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_hmac_good_key(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_hmac_good_key(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     TEST_INFO("✓ HMAC key strength restrictions properly enforced");

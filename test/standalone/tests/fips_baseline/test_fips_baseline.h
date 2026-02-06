@@ -36,12 +36,15 @@ extern OSSL_PROVIDER *g_default_prov;
 extern OSSL_PROVIDER *g_wolfprov;
 
 /* Global library contexts - one for each provider (defined in test_fips_baseline.c) */
-extern OSSL_LIB_CTX *g_default_libctx;
-extern OSSL_LIB_CTX *g_wolfprov_libctx;
+extern OSSL_LIB_CTX *osslLibCtx;
+extern OSSL_LIB_CTX *wpLibCtx;
 
 /* Setup and cleanup functions (implemented in test_fips_baseline.c) */
 int setup_and_verify_providers(void);
 void cleanup_providers(void);
+
+/* FIPS sanity check (implemented in test_fips_baseline_digest.c) */
+int test_fips_sanity(void);
 
 /* Digest restriction tests (implemented in test_fips_baseline_digest.c) */
 int test_md5_restriction(void);

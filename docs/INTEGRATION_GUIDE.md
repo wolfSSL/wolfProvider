@@ -188,6 +188,34 @@ See comments in that file for examples.
 
 ---
 
+## Verifying Installation
+
+After building and installing wolfProvider, confirm that it is working correctly.
+
+### Check Provider Availability
+
+```bash
+openssl list -providers
+```
+
+This should list wolfProvider among the available providers.
+
+### Run Unit Tests
+
+```bash
+make test
+```
+
+### Run Command Line Tests
+
+```bash
+./scripts/run-tests.sh
+```
+
+If any tests fail, enable debug logging (see the [Debugging](#debugging) section) and review the output for details.
+
+---
+
 ## Support
 
 - [GitHub Issues](https://github.com/wolfssl/wolfProvider/issues)

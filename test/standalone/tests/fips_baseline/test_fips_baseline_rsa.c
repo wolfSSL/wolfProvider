@@ -433,15 +433,15 @@ int test_rsa_restriction(void)
 
     /* Test with wolfProvider */
     TEST_INFO("  Testing with wolfProvider...");
-    if (test_rsa_keygen(g_wolfprov_libctx, "wolfProvider", &wolfprov_key) != TEST_SUCCESS) {
+    if (test_rsa_keygen(wpLibCtx, "wolfProvider", &wolfprov_key) != TEST_SUCCESS) {
         TEST_ERROR("    wolfProvider RSA keygen tests failed");
         goto cleanup;
     }
-    if (test_rsa_signatures(g_wolfprov_libctx, "wolfProvider", wolfprov_key) != TEST_SUCCESS) {
+    if (test_rsa_signatures(wpLibCtx, "wolfProvider", wolfprov_key) != TEST_SUCCESS) {
         TEST_ERROR("    wolfProvider RSA signature tests failed");
         goto cleanup;
     }
-    if (test_rsa_sha1_verify(g_wolfprov_libctx, "wolfProvider", &wolfprov_sha1_verified) != TEST_SUCCESS) {
+    if (test_rsa_sha1_verify(wpLibCtx, "wolfProvider", &wolfprov_sha1_verified) != TEST_SUCCESS) {
         TEST_ERROR("    wolfProvider RSA-SHA1 verify test failed");
         goto cleanup;
     }
@@ -449,15 +449,15 @@ int test_rsa_restriction(void)
 
     /* Test with default (baseline) provider */
     TEST_INFO("  Testing with default (baseline) provider...");
-    if (test_rsa_keygen(g_default_libctx, "default (baseline)", &default_key) != TEST_SUCCESS) {
+    if (test_rsa_keygen(osslLibCtx, "default (baseline)", &default_key) != TEST_SUCCESS) {
         TEST_ERROR("    default RSA keygen tests failed");
         goto cleanup;
     }
-    if (test_rsa_signatures(g_default_libctx, "default (baseline)", default_key) != TEST_SUCCESS) {
+    if (test_rsa_signatures(osslLibCtx, "default (baseline)", default_key) != TEST_SUCCESS) {
         TEST_ERROR("    default RSA signature tests failed");
         goto cleanup;
     }
-    if (test_rsa_sha1_verify(g_default_libctx, "default (baseline)", &default_sha1_verified) != TEST_SUCCESS) {
+    if (test_rsa_sha1_verify(osslLibCtx, "default (baseline)", &default_sha1_verified) != TEST_SUCCESS) {
         TEST_ERROR("    default RSA-SHA1 verify test failed");
         goto cleanup;
     }

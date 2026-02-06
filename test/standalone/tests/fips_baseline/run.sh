@@ -35,13 +35,13 @@ echo ""
 # Detect FIPS version
 FIPS_VERSION="unknown"
 
-# Check if provider output indicates FIPS mode
-if ${OPENSSL_BIN} list -providers 2>/dev/null | grep -qi "fips"; then
+# Check if provider output indicates FIPS baseline mode
+if ${OPENSSL_BIN} list -providers 2>/dev/null | grep -qi "Baseline"; then
     FIPS_VERSION="fips"
-    echo "FIPS provider detected"
+    echo "FIPS Baseline provider detected"
 else
     FIPS_VERSION="none"
-    echo "No FIPS provider detected (running in non-FIPS mode)"
+    echo "No FIPS Baseline provider detected (running in non-FIPS Baseline mode)"
 fi
 
 # Try to get more specific version info from openssl

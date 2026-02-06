@@ -222,11 +222,11 @@ int test_ecdh_restrictions(void)
     /* Test 1: P-192 ECDH - should be BLOCKED */
     TEST_INFO("  Test 1: P-192 ECDH (should be blocked)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_ecdh_p192(g_wolfprov_libctx, "wolfProvider", 1) != TEST_SUCCESS)
+    if (test_ecdh_p192(wpLibCtx, "wolfProvider", 1) != TEST_SUCCESS)
         return TEST_FAILURE;
 
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_ecdh_p192(g_default_libctx, "default", 1) != TEST_SUCCESS)
+    if (test_ecdh_p192(osslLibCtx, "default", 1) != TEST_SUCCESS)
         return TEST_FAILURE;
 
     TEST_INFO("    ✓ Both providers correctly block P-192 ECDH");
@@ -235,11 +235,11 @@ int test_ecdh_restrictions(void)
     /* Test 2: P-256 ECDH - should be ALLOWED */
     TEST_INFO("  Test 2: P-256 ECDH (should be allowed)");
     TEST_INFO("    Testing with wolfProvider...");
-    if (test_ecdh_p256(g_wolfprov_libctx, "wolfProvider") != TEST_SUCCESS)
+    if (test_ecdh_p256(wpLibCtx, "wolfProvider") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     TEST_INFO("    Testing with default (baseline)...");
-    if (test_ecdh_p256(g_default_libctx, "default") != TEST_SUCCESS)
+    if (test_ecdh_p256(osslLibCtx, "default") != TEST_SUCCESS)
         return TEST_FAILURE;
 
     TEST_INFO("    ✓ Both providers correctly allow P-256 ECDH");
