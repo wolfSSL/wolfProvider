@@ -275,6 +275,7 @@ int test_rsa_fromdata(void* data);
 int test_rsa_decode_pkcs8(void* data);
 int test_rsa_encode_pkcs8(void* data);
 int test_rsa_null_init(void* data);
+int test_rsa_key_integrity(void* data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH
