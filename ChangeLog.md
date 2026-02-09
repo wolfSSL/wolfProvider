@@ -1,3 +1,37 @@
+# wolfProvider version 1.1.1 (February 09, 2026)
+
+Release 1.1.1 has been developed according to wolfSSL's development and QA
+process and successfully passed the quality criteria.
+
+PR stands for Pull Request, and PR <NUMBER> references a GitHub pull request
+number where the code change was added.
+
+## New Feature Additions
+* Add OpenSSL FIPS baseline process implementation (PR 357)
+* Add seed-src handling for wolfProvider (PR 350)
+* Add EC public key auto derivation from private key (PR 338)
+* Add text encoder for ECC (PR 348)
+* Add option for debug output to default to silent (PR 356)
+* Add static analysis CI tools (PR 349)
+* Add option to enable unit testing for replace default mode (PR 331)
+
+## Enhancements and Optimizations
+* Optimize FIPS CAST startup tests (PR 351)
+* Update TLS 1.3 KDF to use proper wolfcrypt FIPS APIs (PR 352)
+* Restrict DH keygen to 2048 bits and above for FIPS builds (PR 336)
+* Update wolfSSL version to v5.8.4 and OpenSSL to v3.5.4 (PR 334)
+* Don't modify system config when installing in standalone mode (PR 335)
+* Add RSA-PSS PKI encoding/decoding support (PR 333)
+
+## Bug Fixes
+* Fix NULL salt handling in HKDF (PR 328)
+* Fix EC public key auto-derive version check for OpenSSL 4.0.0+ (PR 355)
+* Fix RSA-PSS command test (PR 344)
+* Fix const issue with x509 test code (PR 346)
+* Fix provider cmd test (PR 347)
+* Fix size_t issue in test_ecc.c (PR 343)
+* Fix RD detection when running cmdline tests (PR 354)
+
 # wolfProvider version 1.1.0 (October 29, 2025)
 
 Release 1.1.0 has been developed according to wolfSSL's development and QA
