@@ -5,7 +5,8 @@
 # Standalone test programs use no extension - simple and clean!
 
 # Common standalone test headers
-noinst_HEADERS += test/standalone/test_common.h
+noinst_HEADERS += test/standalone/test_common.h \
+                  test/standalone/tests/fips_baseline/test_fips_baseline.h
 
 # Standalone test programs
 # Each test compiles to its own binary for isolated execution
