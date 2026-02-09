@@ -157,6 +157,9 @@ install_wolfprov() {
     # but before testing so that the library is present if needed
     if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" != "1" ]; then
         printf "\tWARNING: Skipping tests in replace mode (use --enable-replace-default-testing to enable)...\n"
+    elif [ "$WOLFPROV_FIPS_BASELINE" = "1" ]; then
+        printf "\tWARNING: Skipping unit tests in FIPS baseline mode (algorithms removed, tests will fail)...\n"
+        printf "\tINFO: FIPS baseline tests available: ./test/standalone/tests/fips_baseline/run.sh\n"
     else
         # Setup the environment to ensure we use the local builds of wolfprov, wolfssl, and openssl.
         if ! source ${SCRIPT_DIR}/env-setup >/dev/null 2>&1; then

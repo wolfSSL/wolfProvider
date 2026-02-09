@@ -1,0 +1,102 @@
+--- a/crypto/ffc/ffc_dh.c
++++ b/crypto/ffc/ffc_dh.c
+@@ -58,9 +58,10 @@
+ };
+ 
+ /*
+- * The private key length values are taken from RFC7919 with the values for
+- * MODP primes given the same lengths as the equivalent FFDHE.
+- * The MODP 1536 value is approximated.
++ * The private key length values are taken from RFC7919.
++ *
++ * FIPS baseline restriction: Only FFDHE groups are allowed.
++ * MODP and RFC5114 groups are blocked to match wolfProvider FIPS behavior.
+  */
+ static const DH_NAMED_GROUP dh_named_groups[] = {
+     FFDHE(2048, 225),
+@@ -68,23 +69,11 @@
+     FFDHE(4096, 325),
+     FFDHE(6144, 375),
+     FFDHE(8192, 400),
+-#ifndef FIPS_MODULE
+-    MODP(1536, 200),
+-#endif
+-    MODP(2048, 225),
+-    MODP(3072, 275),
+-    MODP(4096, 325),
+-    MODP(6144, 375),
+-    MODP(8192, 400),
+     /*
+-     * Additional dh named groups from RFC 5114 that have a different g.
+-     * The uid can be any unique identifier.
++     * FIPS baseline: MODP groups removed - only FFDHE (RFC 7919) groups allowed.
++     * This matches wolfProvider FIPS behavior which only supports safe-prime
++     * FFDHE groups per SP 800-56A Rev. 3.
+      */
+-#ifndef FIPS_MODULE
+-    RFC5114("dh_1024_160", 1, 1024, 1024_160),
+-    RFC5114("dh_2048_224", 2, 2048, 2048_224),
+-    RFC5114("dh_2048_256", 3, 2048, 2048_256),
+-#endif
+ };
+ 
+ const DH_NAMED_GROUP *ossl_ffc_name_to_dh_named_group(const char *name)
+--- a/providers/implementations/keymgmt/dh_kmgmt.c
++++ b/providers/implementations/keymgmt/dh_kmgmt.c
+@@ -26,6 +26,7 @@
+ #include "crypto/dh.h"
+ #include "internal/fips.h"
+ #include "internal/sizes.h"
++#include <openssl/proverr.h>
+ 
+ static OSSL_FUNC_keymgmt_new_fn dh_newdata;
+ static OSSL_FUNC_keymgmt_free_fn dh_freedata;
+@@ -695,6 +696,9 @@
+     return gctx->cb(params, gctx->cbarg);
+ }
+ 
++/* FIPS baseline: Minimum DH prime size (2048 bits) */
++#define DH_MIN_PRIME_BITS 2048
++
+ static void *dh_gen(void *genctx, OSSL_CALLBACK *osslcb, void *cbarg)
+ {
+     int ret = 0;
+@@ -707,6 +711,15 @@
+         return NULL;
+ 
+     /*
++     * FIPS baseline: Enforce minimum 2048-bit prime for custom parameters.
++     * This matches wolfProvider FIPS behavior.
++     */
++    if (gctx->group_nid == NID_undef && gctx->pbits < DH_MIN_PRIME_BITS) {
++        ERR_raise(ERR_LIB_PROV, PROV_R_KEY_SIZE_TOO_SMALL);
++        return NULL;
++    }
++
++    /*
+      * If a group name is selected then the type is group regardless of what
+      * the user selected. This overrides rather than errors for backwards
+      * compatibility.
+@@ -746,9 +759,19 @@
+         ffc = ossl_dh_get0_params(dh);
+ 
+         /* Copy the template value if one was passed */
+-        if (gctx->ffc_params != NULL
+-            && !ossl_ffc_params_copy(ffc, gctx->ffc_params))
+-            goto end;
++        if (gctx->ffc_params != NULL) {
++            /*
++             * FIPS baseline: Check template params meet minimum size.
++             * This catches the case where small params are passed via template.
++             */
++            if (gctx->ffc_params->p != NULL
++                && BN_num_bits(gctx->ffc_params->p) < DH_MIN_PRIME_BITS) {
++                ERR_raise(ERR_LIB_PROV, PROV_R_KEY_SIZE_TOO_SMALL);
++                goto end;
++            }
++            if (!ossl_ffc_params_copy(ffc, gctx->ffc_params))
++                goto end;
++        }
+ 
+         if (!ossl_ffc_params_set_seed(ffc, gctx->seed, gctx->seedlen))
+             goto end;

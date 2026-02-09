@@ -1,0 +1,17 @@
+--- a/providers/implementations/signature/rsa_sig.c
++++ b/providers/implementations/signature/rsa_sig.c
+@@ -318,6 +318,14 @@ static int rsa_setup_md(PROV_RSA_CTX *ctx, const char *mdname,
+         int md_nid = ossl_digest_rsa_sign_get_md_nid(ctx->libctx, md,
+                                                      sha1_allowed);
+         size_t mdname_len = strlen(mdname);
++
++        /* FIPS baseline: hard block SHA1 for signing operations */
++        if (ctx->operation == EVP_PKEY_OP_SIGN && md_nid == NID_sha1) {
++            ERR_raise_data(ERR_LIB_PROV, PROV_R_DIGEST_NOT_ALLOWED,
++                           "SHA1 signing not allowed");
++            EVP_MD_free(md);
++            return 0;
++        }
+
+         if (md == NULL
+             || md_nid <= 0

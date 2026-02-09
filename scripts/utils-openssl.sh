@@ -152,6 +152,23 @@ is_libcrypto_num_patched() {
     return 1
 }
 
+is_fips_baseline_patched() {
+    # Return 0 if FIPS baseline patched, 1 if not
+    local dir="${OPENSSL_SOURCE_DIR:?OPENSSL_SOURCE_DIR not set}"
+    local file="${dir%/}/providers/fips/self_test.c"
+
+    # File must exist to be patched
+    [[ -f "$file" ]] || return 1
+
+    # Check for distinctive FIPS baseline bypass comment
+    if grep -q 'If already running, just return success' -- "$file"; then
+        return 0
+    fi
+
+    # Not patched
+    return 1
+}
+
 patch_openssl_version() {
     # Patch the OpenSSL version (wolfProvider/openssl-source/VERSION.dat)
     # with our BUILD_METADATA, depending on the FIPS flag. Either "wolfProvider" or "wolfProvider-fips".
@@ -199,6 +216,57 @@ patch_openssl() {
         printf "Done.\n"
 
         popd &> /dev/null
+    elif [ "$WOLFPROV_FIPS_BASELINE" = "1" ]; then
+
+        if [ -d "${OPENSSL_INSTALL_DIR}" ]; then
+            # If openssl is already installed, patching makes no sense as
+            # it will not be rebuilt. It may already be built as patched,
+            # just return and let check_openssl_fips_baseline_mismatch
+            # check for the mismatch.
+            return 0
+        fi
+
+        printf "\tApplying OpenSSL FIPS baseline patch ... "
+        pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
+
+        # Check if patch is already applied
+        if is_fips_baseline_patched; then
+            printf "Already applied.\n"
+            popd &> /dev/null
+            return 0
+        fi
+
+        # Apply the FIPS baseline patch using the patcher script
+        ${SCRIPT_DIR}/patch-openssl-fips.sh \
+            --openssl-src="${OPENSSL_SOURCE_DIR}" \
+            --fips-version="${WOLFSSL_FIPS_CHECK_TAG:-v5.2.4}" >>$LOG_FILE 2>&1
+        if [ $? != 0 ]; then
+            printf "ERROR.\n"
+            printf "\n\nFIPS baseline patch application failed. Last 40 lines of log:\n"
+            tail -n 40 $LOG_FILE
+            do_cleanup
+            exit 1
+        fi
+        patch_openssl_version
+        printf "Done.\n"
+
+        popd &> /dev/null
+
+        printf "\n"
+        printf "    ╔════════════════════════════════════════════════════════════════════╗\n"
+        printf "    ║                            *** WARNING ***                         ║\n"
+        printf "    ╠════════════════════════════════════════════════════════════════════╣\n"
+        printf "    ║  OpenSSL has been PATCHED with FIPS baseline modifications         ║\n"
+        printf "    ║                                                                    ║\n"
+        printf "    ║  Changes:                                                          ║\n"
+        printf "    ║  • Many algorithms removed from default/FIPS/legacy providers      ║\n"
+        printf "    ║  • FIPS POST (Power-On Self Test) BYPASSED                         ║\n"
+        printf "    ║                                                                    ║\n"
+        printf "    ║  >> DO NOT USE THIS BUILD IN PRODUCTION                            ║\n"
+        printf "    ║  >> This build is for FIPS BASELINE TESTING ONLY                   ║\n"
+        printf "    ║  >> NOT FIPS COMPLIANT                                             ║\n"
+        printf "    ╚════════════════════════════════════════════════════════════════════╝\n"
+        printf "\n"
     else
         printf "\tPatching OpenSSL version only ... "
         pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
@@ -298,11 +366,39 @@ check_replace_default_testing_mismatch() {
     fi
 }
 
+check_openssl_fips_baseline_mismatch() {
+    local fips_baseline_is_patched=0
+
+    # Check if the source was patched for FIPS baseline
+    if is_fips_baseline_patched; then
+        fips_baseline_is_patched=1
+        printf "INFO: OpenSSL source modified - FIPS baseline patch applied (reduced algorithm set, bypassed POST).\n"
+    fi
+
+    # Check for mismatch
+    if [ "$WOLFPROV_FIPS_BASELINE" = "1" ] && [ "$fips_baseline_is_patched" = "0" ]; then
+        printf "ERROR: --enable-fips-baseline build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITHOUT FIPS baseline patch\n"
+        printf "Current request: --enable-fips-baseline build\n\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
+        exit 1
+    elif [ "$WOLFPROV_FIPS_BASELINE" != "1" ] && [ "$fips_baseline_is_patched" = "1" ]; then
+        printf "ERROR: Standard build mode mismatch!\n"
+        printf "Existing OpenSSL was built WITH FIPS baseline patch\n"
+        printf "Current request: standard build\n\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        printf "Then rebuild with desired configuration.\n"
+        exit 1
+    fi
+}
+
 install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
     patch_openssl
     check_openssl_replace_default_mismatch
+    check_openssl_fips_baseline_mismatch
     check_replace_default_testing_mismatch
 
     pushd ${OPENSSL_SOURCE_DIR} &> /dev/null

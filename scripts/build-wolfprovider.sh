@@ -25,6 +25,8 @@ show_help() {
   echo "  --enable-replace-default-testing"
   echo "                             Enable direct provider loading in unit tests. This option patches openssl to export additional symbols."
   echo "                             Note: Requires --replace-default. Only for test builds, not for production."
+  echo "  --enable-fips-baseline     Apply FIPS baseline patch to OpenSSL (removes many algorithms, bypasses FIPS POST)"
+  echo "                             Note: Mutually exclusive with --replace-default. For testing only."
   echo "  --leave-silent             Enable leave silent mode to suppress logging of return 0 in probing functions where expected failures may occur."
   echo "                             Note: This only affects logging; the calling function is still responsible for handling all return values appropriately."
   echo "  --debug-silent             Debug logging compiled in but silent by default. Use WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS env vars to enable at runtime. Requires --debug."
@@ -46,6 +48,7 @@ show_help() {
   echo "  WOLFPROV_DISABLE_ERR_TRACE If set to 1, wolfSSL will not be configured with --enable-debug-trace-errcodes=backtrace"
   echo "  WOLFPROV_REPLACE_DEFAULT   If set to 1, patches OpenSSL so wolfProvider is the default provider"
   echo "  WOLFPROV_REPLACE_DEFAULT_TESTING If set to 1, enables direct provider loading in unit tests (requires WOLFPROV_REPLACE_DEFAULT=1)"
+  echo "  WOLFPROV_FIPS_BASELINE     If set to 1, applies FIPS baseline patch to OpenSSL (mutually exclusive with WOLFPROV_REPLACE_DEFAULT)"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
   echo "  WOLFPROV_SEED_SRC          If set to 1, enables SEED-SRC with /dev/urandom caching (also enables WC_RNG_SEED_CB in wolfSSL)"
   echo ""
@@ -131,6 +134,9 @@ for arg in "$@"; do
         --enable-replace-default-testing)
             WOLFPROV_REPLACE_DEFAULT_TESTING=1
             ;;
+        --enable-fips-baseline)
+            WOLFPROV_FIPS_BASELINE=1
+            ;;
         --leave-silent)
             WOLFPROV_LEAVE_SILENT=1
             ;;
@@ -173,6 +179,13 @@ fi
 # Check for consistency between replace-default options
 if [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT" != "1" ]; then
     echo "Error: --enable-replace-default-testing requires --replace-default to also be set."
+    exit 1
+fi
+
+# Check for mutual exclusivity between replace-default and fips-baseline
+if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$WOLFPROV_FIPS_BASELINE" = "1" ]; then
+    echo "Error: --replace-default and --enable-fips-baseline are mutually exclusive."
+    echo "       Choose one or the other, not both."
     exit 1
 fi
 

@@ -1,0 +1,40 @@
+--- a/providers/implementations/kdfs/pbkdf2_fips.c
++++ b/providers/implementations/kdfs/pbkdf2_fips.c
+@@ -10,11 +10,7 @@
+ #include "pbkdf2.h"
+
+ /*
+- * For backwards compatibility reasons,
+- * Extra checks are done by default in fips mode only.
++ * FIPS baseline: Always enable PBKDF2 lower bound checks.
++ * This enforces SP800-132 constraints regardless of build type.
+  */
+-#ifdef FIPS_MODULE
+ const int ossl_kdf_pbkdf2_default_checks = 1;
+-#else
+-const int ossl_kdf_pbkdf2_default_checks = 0;
+-#endif /* FIPS_MODULE */
+--- a/providers/implementations/kdfs/pbkdf2.c
++++ b/providers/implementations/kdfs/pbkdf2.c
+@@ -36,6 +36,7 @@
+ #define KDF_PBKDF2_MAX_KEY_LEN_DIGEST_RATIO 0xFFFFFFFF
+ #define KDF_PBKDF2_MIN_ITERATIONS 1000
+ #define KDF_PBKDF2_MIN_SALT_LEN   (128 / 8)
++#define KDF_PBKDF2_MIN_PASS_LEN   (112 / 8)  /* 14 bytes = 112 bits */
+
+ static OSSL_FUNC_kdf_newctx_fn kdf_pbkdf2_new;
+ static OSSL_FUNC_kdf_dupctx_fn kdf_pbkdf2_dup;
+@@ -415,6 +416,12 @@
+     }
+ #endif
+
++    /* FIPS baseline: Enforce minimum password length (112 bits) */
++    if (lower_bound_checks && passlen < KDF_PBKDF2_MIN_PASS_LEN) {
++        ERR_raise(ERR_LIB_PROV, PROV_R_KEY_SIZE_TOO_SMALL);
++        return 0;
++    }
++
+     hctx_tpl = HMAC_CTX_new();
+     if (hctx_tpl == NULL)
+         return 0;
+
