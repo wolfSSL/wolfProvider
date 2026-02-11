@@ -585,12 +585,49 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
             ctx->tlsmac = NULL;
         }
 
-        if (macSize == 0 || macSize > EVP_MAX_MD_SIZE ||
+        if (macSize > EVP_MAX_MD_SIZE ||
             oLen < AES_BLOCK_SIZE + macSize + 1) {
             ok = 0;
         }
 
-        if (ok) {
+        if (ok && macSize == 0) {
+            /* ETM (Encrypt-then-MAC) or no MAC: the record layer already
+             * handled the MAC. We only need to strip the explicit IV and
+             * validate+remove padding (same as OpenSSL ssl3_cbc_copy_mac
+             * returning early when mac_size == 0). */
+            unsigned char *ivRec = out + AES_BLOCK_SIZE;
+            size_t ivRecLen = oLen - AES_BLOCK_SIZE;
+            unsigned char padV = ivRec[ivRecLen - 1];
+            size_t gd = (size_t)0 - ((size_t)(
+                wp_ct_int_mask_gte((int)ivRecLen, (int)padV + 1) & 1));
+            size_t tc = 256;
+            if (tc > ivRecLen)
+                tc = ivRecLen;
+
+            for (i = 0; i < tc; i++) {
+                byte m = wp_ct_int_mask_gte((int)padV, (int)i);
+                unsigned char bv = ivRec[ivRecLen - 1 - i];
+                gd &= ~((size_t)(m & (padV ^ bv)));
+            }
+            {
+                size_t d = (gd & 0xff) ^ 0xff;
+                d |= (0 - d);
+                d >>= (sizeof(size_t) * 8 - 1);
+                gd = d - 1;
+            }
+            ivRecLen -= gd & ((size_t)padV + 1);
+            *outLen = ivRecLen;
+            /* No MAC to extract */
+            ctx->tlsmac = NULL;
+            ctx->tlsmacAlloced = 0;
+            /* With ETM/no-MAC, bad padding is a real error (the MAC was
+             * already verified by the record layer, so there is no padding
+             * oracle concern).  Matches OpenSSL ssl3_cbc_copy_mac returning
+             * 0 when good==0 and mac_size==0. */
+            if (gd == 0)
+                ok = 0;
+        }
+        else if (ok) {
             /* 64-byte aligned buffer for cache-line-aware MAC rotation */
             unsigned char rotatedMacBuf[64 + EVP_MAX_MD_SIZE];
             unsigned char *rotatedMac;
