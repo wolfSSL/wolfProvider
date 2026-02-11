@@ -426,4 +426,10 @@ int test_ecx_null_init(void *data);
 int test_pkcs7_x509_sign_verify(void *data);
 int test_x509_cert(void *data);
 
+#if defined(WP_HAVE_AESCBC) && defined(WP_HAVE_RSA) && \
+    defined(WP_HAVE_ECDH) && defined(WP_HAVE_SHA384)
+int test_tls12_cbc(void *data);
+int test_tls12_cbc_ossl(void *data);
+#endif
+
 #endif /* UNIT_H */

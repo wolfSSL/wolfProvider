@@ -39,10 +39,20 @@ typedef struct wp_AesBlockCtx {
     /** wolfSSL AES object.  */
     Aes aes;
 
+    /** Provider context - needed for wolfCrypt RNG access. */
+    WOLFPROV_CTX *provCtx;
+
     /** Cipher mode - CBC or ECB. */
     int mode;
 
     unsigned int tls_version;
+
+    /** Pointer to the MAC extracted from a decrypted TLS record. */
+    unsigned char *tlsmac;
+    /** Size of the MAC expected in TLS records. */
+    size_t tlsmacsize;
+    /** Whether tlsmac was separately allocated. */
+    int tlsmacAlloced;
 
     /** Length of key in bytes. */
     size_t keyLen;
@@ -79,6 +89,9 @@ static int wp_aes_block_set_ctx_params(wp_AesBlockCtx *ctx,
  */
 static void wp_aes_block_freectx(wp_AesBlockCtx *ctx)
 {
+    if (ctx->tlsmacAlloced) {
+        OPENSSL_free(ctx->tlsmac);
+    }
     wc_AesFree(&ctx->aes);
     OPENSSL_clear_free(ctx, sizeof(*ctx));
 }
@@ -100,6 +113,19 @@ static void *wp_aes_block_dupctx(wp_AesBlockCtx *src)
     if (dst != NULL) {
         /* TODO: copying Aes may not work if it has pointers in it. */
         XMEMCPY(dst, src, sizeof(*src));
+        /* Deep-copy tlsmac to avoid double-free between src and dst. */
+        if (src->tlsmacAlloced && src->tlsmac != NULL) {
+            dst->tlsmac = OPENSSL_malloc(src->tlsmacsize);
+            if (dst->tlsmac == NULL) {
+                OPENSSL_free(dst);
+                return NULL;
+            }
+            XMEMCPY(dst->tlsmac, src->tlsmac, src->tlsmacsize);
+        }
+        else {
+            dst->tlsmac = NULL;
+            dst->tlsmacAlloced = 0;
+        }
     }
 
     return dst;
@@ -207,6 +233,8 @@ static const OSSL_PARAM* wp_cipher_gettable_ctx_params(wp_AesBlockCtx* ctx,
         OSSL_PARAM_uint(OSSL_CIPHER_PARAM_NUM, NULL),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_IV, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_UPDATED_IV, NULL, 0),
+        { OSSL_CIPHER_PARAM_TLS_MAC, OSSL_PARAM_OCTET_PTR, NULL, 0,
+          OSSL_PARAM_UNMODIFIED },
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -232,6 +260,7 @@ static const OSSL_PARAM* wp_cipher_settable_ctx_params(wp_AesBlockCtx* ctx,
         OSSL_PARAM_uint(OSSL_CIPHER_PARAM_NUM, NULL),
         OSSL_PARAM_uint(OSSL_CIPHER_PARAM_USE_BITS, NULL),
         OSSL_PARAM_uint(OSSL_CIPHER_PARAM_TLS_VERSION, NULL),
+        OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_TLS_MAC_SIZE, NULL),
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -528,18 +557,158 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
         *outLen = oLen;
     }
     if (ok && (ctx->tls_version > 0) && (!ctx->enc)) {
-        unsigned char pad = out[oLen-1];
-        int padStart = AES_BLOCK_SIZE - pad - 1;
-        unsigned char invalid = (pad < AES_BLOCK_SIZE) - 1;
-        int i;
+        /*
+         * TLS 1.2 CBC padding removal and MAC extraction.
+         * Buffer: [explicit_IV(BS)][payload][MAC(macsize)][padding(pad+1)]
+         *
+         * Constant-time padding validation based on OpenSSL's
+         * tls1_cbc_remove_padding_and_mac() (ssl/record/methods/tls_pad.c)
+         *
+         * Constant-time MAC extraction based on OpenSSL's
+         * ssl3_cbc_copy_mac() rotation pattern. On bad padding the MAC
+         * is replaced with random bytes via ct select.
+         */
+        unsigned char *rec;
+        size_t recLen;
+        size_t origRecLen;
+        unsigned char padVal;
+        size_t overhead;
+        size_t toCheck;
+        size_t good;
+        size_t i, j;
+        size_t macSize = ctx->tlsmacsize;
 
-        for (i = AES_BLOCK_SIZE - 1; i >= 0; i--) {
-            byte check = wp_ct_int_mask_gte(i, padStart);
-            check &= wp_ct_byte_mask_ne(out[oLen - AES_BLOCK_SIZE + i], pad);
-            invalid |= check;
+        /* Free any previously allocated MAC */
+        if (ctx->tlsmacAlloced) {
+            OPENSSL_free(ctx->tlsmac);
+            ctx->tlsmacAlloced = 0;
+            ctx->tlsmac = NULL;
         }
-        *outLen = oLen - pad - 1 - AES_BLOCK_SIZE;
-        ok = invalid == 0;
+
+        if (macSize == 0 || macSize > EVP_MAX_MD_SIZE ||
+            oLen < AES_BLOCK_SIZE + macSize + 1) {
+            ok = 0;
+        }
+
+        if (ok) {
+            /* 64-byte aligned buffer for cache-line-aware MAC rotation */
+            unsigned char rotatedMacBuf[64 + EVP_MAX_MD_SIZE];
+            unsigned char *rotatedMac;
+            unsigned char randMac[EVP_MAX_MD_SIZE];
+            size_t macEnd;
+            size_t macStart;
+            size_t scanStart = 0;
+            byte inMac;
+            size_t rotateOff;
+
+            /* Align rotatedMac to 64-byte boundary so the entire MAC
+             * buffer (up to EVP_MAX_MD_SIZE=64) sits within one or two
+             * 32-byte cache lines at known positions. */
+            rotatedMac = rotatedMacBuf +
+                ((0 - (size_t)rotatedMacBuf) & 63);
+
+            /* For TLS 1.1+/DTLS: skip explicit IV */
+            rec = out + AES_BLOCK_SIZE;
+            recLen = oLen - AES_BLOCK_SIZE;
+            origRecLen = recLen;
+
+            padVal = rec[recLen - 1];
+            overhead = macSize + (size_t)padVal + 1;
+
+            /* CT overhead check: recLen >= overhead.
+             * No branch on padVal — fold into good mask instead. */
+            good = (size_t)0 -
+                ((size_t)(wp_ct_int_mask_gte((int)recLen, (int)overhead) & 1));
+
+            /* Validate padding bytes in constant time.
+             * Check up to 256 bytes (max TLS padding). */
+            toCheck = 256;
+            if (toCheck > recLen)
+                toCheck = recLen;
+
+            for (i = 0; i < toCheck; i++) {
+                byte mask = wp_ct_int_mask_gte((int)padVal, (int)i);
+                unsigned char b = rec[recLen - 1 - i];
+                good &= ~((size_t)(mask & (padVal ^ b)));
+            }
+            {
+                /* Collapse lower 8 bits to full-width size_t mask.
+                 * Same technique as OpenSSL constant_time_eq_s. */
+                size_t diff = (good & 0xff) ^ 0xff;
+                diff |= (0 - diff);
+                diff >>= (sizeof(size_t) * 8 - 1);
+                good = diff - 1;
+            }
+
+            /* Remove padding (only if valid) */
+            recLen -= good & ((size_t)padVal + 1);
+
+            macEnd = recLen;
+            macStart = macEnd - macSize;
+
+            recLen -= macSize;
+            *outLen = recLen;
+
+            /* Generate random MAC to use if padding was bad */
+        #ifndef WP_SINGLE_THREADED
+            wp_provctx_lock_rng(ctx->provCtx);
+        #endif
+            if (wc_RNG_GenerateBlock(wp_provctx_get_rng(ctx->provCtx),
+                                     randMac, (word32)macSize) != 0) {
+                ok = 0;
+            }
+        #ifndef WP_SINGLE_THREADED
+            wp_provctx_unlock_rng(ctx->provCtx);
+        #endif
+
+            ctx->tlsmac = OPENSSL_malloc(macSize);
+            if (ctx->tlsmac == NULL) {
+                ok = 0;
+            }
+            else {
+                ctx->tlsmacAlloced = 1;
+
+                /* Constant-time MAC extraction: scan all bytes that
+                 * could contain the MAC (position varies by up to 255). */
+                if (origRecLen > macSize + 255 + 1)
+                    scanStart = origRecLen - (macSize + 255 + 1);
+
+                XMEMSET(rotatedMac, 0, EVP_MAX_MD_SIZE);
+                inMac = 0;
+                rotateOff = 0;
+                for (i = scanStart, j = 0; i < origRecLen; i++) {
+                    byte started = wp_ct_int_mask_eq((int)i, (int)macStart);
+                    byte ended   = wp_ct_int_mask_lt((int)i, (int)macEnd);
+                    unsigned char b = rec[i];
+
+                    inMac |= started;
+                    inMac &= ended;
+                    rotateOff |= j & (size_t)started;
+                    rotatedMac[j++] |= b & inMac;
+                    j &= (size_t)wp_ct_int_mask_lt((int)j, (int)macSize);
+                }
+
+                /* Cache-line-aware un-rotation: always load from both
+                 * 32-byte halves and ct-select to avoid leaking
+                 * rotateOff through cache access patterns. Same
+                 * technique as OpenSSL's CBC_MAC_ROTATE_IN_PLACE. */
+                for (i = 0; i < macSize; i++) {
+                    char aux1 = rotatedMac[rotateOff & ~32];
+                    char aux2 = rotatedMac[rotateOff | 32];
+                    byte eqMask = wp_ct_int_mask_eq(
+                        (int)(rotateOff & ~32), (int)rotateOff);
+                    unsigned char real = wp_ct_byte_mask_sel(
+                        eqMask, (byte)aux1, (byte)aux2);
+                    byte goodMask = (byte)(good & 0xff);
+
+                    ctx->tlsmac[i] = wp_ct_byte_mask_sel(goodMask, real,
+                                                        randMac[i]);
+                    rotateOff++;
+                    rotateOff &= (size_t)wp_ct_int_mask_lt(
+                        (int)rotateOff, (int)macSize);
+                }
+            }
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -790,6 +959,13 @@ static int wp_aes_block_get_ctx_params(wp_AesBlockCtx* ctx, OSSL_PARAM params[])
             ok = 0;
         }
     }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_TLS_MAC);
+        if ((p != NULL) &&
+            (!OSSL_PARAM_set_octet_ptr(p, ctx->tlsmac, ctx->tlsmacsize))) {
+            ok = 0;
+        }
+    }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -837,6 +1013,15 @@ static int wp_aes_block_set_ctx_params(wp_AesBlockCtx *ctx,
         if (ok && (!wp_params_get_uint(params, OSSL_CIPHER_PARAM_TLS_VERSION,
                 &ctx->tls_version, NULL))) {
             ok = 0;
+        }
+        if (ok) {
+            const OSSL_PARAM *pmac = OSSL_PARAM_locate_const(params,
+                                         OSSL_CIPHER_PARAM_TLS_MAC_SIZE);
+            if (pmac != NULL) {
+                if (!OSSL_PARAM_get_size_t(pmac, &ctx->tlsmacsize)) {
+                    ok = 0;
+                }
+            }
         }
     }
 
@@ -891,11 +1076,11 @@ static wp_AesBlockCtx* wp_aes_block_##kBits##_##lcmode##_newctx(               \
     WOLFPROV_CTX *provCtx)                                                     \
 {                                                                              \
     wp_AesBlockCtx *ctx = NULL;                                                \
-    (void)provCtx;                                                             \
     if (wolfssl_prov_is_running()) {                                           \
         ctx = OPENSSL_zalloc(sizeof(*ctx));                                    \
     }                                                                          \
     if (ctx != NULL) {                                                         \
+        ctx->provCtx = provCtx;                                               \
         wp_aes_block_init_ctx(ctx, kBits, ivBits, EVP_CIPH_##UCMODE##_MODE);   \
     }                                                                          \
     return ctx;                                                                \
