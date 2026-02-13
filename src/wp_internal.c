@@ -1183,3 +1183,46 @@ byte wp_ct_int_mask_gte(int a, int b)
     return ((((uint32_t)a - (uint32_t)b) >> 31) - 1);
 }
 
+/**
+ * Constant time, set mask when first value is equal to second.
+ *
+ * @param [in] a  First value.
+ * @param [in] b  Second value.
+ * @return  All bits set when a == b.
+ * @return  0 when a != b.
+ */
+byte wp_ct_int_mask_eq(int a, int b)
+{
+    /* Same as wolfSSL ctMaskEq: ~GT & ~LT */
+    byte gt = (byte)((((uint32_t)a - (uint32_t)b - 1) >> 31) - 1);
+    byte lt = (byte)((((uint32_t)b - (uint32_t)a - 1) >> 31) - 1);
+    return (byte)((byte)(~gt) & (byte)(~lt));
+}
+
+/**
+ * Constant time, set mask when first value is less than second.
+ *
+ * @param [in] a  First value.
+ * @param [in] b  Second value.
+ * @return  All bits set when a < b.
+ * @return  0 when a >= b.
+ */
+byte wp_ct_int_mask_lt(int a, int b)
+{
+    /* Same as wolfSSL ctMaskLT */
+    return (byte)((((uint32_t)b - (uint32_t)a - 1) >> 31) - 1);
+}
+
+/**
+ * Constant time byte select: returns a when mask is 0xff, b when mask is 0x00.
+ *
+ * @param [in] mask  Selection mask (0xff or 0x00).
+ * @param [in] a     Value returned when mask is all-ones.
+ * @param [in] b     Value returned when mask is all-zeros.
+ * @return  Selected byte value.
+ */
+byte wp_ct_byte_mask_sel(byte mask, byte a, byte b)
+{
+    return (byte)((mask & a) | (~mask & b));
+}
+

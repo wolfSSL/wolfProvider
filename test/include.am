@@ -33,6 +33,7 @@ test_unit_test_SOURCES = \
 	test/test_rsa.c \
 	test/test_seccomp_sandbox.c \
 	test/test_tls1_prf.c \
+	test/test_tls_cbc.c \
 	test/unit.c
 test_unit_test_LDADD = libwolfprov.la
 noinst_HEADERS += test/unit.h
