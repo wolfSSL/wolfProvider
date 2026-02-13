@@ -5,3 +5,4 @@ dist_noinst_SCRIPTS += scripts/utils-openssl.sh
 dist_noinst_SCRIPTS += scripts/utils-wolfssl.sh
 dist_noinst_SCRIPTS += scripts/utils-wolfprovider.sh
 dist_noinst_SCRIPTS += scripts/utils-general.sh
+dist_noinst_SCRIPTS += scripts/env-setup
