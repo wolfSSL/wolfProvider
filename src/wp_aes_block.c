@@ -475,6 +475,218 @@ static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
 }
 
 /**
+ * TLS 1.2 CBC decryption record post-processing.
+ *
+ * Performs constant-time padding validation and MAC extraction after
+ * CBC decryption. For ETM (Encrypt-then-MAC) or no-MAC modes, strips the
+ * explicit IV and validates/removes padding. For MtE (MAC-then-Encrypt),
+ * also extracts the MAC using a constant-time rotation pattern.
+ *
+ * @param [in]      ctx     AES block context object.
+ * @param [in]      out     Decrypted output buffer.
+ * @param [in]      oLen    Length of decrypted data in bytes.
+ * @param [in, out] outLen  Updated with length after padding/MAC removal.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
+    unsigned char *out, size_t oLen, size_t *outLen)
+{
+    int ok = 1;
+    /*
+     * TLS 1.2 CBC padding removal and MAC extraction.
+     * Buffer: [explicit_IV(BS)][payload][MAC(macsize)][padding(pad+1)]
+     *
+     * Constant-time padding validation based on OpenSSL's
+     * tls1_cbc_remove_padding_and_mac() (ssl/record/methods/tls_pad.c)
+     *
+     * Constant-time MAC extraction based on OpenSSL's
+     * ssl3_cbc_copy_mac() rotation pattern. On bad padding the MAC
+     * is replaced with random bytes via ct select.
+     */
+    unsigned char *rec;
+    size_t recLen;
+    size_t origRecLen;
+    unsigned char padVal;
+    size_t overhead;
+    size_t toCheck;
+    size_t good;
+    size_t i, j;
+    size_t macSize = ctx->tlsmacsize;
+
+    /* Free any previously allocated MAC */
+    if (ctx->tlsmacAlloced) {
+        OPENSSL_free(ctx->tlsmac);
+        ctx->tlsmacAlloced = 0;
+        ctx->tlsmac = NULL;
+    }
+
+    if (macSize > EVP_MAX_MD_SIZE ||
+        oLen < AES_BLOCK_SIZE + macSize + 1) {
+        ok = 0;
+    }
+
+    if (ok && macSize == 0) {
+        /* ETM (Encrypt-then-MAC) or no MAC: the record layer already
+         * handled the MAC. We only need to strip the explicit IV and
+         * validate+remove padding (same as OpenSSL ssl3_cbc_copy_mac
+         * returning early when mac_size == 0). */
+        unsigned char *ivRec = out + AES_BLOCK_SIZE;
+        size_t ivRecLen = oLen - AES_BLOCK_SIZE;
+        unsigned char padV = ivRec[ivRecLen - 1];
+        size_t gd = (size_t)0 - ((size_t)(
+            wp_ct_int_mask_gte((int)ivRecLen, (int)padV + 1) & 1));
+        size_t tc = 256;
+        if (tc > ivRecLen)
+            tc = ivRecLen;
+
+        for (i = 0; i < tc; i++) {
+            byte m = wp_ct_int_mask_gte((int)padV, (int)i);
+            unsigned char bv = ivRec[ivRecLen - 1 - i];
+            gd &= ~((size_t)(m & (padV ^ bv)));
+        }
+        {
+            size_t d = (gd & 0xff) ^ 0xff;
+            d |= (0 - d);
+            d >>= (sizeof(size_t) * 8 - 1);
+            gd = d - 1;
+        }
+        ivRecLen -= gd & ((size_t)padV + 1);
+        *outLen = ivRecLen;
+        /* No MAC to extract */
+        ctx->tlsmac = NULL;
+        ctx->tlsmacAlloced = 0;
+        /* With ETM/no-MAC, bad padding is a real error (the MAC was
+         * already verified by the record layer, so there is no padding
+         * oracle concern).  Matches OpenSSL ssl3_cbc_copy_mac returning
+         * 0 when good==0 and mac_size==0. */
+        if (gd == 0)
+            ok = 0;
+    }
+    else if (ok) {
+        /* 64-byte aligned buffer for cache-line-aware MAC rotation */
+        unsigned char rotatedMacBuf[64 + EVP_MAX_MD_SIZE];
+        unsigned char *rotatedMac;
+        unsigned char randMac[EVP_MAX_MD_SIZE];
+        size_t macEnd;
+        size_t macStart;
+        size_t scanStart = 0;
+        byte inMac;
+        size_t rotateOff;
+
+        /* Align rotatedMac to 64-byte boundary so the entire MAC
+         * buffer (up to EVP_MAX_MD_SIZE=64) sits within one or two
+         * 32-byte cache lines at known positions. */
+        rotatedMac = rotatedMacBuf +
+            ((0 - (size_t)rotatedMacBuf) & 63);
+
+        /* For TLS 1.1+/DTLS: skip explicit IV */
+        rec = out + AES_BLOCK_SIZE;
+        recLen = oLen - AES_BLOCK_SIZE;
+        origRecLen = recLen;
+
+        padVal = rec[recLen - 1];
+        overhead = macSize + (size_t)padVal + 1;
+
+        /* CT overhead check: recLen >= overhead.
+         * No branch on padVal — fold into good mask instead. */
+        good = (size_t)0 -
+            ((size_t)(wp_ct_int_mask_gte((int)recLen, (int)overhead) & 1));
+
+        /* Validate padding bytes in constant time.
+         * Check up to 256 bytes (max TLS padding). */
+        toCheck = 256;
+        if (toCheck > recLen)
+            toCheck = recLen;
+
+        for (i = 0; i < toCheck; i++) {
+            byte mask = wp_ct_int_mask_gte((int)padVal, (int)i);
+            unsigned char b = rec[recLen - 1 - i];
+            good &= ~((size_t)(mask & (padVal ^ b)));
+        }
+        {
+            /* Collapse lower 8 bits to full-width size_t mask.
+             * Same technique as OpenSSL constant_time_eq_s. */
+            size_t diff = (good & 0xff) ^ 0xff;
+            diff |= (0 - diff);
+            diff >>= (sizeof(size_t) * 8 - 1);
+            good = diff - 1;
+        }
+
+        /* Remove padding (only if valid) */
+        recLen -= good & ((size_t)padVal + 1);
+
+        macEnd = recLen;
+        macStart = macEnd - macSize;
+
+        recLen -= macSize;
+        *outLen = recLen;
+
+        /* Generate random MAC to use if padding was bad */
+    #ifndef WP_SINGLE_THREADED
+        wp_provctx_lock_rng(ctx->provCtx);
+    #endif
+        if (wc_RNG_GenerateBlock(wp_provctx_get_rng(ctx->provCtx),
+                                 randMac, (word32)macSize) != 0) {
+            ok = 0;
+        }
+    #ifndef WP_SINGLE_THREADED
+        wp_provctx_unlock_rng(ctx->provCtx);
+    #endif
+
+        ctx->tlsmac = OPENSSL_malloc(macSize);
+        if (ctx->tlsmac == NULL) {
+            ok = 0;
+        }
+        else {
+            ctx->tlsmacAlloced = 1;
+
+            /* Constant-time MAC extraction: scan all bytes that
+             * could contain the MAC (position varies by up to 255). */
+            if (origRecLen > macSize + 255 + 1)
+                scanStart = origRecLen - (macSize + 255 + 1);
+
+            XMEMSET(rotatedMac, 0, EVP_MAX_MD_SIZE);
+            inMac = 0;
+            rotateOff = 0;
+            for (i = scanStart, j = 0; i < origRecLen; i++) {
+                byte started = wp_ct_int_mask_eq((int)i, (int)macStart);
+                byte ended   = wp_ct_int_mask_lt((int)i, (int)macEnd);
+                unsigned char b = rec[i];
+
+                inMac |= started;
+                inMac &= ended;
+                rotateOff |= j & (size_t)started;
+                rotatedMac[j++] |= b & inMac;
+                j &= (size_t)wp_ct_int_mask_lt((int)j, (int)macSize);
+            }
+
+            /* Cache-line-aware un-rotation: always load from both
+             * 32-byte halves and ct-select to avoid leaking
+             * rotateOff through cache access patterns. Same
+             * technique as OpenSSL's CBC_MAC_ROTATE_IN_PLACE. */
+            for (i = 0; i < macSize; i++) {
+                char aux1 = rotatedMac[rotateOff & ~32];
+                char aux2 = rotatedMac[rotateOff | 32];
+                byte eqMask = wp_ct_int_mask_eq(
+                    (int)(rotateOff & ~32), (int)rotateOff);
+                unsigned char real = wp_ct_byte_mask_sel(
+                    eqMask, (byte)aux1, (byte)aux2);
+                byte goodMask = (byte)(good & 0xff);
+
+                ctx->tlsmac[i] = wp_ct_byte_mask_sel(goodMask, real,
+                                                    randMac[i]);
+                rotateOff++;
+                rotateOff &= (size_t)wp_ct_int_mask_lt(
+                    (int)rotateOff, (int)macSize);
+            }
+        }
+    }
+
+    return ok;
+}
+
+/**
  * Update encryption/decryption with more data.
  *
  * @param [in]  ctx      AES block context object.
@@ -557,195 +769,7 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
         *outLen = oLen;
     }
     if (ok && (ctx->tls_version > 0) && (!ctx->enc)) {
-        /*
-         * TLS 1.2 CBC padding removal and MAC extraction.
-         * Buffer: [explicit_IV(BS)][payload][MAC(macsize)][padding(pad+1)]
-         *
-         * Constant-time padding validation based on OpenSSL's
-         * tls1_cbc_remove_padding_and_mac() (ssl/record/methods/tls_pad.c)
-         *
-         * Constant-time MAC extraction based on OpenSSL's
-         * ssl3_cbc_copy_mac() rotation pattern. On bad padding the MAC
-         * is replaced with random bytes via ct select.
-         */
-        unsigned char *rec;
-        size_t recLen;
-        size_t origRecLen;
-        unsigned char padVal;
-        size_t overhead;
-        size_t toCheck;
-        size_t good;
-        size_t i, j;
-        size_t macSize = ctx->tlsmacsize;
-
-        /* Free any previously allocated MAC */
-        if (ctx->tlsmacAlloced) {
-            OPENSSL_free(ctx->tlsmac);
-            ctx->tlsmacAlloced = 0;
-            ctx->tlsmac = NULL;
-        }
-
-        if (macSize > EVP_MAX_MD_SIZE ||
-            oLen < AES_BLOCK_SIZE + macSize + 1) {
-            ok = 0;
-        }
-
-        if (ok && macSize == 0) {
-            /* ETM (Encrypt-then-MAC) or no MAC: the record layer already
-             * handled the MAC. We only need to strip the explicit IV and
-             * validate+remove padding (same as OpenSSL ssl3_cbc_copy_mac
-             * returning early when mac_size == 0). */
-            unsigned char *ivRec = out + AES_BLOCK_SIZE;
-            size_t ivRecLen = oLen - AES_BLOCK_SIZE;
-            unsigned char padV = ivRec[ivRecLen - 1];
-            size_t gd = (size_t)0 - ((size_t)(
-                wp_ct_int_mask_gte((int)ivRecLen, (int)padV + 1) & 1));
-            size_t tc = 256;
-            if (tc > ivRecLen)
-                tc = ivRecLen;
-
-            for (i = 0; i < tc; i++) {
-                byte m = wp_ct_int_mask_gte((int)padV, (int)i);
-                unsigned char bv = ivRec[ivRecLen - 1 - i];
-                gd &= ~((size_t)(m & (padV ^ bv)));
-            }
-            {
-                size_t d = (gd & 0xff) ^ 0xff;
-                d |= (0 - d);
-                d >>= (sizeof(size_t) * 8 - 1);
-                gd = d - 1;
-            }
-            ivRecLen -= gd & ((size_t)padV + 1);
-            *outLen = ivRecLen;
-            /* No MAC to extract */
-            ctx->tlsmac = NULL;
-            ctx->tlsmacAlloced = 0;
-            /* With ETM/no-MAC, bad padding is a real error (the MAC was
-             * already verified by the record layer, so there is no padding
-             * oracle concern).  Matches OpenSSL ssl3_cbc_copy_mac returning
-             * 0 when good==0 and mac_size==0. */
-            if (gd == 0)
-                ok = 0;
-        }
-        else if (ok) {
-            /* 64-byte aligned buffer for cache-line-aware MAC rotation */
-            unsigned char rotatedMacBuf[64 + EVP_MAX_MD_SIZE];
-            unsigned char *rotatedMac;
-            unsigned char randMac[EVP_MAX_MD_SIZE];
-            size_t macEnd;
-            size_t macStart;
-            size_t scanStart = 0;
-            byte inMac;
-            size_t rotateOff;
-
-            /* Align rotatedMac to 64-byte boundary so the entire MAC
-             * buffer (up to EVP_MAX_MD_SIZE=64) sits within one or two
-             * 32-byte cache lines at known positions. */
-            rotatedMac = rotatedMacBuf +
-                ((0 - (size_t)rotatedMacBuf) & 63);
-
-            /* For TLS 1.1+/DTLS: skip explicit IV */
-            rec = out + AES_BLOCK_SIZE;
-            recLen = oLen - AES_BLOCK_SIZE;
-            origRecLen = recLen;
-
-            padVal = rec[recLen - 1];
-            overhead = macSize + (size_t)padVal + 1;
-
-            /* CT overhead check: recLen >= overhead.
-             * No branch on padVal — fold into good mask instead. */
-            good = (size_t)0 -
-                ((size_t)(wp_ct_int_mask_gte((int)recLen, (int)overhead) & 1));
-
-            /* Validate padding bytes in constant time.
-             * Check up to 256 bytes (max TLS padding). */
-            toCheck = 256;
-            if (toCheck > recLen)
-                toCheck = recLen;
-
-            for (i = 0; i < toCheck; i++) {
-                byte mask = wp_ct_int_mask_gte((int)padVal, (int)i);
-                unsigned char b = rec[recLen - 1 - i];
-                good &= ~((size_t)(mask & (padVal ^ b)));
-            }
-            {
-                /* Collapse lower 8 bits to full-width size_t mask.
-                 * Same technique as OpenSSL constant_time_eq_s. */
-                size_t diff = (good & 0xff) ^ 0xff;
-                diff |= (0 - diff);
-                diff >>= (sizeof(size_t) * 8 - 1);
-                good = diff - 1;
-            }
-
-            /* Remove padding (only if valid) */
-            recLen -= good & ((size_t)padVal + 1);
-
-            macEnd = recLen;
-            macStart = macEnd - macSize;
-
-            recLen -= macSize;
-            *outLen = recLen;
-
-            /* Generate random MAC to use if padding was bad */
-        #ifndef WP_SINGLE_THREADED
-            wp_provctx_lock_rng(ctx->provCtx);
-        #endif
-            if (wc_RNG_GenerateBlock(wp_provctx_get_rng(ctx->provCtx),
-                                     randMac, (word32)macSize) != 0) {
-                ok = 0;
-            }
-        #ifndef WP_SINGLE_THREADED
-            wp_provctx_unlock_rng(ctx->provCtx);
-        #endif
-
-            ctx->tlsmac = OPENSSL_malloc(macSize);
-            if (ctx->tlsmac == NULL) {
-                ok = 0;
-            }
-            else {
-                ctx->tlsmacAlloced = 1;
-
-                /* Constant-time MAC extraction: scan all bytes that
-                 * could contain the MAC (position varies by up to 255). */
-                if (origRecLen > macSize + 255 + 1)
-                    scanStart = origRecLen - (macSize + 255 + 1);
-
-                XMEMSET(rotatedMac, 0, EVP_MAX_MD_SIZE);
-                inMac = 0;
-                rotateOff = 0;
-                for (i = scanStart, j = 0; i < origRecLen; i++) {
-                    byte started = wp_ct_int_mask_eq((int)i, (int)macStart);
-                    byte ended   = wp_ct_int_mask_lt((int)i, (int)macEnd);
-                    unsigned char b = rec[i];
-
-                    inMac |= started;
-                    inMac &= ended;
-                    rotateOff |= j & (size_t)started;
-                    rotatedMac[j++] |= b & inMac;
-                    j &= (size_t)wp_ct_int_mask_lt((int)j, (int)macSize);
-                }
-
-                /* Cache-line-aware un-rotation: always load from both
-                 * 32-byte halves and ct-select to avoid leaking
-                 * rotateOff through cache access patterns. Same
-                 * technique as OpenSSL's CBC_MAC_ROTATE_IN_PLACE. */
-                for (i = 0; i < macSize; i++) {
-                    char aux1 = rotatedMac[rotateOff & ~32];
-                    char aux2 = rotatedMac[rotateOff | 32];
-                    byte eqMask = wp_ct_int_mask_eq(
-                        (int)(rotateOff & ~32), (int)rotateOff);
-                    unsigned char real = wp_ct_byte_mask_sel(
-                        eqMask, (byte)aux1, (byte)aux2);
-                    byte goodMask = (byte)(good & 0xff);
-
-                    ctx->tlsmac[i] = wp_ct_byte_mask_sel(goodMask, real,
-                                                        randMac[i]);
-                    rotateOff++;
-                    rotateOff &= (size_t)wp_ct_int_mask_lt(
-                        (int)rotateOff, (int)macSize);
-                }
-            }
-        }
+        ok = wp_aes_block_tls_dec_record(ctx, out, oLen, outLen);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
