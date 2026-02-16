@@ -37,7 +37,7 @@ ifeq ($(WOLFPROV_DEBUG),1)
   VARIANT           := $(VARIANT)-debug
   VARIANT_DESC      := $(VARIANT_DESC) with debug logs
   VERSION           := $(VERSION)-debug
-  DEBUG_FLAG        := --enable-debug
+  DEBUG_FLAG        := --enable-debug --enable-debug-silent
 endif
 
 ifeq ($(DEB_CFLAGS_APPEND),)
