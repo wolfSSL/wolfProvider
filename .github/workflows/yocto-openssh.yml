@@ -1,0 +1,120 @@
+name: Yocto OpenSSH
+
+# START OF COMMON SECTION
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 8 * * *'  # Daily at 8:00 AM UTC
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  build_wolfprovider:
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ matrix.replace_default }}
+      build_type: 'yocto'
+    strategy:
+      matrix:
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.6' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true, false ]
+
+  verify_yocto_env:
+    needs: build_wolfprovider
+    uses: ./.github/workflows/yocto-verify.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ matrix.replace_default }}
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.6' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true, false ]
+
+  run_openssh_ptest:
+    name: Run OpenSSH Ptest - ${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ matrix.fips_ref }}-${{ matrix.replace_default }}
+    needs: [build_wolfprovider, verify_yocto_env]
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_ref: [ 'v5.8.4-stable' ]
+        openssl_ref: [ 'openssl-3.2.6' ]
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true, false ]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/crops/poky:ubuntu-22.04
+      options: --user root
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Download WIC images
+        uses: actions/download-artifact@v4
+        with:
+          name: yocto-image-${{ matrix.fips_ref == 'FIPS' && 'fips' || 'nonfips' }}-${{ matrix.replace_default && 'replace-default' || 'standalone' }}
+          path: /tmp/yocto-images
+
+      - name: Install QEMU, expect, and xz-utils
+        run: |
+          apt-get update
+          apt-get install -y qemu-system-x86 expect xz-utils
+
+      - name: Setup WIC image
+        run: |
+          cd /tmp/yocto-images
+          if ls *.wic.xz 1> /dev/null 2>&1; then
+            unxz -v *.wic.xz || true
+          fi
+          WIC_FILE=$(ls *.wic 2>/dev/null | grep -v "\.wic\." | head -1)
+          if [ -z "$WIC_FILE" ] || [ ! -f "$WIC_FILE" ]; then
+            echo "ERROR: No decompressed WIC file found"
+            exit 1
+          fi
+          echo "WIC_PATH=/tmp/yocto-images/$WIC_FILE" >> $GITHUB_ENV
+
+      - name: Run openssh ptest
+        timeout-minutes: 180
+        run: |
+          echo "=== Running openssh ptest for ${{ matrix.fips_ref }}-${{ matrix.replace_default }} ==="
+          OUTPUT_FILE="/tmp/openssh-ptest-output-${{ matrix.fips_ref }}-${{ matrix.replace_default }}.txt"
+          
+          $GITHUB_WORKSPACE/.github/scripts/boot-qemu.sh \
+            "$WIC_PATH" \
+            "echo 'setting up environment'" \
+            "wolfproviderenv" \
+            "echo '=== Running openssh ptest ==='" \
+            "cd /usr/lib/openssh/ptest && ./run-ptest" > "$OUTPUT_FILE" 2>&1 || true
+          
+          echo "=== OpenSSH ptest output ==="
+          cat "$OUTPUT_FILE"
+          echo ""
+          
+          # Verify ptest results
+          echo "=== Verifying openssh ptest results ==="
+          source $GITHUB_WORKSPACE/.github/scripts/yocto-verify-common.sh
+          yocto_test_verify "OpenSSH" "$OUTPUT_FILE" || exit 1
+
+      - name: Upload ptest logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openssh-ptest-logs-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}-${{ matrix.fips_ref == 'FIPS' && 'fips' || 'nonfips' }}-${{ matrix.replace_default && 'replace-default' || 'standalone' }}
+          path: |
+            /tmp/openssh-ptest-output-*.txt
+          retention-days: 7
+          if-no-files-found: ignore

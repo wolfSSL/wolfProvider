@@ -1,0 +1,115 @@
+name: Verify Yocto Environment
+
+# START OF COMMON SECTION
+on:
+  workflow_call:
+    inputs:
+      wolfssl_ref:
+        required: true
+        type: string
+      openssl_ref:
+        required: true
+        type: string
+      fips_ref:
+        required: false
+        type: string
+      replace_default:
+        required: false
+        type: boolean
+        default: false
+# END OF COMMON SECTION
+
+jobs:
+  verify_yocto_environment:
+    name: Verify Yocto Environment - ${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ inputs.fips_ref }}-${{ inputs.replace_default }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/crops/poky:ubuntu-22.04
+      options: --user root
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Download Yocto image
+        uses: actions/download-artifact@v4
+        with:
+          name: yocto-image-${{ inputs.fips_ref == 'FIPS' && 'fips' || 'nonfips' }}-${{ inputs.replace_default && 'replace-default' || 'standalone' }}
+          path: /tmp/yocto-images
+
+      - name: Install QEMU, expect, and xz-utils
+        run: |
+          apt-get update
+          apt-get install -y qemu-system-x86 expect xz-utils
+
+      - name: Setup Yocto image
+        run: |
+          echo "=== Downloaded Yocto image ==="
+          ls -lah /tmp/yocto-images/
+          cd /tmp/yocto-images
+
+          # Extract if Yocto image is compressed
+          if ls *.wic.xz 1> /dev/null 2>&1; then
+            echo "Extracting xz-compressed WIC files..."
+            unxz -v *.wic.xz || true
+          fi
+
+          # Verify the Yocto image file is found
+          WIC_FILE=$(ls *.wic 2>/dev/null | grep -v "\.wic\." | head -1)
+
+          if [ -z "$WIC_FILE" ] || [ ! -f "$WIC_FILE" ]; then
+            echo "ERROR: No decompressed Yocto image file found"
+            echo "Available files:"
+            ls -la /tmp/yocto-images/
+            exit 1
+          fi
+
+          echo "Using Yocto image file: $WIC_FILE"
+          echo "Expected configuration: fips_ref=${{ inputs.fips_ref }}, replace_default=${{ inputs.replace_default }}"
+          echo "WIC_PATH=/tmp/yocto-images/$WIC_FILE" >> $GITHUB_ENV
+
+      - name: Boot QEMU, verify configuration
+        timeout-minutes: 30
+        run: |
+          # Run everything in a single QEMU boot session to capture output for verification
+          echo "=== Booting QEMU and verifying configuration for ${{ inputs.fips_ref }}-${{ inputs.replace_default }} ==="
+          echo "Yocto image file: $WIC_PATH"
+
+          OUTPUT_FILE="/tmp/yocto-test-output-${{ inputs.fips_ref }}-${{ inputs.replace_default }}.txt"
+
+          # Run commands and capture all output
+          # Check the replace-default detection file first, then verify providers
+          export EXPECT_TIMEOUT=3600 # 1 hour
+          $GITHUB_WORKSPACE/.github/scripts/boot-qemu.sh \
+            "$WIC_PATH" \
+            "cat /etc/openssl/replace-default-enabled 2>/dev/null || echo 'File not found'" \
+            "openssl list -providers" \
+            "openssl version" \
+            "cd /usr/bin && ls -la wolfproviderenv" \
+            "wolfproviderenv" > "$OUTPUT_FILE" 2>&1 || true
+
+          # Display the output
+          echo "=== Full test output ==="
+          cat "$OUTPUT_FILE"
+          echo ""
+
+          # Verify the Yocto environment is correctly built for test output
+          echo "=== Verifying configuration ==="
+          source $GITHUB_WORKSPACE/.github/scripts/yocto-verify-common.sh
+          yocto_env_verify \
+            "$OUTPUT_FILE" \
+            "${{ inputs.openssl_ref }}" \
+            "${{ inputs.wolfssl_ref }}" \
+            "${{ inputs.replace_default }}" \
+            "${{ inputs.fips_ref }}"
+
+      - name: Upload Yocto environment verification logs (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yocto-test-logs-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}-${{ inputs.fips_ref == 'FIPS' && 'fips' || 'nonfips' }}-${{ inputs.replace_default && 'replace-default' || 'standalone' }}
+          path: |
+            /tmp/yocto-images/*.log
+          retention-days: 3
+          if-no-files-found: ignore
