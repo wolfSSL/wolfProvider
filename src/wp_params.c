@@ -45,16 +45,22 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
 
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_mp_read_unsigned_bin_le");
 
-    /* Make big-endian. */
-    for (i = 0; i < len; i++) {
-        rdata[i] = data[len - 1 - i];
+    if (len > sizeof(rdata)) {
+        ok = 0;
     }
 
-    /* Read big-endian data in. */
-    rc = mp_read_unsigned_bin(mp, rdata, (word32)len);
-    if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "mp_read_unsigned_bin", rc);
-        ok = 0;
+    if (ok) {
+        /* Make big-endian. */
+        for (i = 0; i < len; i++) {
+            rdata[i] = data[len - 1 - i];
+        }
+
+        /* Read big-endian data in. */
+        rc = mp_read_unsigned_bin(mp, rdata, (word32)len);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "mp_read_unsigned_bin", rc);
+            ok = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
