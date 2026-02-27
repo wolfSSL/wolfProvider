@@ -121,6 +121,7 @@ static void *wp_aes_block_dupctx(wp_AesBlockCtx *src)
                 return NULL;
             }
             XMEMCPY(dst->tlsmac, src->tlsmac, src->tlsmacsize);
+            dst->tlsmacAlloced = 1;
         }
         else {
             dst->tlsmac = NULL;
@@ -493,6 +494,9 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
     unsigned char *out, size_t oLen, size_t *outLen)
 {
     int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aes_block_tls_dec_record");
+
     /*
      * TLS 1.2 CBC padding removal and MAC extraction.
      * Buffer: [explicit_IV(BS)][payload][MAC(macsize)][padding(pad+1)]
@@ -682,6 +686,8 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
             }
         }
     }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
 
     return ok;
 }
