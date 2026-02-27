@@ -252,6 +252,9 @@ BIO* wp_corebio_get_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio);
 byte wp_ct_byte_mask_eq(byte a, byte b);
 byte wp_ct_byte_mask_ne(byte a, byte b);
 byte wp_ct_int_mask_gte(int a, int b);
+byte wp_ct_int_mask_eq(int a, int b);
+byte wp_ct_int_mask_lt(int a, int b);
+byte wp_ct_byte_mask_sel(byte mask, byte a, byte b);
 
 #endif /* WP_INTERNAL_H */
 

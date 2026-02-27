@@ -437,6 +437,12 @@ TEST_CASE test_case[] = {
 
     TEST_DECL(test_pkcs7_x509_sign_verify, NULL),
     TEST_DECL(test_x509_cert, NULL),
+
+#if defined(WP_HAVE_AESCBC) && defined(WP_HAVE_RSA) && \
+    defined(WP_HAVE_ECDH) && defined(WP_HAVE_SHA384)
+    TEST_DECL(test_tls12_cbc_ossl, NULL),
+    TEST_DECL(test_tls12_cbc, NULL),
+#endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
 
