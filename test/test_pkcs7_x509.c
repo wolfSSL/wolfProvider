@@ -121,9 +121,16 @@ int test_pkcs7_x509_sign_verify(void* data)
     X509_gmtime_adj(X509_get_notAfter(cert), 31536000L);
     X509_set_pubkey(cert, pkey);
 
-    X509_NAME *name = X509_get_subject_name(cert);
-    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *)"Test Signer", -1, -1, 0);
+    X509_NAME *name = X509_NAME_new();
+    if (!name) {
+        PRINT_MSG("X509_NAME_new failed");
+        return -1;
+    }
+    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+        (unsigned char *)"Test Signer", -1, -1, 0);
+    X509_set_subject_name(cert, name);
     X509_set_issuer_name(cert, name);
+    X509_NAME_free(name);
     X509_sign(cert, pkey, EVP_sha256());
 
     /* === Step 3: Create the data to be signed === */
@@ -206,11 +213,11 @@ static int test_x509_name(const X509_NAME *name) {
     }
 
     for (int i = 0; i < count; i++) {
-        X509_NAME_ENTRY *entry = X509_NAME_get_entry(name, i);
+        const X509_NAME_ENTRY *entry = X509_NAME_get_entry(name, i);
         if (!entry) continue;
 
-        ASN1_OBJECT *obj = X509_NAME_ENTRY_get_object(entry);
-        ASN1_STRING *data = X509_NAME_ENTRY_get_data(entry);
+        const ASN1_OBJECT *obj = X509_NAME_ENTRY_get_object(entry);
+        const ASN1_STRING *data = X509_NAME_ENTRY_get_data(entry);
 
         char obj_buf[80];
         OBJ_obj2txt(obj_buf, sizeof(obj_buf), obj, 1);

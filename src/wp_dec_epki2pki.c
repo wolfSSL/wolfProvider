@@ -207,7 +207,7 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     else if (data == NULL) {
         done = 1;
     }
-    if (wc_GetPkcs8TraditionalOffset(data, &tradIdx, (word32)len) <= 0) {
+    if ((!done) && ok && wc_GetPkcs8TraditionalOffset(data, &tradIdx, (word32)len) <= 0) {
         /* This is not PKCS8, we are done */
         done = 1;
         ok = 1;
