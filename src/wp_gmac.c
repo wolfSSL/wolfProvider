@@ -94,6 +94,7 @@ static void wp_gmac_free(wp_GmacCtx* macCtx)
 {
     if (macCtx != NULL) {
         OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
+        OPENSSL_cleanse(macCtx->iv, macCtx->ivLen);
         OPENSSL_clear_free(macCtx->data, macCtx->dataLen);
         OPENSSL_free(macCtx);
     }
@@ -161,9 +162,24 @@ static wp_GmacCtx* wp_gmac_dup(wp_GmacCtx* src)
     }
     if (dst != NULL) {
         *dst = *src;
+        dst->data = NULL;
+        dst->dataLen = 0;
         dst->keyLen = 0;
         dst->ivLen = 0;
 
+        if (src->dataLen != 0) {
+            dst->data = OPENSSL_memdup(src->data, src->dataLen);
+            if (dst->data) {
+                dst->dataLen = src->dataLen;
+            }
+            else {
+                wp_gmac_free(dst);
+                dst = NULL;
+            }
+        }
+    }
+
+    if (dst != NULL) {
         if (src->ivLen != 0) {
             XMEMCPY(dst->iv, src->iv, src->ivLen);
             dst->ivLen = src->ivLen;

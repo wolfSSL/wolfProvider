@@ -123,6 +123,7 @@ int test_cmac_create(void *data);
 
 #ifdef WP_HAVE_GMAC
 int test_gmac_create(void *data);
+int test_gmac_dup(void *data);
 #endif /* WP_HAVE_GMAC */
 
 #ifdef WP_HAVE_TLS1_PRF
