@@ -994,6 +994,8 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         *keyLen = len;
     }
 
+    OPENSSL_cleanse(password, sizeof(password));
+
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else

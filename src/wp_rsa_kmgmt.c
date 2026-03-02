@@ -2472,6 +2472,8 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
         ok = wp_rsa_decode_pki(rsa, data, len);
     }
 
+    OPENSSL_cleanse(password, sizeof(password));
+
     WOLFPROV_LEAVE_SILENT(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
         ok);
     return ok;
@@ -3262,6 +3264,8 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
     }
 
     XFREE(encodedKey, NULL, DYNAMIC_TYPE_RSA_BUFFER);
+
+    OPENSSL_cleanse(password, sizeof(password));
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;

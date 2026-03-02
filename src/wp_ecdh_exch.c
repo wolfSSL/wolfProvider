@@ -315,7 +315,8 @@ static int wp_ecdh_derive(wp_EcdhCtx* ctx, unsigned char* secret,
     int done = 0;
     unsigned char* out;
     size_t outLen;
-    unsigned char tmp[72];
+    unsigned char* tmp = NULL;
+    size_t maxLen = (size_t)wp_ecc_get_size(ctx->key);
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDH, "wp_ecdh_derive");
 
@@ -326,10 +327,10 @@ static int wp_ecdh_derive(wp_EcdhCtx* ctx, unsigned char* secret,
     /* No output buffer, return maximum size only. */
     if (ok && (secret == NULL)) {
         if (ctx->kdfType == WP_KDF_NONE) {
-            *secLen = wp_ecc_get_size(ctx->key);
+            *secLen = maxLen;
         }
         else {
-            *secLen = ctx->keyLen;;
+            *secLen = ctx->keyLen;
         }
         done = 1;
     }
@@ -342,8 +343,15 @@ static int wp_ecdh_derive(wp_EcdhCtx* ctx, unsigned char* secret,
         }
         else if (ctx->kdfType == WP_KDF_X963) {
             /* Output of ECDH key exchange goes into temporary buffer. */
-            out = tmp;
-            outLen = sizeof(tmp);
+            tmp = OPENSSL_malloc(maxLen);
+            if (tmp == NULL) {
+                ok = 0;
+                outLen = 0;
+            }
+            else {
+                out = tmp;
+                outLen = maxLen;
+            }
         }
         else {
             ok = 0;
@@ -364,6 +372,8 @@ static int wp_ecdh_derive(wp_EcdhCtx* ctx, unsigned char* secret,
             *secLen = outLen;
         }
     }
+
+    OPENSSL_clear_free(tmp, maxLen);
 
     WOLFPROV_LEAVE(WP_LOG_COMP_ECDH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
