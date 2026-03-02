@@ -115,7 +115,8 @@ static wp_EcxCtx* wp_ecx_dupctx(wp_EcxCtx* src)
             dst->peer = src->peer;
         }
         if (!ok) {
-            wp_ecx_free(src->key);
+            wp_ecx_free(dst->key);
+            wp_ecx_free(dst->peer);
             OPENSSL_free(dst);
             dst = NULL;
         }

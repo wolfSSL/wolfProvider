@@ -156,8 +156,8 @@ static wp_EcdhCtx* wp_ecdh_dup(wp_EcdhCtx* src)
         }
         if (!ok) {
             /* Free allocated memory and up referenced objects. */
-            wp_ecc_free(src->peer);
-            wp_ecc_free(src->key);
+            wp_ecc_free(dst->peer);
+            wp_ecc_free(dst->key);
             OPENSSL_free(dst);
             dst = NULL;
         }
