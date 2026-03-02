@@ -55,7 +55,8 @@ jobs:
         run: |
           apt-get update
           apt-get install -y git build-essential autoconf automake \
-            libtool pkg-config libgnutls28-dev net-tools iproute2 python3
+            libtool pkg-config libgnutls28-dev net-tools iproute2 python3 \
+            valgrind libtool-bin
 
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
