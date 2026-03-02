@@ -191,6 +191,11 @@ static const char* wp_rsa_param_key[WP_RSA_PARAM_NUMS_CNT] = {
     OSSL_PKEY_PARAM_RSA_EXPONENT1, OSSL_PKEY_PARAM_RSA_EXPONENT2,
     OSSL_PKEY_PARAM_RSA_COEFFICIENT1
 };
+#define WP_RSA_PARAM_KEY_FACTOR_INDEX1 3
+#define WP_RSA_PARAM_KEY_FACTOR_INDEX2 4
+#define WP_RSA_PARAM_KEY_EXPONENT_INDEX1 5
+#define WP_RSA_PARAM_KEY_EXPONENT_INDEX2 6
+#define WP_RSA_PARAM_KEY_COEFFICIENT_INDEX 7
 
 /**
  * RSA PSS parameters.
@@ -1143,6 +1148,27 @@ static int wp_rsa_match(const wp_Rsa* rsa1, const wp_Rsa* rsa2, int selection)
     return ok;
 }
 
+#define VALIDATE_PRIMES_SIZE 133
+static const mp_digit validate_primes[VALIDATE_PRIMES_SIZE] = {
+   0x0002, 0x0003, 0x0005, 0x0007, 0x000B, 0x000D, 0x0011, 0x0013,
+   0x0017, 0x001D, 0x001F, 0x0025, 0x0029, 0x002B, 0x002F, 0x0035,
+   0x003B, 0x003D, 0x0043, 0x0047, 0x0049, 0x004F, 0x0053, 0x0059,
+   0x0061, 0x0065, 0x0067, 0x006B, 0x006D, 0x0071, 0x007F, 0x0083,
+   0x0089, 0x008B, 0x0095, 0x0097, 0x009D, 0x00A3, 0x00A7, 0x00AD,
+   0x00B3, 0x00B5, 0x00BF, 0x00C1, 0x00C5, 0x00C7, 0x00D3, 0x00DF,
+   0x00E3, 0x00E5, 0x00E9, 0x00EF, 0x00F1, 0x00FB, 0x0101, 0x0107,
+   0x010D, 0x010F, 0x0115, 0x0119, 0x011B, 0x0125, 0x0133, 0x0137,
+   0x0139, 0x013D, 0x014B, 0x0151, 0x015B, 0x015D, 0x0161, 0x0167,
+   0x016F, 0x0175, 0x017B, 0x017F, 0x0185, 0x018D, 0x0191, 0x0199,
+   0x01A3, 0x01A5, 0x01AF, 0x01B1, 0x01B7, 0x01BB, 0x01C1, 0x01C9,
+   0x01CD, 0x01CF, 0x01D3, 0x01DF, 0x01E7, 0x01EB, 0x01F3, 0x01F7,
+   0x01FD, 0x0209, 0x020B, 0x021D, 0x0223, 0x022D, 0x0233, 0x0239,
+   0x023B, 0x0241, 0x024B, 0x0251, 0x0257, 0x0259, 0x025F, 0x0265,
+   0x0269, 0x026B, 0x0277, 0x0281, 0x0283, 0x0287, 0x028D, 0x0293,
+   0x0295, 0x02A1, 0x02A5, 0x02AB, 0x02B3, 0x02BD, 0x02C5, 0x02CF,
+   0x02D7, 0x02DD, 0x02E3, 0x02E7, 0x02EF,
+};
+
 /**
  * Validate the RSA key.
  *
@@ -1175,21 +1201,137 @@ static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
     else
 #endif
     if (checkPriv) {
-        if (mp_isone(&rsa->key.d) || mp_iszero((mp_int*)&rsa->key.d) ||
+        if (mp_iszero((mp_int*)&rsa->key.d) ||
             (mp_cmp((mp_int*)&rsa->key.d, (mp_int*)&rsa->key.n) != MP_LT)) {
             ok = 0;
         }
     }
     else if (checkPub) {
-        if (mp_iseven(&rsa->key.e) || mp_iszero((mp_int*)&rsa->key.e) ||
-            mp_isone(&rsa->key.e)) {
+        int prime;
+        mp_int res;
+
+        if (mp_iszero((mp_int*)&rsa->key.e) || mp_iszero((mp_int*)&rsa->key.n) ||
+                mp_isone((mp_int*)&rsa->key.e) || mp_isone((mp_int*)&rsa->key.n) ||
+                mp_iseven((mp_int*)&rsa->key.e) || mp_iseven((mp_int*)&rsa->key.n)) {
             ok = 0;
+        }
+
+        if (ok && mp_init(&res) != MP_OKAY) {
+            ok = 0;
+        }
+        else if (ok) {
+            for(prime = 0; prime < VALIDATE_PRIMES_SIZE; prime++) {
+                if (mp_set_int(&res, validate_primes[prime]) != MP_OKAY ||
+                        mp_mod((mp_int*)&rsa->key.n, &res, &res) != MP_OKAY ||
+                        mp_iszero(&res)) {
+                    ok = 0;
+                    break;
+                }
+            }
+
+            mp_clear(&res);
         }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
+
+/**
+ * Copy an unsigned value from an OSSL param into a provided RSA key parameter.
+ *
+ * @param [out] mp         RSA key parameter.
+ * @param [in]  param      Parameter to copy value from.
+ * @return  Size of mp in bits as unsigned integer on success.
+ * @return  -1 on failure.
+ */
+static int wp_rsa_import_store_unsigned(mp_int* mp, const OSSL_PARAM* param)
+{
+    int ok;
+    int bits = -1;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_import_store_unsigned");
+
+#if OPENSSL_VERSION_NUMBER <= 0x30100080L
+    ok = param->data != NULL && param->data_type == OSSL_PARAM_UNSIGNED_INTEGER;
+#else
+    ok = param->data != NULL && (param->data_type == OSSL_PARAM_INTEGER ||
+            param->data_type == OSSL_PARAM_UNSIGNED_INTEGER);
+#endif /* OPENSSL_VERSION_NUMBER <= 3.1.8 */
+
+    if (ok && !wp_mp_read_unsigned_bin_le(mp, param->data, param->data_size)) {
+        WOLFPROV_MSG(WP_LOG_COMP_RSA,
+            "Failed to read %s from parameters", param->key);
+        ok = 0;
+    }
+
+    if (ok) {
+        bits = mp_count_bits(mp);
+    }
+
+    /* Negative values are accepted by OSSL, for now just set to 0.
+     * Note that bits of signed value (as unsigned) are returned */
+    if (ok && param->data_type == OSSL_PARAM_INTEGER) {
+        ok = mp_set(mp, 0) == MP_OKAY;
+        bits -= 8;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return bits;
+}
+
+/**
+ * Based on the index into wp_rsa_param_key, increment the appropriate counter.
+ *
+ * @param [in]  index      Index associated with wp_rsa_param_key.
+ * @param [out] primes     Count of prime parameters.
+ * @param [out] exps       Count of exponent parameters.
+ * @param [out] coeffs     Count of coefficient parameters.
+ */
+#if OPENSSL_VERSION_NUMBER < 0x30300000L
+static void wp_rsa_import_increment_crt_counts(int index, int *primes,
+    int *exps, int *coeffs)
+{
+    if (index >= WP_RSA_PARAM_KEY_FACTOR_INDEX1 &&
+            index <= WP_RSA_PARAM_KEY_FACTOR_INDEX2) {
+        *primes += 1;
+    }
+    else if (index >= WP_RSA_PARAM_KEY_EXPONENT_INDEX1 &&
+                index <= WP_RSA_PARAM_KEY_EXPONENT_INDEX2) {
+        *exps += 1;
+    }
+    else if (index == WP_RSA_PARAM_KEY_COEFFICIENT_INDEX) {
+        *coeffs += 1;
+    }
+}
+
+static int wp_rsa_import_verify_crt(int primes, int exps, int coeffs)
+{
+    int ok = 1;
+
+    (void)exps;
+    (void)coeffs;
+
+    if (primes > 0) {
+#if (OPENSSL_VERSION_NUMBER < 0x30100040L && OPENSSL_VERSION_NUMBER > 0x30000120L) \
+    || (OPENSSL_VERSION_NUMBER < 0x300000C0L)
+        if (primes < 2 || primes != exps || primes != coeffs + 1) {
+#else
+        if (primes < 2) {
+#endif /* (Ver < 3.1.4 && Ver > 3.0.18) || (Ver < 3.0.12) */
+            WOLFPROV_MSG(WP_LOG_COMP_RSA,
+                "RSA factors provided but CRT parameters incomplete");
+            ok = 0;
+        }
+        /* TODO: multi-prime checks */
+        else if (primes > 2) {
+            ok = 0;
+        }
+    }
+
+    return ok;
+}
+#endif /* OPENSSL_VERSION_NUMBER < 3.3.0 */
 
 /**
  * Import the key data into RSA key object from parameters.
@@ -1208,18 +1350,39 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
     int cnt = 0;
     mp_int* mp = NULL;
     const OSSL_PARAM* p = NULL;
+    const OSSL_PARAM* n;
+    const OSSL_PARAM* e;
+    const OSSL_PARAM* d = NULL;
+    int bits;
+    int nbits;
+#if OPENSSL_VERSION_NUMBER < 0x30300000L
+    int primes = 0;
+    int exps = 0;
+    int coeffs = 0;
+#endif /* OPENSSL_VERSION_NUMBER < 3.3.0 */
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_import_key_data");
 
     /* N and E params are the only ones required by OSSL, so match that.
      * See ossl_rsa_fromdata() and RSA_set0_key() in OpenSSL. */
-    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N) == NULL ||
-        OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E) == NULL) {
+    if ((n = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_N)) == NULL ||
+            n->data == NULL ||
+            (e = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E)) == NULL ||
+            e->data == NULL) {
         WOLFPROV_MSG(WP_LOG_COMP_RSA, "Param N or E is missing");
         ok = 0;
     }
+    if (ok && priv) {
+        d = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_D);
+    }
 
     if (ok) {
+        mp = &rsa->key.n;
+        nbits = wp_rsa_import_store_unsigned(mp, n);
+        ok = nbits != -1;
+    }
+
+    if (ok && d != NULL) {
         cnt = wp_params_count(params);
         rsa->key.type = priv ? RSA_PRIVATE : RSA_PUBLIC;
 
@@ -1230,6 +1393,10 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
                 if (XSTRNCMP(p->key, wp_rsa_param_key[j], XSTRLEN(p->key)) == 0) {
                     index = j;
+#if OPENSSL_VERSION_NUMBER < 0x30300000L
+                    wp_rsa_import_increment_crt_counts(index, &primes, &exps,
+                                                                       &coeffs);
+#endif /* OPENSSL_VERSION_NUMBER < 3.3.0 */
                     break;
                 }
             }
@@ -1241,15 +1408,33 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             }
 
             /* Read the value into the rsa struct */
-            if (ok) {
+            if (ok && p != n) {
                 mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[index]);
-                if (!wp_mp_read_unsigned_bin_le(mp, p->data, p->data_size)) {
-                    WOLFPROV_MSG(WP_LOG_COMP_RSA,
-                        "Failed to read %s from parameters", p->key);
-                    ok = 0;
-                }
+                bits = wp_rsa_import_store_unsigned(mp, p);
+#if OPENSSL_VERSION_NUMBER >= 0x30400000L
+                ok = bits != -1 && bits <= nbits;
+#else
+                ok = bits != -1;
+#endif /* OPENSSL_VERSION_NUMBER >= 3.4.0 */
             }
         }
+
+/* TODO: need to generate exponents and coefficients beforehand
+ * in newer versions, so skip check for now */
+#if OPENSSL_VERSION_NUMBER < 0x30300000L
+        if (ok) {
+            ok = wp_rsa_import_verify_crt(primes, exps, coeffs);
+        }
+#endif /* OPENSSL_VERSION_NUMBER < 3.3.0 */
+    }
+    else if (ok && d == NULL) {
+        mp = &rsa->key.e;
+        bits = wp_rsa_import_store_unsigned(mp, e);
+#if OPENSSL_VERSION_NUMBER >= 0x30400000L
+        ok = bits != -1 && bits <= nbits;
+#else
+        ok = bits != -1;
+#endif /* OPENSSL_VERSION_NUMBER >= 3.4.0 */
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
