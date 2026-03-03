@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      build_type:
+        required: false
+        type: string
+        default: debian
 
 jobs:
   build_wolfprovider_common:
@@ -26,7 +30,7 @@ jobs:
       contents: read
       packages: read
     # Run inside Debian Bookworm using container from ghcr.io/wolfssl/build-wolfprovider-debian:bookworm
-    # We are using this container to avoid having to install all the dependencies on the host machine 
+    # We are using this container to avoid having to install all the dependencies on the host machine
     # and speed up the build process.
     # Note: Docker image paths must be lowercase even though the GitHub org is wolfSSL
     container:
@@ -41,8 +45,32 @@ jobs:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
-      DEBS_PATH: debs
+      YOCTO_IMAGES_PATH: /tmp/yocto-images
     steps:
+      # Compute artifact name for both check and upload steps
+      - name: Prepare artifact name
+        id: prepare_artifact_name
+        run: |
+          if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
+            FIPS_STR="fips"
+          else
+            FIPS_STR="nonfips"
+          fi
+          if [ "${{ inputs.replace_default }}" = "true" ]; then
+            CONFIG_STR="replace-default"
+          else
+            CONFIG_STR="standalone"
+          fi
+
+          if [ "${{ inputs.build_type }}" = "yocto" ]; then
+            ARTIFACT_NAME="yocto-image-${FIPS_STR}-${CONFIG_STR}"
+          else
+            ARTIFACT_NAME="debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}"
+          fi
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "fips_str=${FIPS_STR}" >> $GITHUB_OUTPUT
+          echo "config_str=${CONFIG_STR}" >> $GITHUB_OUTPUT
+
       # Check if artifact already exists from another job in the same workflow run
       # When multiple matrix jobs run in parallel, the first one to finish uploads the artifact
       # Other jobs can then find it and skip rebuilding (no need to download it, just check it exists)
@@ -51,76 +79,145 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
+          name: ${{ steps.prepare_artifact_name.outputs.artifact_name }}
 
-      # Download pre-built packages from debs branch
-      - name: Checkout debs branch
+      # ── ORAS setup (shared by both debian and yocto builds) ──
+      # Artifacts are stored as OCI packages on ghcr.io, pushed by Jenkins.
+      # NOTE: If packages are private, the package settings on ghcr.io must grant
+      # access to the wolfSSL/wolfProvider repository for GITHUB_TOKEN to work.
+      - name: Install ORAS
         if: steps.check_artifact.outcome != 'success'
-        uses: actions/checkout@v4
-        with:
-          repository: wolfSSL/wolfProvider
-          ref: debs
-          sparse-checkout: |
-            fips
-            nonfips
-            openssl
-          sparse-checkout-cone-mode: false
-          path: ${{ env.DEBS_PATH }}
+        run: |
+          ORAS_VERSION="1.2.2"
+          ORAS_CHECKSUM="bff970346470e5ef888e9f2c0bf7f8ee47283f5a45207d6e7a037da1fb0eae0d"
+          curl -sLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          echo "${ORAS_CHECKSUM}  oras_${ORAS_VERSION}_linux_amd64.tar.gz" | sha256sum -c - || {
+            echo "ERROR: ORAS checksum verification failed!"
+            exit 1
+          }
+          tar xzf "oras_${ORAS_VERSION}_linux_amd64.tar.gz" -C /usr/local/bin/ oras
+          rm -f "oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          oras version
 
-      - name: Setup packages from debs branch
+      - name: Login to ghcr.io
         if: steps.check_artifact.outcome != 'success'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login \
+            --username ${{ github.repository_owner }} \
+            --password-stdin ghcr.io
+
+      # ── Debian build: pull .deb packages from ghcr.io ──
+      - name: Download pre-built packages from ghcr.io
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
           mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
 
-          echo "Available packages in debs branch:"
-          ls -la ${{ env.DEBS_PATH }}/
-
-          # Copy packages based on build type
+          # Pull wolfSSL packages based on FIPS variant
           if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
-            if [ -d "${{ env.DEBS_PATH }}/fips" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/fips/*.deb 2>/dev/null)" ]; then
-              echo "Copying FIPS wolfSSL packages..."
-              cp ${{ env.DEBS_PATH }}/fips/*.deb ${{ env.WOLFSSL_PACKAGES_PATH }}/
-            else
-              echo "ERROR: No FIPS packages found in debs branch"
-              exit 1
-            fi
+            echo "Pulling FIPS wolfSSL packages..."
+            oras pull ghcr.io/wolfssl/wolfprovider/debs:fips \
+              -o ${{ env.WOLFSSL_PACKAGES_PATH }}
           else
-            if [ -d "${{ env.DEBS_PATH }}/nonfips" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/nonfips/*.deb 2>/dev/null)" ]; then
-              echo "Copying non-FIPS wolfSSL packages..."
-              cp ${{ env.DEBS_PATH }}/nonfips/*.deb ${{ env.WOLFSSL_PACKAGES_PATH }}/
-            else
-              echo "ERROR: No non-FIPS packages found in debs branch"
-              exit 1
-            fi
+            echo "Pulling non-FIPS wolfSSL packages..."
+            oras pull ghcr.io/wolfssl/wolfprovider/debs:nonfips \
+              -o ${{ env.WOLFSSL_PACKAGES_PATH }}
           fi
-          # Copy OpenSSL packages based on replace_default setting
+
+          # Pull OpenSSL packages based on replace_default setting
           if [ "${{ inputs.replace_default }}" = "true" ]; then
-            if [ -d "${{ env.DEBS_PATH }}/openssl/debs-replace-default" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/openssl/debs-replace-default/*.deb 2>/dev/null)" ]; then
-              echo "Copying OpenSSL replace-default packages..."
-              cp ${{ env.DEBS_PATH }}/openssl/debs-replace-default/*.deb ${{ env.OPENSSL_PACKAGES_PATH }}/
-            else
-              echo "WARNING: No OpenSSL replace-default packages found in debs branch"
-            fi
+            echo "Pulling OpenSSL replace-default packages..."
+            oras pull ghcr.io/wolfssl/wolfprovider/debs:openssl-replace-default \
+              -o ${{ env.OPENSSL_PACKAGES_PATH }}
           else
-            if [ -d "${{ env.DEBS_PATH }}/openssl/debs-default" ] && [ "$(ls -A ${{ env.DEBS_PATH }}/openssl/debs-default/*.deb 2>/dev/null)" ]; then
-              echo "Copying OpenSSL default packages..."
-              cp ${{ env.DEBS_PATH }}/openssl/debs-default/*.deb ${{ env.OPENSSL_PACKAGES_PATH }}/
-            else
-              echo "WARNING: No OpenSSL default packages found in debs branch"
-            fi
+            echo "Pulling OpenSSL default packages..."
+            oras pull ghcr.io/wolfssl/wolfprovider/debs:openssl-default \
+              -o ${{ env.OPENSSL_PACKAGES_PATH }}
+          fi
+
+          # Validate that we actually got .deb files
+          WOLFSSL_COUNT=$(find ${{ env.WOLFSSL_PACKAGES_PATH }} -name "*.deb" 2>/dev/null | wc -l)
+          OPENSSL_COUNT=$(find ${{ env.OPENSSL_PACKAGES_PATH }} -name "*.deb" 2>/dev/null | wc -l)
+
+          if [ "$WOLFSSL_COUNT" -eq 0 ]; then
+            echo "ERROR: No wolfSSL .deb packages found after pull from ghcr.io"
+            echo "Check that Jenkins debian-export job has pushed packages"
+            exit 1
+          fi
+          if [ "$OPENSSL_COUNT" -eq 0 ]; then
+            echo "ERROR: No OpenSSL .deb packages found after pull from ghcr.io"
+            echo "Check that Jenkins debian-export job has pushed packages"
+            exit 1
           fi
 
           echo ""
           echo "Packages ready for installation:"
-          echo "wolfSSL packages:"
+          echo "wolfSSL packages ($WOLFSSL_COUNT .deb files):"
           ls -la ${{ env.WOLFSSL_PACKAGES_PATH }}
           echo ""
-          echo "OpenSSL packages:"
+          echo "OpenSSL packages ($OPENSSL_COUNT .deb files):"
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
 
+      # ── Yocto build: pull WIC images from ghcr.io ──
+      - name: Install xz-utils
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        run: |
+          apt-get update
+          apt-get install -y xz-utils
+
+      - name: Download WIC images from ghcr.io
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        run: |
+          mkdir -p ${{ env.YOCTO_IMAGES_PATH }}
+
+          TAG="${{ steps.prepare_artifact_name.outputs.fips_str }}-${{ steps.prepare_artifact_name.outputs.config_str }}"
+          echo "Pulling ghcr.io/wolfssl/wolfprovider/wics:${TAG}..."
+          oras pull "ghcr.io/wolfssl/wolfprovider/wics:${TAG}" \
+            -o ${{ env.YOCTO_IMAGES_PATH }}
+
+          cd ${{ env.YOCTO_IMAGES_PATH }}
+
+          # Validate we got something from ghcr.io
+          FILE_COUNT=$(ls -1 2>/dev/null | wc -l)
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "ERROR: No files found after pull from ghcr.io"
+            echo "Check that Jenkins yocto-wic-export job has pushed images for tag: ${TAG}"
+            exit 1
+          fi
+
+          # Reassemble split files if present (Jenkins splits files >45MB)
+          if ls *.wic.xz.part-* 1>/dev/null 2>&1; then
+            echo "Reassembling split WIC files..."
+            for part_000 in *.wic.xz.part-000; do
+              BASE_NAME=$(echo "$part_000" | sed 's/\.part-000$//')
+              # Sort numerically to ensure correct order
+              ls -1 ${BASE_NAME}.part-* | sort > /tmp/parts_list.txt
+              cat $(cat /tmp/parts_list.txt) > ${BASE_NAME}
+              rm -f ${BASE_NAME}.part-*
+              echo "Reassembled: ${BASE_NAME}"
+            done
+          fi
+
+          # Decompress
+          if ls *.wic.xz 1>/dev/null 2>&1; then
+            echo "Decompressing WIC images..."
+            for f in *.wic.xz; do unxz -v "$f"; done
+          fi
+
+          # Validate we have a usable .wic file
+          WIC_COUNT=$(ls -1 *.wic 2>/dev/null | wc -l)
+          if [ "$WIC_COUNT" -eq 0 ]; then
+            echo "ERROR: No .wic files after decompression"
+            exit 1
+          fi
+
+          echo ""
+          echo "WIC image ready ($WIC_COUNT file(s)):"
+          ls -lah ${{ env.YOCTO_IMAGES_PATH }}
+
+      # ── Debian build: install packages and build wolfProvider ──
       - name: Install OpenSSL and wolfSSL packages
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           echo "Installing OpenSSL and wolfSSL packages (${{ inputs.fips_ref }})..."
 
@@ -147,7 +244,7 @@ jobs:
           dpkg -l | grep wolfssl || echo "  No wolfSSL packages found"
 
       - name: Checkout wolfProvider
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -155,34 +252,34 @@ jobs:
 
       # Avoid "detected dubious ownership" warning
       - name: Ensure the working directory safe
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # When running on a fork the upstream tags are not present, so fetch them explicitly
       - name: Fetch tags from upstream(for Debian versioning)
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
           git fetch upstream --tags --no-recurse-submodules
 
       - name: Install wolfProvider
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           $GITHUB_WORKSPACE/debian/install-wolfprov.sh ${{ inputs.fips_ref == 'FIPS' && '--fips' || '' }} ${{ env.WOLFPROV_PACKAGES_PATH }}
 
       - name: Setup packages directory
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         run: |
           mkdir -p ${{ env.WOLFPROV_PACKAGES_PATH }}
-          
+
           # Copy wolfProvider packages (built in previous step)
           cp $GITHUB_WORKSPACE/../libwolfprov*.deb    ${{ env.WOLFPROV_PACKAGES_PATH }}
           cp $GITHUB_WORKSPACE/../libwolfprov*.dsc    ${{ env.WOLFPROV_PACKAGES_PATH }}
           cp $GITHUB_WORKSPACE/../libwolfprov*.tar.gz ${{ env.WOLFPROV_PACKAGES_PATH }}
 
-          # Note: OpenSSL and wolfSSL packages already copied from debs branch earlier
-          
+          # Note: OpenSSL and wolfSSL packages already downloaded from ghcr.io earlier
+
           printf "Listing packages directory:\n"
           echo "wolfProvider packages:"
           ls -la ${{ env.WOLFPROV_PACKAGES_PATH }}
@@ -193,15 +290,25 @@ jobs:
           echo "OpenSSL packages:"
           ls -la ${{ env.OPENSSL_PACKAGES_PATH }}
 
-      # Save all packages as artifacts for consumers
-      # Skip upload if artifact already exists (from a parallel run)
+      # ── Artifact uploads ──
+      # Save all packages as artifacts for consumers (Debian)
       - name: Upload wolfProvider packages
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
         uses: actions/upload-artifact@v4
         with:
-          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
+          name: ${{ steps.prepare_artifact_name.outputs.artifact_name }}
           path: |
             ${{ env.WOLFSSL_PACKAGES_PATH }}
             ${{ env.OPENSSL_PACKAGES_PATH }}
             ${{ env.WOLFPROV_PACKAGES_PATH }}
+          retention-days: 1
+
+      # Save WIC images as artifacts (Yocto)
+      - name: Upload Yocto WIC images
+        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare_artifact_name.outputs.artifact_name }}
+          path: |
+            ${{ env.YOCTO_IMAGES_PATH }}
           retention-days: 1
