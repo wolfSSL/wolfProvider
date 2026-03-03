@@ -332,12 +332,13 @@ int wp_unlock(wolfSSL_Mutex* mutex)
  */
 int wp_name_to_nid(OSSL_LIB_CTX* libCtx, const char* name, const char* propQ)
 {
-    int nid;
+    int nid = NID_undef;
 
     EVP_MD* md = EVP_MD_fetch(libCtx, name, propQ);
-    nid = EVP_MD_type(md);
-    EVP_MD_free(md);
-
+    if (md) {
+        nid = EVP_MD_type(md);
+        EVP_MD_free(md);
+    }
     return nid;
 }
 
@@ -441,11 +442,13 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid)
 int wp_name_to_wc_mgf(OSSL_LIB_CTX* libCtx, const char* name,
     const char* propQ)
 {
-    int ret;
+    int ret = WC_MGF1NONE;
 
     EVP_MD* md = EVP_MD_fetch(libCtx, name, propQ);
-    ret = wp_mgf1_from_hash(EVP_MD_type(md));
-    EVP_MD_free(md);
+    if (md) {
+        ret = wp_mgf1_from_hash(EVP_MD_type(md));
+        EVP_MD_free(md);
+    }
 
     return ret;
 }

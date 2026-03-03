@@ -394,6 +394,10 @@ static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
         localKeyLen = (word32)keyLen;
     }
 
+    if (localKeyLen > sizeof(localKey)) {
+        ok = 0;
+    }
+
     if (ok) {
         XMEMCPY(localKey, key, keyLen);
         rc = wc_HmacSetKey(&ctx->hmacCtx, ctx->hashType, localKey,
