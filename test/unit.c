@@ -209,6 +209,7 @@ TEST_CASE test_case[] = {
 #endif
 #ifdef WP_HAVE_GMAC
     TEST_DECL(test_gmac_create, &flags),
+    TEST_DECL(test_gmac_dup, &flags),
 #endif
 #ifdef WP_HAVE_TLS1_PRF
     TEST_DECL(test_tls1_prf, NULL),
@@ -813,4 +814,3 @@ int main(int argc, char* argv[])
 
     return err;
 }
-
