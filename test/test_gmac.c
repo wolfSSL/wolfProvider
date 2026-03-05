@@ -22,9 +22,6 @@
 #include <openssl/core_names.h>
 
 #include "unit.h"
-#undef AES_BLOCK_SIZE
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/aes.h>
 
 #ifdef WP_HAVE_GMAC
 
@@ -195,10 +192,10 @@ int test_gmac_dup(void *data)
     (void)data;
 
     /* Build full messages used for one-shot expected MAC calculations. */
-    XMEMCPY(msgA, prefix, sizeof(prefix));
-    XMEMCPY(msgA + sizeof(prefix), tailA, sizeof(tailA));
-    XMEMCPY(msgB, prefix, sizeof(prefix));
-    XMEMCPY(msgB + sizeof(prefix), tailB, sizeof(tailB));
+    memcpy(msgA, prefix, sizeof(prefix));
+    memcpy(msgA + sizeof(prefix), tailA, sizeof(tailA));
+    memcpy(msgB, prefix, sizeof(prefix));
+    memcpy(msgB + sizeof(prefix), tailB, sizeof(tailB));
 
     /* Compute expected MACs for each post-duplication branch. */
     ret = test_gmac_gen_mac(wpLibCtx, cipher, iv, (int)sizeof(iv), key,
