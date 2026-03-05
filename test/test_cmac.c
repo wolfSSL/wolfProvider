@@ -22,9 +22,6 @@
 #include <openssl/core_names.h>
 
 #include "unit.h"
-#undef AES_BLOCK_SIZE
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/cmac.h>
 
 #ifdef WP_HAVE_CMAC
 
@@ -261,5 +258,4 @@ int test_cmac_create(void *data)
 }
 
 #endif /* WP_HAVE_CMAC */
-
 
