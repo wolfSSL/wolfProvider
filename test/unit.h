@@ -193,6 +193,8 @@ int test_aes192_gcm(void *data);
 int test_aes256_gcm(void *data);
 int test_aes128_gcm_fixed(void *data);
 int test_aes128_gcm_tls(void *data);
+int test_aes128_gcm_set_iv_inv(void *data);
+int test_aes128_gcm_set_iv_fixed(void *data);
 
 #endif /* WP_HAVE_AESGCM */
 
