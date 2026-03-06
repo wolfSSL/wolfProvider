@@ -217,7 +217,7 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
 
     WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_DRBG);
 
-    ctx = (WOLFPROV_CTX*)OPENSSL_zalloc(sizeof(WOLFPROV_CTX));
+    ctx = (WOLFPROV_CTX*)OPENSSL_zalloc(sizeof(*ctx));
     if ((ctx != NULL) && (wc_InitRng(&ctx->rng) != 0)) {
         OPENSSL_free(ctx);
         ctx = NULL;

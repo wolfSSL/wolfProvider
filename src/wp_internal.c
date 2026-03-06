@@ -925,7 +925,7 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
         ok = 0;
     }
     if (ok) {
-        XMEMSET(info, 0, sizeof(EncryptedInfo));
+        XMEMSET(info, 0, sizeof(info));
         XSTRNCPY(info->name, cipherName, NAME_SZ-1);
         info->name[NAME_SZ-1] = '\0';
 
