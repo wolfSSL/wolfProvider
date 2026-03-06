@@ -669,6 +669,270 @@ static int test_aes_tag_dec_ossh_multi(const EVP_CIPHER *cipher,
     return err;
 }
 
+static int test_aes_tag_enc_ossh_iv_params(const EVP_CIPHER *cipher,
+    unsigned char *key, unsigned char *iv, int ivFixedSetArg,
+    unsigned char *aad, unsigned char *msg, int len, unsigned char *enc,
+    unsigned char *tag, unsigned char *ivInv, size_t ivInvLen)
+{
+    int err;
+    EVP_CIPHER_CTX *encCtx;
+    unsigned int tagLen = 16;
+    unsigned char ivLocal[EVP_GCM_TLS_FIXED_IV_LEN + EVP_GCM_TLS_EXPLICIT_IV_LEN];
+
+    memcpy(ivLocal, iv, sizeof(ivLocal));
+
+    err = (encCtx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_CipherInit(encCtx, cipher, NULL, ivLocal, 1) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: EVP_CipherInit(enc=1) failed");
+       }
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(encCtx, EVP_CTRL_GCM_SET_IV_FIXED,
+                                 ivFixedSetArg, ivLocal) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: SET_IV_FIXED failed arg=%d", ivFixedSetArg);
+       }
+    }
+    if (err == 0) {
+       err = EVP_CipherInit(encCtx, NULL, key, NULL, -1) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: EVP_CipherInit(key) failed");
+       }
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(encCtx, EVP_CTRL_GCM_IV_GEN, (int)ivInvLen,
+                                 ivInv) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: IV_GEN failed ivInvLen=%d", (int)ivInvLen);
+       }
+    }
+    if (err == 0) {
+       err = EVP_Cipher(encCtx, NULL, aad, (int)strlen((char *)aad)) <= 0;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: AAD step failed");
+       }
+    }
+    if (err == 0) {
+       err = EVP_Cipher(encCtx, enc, msg, len) != len;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: payload step failed len=%d", len);
+       }
+    }
+    if (err == 0) {
+       err = EVP_Cipher(encCtx, NULL, NULL, 0) < 0;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: final step failed");
+       }
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(encCtx, EVP_CTRL_GCM_GET_TAG, tagLen,
+                                 tag) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("enc_ossh_iv_params: GET_TAG failed");
+       }
+    }
+
+    EVP_CIPHER_CTX_free(encCtx);
+    return err;
+}
+
+static int test_aes_tag_dec_ossh_set_iv_inv(const EVP_CIPHER *cipher,
+    unsigned char *key, unsigned char *iv, int ivFixedSetArg,
+    unsigned char *aad, unsigned char *msg, int len, unsigned char *enc,
+    unsigned char *tag, unsigned char *dec, unsigned char *ivInv,
+    size_t ivInvLen)
+{
+    int err;
+    EVP_CIPHER_CTX *decCtx;
+    unsigned int tagLen = 16;
+    unsigned char ivLocal[EVP_GCM_TLS_FIXED_IV_LEN + EVP_GCM_TLS_EXPLICIT_IV_LEN];
+
+    memcpy(ivLocal, iv, sizeof(ivLocal));
+
+    err = (decCtx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+       err = EVP_CipherInit(decCtx, cipher, NULL, ivLocal, 0) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("dec_ossh_set_iv_inv: EVP_CipherInit(enc=0) failed");
+       }
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_GCM_SET_IV_FIXED,
+                                 ivFixedSetArg, ivLocal) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("dec_ossh_set_iv_inv: SET_IV_FIXED failed arg=%d", ivFixedSetArg);
+       }
+    }
+    if (err == 0) {
+       err = EVP_CipherInit(decCtx, NULL, key, NULL, -1) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("dec_ossh_set_iv_inv: EVP_CipherInit(key) failed");
+       }
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_GCM_SET_IV_INV,
+                                 (int)ivInvLen, ivInv) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("dec_ossh_set_iv_inv: SET_IV_INV failed ivInvLen=%d", (int)ivInvLen);
+       }
+    }
+    if (err == 0) {
+       err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_GCM_SET_TAG, tagLen,
+                                 tag) != 1;
+       if (err != 0) {
+           PRINT_ERR_MSG("dec_ossh_set_iv_inv: SET_TAG failed");
+       }
+    }
+    if (err == 0) {
+        err = EVP_Cipher(decCtx, NULL, aad, (int)strlen((char *)aad)) <= 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("dec_ossh_set_iv_inv: AAD step failed");
+        }
+    }
+    if (err == 0) {
+       err = EVP_Cipher(decCtx, dec, enc, len) != len;
+       if (err != 0) {
+           PRINT_ERR_MSG("dec_ossh_set_iv_inv: payload step failed len=%d", len);
+       }
+    }
+    if (err == 0) {
+       err = EVP_Cipher(decCtx, NULL, NULL, 0) < 0;
+       if (err != 0) {
+           PRINT_ERR_MSG("dec_ossh_set_iv_inv: final step failed");
+       }
+    }
+    if ((err == 0) && (dec != NULL) && (msg != NULL) && (memcmp(dec, msg,
+            len) != 0)) {
+        PRINT_ERR_MSG("dec_ossh_set_iv_inv: plaintext mismatch len=%d", len);
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(decCtx);
+    return err;
+}
+
+static int test_aes_tag_set_iv_inv(void *data, const char *cipher,
+                                   int keyLen)
+{
+    int err = 0;
+    unsigned char msg[] = "Test pattern";
+    unsigned char key[32];
+    unsigned char iv[12];
+    unsigned char aad[] = "AAD";
+    unsigned char enc[sizeof(msg)];
+    unsigned char tag[AES_BLOCK_SIZE];
+    unsigned char dec[sizeof(msg)];
+    unsigned char ivInv[EVP_GCM_TLS_EXPLICIT_IV_LEN];
+    EVP_CIPHER* ocipher;
+    EVP_CIPHER* wcipher;
+
+    (void)data;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, cipher, "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, cipher, "");
+
+    if (RAND_bytes(key, keyLen) == 0) {
+        err = 1;
+    }
+    if ((err == 0) && (RAND_bytes(iv, sizeof(iv)) == 0)) {
+        err = 1;
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Encrypt with OpenSSL (SET_IV_INV)");
+        err = test_aes_tag_enc_ossh_iv_params(ocipher, key, iv, -1, aad, msg,
+                                              sizeof(msg), enc, tag, ivInv,
+                                              sizeof(ivInv));
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with wolfprovider (SET_IV_INV)");
+        err = test_aes_tag_dec_ossh_set_iv_inv(wcipher, key, iv, -1, aad, msg,
+                                               sizeof(msg), enc, tag, dec,
+                                               ivInv, sizeof(ivInv));
+    }
+    if (err == 0) {
+        PRINT_MSG("Encrypt with wolfprovider (SET_IV_INV)");
+        err = test_aes_tag_enc_ossh_iv_params(wcipher, key, iv, -1, aad, msg,
+                                              sizeof(msg), enc, tag, ivInv,
+                                              sizeof(ivInv));
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with OpenSSL (SET_IV_INV)");
+        err = test_aes_tag_dec_ossh_set_iv_inv(ocipher, key, iv, -1, aad, msg,
+                                               sizeof(msg), enc, tag, dec,
+                                               ivInv, sizeof(ivInv));
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+static int test_aes_tag_set_iv_fixed(void *data, const char *cipher,
+                                     int keyLen)
+{
+    int err = 0;
+    unsigned char msg[] = "Test pattern";
+    unsigned char key[32];
+    unsigned char iv[12];
+    unsigned char aad[] = "AAD";
+    unsigned char enc[sizeof(msg)];
+    unsigned char tag[AES_BLOCK_SIZE];
+    unsigned char dec[sizeof(msg)];
+    unsigned char ivInv[EVP_GCM_TLS_EXPLICIT_IV_LEN];
+    EVP_CIPHER* ocipher;
+    EVP_CIPHER* wcipher;
+
+    (void)data;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, cipher, "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, cipher, "");
+
+    if (RAND_bytes(key, keyLen) == 0) {
+        err = 1;
+    }
+    if ((err == 0) && (RAND_bytes(iv, sizeof(iv)) == 0)) {
+        err = 1;
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Encrypt with OpenSSL (TLS1_IV_FIXED)");
+        err = test_aes_tag_enc_ossh_iv_params(ocipher, key, iv,
+                                              EVP_GCM_TLS_FIXED_IV_LEN, aad,
+                                              msg, sizeof(msg), enc, tag,
+                                              ivInv, sizeof(ivInv));
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with wolfprovider (TLS1_IV_FIXED)");
+        err = test_aes_tag_dec_ossh_set_iv_inv(wcipher, key, iv,
+                                               EVP_GCM_TLS_FIXED_IV_LEN, aad,
+                                               msg, sizeof(msg), enc, tag, dec,
+                                               ivInv, sizeof(ivInv));
+    }
+    if (err == 0) {
+        PRINT_MSG("Encrypt with wolfprovider (TLS1_IV_FIXED)");
+        err = test_aes_tag_enc_ossh_iv_params(wcipher, key, iv,
+                                              EVP_GCM_TLS_FIXED_IV_LEN, aad,
+                                              msg, sizeof(msg), enc, tag,
+                                              ivInv, sizeof(ivInv));
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with OpenSSL (TLS1_IV_FIXED)");
+        err = test_aes_tag_dec_ossh_set_iv_inv(ocipher, key, iv,
+                                               EVP_GCM_TLS_FIXED_IV_LEN, aad,
+                                               msg, sizeof(msg), enc, tag, dec,
+                                               ivInv, sizeof(ivInv));
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
 static int test_aes_tag_fixed(void *data, const char *cipher,
                               int keyLen, int ivFixedLen, int ivLen)
 {
@@ -1042,6 +1306,20 @@ int test_aes128_gcm_tls(void *data)
                             EVP_GCM_TLS_FIXED_IV_LEN, 0);
 }
 
+/******************************************************************************/
+
+int test_aes128_gcm_set_iv_inv(void *data)
+{
+    return test_aes_tag_set_iv_inv(data, "AES-128-GCM", 16);
+}
+
+/******************************************************************************/
+
+int test_aes128_gcm_set_iv_fixed(void *data)
+{
+    return test_aes_tag_set_iv_fixed(data, "AES-128-GCM", 16);
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/
@@ -1092,4 +1370,3 @@ int test_aes128_ccm_tls(void *data)
 }
 
 #endif /* WP_HAVE_AESCCM */
-

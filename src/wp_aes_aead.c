@@ -666,8 +666,8 @@ static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
             ok = wp_aead_set_param_tls1_iv_fixed(ctx, params);
         }
         else if (ok && (ctx->mode == EVP_CIPH_GCM_MODE) &&
-                 (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED,
-                  sizeof(OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED)) == 0)) {
+                 (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV,
+                  sizeof(OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV)) == 0)) {
             ok = wp_aead_set_param_tls1_iv_rand(ctx, params);
         }
 
@@ -921,11 +921,16 @@ static int wp_aesgcm_set_rand_iv(wp_AeadCtx *ctx, unsigned char *in,
         ok = 0;
     }
     else {
-#ifndef WOLFSSL_AESGCM_STREAM
-        XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
-#endif
         XMEMCPY(ctx->iv + ctx->ivLen - inLen, in, inLen);
+#ifdef WOLFSSL_AESGCM_STREAM
+        /* Stream update initializes AES-GCM when IV state is buffered. */
+        ctx->ivState = IV_STATE_BUFFERED;
+#else
+        /* Non-stream path consumes origIv when IV state is COPIED. Ensure it
+         * includes the explicit/random bytes from SET_IV_INV. */
+        XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
         ctx->ivState = IV_STATE_COPIED;
+#endif
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -997,6 +1002,101 @@ static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
 }
 
 /**
+ * Initialize AES GCM key and IV/nonce state.
+ *
+ * @param [in, out] ctx     AEAD context object.
+ * @param [in]      key     Key to initialize with. May be NULL.
+ * @param [in]      keyLen  Length of key in bytes.
+ * @param [in]      iv      IV/nonce to initialize with. May be NULL.
+ * @param [in]      ivLen   Length of IV/nonce in bytes.
+ * @param [in]      enc     1 for encryption, 0 for decryption.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_aesgcm_init_key_iv(wp_AeadCtx* ctx, const unsigned char* key,
+    size_t keyLen, const unsigned char* iv, size_t ivLen, int enc)
+{
+    Aes *aes = &ctx->aes;
+    int ok = 1;
+    int rc;
+
+#ifdef WOLFSSL_AESGCM_STREAM
+    if (iv != NULL) {
+        if (ivLen > 0) {
+            XMEMCPY(ctx->iv, iv, ivLen);
+            ctx->ivState = IV_STATE_BUFFERED;
+            ctx->ivSet = 0;
+            ctx->ivLen = ivLen;
+        }
+        else {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_AES,
+                "wp_aesgcm_init_key_iv: stream iv pointer provided with ivLen=0 "
+                "(enc=%d), treating as key-only reinit", enc);
+        }
+    }
+
+    if (ok && (key != NULL)) {
+        if ((iv == NULL) || (ivLen == 0)) {
+            rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_AesGcmSetKey", rc);
+                ok = 0;
+            }
+        }
+        else if (enc) {
+            rc = wc_AesGcmEncryptInit(aes, key, (word32)keyLen, iv,
+                (word32)ivLen);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_AesGcmEncryptInit", rc);
+                ok = 0;
+            }
+        }
+        else {
+            rc = wc_AesGcmDecryptInit(aes, key, (word32)keyLen, iv,
+                (word32)ivLen);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_AesGcmDecryptInit", rc);
+                ok = 0;
+            }
+        }
+    }
+#else
+    (void)enc;
+    if (key != NULL) {
+        rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetKey",
+                rc);
+            ok = 0;
+        }
+    }
+    if (ok && (iv != NULL) && (ivLen > 0)) {
+        if (ivLen != ctx->ivLen) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_AES,
+                "wp_aesgcm_init_key_iv: non-stream ivLen mismatch ivLen=%u "
+                "ctx->ivLen=%u", (unsigned)ivLen, (unsigned)ctx->ivLen);
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, iv, ivLen);
+            ctx->ivState = IV_STATE_BUFFERED;
+            ctx->ivSet = 0;
+        }
+    }
+    else if (ok && (iv != NULL) && (ivLen == 0)) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_AES,
+            "wp_aesgcm_init_key_iv: non-stream iv pointer provided with ivLen=0, "
+            "keeping existing IV");
+    }
+#endif
+
+    return ok;
+}
+
+/**
  * Initialize AES GCM cipher for encryption.
  *
  * Sets the parameters as well as key and IV/nonce.
@@ -1014,7 +1114,6 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
     size_t keyLen, const unsigned char *iv, size_t ivLen,
     const OSSL_PARAM params[])
 {
-    Aes *aes = &ctx->aes;
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_einit");
@@ -1025,55 +1124,9 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
     if (ok) {
         WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
     }
-#ifdef WOLFSSL_AESGCM_STREAM
     if (ok) {
-        int rc;
-
-        if (iv != NULL) {
-            if (ivLen == 0) {
-                ok = 0;
-            }
-            if (ok) {
-                XMEMCPY(ctx->iv, iv, ivLen);
-                ctx->ivState = IV_STATE_BUFFERED;
-                ctx->ivSet = 0;
-                ctx->ivLen = ivLen;
-            }
-        }
-        if ((ivLen == 0) && (key != NULL)) {
-            rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetKey", rc);
-                ok = 0;
-            }
-        }
-        else if (key != NULL) {
-            rc = wc_AesGcmEncryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen);
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmEncryptInit", rc);
-                ok = 0;
-            }
-        }
+        ok = wp_aesgcm_init_key_iv(ctx, key, keyLen, iv, ivLen, 1);
     }
-#else
-    if (ok && (key != NULL)) {
-        int rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetKey", rc);
-            ok = 0;
-        }
-    }
-    if (ok && (iv != NULL)) {
-        if (ivLen != ctx->ivLen) {
-            ok = 0;
-        }
-        if (ok) {
-            XMEMCPY(ctx->iv, iv, ivLen);
-            ctx->ivState = IV_STATE_BUFFERED;
-            ctx->ivSet = 0;
-        }
-    }
-#endif
     if (ok) {
         ctx->enc = 1;
         ctx->keySet |= (key != NULL);
@@ -1103,7 +1156,6 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
     size_t keyLen, const unsigned char *iv, size_t ivLen,
     const OSSL_PARAM params[])
 {
-    Aes *aes = &ctx->aes;
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_dinit");
@@ -1114,38 +1166,9 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
     if (ok) {
         WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
     }
-#ifdef WOLFSSL_AESGCM_STREAM
-    if (ok && key != NULL) {
-        int rc = wc_AesGcmDecryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmDecryptInit", rc);
-            ok = 0;
-        }
-    }
     if (ok) {
-        XMEMCPY(ctx->iv, iv, ivLen);
-        ctx->ivState = IV_STATE_BUFFERED;
-        ctx->ivSet = 0;
+        ok = wp_aesgcm_init_key_iv(ctx, key, keyLen, iv, ivLen, 0);
     }
-#else
-    if (ok && (key != NULL)) {
-        int rc = wc_AesGcmSetKey(aes, key, (word32)keyLen);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetKey", rc);
-            ok = 0;
-        }
-    }
-    if (ok && (iv != NULL)) {
-        if (ivLen != ctx->ivLen) {
-            ok = 0;
-        }
-        if (ok) {
-            XMEMCPY(ctx->iv, iv, ivLen);
-            ctx->ivState = IV_STATE_BUFFERED;
-            ctx->ivSet = 0;
-        }
-    }
-#endif
     if (ok) {
         ctx->enc = 0;
         ctx->keySet |= (key != NULL);
