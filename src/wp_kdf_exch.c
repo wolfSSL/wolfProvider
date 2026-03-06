@@ -103,9 +103,11 @@ static wp_KdfCtx* wp_kdf_ctx_new(WOLFPROV_CTX* provCtx, const char* name)
  */
 static void wp_kdf_ctx_free(wp_KdfCtx* ctx)
 {
-    wp_kdf_free(ctx->key);
-    EVP_KDF_CTX_free(ctx->kdfCtx);
-    OPENSSL_free(ctx);
+    if (ctx != NULL) {
+        wp_kdf_free(ctx->key);
+        EVP_KDF_CTX_free(ctx->kdfCtx);
+        OPENSSL_free(ctx);
+    }
 }
 
 /**
@@ -133,7 +135,7 @@ static wp_KdfCtx* wp_kdf_ctx_dup(wp_KdfCtx* src)
         }
 
         if (!ok) {
-            OPENSSL_free(dst);
+            wp_kdf_ctx_free(dst);
             dst = NULL;
         }
     }
