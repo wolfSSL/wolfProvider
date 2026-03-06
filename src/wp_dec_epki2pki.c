@@ -263,6 +263,8 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     /* Dispose of the EPKI data buffer. */
     OPENSSL_free(data);
 
+    OPENSSL_cleanse(password, sizeof(password));
+
     WOLFPROV_LEAVE(WP_LOG_COMP_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

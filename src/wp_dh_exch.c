@@ -512,8 +512,10 @@ static int wp_dh_set_param_kdf_digest(wp_DhCtx* ctx, const OSSL_PARAM params[])
     }
     if (ok && (mdName != NULL)) {
         const char* mdProps = NULL;
+        size_t mdNameLen = OPENSSL_strnlen(mdName, sizeof(ctx->kdfMdName) - 1);
 
-        XMEMCPY(ctx->kdfMdName, mdName, XSTRLEN(mdName) + 1);
+        XMEMCPY(ctx->kdfMdName, mdName, mdNameLen);
+        ctx->kdfMdName[mdNameLen] = '\0';
         if (!wp_params_get_utf8_string_ptr(params,
                     OSSL_EXCHANGE_PARAM_KDF_DIGEST_PROPS, &mdProps)) {
             ok = 0;
