@@ -15,7 +15,6 @@ on:
       replace_default:
         required: false
         type: boolean
-        default: false
 
 jobs:
   build_wolfprovider_common:
@@ -42,6 +41,7 @@ jobs:
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
       DEBS_PATH: debs
+      PACKAGE_NAME: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }} 
     steps:
       # Check if artifact already exists from another job in the same workflow run
       # When multiple matrix jobs run in parallel, the first one to finish uploads the artifact
@@ -51,7 +51,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
+          name: ${{ env.PACKAGE_NAME }}
 
       # Download pre-built packages from debs branch
       - name: Checkout debs branch
@@ -199,7 +199,7 @@ jobs:
         if: steps.check_artifact.outcome != 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: debian-packages-${{ inputs.fips_ref }}${{ inputs.replace_default && '-replace-default' || '' }}-${{ inputs.wolfssl_ref }}-${{ inputs.openssl_ref }}
+          name: ${{ env.PACKAGE_NAME }}
           path: |
             ${{ env.WOLFSSL_PACKAGES_PATH }}
             ${{ env.OPENSSL_PACKAGES_PATH }}
