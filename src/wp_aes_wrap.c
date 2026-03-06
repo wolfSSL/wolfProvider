@@ -396,6 +396,7 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesKeyUnWrap", rc);
                 ok = 0;
             }
+        }
     #endif
 
         if (ok) {

@@ -299,7 +299,7 @@ static int wp_mac_digest_sign_final(wp_MacSigCtx *ctx, unsigned char *sig,
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
-    if (ok & (sigSize == MAX_SIZE_T) && (ctx->type == WP_MAC_TYPE_CMAC)) {
+    if (ok && (sigSize == MAX_SIZE_T) && (ctx->type == WP_MAC_TYPE_CMAC)) {
         sigSize = AES_BLOCK_SIZE;
     }
     if (ok && (!EVP_MAC_final(ctx->macCtx, sig, sigLen, sigSize))) {
