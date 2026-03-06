@@ -336,7 +336,7 @@ int wp_dh_get_priv(wp_Dh* dh, unsigned char** priv, word32* privSz)
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_get_priv");
 
-    if (privSz == 0) {
+    if (dh == NULL || priv == NULL || privSz == NULL) {
         ok = 0;
     }
     else {
@@ -366,7 +366,7 @@ int wp_dh_get_pub(wp_Dh* dh, unsigned char** pub, word32* pubSz)
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_get_pub");
 
-    if (pubSz == 0) {
+    if (dh == NULL || pub == NULL || pubSz == NULL) {
         ok = 0;
     }
     else {
