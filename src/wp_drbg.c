@@ -190,7 +190,7 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
 
         if (ok) {
             /* Initialize wolfCrypt RNG with parent-provided seed */
-            ctx->rng = OPENSSL_zalloc(sizeof(WC_RNG));
+            ctx->rng = OPENSSL_zalloc(sizeof(*ctx->rng));
             if (ctx->rng == NULL) {
                 ok = 0;
             }
