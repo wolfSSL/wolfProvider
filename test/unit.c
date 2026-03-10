@@ -267,6 +267,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes256_gcm, NULL),
     TEST_DECL(test_aes128_gcm_fixed, NULL),
     TEST_DECL(test_aes128_gcm_tls, NULL),
+    TEST_DECL(test_aes128_gcm_set_iv_inv, NULL),
 #endif
 #ifdef WP_HAVE_AESCCM
     TEST_DECL(test_aes128_ccm, NULL),

@@ -1042,6 +1042,160 @@ int test_aes128_gcm_tls(void *data)
                             EVP_GCM_TLS_FIXED_IV_LEN, 0);
 }
 
+/******************************************************************************/
+
+/* Test that OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV correctly sets the
+ * explicit/random portion of the IV on the decrypt side via the OSSL_PARAM
+ * interface. This exercises the fix in wp_aead_set_ctx_params where the
+ * parameter key comparison was corrected from AEAD_TLS1_IV_FIXED to
+ * AEAD_TLS1_SET_IV_INV. */
+static int test_aes_gcm_set_iv_inv_dec(const EVP_CIPHER *cipher,
+    unsigned char *key, unsigned char *iv, int ivFixedLen, int ivLen,
+    unsigned char *aad, unsigned char *msg, int len,
+    unsigned char *enc, unsigned char *tag, unsigned char *dec)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int decLen;
+    unsigned int tagLen = 16;
+    OSSL_PARAM params[2];
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    /* Init decrypt with key. */
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, cipher, key, NULL) != 1;
+    }
+    /* Set the fixed IV portion - this also sets ivGen. */
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                                  ivFixedLen, iv) != 1;
+    }
+    /* Use OSSL_PARAM AEAD_TLS1_SET_IV_INV to set the explicit/random part
+     * of the IV from the encrypt side. This is the code path fixed by the
+     * commit. */
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV,
+            (void *)(iv + ivFixedLen), ivLen - ivFixedLen);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    /* Set tag for verification. */
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, tagLen,
+                                  (void *)tag) != 1;
+    }
+    /* AAD. */
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &decLen, aad,
+                                (int)strlen((char *)aad)) != 1;
+    }
+    /* Decrypt. */
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, dec, &decLen, enc, len) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, dec + decLen, &decLen) != 1;
+    }
+    if (err == 0 && dec != NULL && msg != NULL) {
+        PRINT_BUFFER("Decrypted", dec, len);
+        if (memcmp(dec, msg, len) != 0) {
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return err;
+}
+
+static int test_aes_gcm_set_iv_inv(void *data, const char *cipher,
+                                    int keyLen, int ivFixedLen, int ivLen)
+{
+    int err = 0;
+    unsigned char msg[] = "Test pattern";
+    unsigned char key[32];
+    unsigned char iv[12];
+    unsigned char aad[] = "AAD";
+    unsigned char enc[sizeof(msg)];
+    unsigned char tag[AES_BLOCK_SIZE];
+    unsigned char dec[sizeof(msg)];
+    EVP_CIPHER* ocipher;
+    EVP_CIPHER* wcipher;
+
+    (void)data;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, cipher, "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, cipher, "");
+
+    if (RAND_bytes(key, keyLen) == 0) {
+        err = 1;
+    }
+    if (err == 0) {
+        if (RAND_bytes(iv, sizeof(iv)) == 0) {
+            err = 1;
+        }
+    }
+
+    if (err == 0) {
+        PRINT_BUFFER("Key", key, keyLen);
+        PRINT_BUFFER("IV", iv, ivLen);
+        PRINT_BUFFER("Message", msg, sizeof(msg));
+    }
+
+    /* Encrypt with OpenSSL using fixed IV, decrypt with wolfProvider
+     * using OSSL_PARAM SET_IV_INV. */
+    if (err == 0) {
+        PRINT_MSG("Encrypt with OpenSSL (fixed IV)");
+        err = test_aes_tag_fixed_enc(ocipher, key, iv, ivFixedLen, ivLen,
+                                     aad, msg, sizeof(msg), enc, tag);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with wolfprovider (SET_IV_INV via OSSL_PARAM)");
+        err = test_aes_gcm_set_iv_inv_dec(wcipher, key, iv, ivFixedLen, ivLen,
+                                           aad, msg, sizeof(msg), enc, tag,
+                                           dec);
+    }
+
+    /* Encrypt with wolfProvider using fixed IV, decrypt with wolfProvider
+     * using OSSL_PARAM SET_IV_INV. */
+    if (err == 0) {
+        PRINT_MSG("Encrypt with wolfprovider (fixed IV)");
+        err = test_aes_tag_fixed_enc(wcipher, key, iv, ivFixedLen, ivLen,
+                                     aad, msg, sizeof(msg), enc, tag);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with wolfprovider (SET_IV_INV via OSSL_PARAM)");
+        err = test_aes_gcm_set_iv_inv_dec(wcipher, key, iv, ivFixedLen, ivLen,
+                                           aad, msg, sizeof(msg), enc, tag,
+                                           dec);
+    }
+
+    /* Encrypt with wolfProvider using fixed IV, decrypt with OpenSSL
+     * using OSSL_PARAM SET_IV_INV. */
+    if (err == 0) {
+        PRINT_MSG("Encrypt with wolfprovider (fixed IV)");
+        err = test_aes_tag_fixed_enc(wcipher, key, iv, ivFixedLen, ivLen,
+                                     aad, msg, sizeof(msg), enc, tag);
+    }
+    if (err == 0) {
+        PRINT_MSG("Decrypt with OpenSSL (SET_IV_INV via OSSL_PARAM)");
+        err = test_aes_gcm_set_iv_inv_dec(ocipher, key, iv, ivFixedLen, ivLen,
+                                           aad, msg, sizeof(msg), enc, tag,
+                                           dec);
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+int test_aes128_gcm_set_iv_inv(void *data)
+{
+    return test_aes_gcm_set_iv_inv(data, "AES-128-GCM", 16,
+                                    EVP_GCM_TLS_FIXED_IV_LEN, 12);
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/

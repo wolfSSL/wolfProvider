@@ -666,8 +666,8 @@ static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
             ok = wp_aead_set_param_tls1_iv_fixed(ctx, params);
         }
         else if (ok && (ctx->mode == EVP_CIPH_GCM_MODE) &&
-                 (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED,
-                  sizeof(OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED)) == 0)) {
+                 (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV,
+                  sizeof(OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV)) == 0)) {
             ok = wp_aead_set_param_tls1_iv_rand(ctx, params);
         }
 
@@ -925,7 +925,7 @@ static int wp_aesgcm_set_rand_iv(wp_AeadCtx *ctx, unsigned char *in,
         XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
 #endif
         XMEMCPY(ctx->iv + ctx->ivLen - inLen, in, inLen);
-        ctx->ivState = IV_STATE_COPIED;
+        ctx->ivState = IV_STATE_BUFFERED;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

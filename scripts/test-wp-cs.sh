@@ -284,9 +284,9 @@ openssl version -a || true
 if [ "${AM_BWRAPPED-}" != "yes" ]; then
     # Perform the build only if not in the bubble
     printf "Cleaning up previous builds\n"
-    ${SCRIPT_DIR}/build-wolfprovider.sh --clean --distclean
+    ${SCRIPT_DIR}/build-wolfprovider.sh --clean --distclean || exit 1
     printf "Building wolfProvider\n"
-    ${SCRIPT_DIR}/build-wolfprovider.sh
+    ${SCRIPT_DIR}/build-wolfprovider.sh || exit 1
 
     printf "OPENSSL_BIN: $OPENSSL_BIN\n"
     $OPENSSL_BIN version -a || true
@@ -321,4 +321,3 @@ else
     printf "$FAIL tests failed.\n"
     exit 1
 fi
-
