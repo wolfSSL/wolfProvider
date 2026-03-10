@@ -95,12 +95,14 @@ jobs:
             echo "ERROR: ORAS checksum verification failed!"
             exit 1
           }
-          tar xzf "oras_${ORAS_VERSION}_linux_amd64.tar.gz" -C /usr/local/bin/ oras
+          mkdir -p "$GITHUB_WORKSPACE/.bin"
+          tar xzf "oras_${ORAS_VERSION}_linux_amd64.tar.gz" -C "$GITHUB_WORKSPACE/.bin/" oras
+          echo "$GITHUB_WORKSPACE/.bin" >> $GITHUB_PATH
           rm -f "oras_${ORAS_VERSION}_linux_amd64.tar.gz"
-          oras version
+          "$GITHUB_WORKSPACE/.bin/oras" version
 
       - name: Login to ghcr.io
-        if: steps.check_artifact.outcome != 'success'
+        if: steps.check_artifact.outcome != 'success' && github.repository == 'wolfSSL/wolfProvider'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | oras login \
             --username ${{ github.repository_owner }} \
@@ -108,7 +110,7 @@ jobs:
 
       # ── Debian build: pull .deb packages from ghcr.io ──
       - name: Download pre-built packages from ghcr.io
-        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'debian'
+        if: steps.check_artifact.outcome != 'success' && github.repository == 'wolfSSL/wolfProvider' && inputs.build_type == 'debian'
         run: |
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
           mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
@@ -166,7 +168,7 @@ jobs:
           apt-get install -y xz-utils
 
       - name: Download WIC images from ghcr.io
-        if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
+        if: steps.check_artifact.outcome != 'success' && github.repository == 'wolfSSL/wolfProvider' && inputs.build_type == 'yocto'
         run: |
           mkdir -p ${{ env.YOCTO_IMAGES_PATH }}
 
