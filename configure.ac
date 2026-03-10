@@ -26,9 +26,20 @@ USER_CFLAGS="$CFLAGS"
 AC_PROG_CC
 AC_LANG(C)
 
-# OpenSSL
-AC_CHECK_HEADERS([openssl/core.h])
+# wolfSSL - check first so its -I/-L paths take precedence over OpenSSL prefix
+# which may contain stale wolfSSL headers from a different version
+AX_CHECK_WOLFSSL(
+    [have_wolfssl=yes],
+    AC_MSG_FAILURE([could not locate wolfSSL])
+)
 
+if test "x$have_wolfssl" = "xyes"; then
+    LIBS="$LIBS $WOLFSSL_LIBS"
+    CFLAGS="$CFLAGS $WOLFSSL_INCLUDES"
+    LDFLAGS="$LDFLAGS $WOLFSSL_LDFLAGS"
+fi
+
+# OpenSSL
 AX_CHECK_OPENSSL(
     [have_openssl=yes],
     AC_MSG_FAILURE([could not locate OpenSSL])
@@ -40,17 +51,7 @@ if test "x$have_openssl" = "xyes"; then
     LDFLAGS="$LDFLAGS $OPENSSL_LDFLAGS"
 fi
 
-# wolfSSL
-AX_CHECK_WOLFSSL(
-    [have_wolfssl=yes],
-    AC_MSG_FAILURE([could not locate wolfSSL])
-)
-
-if test "x$have_wolfssl" = "xyes"; then
-    LIBS="$LIBS $WOLFSSL_LIBS"
-    CFLAGS="$CFLAGS $WOLFSSL_INCLUDES"
-    LDFLAGS="$LDFLAGS $WOLFSSL_LDFLAGS"
-fi
+AC_CHECK_HEADERS([openssl/core.h])
 
 # Check for required headers
 AC_CHECK_HEADERS([stdlib.h])
