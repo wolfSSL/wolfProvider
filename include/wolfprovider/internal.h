@@ -39,14 +39,7 @@
 #include "wp_params.h"
 
 #ifndef AES_BLOCK_SIZE
-    #include <openssl/aes.h>
-    #ifndef AES_BLOCK_SIZE
-        #ifdef WC_NO_COMPAT_AES_BLOCK_SIZE
-            #define AES_BLOCK_SIZE WC_AES_BLOCK_SIZE
-        #else
-            #error AES_BLOCK_SIZE not defined when it should be
-        #endif
-    #endif
+    #define AES_BLOCK_SIZE 16
 #endif
 
 #ifndef WP_INTERNAL_H
@@ -257,4 +250,3 @@ byte wp_ct_int_mask_lt(int a, int b);
 byte wp_ct_byte_mask_sel(byte mask, byte a, byte b);
 
 #endif /* WP_INTERNAL_H */
-

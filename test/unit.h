@@ -37,13 +37,16 @@
 #include <openssl/evp.h>
 #include <openssl/ec.h>
 #include <openssl/ssl.h>
-#include <openssl/aes.h>
 #include <openssl/rand.h>
 #include <openssl/kdf.h>
 #include <openssl/core_names.h>
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/wp_logging.h>
+
+#ifndef AES_BLOCK_SIZE
+    #define AES_BLOCK_SIZE 16
+#endif
 
 #ifdef TEST_MULTITHREADED
 #define PRINT_MSG(str)
