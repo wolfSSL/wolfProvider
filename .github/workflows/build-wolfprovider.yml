@@ -151,20 +151,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          fetch-tags: true
 
       # Avoid "detected dubious ownership" warning
       - name: Ensure the working directory safe
         if: steps.check_artifact.outcome != 'success'
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      # When running on a fork the upstream tags are not present, so fetch them explicitly
-      - name: Fetch tags from upstream(for Debian versioning)
-        if: steps.check_artifact.outcome != 'success'
-        run: |
-          git remote add upstream https://github.com/wolfSSL/wolfProvider.git || true
-          git fetch upstream --tags --no-recurse-submodules
 
       - name: Install wolfProvider
         if: steps.check_artifact.outcome != 'success'
