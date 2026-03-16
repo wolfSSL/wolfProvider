@@ -108,11 +108,13 @@ static wp_EcxCtx* wp_ecx_dupctx(wp_EcxCtx* src)
         else {
             dst->key = src->key;
         }
-        if (ok && (src->peer != NULL) && (!wp_ecx_up_ref(src->peer))) {
-            ok = 0;
-        }
-        else {
-            dst->peer = src->peer;
+        if (ok) {
+            if ((src->peer != NULL) && (!wp_ecx_up_ref(src->peer))) {
+                ok = 0;
+            }
+            else {
+                dst->peer = src->peer;
+            }
         }
         if (!ok) {
             wp_ecx_free(dst->key);

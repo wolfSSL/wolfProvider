@@ -133,11 +133,13 @@ static wp_EcdhCtx* wp_ecdh_dup(wp_EcdhCtx* src)
             dst->key = src->key;
         }
         /* Copy peer's key by up referencing and copying pointer. */
-        if (ok && (src->peer != NULL) && (!wp_ecc_up_ref(src->peer))) {
-            ok = 0;
-        }
-        else {
-            dst->peer = src->peer;
+        if (ok) {
+            if ((src->peer != NULL) && (!wp_ecc_up_ref(src->peer))) {
+                ok = 0;
+            }
+            else {
+                dst->peer = src->peer;
+            }
         }
         /* Copy User Keying Material. */
         if (ok && (src->ukm != NULL) && (src->ukmLen > 0)) {
