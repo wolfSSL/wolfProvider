@@ -481,7 +481,7 @@ static int wp_dh_set_param_kdf(wp_DhCtx* ctx, const OSSL_PARAM params[])
         if (kdf[0] == '\0') {
             ctx->kdfType = WP_KDF_NONE;
         }
-        else if (XSTRNCMP(kdf, OSSL_KDF_NAME_X942KDF_ASN1, XSTRLEN(kdf)) == 0) {
+        else if (XSTRCMP(kdf, OSSL_KDF_NAME_X942KDF_ASN1) == 0) {
             /* Only support the non ASN1 variant. */
             ctx->kdfType = WP_KDF_X963;
         }

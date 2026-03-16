@@ -851,6 +851,56 @@ static int test_ecdh(const unsigned char *privKey, size_t len,
     return err;
 }
 
+#ifdef WP_HAVE_EC_P256
+int test_ecdh_invalid_kdf_strings(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *key = NULL;
+    const unsigned char *p = ecc_key_der_256;
+    char *invalidKdfs[] = {
+        (char *)"X",
+        (char *)"X942",
+        (char *)"X942KDF",
+        (char *)"X942KDF-AS"
+    };
+    size_t i;
+
+    (void)data;
+
+    PRINT_MSG("Reject invalid ECDH KDF type strings");
+
+    key = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
+        wpLibCtx, NULL);
+    err = key == NULL;
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    for (i = 0; (err == 0) && (i < (sizeof(invalidKdfs) / sizeof(*invalidKdfs)));
+            i++) {
+        OSSL_PARAM params[2];
+
+        params[0] = OSSL_PARAM_construct_utf8_string(
+            OSSL_EXCHANGE_PARAM_KDF_TYPE, invalidKdfs[i], 0);
+        params[1] = OSSL_PARAM_construct_end();
+
+        err = EVP_PKEY_CTX_set_params(ctx, params) > 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("Accepted invalid ECDH KDF type: %s", invalidKdfs[i]);
+        }
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+
+    return err;
+}
+#endif /* WP_HAVE_EC_P256 */
+
 #ifdef WP_HAVE_EC_P192
 int test_ecdh_p192(void *data)
 {
