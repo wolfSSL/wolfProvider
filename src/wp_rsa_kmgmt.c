@@ -767,7 +767,7 @@ static int wp_rsa_pss_params_set_params(wp_RsaPssParams* pss,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_pss_params_set_params");
 
-    if (!defaultsSet) {
+    if (!*defaultsSet) {
         if (!wp_rsa_pss_params_set_pss_defaults(pss)) {
             ok = 0;
         }
