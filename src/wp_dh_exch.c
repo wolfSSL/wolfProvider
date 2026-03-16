@@ -101,6 +101,7 @@ static void wp_dh_freectx(wp_DhCtx* ctx)
     if (ctx != NULL) {
         wp_dh_free(ctx->peer);
         wp_dh_free(ctx->key);
+        OPENSSL_free(ctx->ukm);
         OPENSSL_free(ctx);
     }
 }

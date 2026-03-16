@@ -103,6 +103,7 @@ static void wp_ecdh_free(wp_EcdhCtx* ctx)
     if (ctx != NULL) {
         wp_ecc_free(ctx->peer);
         wp_ecc_free(ctx->key);
+        OPENSSL_free(ctx->ukm);
         OPENSSL_free(ctx);
     }
 }
