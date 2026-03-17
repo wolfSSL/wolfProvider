@@ -132,11 +132,13 @@ static wp_DhCtx* wp_dh_dupctx(wp_DhCtx* src)
             dst->key = src->key;
         }
         /* Copy peer's key by up referencing and copying pointer. */
-        if (ok && (src->peer != NULL) && (!wp_dh_up_ref(src->peer))) {
-            ok = 0;
-        }
-        else {
-            dst->peer = src->peer;
+        if (ok) {
+            if ((src->peer != NULL) && (!wp_dh_up_ref(src->peer))) {
+                ok = 0;
+            }
+            else {
+                dst->peer = src->peer;
+            }
         }
         /* Copy User Keying Material. */
         if (ok && (src->ukm != NULL) && (src->ukmLen > 0)) {
