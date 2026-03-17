@@ -62,7 +62,7 @@ static CTX* name##_newctx(WOLFPROV_CTX* provCtx)                               \
     CTX* ctx = NULL;                                                           \
     (void)provCtx;                                                             \
     if (wolfssl_prov_is_running()) {                                           \
-        ctx = OPENSSL_zalloc(sizeof(CTX));                                     \
+        ctx = OPENSSL_zalloc(sizeof(*ctx));                                    \
     }                                                                          \
     return ctx;                                                                \
 }
