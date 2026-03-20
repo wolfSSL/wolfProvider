@@ -1,0 +1,10 @@
+build_wolfprovider:
+  uses: ./.github/workflows/build-wolfprovider.yml
+  with:
+    wolfssl_ref: ${{ matrix.wolfssl_ref }}
+    openssl_ref: ${{ matrix.openssl_ref }}
+    fips_ref: ${{ matrix.fips_ref }}
+    replace_default: ${{ matrix.replace_default }}
+  strategy:
+    matrix:
+      include: "./common/wp-matrix.yml.in"

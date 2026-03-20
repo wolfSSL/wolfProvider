@@ -1,0 +1,46 @@
+name: cjose Tests
+include: "./common/wp-trigger.yml.in"
+
+jobs:
+  include: "./common/wp-build.yml.in"
+
+  test_cjose:
+    include: "./common/wp-testenv.yml.in"
+
+    strategy:
+      matrix:
+        cjose_ref: [ 'v0.6.2.1' ]
+        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        include: "./common/wp-matrix.yml.in"
+
+    steps:
+      include: "./common/wp-install.yml.in"
+
+      - name: Install cjose dependencies
+        run: |
+          apt-get update
+          apt-get install -y git build-essential autoconf automake \
+            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev
+
+      - name: Download cjose
+        uses: actions/checkout@v4
+        with:
+          repository: OpenIDC/cjose
+          ref: ${{ matrix.cjose_ref }}
+          path: cjose
+          fetch-depth: 1
+
+      - name: Build cjose
+        working-directory: cjose
+        run: |
+          ./configure CFLAGS="-Wno-error=deprecated-declarations"
+          make
+
+      - name: Run cjose tests
+        working-directory: cjose
+        run: |
+          export ${{ matrix.force_fail }}
+          make test 2>&1 | tee cjose-test.log
+          TEST_RESULT=$(grep -q "FAIL: check_cjose" cjose-test.log && echo "1" || echo "0")
+          echo "TEST_RESULT = $TEST_RESULT"
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} cjose
