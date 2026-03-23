@@ -162,11 +162,12 @@ static wp_CmacCtx* wp_cmac_dup(wp_CmacCtx* src)
         dst = wp_cmac_new(NULL);
     }
     if (dst != NULL) {
-        *dst = *src;
-        dst->keyLen = 0;
+        dst->type = src->type;
+        dst->size = src->size;
+        dst->expKeySize = src->expKeySize;
 
         if ((src->keyLen != 0) &&
-            (!wp_cmac_set_key(dst, src->key, src->keyLen, 0))) {
+            (!wp_cmac_set_key(dst, src->key, src->keyLen, 1))) {
             wp_cmac_free(dst);
             dst = NULL;
         }

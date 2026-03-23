@@ -866,21 +866,22 @@ static int wp_aes_block_final_dec(wp_AesBlockCtx* ctx, unsigned char *out,
 
     if (ok && ctx->pad) {
         unsigned char pad;
+        unsigned char invalid;
+        unsigned char i;
 
         pad = ctx->buf[AES_BLOCK_SIZE - 1];
-        if ((pad == 0) || (pad > AES_BLOCK_SIZE)) {
+        invalid = wp_ct_byte_mask_eq(pad, 0) |
+                  ~wp_ct_int_mask_gte(AES_BLOCK_SIZE, (int)pad);
+        for (i = 0; i < AES_BLOCK_SIZE; i++) {
+            unsigned char mask = wp_ct_int_mask_gte((int)i,
+                AES_BLOCK_SIZE - (int)pad);
+            invalid |= mask & wp_ct_byte_mask_ne(ctx->buf[i], pad);
+        }
+        if (invalid) {
             ok = 0;
         }
-        if (ok) {
-            unsigned char len = AES_BLOCK_SIZE;
-            unsigned char i;
-
-            for (i = 0; i < pad; i++) {
-                if (ctx->buf[--len] != pad) {
-                    return 0;
-                }
-            }
-            ctx->bufSz = len;
+        else {
+            ctx->bufSz = AES_BLOCK_SIZE - pad;
         }
     }
 

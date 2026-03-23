@@ -335,28 +335,23 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
 {
     int ok = 1;
 
+    int rc;
+
     WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_reseed");
 
-#if 0
-    /* Calling Hash_DRBG_Instantiate would be better. */
-    int rc;
-    rc = wc_RNG_DRBG_Reseed(ctx->rng, entropy, entropyLen);
+    rc = wc_RNG_DRBG_Reseed(ctx->rng, entropy, (word32)entropyLen);
     if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_RNG_DRBG_Reseed", rc);
         ok = 0;
     }
     if (ok && (addInLen > 0)) {
-        rc = wc_RNG_DRBG_Reseed(ctx->rng, addIn, addInLen);
+        rc = wc_RNG_DRBG_Reseed(ctx->rng, addIn, (word32)addInLen);
         if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG,
+                "wc_RNG_DRBG_Reseed", rc);
             ok = 0;
         }
     }
-#else
-    (void)ctx;
-    (void)entropy;
-    (void)entropyLen;
-    (void)addIn;
-    (void)addInLen;
-#endif
 
     (void)predResist;
 
@@ -388,6 +383,7 @@ static int wp_drbg_enable_locking(wp_DrbgCtx* ctx)
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_InitMutex", rc);
                 OPENSSL_free(ctx->mutex);
+                ctx->mutex = NULL;
                 ok = 0;
             }
         }
@@ -547,11 +543,16 @@ static int wp_drbg_set_ctx_params(wp_DrbgCtx* ctx, const OSSL_PARAM params[])
  */
 static int wp_drbg_verify_zeroization(wp_DrbgCtx* ctx)
 {
+    int ok;
+
     WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_verify_zeroization");
 
-    (void)ctx;
-    WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
+    /* After uninstantiate, ctx->rng is freed (with internal state zeroized
+     * by wolfSSL) and set to NULL. Verify that cleanup occurred. */
+    ok = (ctx->rng == NULL);
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**

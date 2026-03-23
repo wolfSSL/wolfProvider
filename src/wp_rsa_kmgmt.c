@@ -1001,8 +1001,8 @@ static int wp_rsa_get_params_pss(wp_RsaPssParams* pss,  OSSL_PARAM params[])
     /* MGF is default so don't set. */
     if (ok && (pss->mgf != WP_RSA_PSS_MGF_DEF)) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_RSA_MGF1_DIGEST);
-        if ((p != NULL) && wp_digest_to_ossl_digest(pss->hashType, &osslDigest)
-                && !OSSL_PARAM_set_utf8_string(p, osslDigest)) {
+        if ((p != NULL) &&
+                !OSSL_PARAM_set_utf8_string(p, pss->mgfMdName)) {
             ok = 0;
         }
     }

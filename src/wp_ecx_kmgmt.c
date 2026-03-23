@@ -356,16 +356,65 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
 {
     wp_Ecx* dst = NULL;
 
-    (void)selection;
     if (wolfssl_prov_is_running()) {
         /* Create a new ecx object. */
         dst = wp_ecx_new(src->provCtx, src->data);
     }
     if (dst != NULL) {
-        XMEMCPY(&dst->key, &src->key, sizeof(src->key));
+        int ok = 1;
+
         dst->includePublic = src->includePublic;
-        dst->hasPub        = src->hasPub;
-        dst->hasPriv       = src->hasPriv;
+
+        /* Copy public key if available and requested. */
+        if (ok && src->hasPub &&
+            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+            byte buf[64];
+            word32 len = (word32)sizeof(buf);
+            int rc = (*src->data->exportPub)((void*)&src->key, buf, &len,
+                ECX_LITTLE_ENDIAN);
+            if (rc != 0) {
+                ok = 0;
+            }
+            if (ok) {
+                rc = (*dst->data->importPub)(buf, len, (void*)&dst->key,
+                    ECX_LITTLE_ENDIAN);
+                if (rc != 0) {
+                    ok = 0;
+                }
+            }
+            if (ok) {
+                dst->hasPub = 1;
+            }
+        }
+        /* Copy private key if available and requested. */
+        if (ok && src->hasPriv &&
+            ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+            byte buf[64];
+            word32 len = (word32)sizeof(buf);
+            int rc = (*src->data->exportPriv)((void*)&src->key, buf, &len);
+            if (rc != 0) {
+                ok = 0;
+            }
+            if (ok) {
+                rc = (*dst->data->importPriv)(buf, len, (void*)&dst->key,
+                    ECX_LITTLE_ENDIAN);
+                if (rc != 0) {
+                    ok = 0;
+                }
+            }
+            if (ok) {
+                dst->hasPriv = 1;
+                dst->clamped = src->clamped;
+                XMEMCPY(dst->unclamped, src->unclamped,
+                    sizeof(src->unclamped));
+            }
+            wc_ForceZero(buf, len);
+        }
+
+        if (!ok) {
+            wp_ecx_free(dst);
+            dst = NULL;
+        }
     }
 
     return dst;

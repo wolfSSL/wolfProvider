@@ -1688,6 +1688,10 @@ static void *wp_aes_gcm_newctx(WOLFPROV_CTX* provCtx, size_t keyBits)
  */
 static void wp_aes_gcm_freectx(wp_AeadCtx* ctx)
 {
+    OPENSSL_free(ctx->aad);
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    OPENSSL_free(ctx->in);
+#endif
     wc_AesFree(&ctx->aes);
     OPENSSL_free(ctx);
 }
