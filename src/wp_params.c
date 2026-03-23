@@ -208,6 +208,9 @@ void wp_param_set_mp_buf(OSSL_PARAM* p, const char* key, unsigned char* num,
     for (i = 0; i < nLen; i++) {
         data[i] = num[nLen - 1 - i];
     }
+#else
+    XMEMCPY(data, num, nLen);
+    (void)i;
 #endif
 }
 
@@ -393,6 +396,7 @@ int wp_params_get_bn_be(const OSSL_PARAM* params, const char* key,
         }
 #else
         XMEMCPY(*data, p->data, p->data_size);
+        *len = p->data_size;
 #endif
     }
 

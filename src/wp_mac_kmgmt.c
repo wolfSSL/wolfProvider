@@ -223,10 +223,11 @@ void wp_mac_free(wp_Mac* mac)
         int rc;
 
         rc = wc_LockMutex(&mac->mutex);
-        cnt = --mac->refCnt;
-        if (rc == 0) {
-            wc_UnLockMutex(&mac->mutex);
+        if (rc != 0) {
+            return;
         }
+        cnt = --mac->refCnt;
+        wc_UnLockMutex(&mac->mutex);
     #else
         cnt = --mac->refCnt;
     #endif
@@ -346,7 +347,7 @@ static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
         (mac1->keyLen != MAX_SIZE_T) && ((mac1->keyLen != mac2->keyLen) ||
-        (XMEMCMP(mac1->key, mac2->key, mac1->keyLen) != 0) ||
+        (CRYPTO_memcmp(mac1->key, mac2->key, mac1->keyLen) != 0) ||
         (XMEMCMP(mac1->cipher, mac2->cipher, WP_MAX_CIPH_NAME_SIZE) != 0))) {
         ok = 0;
     }

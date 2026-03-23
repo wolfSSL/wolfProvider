@@ -128,6 +128,7 @@ static void wp_mac_ctx_free(wp_MacSigCtx* ctx)
 {
     if (ctx != NULL) {
         EVP_MAC_CTX_free(ctx->macCtx);
+        wp_mac_free(ctx->mac);
         OPENSSL_free(ctx->propQuery);
         OPENSSL_free(ctx);
     }
@@ -159,6 +160,9 @@ static wp_MacSigCtx* wp_mac_ctx_dup(wp_MacSigCtx* srcCtx)
             if (dstCtx->macCtx == NULL) {
                 ok = 0;
             }
+        }
+        if (ok && !wp_mac_up_ref(srcCtx->mac)) {
+            ok = 0;
         }
         if (ok) {
             dstCtx->mac = srcCtx->mac;
@@ -199,8 +203,14 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
+    if (ok && mac != NULL && !wp_mac_up_ref(mac)) {
+        ok = 0;
+    }
     if (ok) {
-        ctx->mac = mac;
+        if (mac != NULL) {
+            wp_mac_free(ctx->mac);
+            ctx->mac = mac;
+        }
 
         if (!wp_mac_get_private_key(ctx->mac, &priv, &privLen)) {
             ok = 0;
