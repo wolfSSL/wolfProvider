@@ -470,6 +470,131 @@ int test_rand_seed(void *data)
     return err;
 }
 
+/**
+ * Test DRBG reseed and verify_zeroization - Validates #169, #170.
+ *
+ * Creates SEED-SRC -> CTR-DRBG hierarchy, generates bytes, reseeds,
+ * generates more bytes (verifying they differ), then uninstantiates
+ * and calls verify_zeroization.
+ */
+static int test_drbg_reseed_helper(OSSL_LIB_CTX *libCtx, const char *propq)
+{
+    int err = 0;
+    EVP_RAND *seed_src = NULL;
+    EVP_RAND *ctr_drbg = NULL;
+    EVP_RAND_CTX *seed_ctx = NULL;
+    EVP_RAND_CTX *drbg_ctx = NULL;
+    unsigned char buf1[32];
+    unsigned char buf2[32];
+
+    PRINT_MSG("Testing DRBG reseed and verify_zeroization");
+
+    seed_src = EVP_RAND_fetch(libCtx, "SEED-SRC", propq);
+    if (seed_src == NULL) {
+        PRINT_ERR_MSG("Failed to fetch SEED-SRC");
+        err = 1;
+        goto cleanup;
+    }
+
+    seed_ctx = EVP_RAND_CTX_new(seed_src, NULL);
+    if (seed_ctx == NULL) {
+        PRINT_ERR_MSG("Failed to create SEED-SRC context");
+        err = 1;
+        goto cleanup;
+    }
+
+    if (EVP_RAND_instantiate(seed_ctx, 0, 0, NULL, 0, NULL) != 1) {
+        PRINT_ERR_MSG("Failed to instantiate SEED-SRC");
+        err = 1;
+        goto cleanup;
+    }
+
+    ctr_drbg = EVP_RAND_fetch(libCtx, "CTR-DRBG", propq);
+    if (ctr_drbg == NULL) {
+        PRINT_ERR_MSG("Failed to fetch CTR-DRBG");
+        err = 1;
+        goto cleanup;
+    }
+
+    drbg_ctx = EVP_RAND_CTX_new(ctr_drbg, seed_ctx);
+    if (drbg_ctx == NULL) {
+        PRINT_ERR_MSG("Failed to create CTR-DRBG context");
+        err = 1;
+        goto cleanup;
+    }
+
+    {
+        OSSL_PARAM params[2];
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_CIPHER,
+                                                     (char*)"AES-256-CTR", 0);
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_RAND_CTX_set_params(drbg_ctx, params) != 1) {
+            PRINT_ERR_MSG("Failed to set CTR-DRBG cipher param");
+            err = 1;
+            goto cleanup;
+        }
+    }
+
+    if (EVP_RAND_instantiate(drbg_ctx, 256, 0, NULL, 0, NULL) != 1) {
+        PRINT_ERR_MSG("Failed to instantiate CTR-DRBG");
+        err = 1;
+        goto cleanup;
+    }
+
+    /* Generate first block. */
+    if (EVP_RAND_generate(drbg_ctx, buf1, sizeof(buf1), 256, 0,
+                          NULL, 0) != 1) {
+        PRINT_ERR_MSG("Failed first generate");
+        err = 1;
+        goto cleanup;
+    }
+
+    /* Reseed (exercises fix #169). */
+    if (EVP_RAND_reseed(drbg_ctx, 0, NULL, 0, NULL, 0) != 1) {
+        PRINT_ERR_MSG("EVP_RAND_reseed failed");
+        err = 1;
+        goto cleanup;
+    }
+    PRINT_MSG("DRBG reseed succeeded");
+
+    /* Generate second block after reseed. */
+    if (EVP_RAND_generate(drbg_ctx, buf2, sizeof(buf2), 256, 0,
+                          NULL, 0) != 1) {
+        PRINT_ERR_MSG("Failed second generate after reseed");
+        err = 1;
+        goto cleanup;
+    }
+
+    /* Buffers should differ (extremely high probability). */
+    if (memcmp(buf1, buf2, sizeof(buf1)) == 0) {
+        PRINT_ERR_MSG("Pre/post-reseed outputs are identical");
+        err = 1;
+        goto cleanup;
+    }
+    PRINT_MSG("Pre/post-reseed outputs differ as expected");
+
+    /* Uninstantiate and verify zeroization (exercises fix #170). */
+    if (EVP_RAND_uninstantiate(drbg_ctx) != 1) {
+        PRINT_ERR_MSG("EVP_RAND_uninstantiate failed");
+        err = 1;
+        goto cleanup;
+    }
+
+    if (EVP_RAND_verify_zeroization(drbg_ctx) != 1) {
+        PRINT_ERR_MSG("EVP_RAND_verify_zeroization failed");
+        err = 1;
+        goto cleanup;
+    }
+    PRINT_MSG("DRBG verify_zeroization succeeded");
+
+cleanup:
+    EVP_RAND_CTX_free(drbg_ctx);
+    EVP_RAND_CTX_free(seed_ctx);
+    EVP_RAND_free(ctr_drbg);
+    EVP_RAND_free(seed_src);
+    return err;
+}
+
 #else /* !(WP_HAVE_SEED_SRC && WP_HAVE_RANDOM) */
 
 int test_rand_seed(void *data)
@@ -481,4 +606,24 @@ int test_rand_seed(void *data)
 }
 
 #endif /* WP_HAVE_SEED_SRC && WP_HAVE_RANDOM */
+
+int test_drbg_reseed(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+    PRINT_MSG("Test OpenSSL DRBG reseed/zeroization");
+    err = test_drbg_reseed_helper(osslLibCtx, NULL);
+    if (err == 0) {
+        PRINT_MSG("Test wolfProvider DRBG reseed/zeroization");
+        err = test_drbg_reseed_helper(wpLibCtx, NULL);
+    }
+#else
+    PRINT_MSG("DRBG reseed test skipped - SEED-SRC not enabled");
+#endif
+
+    return err;
+}
 

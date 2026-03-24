@@ -295,6 +295,280 @@ int test_hmac_create(void *data)
     return ret;
 }
 
-#endif /* WP_HAVE_HMAC */
+int test_hmac_dup(void *data)
+{
+    int ret = 0;
+    EVP_MAC* emac = NULL;
+    EVP_MAC_CTX* src = NULL;
+    EVP_MAC_CTX* dup = NULL;
+    OSSL_PARAM params[3];
+    char digest[] = "SHA-256";
+    unsigned char key[] = "My empire of dirt";
+    unsigned char prefix[] = "dup-prefix";
+    unsigned char tailA[] = "-tail-a";
+    unsigned char tailB[] = "-tail-b";
+    unsigned char msgA[sizeof(prefix) + sizeof(tailA)];
+    unsigned char msgB[sizeof(prefix) + sizeof(tailB)];
+    unsigned char macA[32];
+    unsigned char macB[32];
+    unsigned char expA[32];
+    unsigned char expB[32];
+    size_t macASz = sizeof(macA);
+    size_t macBSz = sizeof(macB);
+    int expASz = sizeof(expA);
+    int expBSz = sizeof(expB);
 
+    (void)data;
+
+    PRINT_MSG("Testing HMAC context dup");
+
+    /* Build full messages for one-shot expected MAC calculations. */
+    memcpy(msgA, prefix, sizeof(prefix));
+    memcpy(msgA + sizeof(prefix), tailA, sizeof(tailA));
+    memcpy(msgB, prefix, sizeof(prefix));
+    memcpy(msgB + sizeof(prefix), tailB, sizeof(tailB));
+
+    /* Compute expected MACs. */
+    ret = test_mac_gen_mac(wpLibCtx, "SHA-256", "HMAC", key, sizeof(key),
+        msgA, (int)sizeof(msgA), expA, &expASz);
+    if (ret != 0) {
+        PRINT_MSG("Generate expected MAC A failed");
+    }
+    if (ret == 0) {
+        ret = test_mac_gen_mac(wpLibCtx, "SHA-256", "HMAC", key, sizeof(key),
+            msgB, (int)sizeof(msgB), expB, &expBSz);
+        if (ret != 0) {
+            PRINT_MSG("Generate expected MAC B failed");
+        }
+    }
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
+        digest, 0);
+    params[1] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        (void*)key, sizeof(key));
+    params[2] = OSSL_PARAM_construct_end();
+
+    if (ret == 0) {
+        ret = (emac = EVP_MAC_fetch(wpLibCtx, "HMAC", NULL)) == NULL;
+    }
+    if (ret == 0) {
+        ret = (src = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_CTX_set_params(src, params) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_init(src, NULL, 0, NULL) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_update(src, prefix, sizeof(prefix)) != 1;
+    }
+    /* Duplicate after partial update. */
+    if (ret == 0) {
+        ret = (dup = EVP_MAC_CTX_dup(src)) == NULL;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_update(src, tailA, sizeof(tailA)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_update(dup, tailB, sizeof(tailB)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_final(src, macA, &macASz, sizeof(macA)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_final(dup, macB, &macBSz, sizeof(macB)) != 1;
+    }
+    if (ret == 0) {
+        if ((macASz != (size_t)expASz) || (memcmp(macA, expA, macASz) != 0)) {
+            PRINT_MSG("Duplicated source context MAC mismatch");
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        if ((macBSz != (size_t)expBSz) || (memcmp(macB, expB, macBSz) != 0)) {
+            PRINT_MSG("Duplicated destination context MAC mismatch");
+            ret = -1;
+        }
+    }
+
+    EVP_MAC_CTX_free(dup);
+    EVP_MAC_CTX_free(src);
+    EVP_MAC_free(emac);
+
+    return ret;
+}
+
+int test_mac_key_match(void *data)
+{
+    int ret = 0;
+    EVP_PKEY *pkey1 = NULL;
+    EVP_PKEY *pkey2 = NULL;
+    EVP_PKEY *pkey3 = NULL;
+    unsigned char key1[] = "matching-key-value-1234";
+    unsigned char key2[] = "different-key-value-567";
+
+    (void)data;
+
+    PRINT_MSG("Testing MAC key match with CRYPTO_memcmp");
+
+    /* Create two keys with the same key material. */
+    pkey1 = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "HMAC", NULL,
+        key1, sizeof(key1));
+    if (pkey1 == NULL) {
+        PRINT_MSG("Failed to create pkey1");
+        ret = 1;
+    }
+    if (ret == 0) {
+        pkey2 = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "HMAC", NULL,
+            key1, sizeof(key1));
+        if (pkey2 == NULL) {
+            PRINT_MSG("Failed to create pkey2");
+            ret = 1;
+        }
+    }
+
+    /* Verify same keys match. */
+    if (ret == 0) {
+        if (EVP_PKEY_eq(pkey1, pkey2) != 1) {
+            PRINT_MSG("Same keys should match but don't");
+            ret = -1;
+        }
+    }
+
+    /* Create a third key with different material. */
+    if (ret == 0) {
+        pkey3 = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "HMAC", NULL,
+            key2, sizeof(key2));
+        if (pkey3 == NULL) {
+            PRINT_MSG("Failed to create pkey3");
+            ret = 1;
+        }
+    }
+
+    /* Verify different keys don't match. */
+    if (ret == 0) {
+        if (EVP_PKEY_eq(pkey1, pkey3) == 1) {
+            PRINT_MSG("Different keys should not match but do");
+            ret = -1;
+        }
+    }
+
+    EVP_PKEY_free(pkey3);
+    EVP_PKEY_free(pkey2);
+    EVP_PKEY_free(pkey1);
+
+    return ret;
+}
+
+int test_mac_sig_dup(void *data)
+{
+    int ret = 0;
+    EVP_MD_CTX *ctx = NULL;
+    EVP_MD_CTX *dupCtx = NULL;
+    EVP_PKEY_CTX *pctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    unsigned char key[] = "My empire of dirt";
+    unsigned char prefix[] = "dup-prefix";
+    unsigned char tailA[] = "-tail-a";
+    unsigned char tailB[] = "-tail-b";
+    unsigned char msgA[sizeof(prefix) + sizeof(tailA)];
+    unsigned char msgB[sizeof(prefix) + sizeof(tailB)];
+    unsigned char macA[64];
+    unsigned char macB[64];
+    unsigned char expA[64];
+    unsigned char expB[64];
+    size_t macASz = sizeof(macA);
+    size_t macBSz = sizeof(macB);
+    int expASz = sizeof(expA);
+    int expBSz = sizeof(expB);
+
+    (void)data;
+
+    PRINT_MSG("Testing MAC sig context dup (ref counting)");
+
+    /* Build full messages for expected MAC computation. */
+    memcpy(msgA, prefix, sizeof(prefix));
+    memcpy(msgA + sizeof(prefix), tailA, sizeof(tailA));
+    memcpy(msgB, prefix, sizeof(prefix));
+    memcpy(msgB + sizeof(prefix), tailB, sizeof(tailB));
+
+    /* Compute expected MACs via one-shot HMAC. */
+    ret = test_mac_gen_mac(wpLibCtx, "SHA-256", "HMAC", key, sizeof(key),
+        msgA, (int)sizeof(msgA), expA, &expASz);
+    if (ret == 0) {
+        ret = test_mac_gen_mac(wpLibCtx, "SHA-256", "HMAC", key, sizeof(key),
+            msgB, (int)sizeof(msgB), expB, &expBSz);
+    }
+
+    if (ret == 0) {
+        pkey = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "HMAC", NULL,
+            key, sizeof(key));
+        if (pkey == NULL) {
+            PRINT_MSG("Failed to create HMAC pkey");
+            ret = 1;
+        }
+    }
+
+    if (ret == 0) {
+        ctx = EVP_MD_CTX_new();
+        if (ctx == NULL) {
+            ret = 1;
+        }
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignInit_ex(ctx, &pctx, "SHA-256", wpLibCtx, NULL,
+            pkey, NULL) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignUpdate(ctx, prefix, sizeof(prefix)) != 1;
+    }
+
+    /* Duplicate the signing context mid-stream. */
+    if (ret == 0) {
+        dupCtx = EVP_MD_CTX_new();
+        if (dupCtx == NULL) {
+            ret = 1;
+        }
+    }
+    if (ret == 0) {
+        ret = EVP_MD_CTX_copy_ex(dupCtx, ctx) != 1;
+    }
+
+    /* Feed different tails and finalize. */
+    if (ret == 0) {
+        ret = EVP_DigestSignUpdate(ctx, tailA, sizeof(tailA)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignFinal(ctx, macA, &macASz) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignUpdate(dupCtx, tailB, sizeof(tailB)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignFinal(dupCtx, macB, &macBSz) != 1;
+    }
+
+    /* Verify each branch matches its expected MAC. */
+    if (ret == 0) {
+        if ((macASz != (size_t)expASz) || (memcmp(macA, expA, macASz) != 0)) {
+            PRINT_MSG("Source sig context MAC mismatch after dup");
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        if ((macBSz != (size_t)expBSz) || (memcmp(macB, expB, macBSz) != 0)) {
+            PRINT_MSG("Duplicated sig context MAC mismatch");
+            ret = -1;
+        }
+    }
+
+    EVP_MD_CTX_free(dupCtx);
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+
+    return ret;
+}
+
+#endif /* WP_HAVE_HMAC */
 

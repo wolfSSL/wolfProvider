@@ -1952,7 +1952,11 @@ static int test_rsa_decode_evp_pkey(EVP_PKEY* pkey1, EVP_PKEY* pkey2)
             PRINT_MSG("Comparing key %s (%d %d)", str_keys[i], err1, err2);
 
             if (err == 0 && err1 == 1) {
-                err = OPENSSL_strcasecmp(str1, str2) != 0;
+                if (OPENSSL_strcasecmp(str1, str2) != 0) {
+                    PRINT_ERR_MSG("String mismatch for %s: '%s' vs '%s'",
+                                  str_keys[i], str1, str2);
+                    err = 1;
+                }
             }
 
             OPENSSL_free(str1);
@@ -2129,6 +2133,218 @@ int test_rsa_null_init(void* data)
     err = test_rsa_null_sign_init_ex(osslLibCtx);
     if (err == 0) {
         err = test_rsa_null_sign_init_ex(wpLibCtx);
+    }
+
+    return err;
+}
+
+static int test_rsa_pss_mgf1_get_params_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    EVP_PKEY_CTX *pkeyCtx = NULL;
+    OSSL_PARAM params[2];
+    char mgfMdName[64] = "";
+    char *pmgfMdName = mgfMdName;
+
+    /* Generate RSA-PSS key with SHA-256 for signing, SHA-384 for MGF1. */
+    pkeyCtx = EVP_PKEY_CTX_new_from_name(libCtx, "RSA-PSS", NULL);
+    if (pkeyCtx == NULL) {
+        PRINT_ERR_MSG("Failed to create RSA-PSS context");
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(pkeyCtx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_keygen_bits(pkeyCtx, 2048) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_md(pkeyCtx, EVP_sha256()) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_mgf1_md(pkeyCtx,
+                EVP_sha384()) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(pkeyCtx, &pkey) <= 0;
+    }
+    EVP_PKEY_CTX_free(pkeyCtx);
+    pkeyCtx = NULL;
+
+    /* Now retrieve the MGF1 digest param and verify it's SHA-384 not SHA-256. */
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_utf8_string(
+            OSSL_PKEY_PARAM_RSA_MGF1_DIGEST, pmgfMdName, sizeof(mgfMdName));
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_get_params(pkey, params) != 1;
+    }
+    if (err == 0) {
+        /* The fix ensures MGF1 digest (SHA-384) is returned, not the
+         * signing digest (SHA-256). Verify it contains "384" and not "256". */
+        if (strstr(mgfMdName, "384") == NULL) {
+            PRINT_ERR_MSG("MGF1 digest should contain '384' but got: %s",
+                          mgfMdName);
+            err = 1;
+        }
+        else if (strstr(mgfMdName, "256") != NULL) {
+            PRINT_ERR_MSG("MGF1 digest should not contain '256' but got: %s",
+                          mgfMdName);
+            err = 1;
+        }
+        else {
+            PRINT_MSG("MGF1 digest correctly returned: %s", mgfMdName);
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
+int test_rsa_pss_mgf1_get_params(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("Test OpenSSL RSA-PSS MGF1 digest get_params");
+    err = test_rsa_pss_mgf1_get_params_helper(osslLibCtx);
+    if (err == 0) {
+        PRINT_MSG("Test wolfProvider RSA-PSS MGF1 digest get_params");
+        err = test_rsa_pss_mgf1_get_params_helper(wpLibCtx);
+    }
+
+    return err;
+}
+
+static int test_rsa_kem_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    EVP_PKEY_CTX *genCtx = NULL;
+    EVP_PKEY_CTX *encCtx = NULL;
+    EVP_PKEY_CTX *decCtx = NULL;
+    unsigned char *ct = NULL;
+    unsigned char *secret = NULL;
+    unsigned char *recovered = NULL;
+    size_t ctLen = 0;
+    size_t secretLen = 0;
+    size_t recoveredLen = 0;
+
+    /* Generate RSA-2048 key. */
+    genCtx = EVP_PKEY_CTX_new_from_name(libCtx, "RSA", NULL);
+    if (genCtx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(genCtx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_keygen_bits(genCtx, 2048) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(genCtx, &pkey) <= 0;
+    }
+    EVP_PKEY_CTX_free(genCtx);
+    genCtx = NULL;
+
+    /* Encapsulate. */
+    if (err == 0) {
+        encCtx = EVP_PKEY_CTX_new_from_pkey(libCtx, pkey, NULL);
+        if (encCtx == NULL) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate_init(encCtx, NULL) <= 0;
+    }
+    if (err == 0) {
+        OSSL_PARAM params[2];
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_KEM_PARAM_OPERATION,
+            (char*)"RSASVE", 0);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(encCtx, params) != 1;
+    }
+    /* Query sizes. */
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate(encCtx, NULL, &ctLen, NULL,
+                                    &secretLen) <= 0;
+    }
+    if (err == 0) {
+        ct = OPENSSL_malloc(ctLen);
+        secret = OPENSSL_malloc(secretLen);
+        if (ct == NULL || secret == NULL) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate(encCtx, ct, &ctLen, secret,
+                                    &secretLen) <= 0;
+    }
+
+    /* Decapsulate. */
+    if (err == 0) {
+        decCtx = EVP_PKEY_CTX_new_from_pkey(libCtx, pkey, NULL);
+        if (decCtx == NULL) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_decapsulate_init(decCtx, NULL) <= 0;
+    }
+    if (err == 0) {
+        OSSL_PARAM params[2];
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_KEM_PARAM_OPERATION,
+            (char*)"RSASVE", 0);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(decCtx, params) != 1;
+    }
+    /* Query size. */
+    if (err == 0) {
+        err = EVP_PKEY_decapsulate(decCtx, NULL, &recoveredLen, ct,
+                                    ctLen) <= 0;
+    }
+    if (err == 0) {
+        recovered = OPENSSL_malloc(recoveredLen);
+        if (recovered == NULL) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_decapsulate(decCtx, recovered, &recoveredLen, ct,
+                                    ctLen) <= 0;
+    }
+
+    /* Verify secret matches. */
+    if (err == 0) {
+        if (secretLen != recoveredLen ||
+            memcmp(secret, recovered, secretLen) != 0) {
+            PRINT_ERR_MSG("KEM: recovered secret doesn't match original");
+            err = 1;
+        }
+    }
+
+    OPENSSL_free(recovered);
+    OPENSSL_free(secret);
+    OPENSSL_free(ct);
+    EVP_PKEY_CTX_free(decCtx);
+    EVP_PKEY_CTX_free(encCtx);
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
+int test_rsa_kem(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("Test OpenSSL RSA KEM encapsulate/decapsulate");
+    err = test_rsa_kem_helper(osslLibCtx);
+    if (err == 0) {
+        PRINT_MSG("Test wolfProvider RSA KEM encapsulate/decapsulate");
+        err = test_rsa_kem_helper(wpLibCtx);
     }
 
     return err;
