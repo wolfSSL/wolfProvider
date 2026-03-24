@@ -1014,17 +1014,21 @@ static int wp_rsa_get_params_pss(wp_RsaPssParams* pss,  OSSL_PARAM params[])
                     default: break;
                 }
                 if (mgfHash != WC_HASH_TYPE_NONE) {
-                    wp_digest_to_ossl_digest(mgfHash, &mgfName);
+                    if (!wp_digest_to_ossl_digest(mgfHash, &mgfName)) {
+                        ok = 0;
+                    }
                 }
             }
             /* Fall back to signing digest if MGF1 not explicitly set. */
-            if (mgfName == NULL) {
+            if (ok && mgfName == NULL) {
                 if (!wp_digest_to_ossl_digest(pss->hashType, &mgfName)) {
-                    mgfName = OSSL_DIGEST_NAME_SHA1;
+                    ok = 0;
                 }
             }
-            if (!OSSL_PARAM_set_utf8_string(p, mgfName)) {
-                ok = 0;
+            if (ok && mgfName != NULL) {
+                if (!OSSL_PARAM_set_utf8_string(p, mgfName)) {
+                    ok = 0;
+                }
             }
         }
     }

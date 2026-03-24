@@ -377,9 +377,9 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
         }
     }
 
-    /* Clear seed from parent if we obtained one. */
-    if (seed != NULL && ctx->parentClearSeed != NULL) {
-        ctx->parentClearSeed(ctx->parent, seed, seedLen);
+    /* Securely clear and free locally allocated seed buffer. */
+    if (seed != NULL) {
+        OPENSSL_clear_free(seed, seedLen);
     }
 
     (void)predResist;

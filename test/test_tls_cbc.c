@@ -269,7 +269,9 @@ static int test_des3_cbc_pad_roundtrip(OSSL_LIB_CTX *encCtx,
 
     memset(key, 0xAA, sizeof(key));
     memset(iv, 0xBB, sizeof(iv));
-    RAND_bytes(pt, sizeof(pt));
+    if (RAND_bytes(pt, sizeof(pt)) != 1) {
+        err = 1;
+    }
 
     /* Test various plaintext sizes to exercise all padding values (1-8). */
     for (i = 1; i <= 8 && err == 0; i++) {
