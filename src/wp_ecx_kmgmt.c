@@ -361,29 +361,40 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
         dst = wp_ecx_new(src->provCtx, src->data);
     }
     if (dst != NULL) {
-        int ok = 1;
-
         dst->includePublic = src->includePublic;
 
-        /* Copy the key union directly to preserve all internal state. */
+        /* Copy the full key union to preserve internal wolfSSL state.
+         * Private material is zeroized below if not selected. */
         XMEMCPY(&dst->key, &src->key, sizeof(src->key));
 
-        /* Copy public key flags if available and requested. */
+        /* Set public key flag if available and requested. */
         if (src->hasPub &&
             ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
             dst->hasPub = 1;
         }
-        /* Copy private key flags if available and requested. */
+        /* Set private key flag if available and requested. */
         if (src->hasPriv &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
             dst->hasPriv = 1;
             dst->clamped = src->clamped;
             XMEMCPY(dst->unclamped, src->unclamped, sizeof(src->unclamped));
         }
-
-        if (!ok) {
-            wp_ecx_free(dst);
-            dst = NULL;
+        else {
+            /* Private key not selected — re-import only public key to
+             * ensure no private material remains in the dst key object. */
+            if (dst->hasPub) {
+                byte buf[64];
+                word32 len = (word32)sizeof(buf);
+                int rc = (*src->data->exportPub)((void*)&src->key, buf, &len,
+                    ECX_LITTLE_ENDIAN);
+                if (rc == 0) {
+                    /* Re-init key and import only public part. */
+                    (*dst->data->freeKey)((void*)&dst->key);
+                    (*dst->data->initKey)((void*)&dst->key);
+                    (*dst->data->importPub)(buf, len, (void*)&dst->key,
+                        ECX_LITTLE_ENDIAN);
+                }
+            }
         }
     }
 
