@@ -365,50 +365,20 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
 
         dst->includePublic = src->includePublic;
 
-        /* Copy public key if available and requested. */
-        if (ok && src->hasPub &&
+        /* Copy the key union directly to preserve all internal state. */
+        XMEMCPY(&dst->key, &src->key, sizeof(src->key));
+
+        /* Copy public key flags if available and requested. */
+        if (src->hasPub &&
             ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
-            byte buf[64];
-            word32 len = (word32)sizeof(buf);
-            int rc = (*src->data->exportPub)((void*)&src->key, buf, &len,
-                ECX_LITTLE_ENDIAN);
-            if (rc != 0) {
-                ok = 0;
-            }
-            if (ok) {
-                rc = (*dst->data->importPub)(buf, len, (void*)&dst->key,
-                    ECX_LITTLE_ENDIAN);
-                if (rc != 0) {
-                    ok = 0;
-                }
-            }
-            if (ok) {
-                dst->hasPub = 1;
-            }
+            dst->hasPub = 1;
         }
-        /* Copy private key if available and requested. */
-        if (ok && src->hasPriv &&
+        /* Copy private key flags if available and requested. */
+        if (src->hasPriv &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
-            byte buf[64];
-            word32 len = (word32)sizeof(buf);
-            int rc = (*src->data->exportPriv)((void*)&src->key, buf, &len);
-            if (rc != 0) {
-                ok = 0;
-            }
-            if (ok) {
-                rc = (*dst->data->importPriv)(buf, len, (void*)&dst->key,
-                    ECX_LITTLE_ENDIAN);
-                if (rc != 0) {
-                    ok = 0;
-                }
-            }
-            if (ok) {
-                dst->hasPriv = 1;
-                dst->clamped = src->clamped;
-                XMEMCPY(dst->unclamped, src->unclamped,
-                    sizeof(src->unclamped));
-            }
-            wc_ForceZero(buf, len);
+            dst->hasPriv = 1;
+            dst->clamped = src->clamped;
+            XMEMCPY(dst->unclamped, src->unclamped, sizeof(src->unclamped));
         }
 
         if (!ok) {

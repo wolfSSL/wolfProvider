@@ -206,10 +206,14 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_HMAC
     TEST_DECL(test_hmac_create, NULL),
     TEST_DECL(test_hmac_multi_update, NULL),
+    TEST_DECL(test_hmac_dup, NULL),
+    TEST_DECL(test_mac_key_match, NULL),
+    TEST_DECL(test_mac_sig_dup, NULL),
 #endif
 #ifdef WP_HAVE_CMAC
     TEST_DECL(test_cmac_create, &flags),
     TEST_DECL(test_cmac_multi_update, &flags),
+    TEST_DECL(test_cmac_dup, &flags),
 #endif
 #ifdef WP_HAVE_GMAC
     TEST_DECL(test_gmac_create, &flags),
@@ -236,6 +240,7 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_des3_cbc_stream, NULL),
         TEST_DECL(test_des3_cbc_bad_pad, NULL),
         TEST_DECL(test_des3_cbc_large_update, NULL),
+        TEST_DECL(test_des3_tls_cbc, NULL),
     #endif
 #endif
 #ifdef WP_HAVE_AESECB
@@ -297,6 +302,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_random, NULL),
 #endif
     TEST_DECL(test_rand_seed, NULL),
+    TEST_DECL(test_drbg_reseed, NULL),
     TEST_DECL(test_seccomp_sandbox, NULL),
 #ifdef WP_HAVE_DH
     TEST_DECL(test_dh_pgen_pkey, NULL),
@@ -332,6 +338,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_null_init, NULL),
     TEST_DECL(test_rsa_param_prefix_match, NULL),
     TEST_DECL(test_rsa_kem_prefix_match, NULL),
+    TEST_DECL(test_rsa_pss_mgf1_get_params, NULL),
+    TEST_DECL(test_rsa_kem, NULL),
 #endif /* WP_HAVE_RSA */
 #ifdef WP_HAVE_EC_P192
     #ifdef WP_HAVE_ECKEYGEN
@@ -462,6 +470,7 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_X25519
     TEST_DECL(test_ecx_x25519_raw_priv_roundtrip, NULL),
 #endif
+    TEST_DECL(test_ecx_dup, NULL),
 #endif
 
     TEST_DECL(test_pkcs7_x509_sign_verify, NULL),

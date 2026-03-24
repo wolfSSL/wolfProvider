@@ -194,10 +194,10 @@ static wp_HmacCtx* wp_hmac_dup(wp_HmacCtx* src)
         dst->size = src->size;
         dst->provCtx = src->provCtx;
 
-        rc = wc_HmacCopy(&src->hmac, &dst->hmac);
-        if (rc != 0) {
-            ok = 0;
-        }
+        /* Copy the Hmac struct directly to preserve in-progress state.
+         * wc_HmacCopy is not available in all wolfSSL versions. */
+        XMEMCPY(&dst->hmac, &src->hmac, sizeof(Hmac));
+        (void)rc;
 
         if (ok && (src->key != NULL) &&
             (!wp_hmac_set_key(dst, src->key, src->keyLen, 0))) {
