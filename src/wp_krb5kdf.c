@@ -446,7 +446,7 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
     size_t osize = 0;
     size_t cipherLen = 0;
     int rc;
-    Aes aes;
+    Aes aes = {0};
     byte block[AES_BLOCK_SIZE];
     byte cipherBlock[AES_BLOCK_SIZE];
     byte *plain = NULL;
@@ -456,6 +456,13 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
+    }
+    if (ok) {
+        rc = wc_AesInit(&aes, NULL, INVALID_DEVID);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesInit", rc);
+            ok = 0;
+        }
     }
     if (ok && (!wp_kdf_krb5kdf_set_ctx_params(ctx, params))) {
         ok = 0;
