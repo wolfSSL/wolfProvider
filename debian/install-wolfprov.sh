@@ -196,14 +196,8 @@ main() {
     work_dir=$(mktemp -d)
     printf "Working directory: $work_dir\n"
     pushd $work_dir 2>&1 > /dev/null
-    repo_name=$(basename "$REPO_ROOT")
-    if git clone --depth 1 "file://$REPO_ROOT" "$repo_name"; then
-        :
-    else
-        echo "Shallow clone failed, falling back to local clone"
-        git clone "$REPO_ROOT" "$repo_name"
-    fi
-    cd "$repo_name"
+    cp -r $REPO_ROOT .
+    cd $(basename $REPO_ROOT)
 
     wolfprov_build $fips_mode $debug_mode
     if [ $no_install -eq 0 ]; then
