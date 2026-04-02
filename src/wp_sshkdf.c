@@ -364,11 +364,13 @@ static int wp_kdf_sshkdf_derive(wp_SshkdfCtx* ctx, unsigned char* key,
             }
         }
 
+        PRIVATE_KEY_UNLOCK();
         rc = wc_SSH_KDF((byte)ctx->mdType, (byte)ctx->type,
             key, (word32)keyLen,
             rawKey, rawKeySz,
             ctx->xcghash, (word32)ctx->xcghashSz,
             ctx->sessionId, (word32)ctx->sessionIdSz);
+        PRIVATE_KEY_LOCK();
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_SSHKDF, "wc_SSH_KDF", rc);
             ok = 0;
