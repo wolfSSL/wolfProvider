@@ -1238,7 +1238,7 @@ static int wp_ecc_import(wp_Ecc* ecc, int selection, const OSSL_PARAM params[])
     if (ok && ((selection & WP_ECC_POSSIBLE_SELECTIONS) == 0)) {
         ok = 0;
     }
-    if (ok & ((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) == 0)) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) == 0)) {
         ok = 0;
     }
     if (ok && (!wp_ecc_import_group(ecc, params))) {

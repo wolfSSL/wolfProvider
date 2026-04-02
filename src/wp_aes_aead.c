@@ -514,7 +514,7 @@ static int wp_aead_set_param_iv_len(wp_AeadCtx* ctx,
     if (!OSSL_PARAM_get_size_t(p, &sz)) {
         ok = 0;
     }
-    if (ok & ((sz == 0) || (sz > sizeof(ctx->aes.reg)))) {
+    if (ok && ((sz == 0) || (sz > sizeof(ctx->aes.reg)))) {
         ok = 0;
     }
     if (ok) {
