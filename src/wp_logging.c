@@ -531,6 +531,7 @@ static void wolfProv_LogComponentToMask(const char* level, size_t len, void* ctx
         { "WP_LOG_COMP_X448",        XSTRLEN("WP_LOG_COMP_X448"),       WP_LOG_COMP_X448     },
         { "WP_LOG_COMP_QUERY",       XSTRLEN("WP_LOG_COMP_QUERY"),      WP_LOG_COMP_QUERY    },
         { "WP_LOG_COMP_TLS1_PRF",     XSTRLEN("WP_LOG_COMP_TLS1_PRF"),   WP_LOG_COMP_TLS1_PRF },
+        { "WP_LOG_COMP_SSHKDF",      XSTRLEN("WP_LOG_COMP_SSHKDF"),     WP_LOG_COMP_SSHKDF   },
         { "WP_LOG_COMP_ALL",
                                 XSTRLEN("WP_LOG_COMP_ALL"),
                                                         WP_LOG_COMP_ALL },
