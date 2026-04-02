@@ -71,7 +71,9 @@ static XFILE g_urandom_file = XBADFILE;
 /*
  * Flag indicating whether the seed callback has been registered.
  */
+#ifdef WC_RNG_SEED_CB
 static int g_seed_cb_registered = 0;
+#endif
 
 /**
  * wolfSSL seed callback that uses the cached /dev/urandom file.

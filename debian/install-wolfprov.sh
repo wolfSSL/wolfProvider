@@ -100,6 +100,7 @@ wolfprov_build() {
     WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
     dpkg-buildpackage -us -uc \
     -eWOLFSSL_ISFIPS \
+    -eWOLFPROV_DEBUG \
     -eCC -eCXX \
     -eCCACHE_DIR -eCCACHE_BASEDIR -eCCACHE_NOHASHDIR -eCCACHE_COMPILERCHECK
 
