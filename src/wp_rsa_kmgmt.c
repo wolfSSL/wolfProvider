@@ -922,7 +922,7 @@ static int wp_digest_to_ossl_digest(enum wc_HashType hashType,
 {
     int ok = 1;
 
-    switch (hashType) {
+    switch ((int)hashType) {
     case WC_HASH_TYPE_MD5:
         *osslDigest = OSSL_DIGEST_NAME_MD5;
         break;
@@ -969,6 +969,7 @@ static int wp_digest_to_ossl_digest(enum wc_HashType hashType,
 #ifdef WOLFSSL_SM3
     case WC_HASH_TYPE_SM3:
 #endif
+    default:
         ok = 0;
     }
 

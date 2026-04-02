@@ -510,9 +510,9 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_hash_copy");
 
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
-    switch (src->type)
+    switch ((int)src->type)
 #else
-    switch (hashType)
+    switch ((int)hashType)
 #endif
     {
     case WC_HASH_TYPE_MD5:
