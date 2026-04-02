@@ -360,6 +360,54 @@ int test_dh_pkey(void *data)
     return err;
 }
 
+int test_dh_invalid_kdf_strings(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *key = NULL;
+    const unsigned char *p = dh_der;
+    char *invalidKdfs[] = {
+        (char *)"X",
+        (char *)"X942",
+        (char *)"X942KDF",
+        (char *)"X942KDF-AS"
+    };
+    size_t i;
+
+    (void)data;
+
+    PRINT_MSG("Reject invalid DH KDF type strings");
+
+    key = d2i_PrivateKey_ex(EVP_PKEY_DH, NULL, &p, sizeof(dh_der), wpLibCtx,
+        NULL);
+    err = key == NULL;
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    for (i = 0; (err == 0) && (i < (sizeof(invalidKdfs) / sizeof(*invalidKdfs)));
+            i++) {
+        OSSL_PARAM params[2];
+
+        params[0] = OSSL_PARAM_construct_utf8_string(
+            OSSL_EXCHANGE_PARAM_KDF_TYPE, invalidKdfs[i], 0);
+        params[1] = OSSL_PARAM_construct_end();
+
+        err = EVP_PKEY_CTX_set_params(ctx, params) > 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("Accepted invalid DH KDF type: %s", invalidKdfs[i]);
+        }
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+
+    return err;
+}
+
 int test_dh_decode(void *data)
 {
     int err = 0;

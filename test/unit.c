@@ -285,6 +285,7 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_DH
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),
+    TEST_DECL(test_dh_invalid_kdf_strings, NULL),
     TEST_DECL(test_dh_decode, NULL),
     TEST_DECL(test_dh_krb5_keygen, NULL),
 #ifndef WOLFPROV_QUICKTEST
@@ -352,6 +353,7 @@ TEST_CASE test_case[] = {
     #ifdef WP_HAVE_ECKEYGEN
         TEST_DECL(test_ecdh_p256_keygen, NULL),
     #endif
+        TEST_DECL(test_ecdh_invalid_kdf_strings, NULL),
         TEST_DECL(test_ecdh_p256, NULL),
     #endif
     #ifdef WP_HAVE_ECDSA
