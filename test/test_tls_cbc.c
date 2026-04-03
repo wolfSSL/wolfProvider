@@ -238,3 +238,114 @@ int test_tls12_cbc_ossl(void *data)
 }
 
 #endif /* WP_HAVE_AESCBC && WP_HAVE_RSA && WP_HAVE_ECDH && WP_HAVE_SHA384 */
+
+#ifdef WP_HAVE_DES3CBC
+#if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
+
+/*
+ * Test DES3 CBC padding validation (exercises fix #838 constant-time padding).
+ * Encrypts data of various sizes and verifies decrypt roundtrip works,
+ * exercising all padding byte values (1-8 for DES block size).
+ */
+static int test_des3_cbc_pad_roundtrip(OSSL_LIB_CTX *encCtx,
+    OSSL_LIB_CTX *decCtx)
+{
+    int err = 0;
+    EVP_CIPHER *encCipher = NULL;
+    EVP_CIPHER *decCipher = NULL;
+    unsigned char key[24];
+    unsigned char iv[8];
+    unsigned char pt[64];
+    unsigned char ct[128];
+    unsigned char dec[128];
+    int ctLen, decLen, finalLen;
+    int i;
+
+    encCipher = EVP_CIPHER_fetch(encCtx, "DES-EDE3-CBC", "");
+    decCipher = EVP_CIPHER_fetch(decCtx, "DES-EDE3-CBC", "");
+    if (encCipher == NULL || decCipher == NULL) {
+        err = 1;
+    }
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    if (RAND_bytes(pt, sizeof(pt)) != 1) {
+        err = 1;
+    }
+
+    /* Test various plaintext sizes to exercise all padding values (1-8). */
+    for (i = 1; i <= 8 && err == 0; i++) {
+        int ptLen = 8 + i; /* 9..16 bytes, padding will be 7..0+8 */
+        EVP_CIPHER_CTX *ctx;
+
+        /* Encrypt */
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL) { err = 1; break; }
+        if (EVP_EncryptInit_ex(ctx, encCipher, NULL, key, iv) != 1) {
+            err = 1;
+        }
+        ctLen = 0;
+        if (err == 0 && EVP_EncryptUpdate(ctx, ct, &ctLen, pt, ptLen) != 1) {
+            err = 1;
+        }
+        finalLen = 0;
+        if (err == 0 && EVP_EncryptFinal_ex(ctx, ct + ctLen, &finalLen) != 1) {
+            err = 1;
+        }
+        ctLen += finalLen;
+        EVP_CIPHER_CTX_free(ctx);
+
+        if (err != 0) break;
+
+        /* Decrypt */
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL) { err = 1; break; }
+        if (EVP_DecryptInit_ex(ctx, decCipher, NULL, key, iv) != 1) {
+            err = 1;
+        }
+        decLen = 0;
+        if (err == 0 && EVP_DecryptUpdate(ctx, dec, &decLen, ct, ctLen) != 1) {
+            err = 1;
+        }
+        finalLen = 0;
+        if (err == 0 && EVP_DecryptFinal_ex(ctx, dec + decLen, &finalLen) != 1) {
+            PRINT_ERR_MSG("DES3 DecryptFinal failed for ptLen=%d", ptLen);
+            err = 1;
+        }
+        decLen += finalLen;
+        EVP_CIPHER_CTX_free(ctx);
+
+        if (err == 0 && (decLen != ptLen ||
+                         memcmp(dec, pt, ptLen) != 0)) {
+            PRINT_ERR_MSG("DES3 roundtrip mismatch for ptLen=%d", ptLen);
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_free(encCipher);
+    EVP_CIPHER_free(decCipher);
+    return err;
+}
+
+int test_des3_tls_cbc(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("DES3 CBC padding roundtrip (OpenSSL -> wolfProvider)");
+    err = test_des3_cbc_pad_roundtrip(osslLibCtx, wpLibCtx);
+    if (err == 0) {
+        PRINT_MSG("DES3 CBC padding roundtrip (wolfProvider -> OpenSSL)");
+        err = test_des3_cbc_pad_roundtrip(wpLibCtx, osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("DES3 CBC padding roundtrip (wolfProvider -> wolfProvider)");
+        err = test_des3_cbc_pad_roundtrip(wpLibCtx, wpLibCtx);
+    }
+
+    return err;
+}
+
+#endif /* !HAVE_FIPS || WP_ALLOW_NON_FIPS */
+#endif /* WP_HAVE_DES3CBC */

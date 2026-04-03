@@ -263,7 +263,7 @@ static int wp_rsaa_encrypt_init(wp_RsaAsymCtx* ctx, wp_Rsa* rsa,
         ok = 0;
     }
     else {
-        ok = wp_rsaa_init(ctx, rsa, params, EVP_PKEY_OP_SIGN);
+        ok = wp_rsaa_init(ctx, rsa, params, EVP_PKEY_OP_ENCRYPT);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

@@ -257,5 +257,114 @@ int test_cmac_create(void *data)
     return ret;
 }
 
+int test_cmac_dup(void *data)
+{
+    int ret = 0;
+    EVP_MAC* emac = NULL;
+    EVP_MAC_CTX* src = NULL;
+    EVP_MAC_CTX* dup = NULL;
+    OSSL_PARAM params[3];
+    char cipher[] = "AES-256-CBC";
+    unsigned char key[] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+    };
+    unsigned char prefix[] = "dup-prefix";
+    unsigned char tailA[] = "-tail-a";
+    unsigned char tailB[] = "-tail-b";
+    unsigned char msgA[sizeof(prefix) + sizeof(tailA)];
+    unsigned char msgB[sizeof(prefix) + sizeof(tailB)];
+    unsigned char macA[16];
+    unsigned char macB[16];
+    unsigned char expA[16];
+    unsigned char expB[16];
+    size_t macASz = sizeof(macA);
+    size_t macBSz = sizeof(macB);
+    int expASz = sizeof(expA);
+    int expBSz = sizeof(expB);
+
+    (void)data;
+
+    PRINT_MSG("Testing CMAC context dup");
+
+    /* Build full messages for one-shot expected MAC calculations. */
+    memcpy(msgA, prefix, sizeof(prefix));
+    memcpy(msgA + sizeof(prefix), tailA, sizeof(tailA));
+    memcpy(msgB, prefix, sizeof(prefix));
+    memcpy(msgB + sizeof(prefix), tailB, sizeof(tailB));
+
+    /* Compute expected MACs. */
+    ret = test_cmac_gen_mac(wpLibCtx, cipher, key, (int)sizeof(key),
+        msgA, (int)sizeof(msgA), expA, &expASz);
+    if (ret != 0) {
+        PRINT_MSG("Generate expected MAC A failed");
+    }
+    if (ret == 0) {
+        ret = test_cmac_gen_mac(wpLibCtx, cipher, key, (int)sizeof(key),
+            msgB, (int)sizeof(msgB), expB, &expBSz);
+        if (ret != 0) {
+            PRINT_MSG("Generate expected MAC B failed");
+        }
+    }
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_CIPHER,
+        cipher, 0);
+    params[1] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        (void*)key, sizeof(key));
+    params[2] = OSSL_PARAM_construct_end();
+
+    if (ret == 0) {
+        ret = (emac = EVP_MAC_fetch(wpLibCtx, "CMAC", NULL)) == NULL;
+    }
+    if (ret == 0) {
+        ret = (src = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_CTX_set_params(src, params) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_init(src, NULL, 0, NULL) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_update(src, prefix, sizeof(prefix)) != 1;
+    }
+    /* Duplicate after partial update. */
+    if (ret == 0) {
+        ret = (dup = EVP_MAC_CTX_dup(src)) == NULL;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_update(src, tailA, sizeof(tailA)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_update(dup, tailB, sizeof(tailB)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_final(src, macA, &macASz, sizeof(macA)) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_MAC_final(dup, macB, &macBSz, sizeof(macB)) != 1;
+    }
+    if (ret == 0) {
+        if ((macASz != (size_t)expASz) || (memcmp(macA, expA, macASz) != 0)) {
+            PRINT_MSG("Duplicated source context MAC mismatch");
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        if ((macBSz != (size_t)expBSz) || (memcmp(macB, expB, macBSz) != 0)) {
+            PRINT_MSG("Duplicated destination context MAC mismatch");
+            ret = -1;
+        }
+    }
+
+    EVP_MAC_CTX_free(dup);
+    EVP_MAC_CTX_free(src);
+    EVP_MAC_free(emac);
+
+    return ret;
+}
+
 #endif /* WP_HAVE_CMAC */
 

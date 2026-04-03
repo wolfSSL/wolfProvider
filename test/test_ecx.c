@@ -693,4 +693,139 @@ int test_ecx_null_init(void* data)
     return err;
 }
 
+int test_ecx_dup(void *data)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    EVP_PKEY *dupKey = NULL;
+    const unsigned char *p = NULL;
+
+    (void)data;
+
+#ifdef WP_HAVE_ED25519
+    PRINT_MSG("Testing ECX dup with Ed25519");
+
+    /* Load key from DER. */
+    p = ed25519_key_der;
+    pkey = d2i_PrivateKey_ex(EVP_PKEY_ED25519, NULL, &p,
+        sizeof(ed25519_key_der), wpLibCtx, NULL);
+    if (pkey == NULL) {
+        PRINT_MSG("Failed to load Ed25519 key");
+        err = 1;
+    }
+
+    /* Duplicate the key. */
+    if (err == 0) {
+        dupKey = EVP_PKEY_dup(pkey);
+        if (dupKey == NULL) {
+            PRINT_MSG("EVP_PKEY_dup failed");
+            err = 1;
+        }
+    }
+
+    /* Verify the keys are equal. */
+    if (err == 0) {
+        if (EVP_PKEY_eq(pkey, dupKey) != 1) {
+            PRINT_MSG("EVP_PKEY_eq failed after dup");
+            err = 1;
+        }
+    }
+
+    /* Sign with dup, verify with original. */
+    if (err == 0) {
+        unsigned char sig[ED25519_SIG_SIZE];
+        size_t sigLen = sizeof(sig);
+        unsigned char msg[32];
+
+        err = RAND_bytes(msg, sizeof(msg)) == 0;
+
+        if (err == 0) {
+            PRINT_MSG("Sign with dup key");
+            err = test_digest_sign(dupKey, wpLibCtx, msg, sizeof(msg),
+                                    NULL, NULL, sig, &sigLen, 0, 0);
+        }
+        if (err == 0) {
+            PRINT_MSG("Verify with original key");
+            err = test_digest_verify(pkey, wpLibCtx, msg, sizeof(msg),
+                                      NULL, NULL, sig, sigLen, 0, 0);
+        }
+    }
+
+    /* Sign with original, verify with dup. */
+    if (err == 0) {
+        unsigned char sig[ED25519_SIG_SIZE];
+        size_t sigLen = sizeof(sig);
+        unsigned char msg[32];
+
+        err = RAND_bytes(msg, sizeof(msg)) == 0;
+
+        if (err == 0) {
+            PRINT_MSG("Sign with original key");
+            err = test_digest_sign(pkey, wpLibCtx, msg, sizeof(msg),
+                                    NULL, NULL, sig, &sigLen, 0, 0);
+        }
+        if (err == 0) {
+            PRINT_MSG("Verify with dup key");
+            err = test_digest_verify(dupKey, wpLibCtx, msg, sizeof(msg),
+                                      NULL, NULL, sig, sigLen, 0, 0);
+        }
+    }
+
+    EVP_PKEY_free(dupKey);
+    EVP_PKEY_free(pkey);
+    dupKey = NULL;
+    pkey = NULL;
+#endif /* WP_HAVE_ED25519 */
+
+#ifdef WP_HAVE_ED448
+    if (err == 0) {
+        PRINT_MSG("Testing ECX dup with Ed448");
+
+        p = ed448_key_der;
+        pkey = d2i_PrivateKey_ex(EVP_PKEY_ED448, NULL, &p,
+            sizeof(ed448_key_der), wpLibCtx, NULL);
+        if (pkey == NULL) {
+            PRINT_MSG("Failed to load Ed448 key");
+            err = 1;
+        }
+
+        if (err == 0) {
+            dupKey = EVP_PKEY_dup(pkey);
+            if (dupKey == NULL) {
+                PRINT_MSG("EVP_PKEY_dup failed for Ed448");
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            if (EVP_PKEY_eq(pkey, dupKey) != 1) {
+                PRINT_MSG("EVP_PKEY_eq failed after Ed448 dup");
+                err = 1;
+            }
+        }
+
+        if (err == 0) {
+            unsigned char sig[ED448_SIG_SIZE];
+            size_t sigLen = sizeof(sig);
+            unsigned char msg[32];
+
+            err = RAND_bytes(msg, sizeof(msg)) == 0;
+            if (err == 0) {
+                err = test_digest_sign(dupKey, wpLibCtx, msg, sizeof(msg),
+                                        NULL, NULL, sig, &sigLen, 0, 0);
+            }
+            if (err == 0) {
+                err = test_digest_verify(pkey, wpLibCtx, msg, sizeof(msg),
+                                          NULL, NULL, sig, sigLen, 0, 0);
+            }
+        }
+
+        EVP_PKEY_free(dupKey);
+        EVP_PKEY_free(pkey);
+    }
+#endif /* WP_HAVE_ED448 */
+
+    return err;
+}
+
 #endif /* defined(WP_HAVE_ED25519) || defined(WP_HAVE_ECD444) */

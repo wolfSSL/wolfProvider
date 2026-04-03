@@ -453,7 +453,7 @@ void wp_dh_free(wp_Dh* dh)
         if (cnt == 0) {
             /* No more references to this object. */
             OPENSSL_free(dh->pub);
-            OPENSSL_free(dh->priv);
+            OPENSSL_clear_free(dh->priv, dh->privSz);
     #ifndef WP_SINGLE_THREADED
             wc_FreeMutex(&dh->mutex);
     #endif
@@ -730,6 +730,9 @@ static int wp_dh_get_params_encoded_public_key(wp_Dh* dh, OSSL_PARAM params[])
                 if (p->data_size < outLen) {
                     ok = 0;
                 }
+                if (ok && (dh->pubSz > outLen)) {
+                    ok = 0;
+                }
                 if (ok) {
                     unsigned char* data = p->data;
                     size_t padSz = outLen - dh->pubSz;
@@ -860,16 +863,6 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
                 /* return_size is set within this function */
                 ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
                     dh->priv, dh->privSz);
-            }
-        }
-    }
-    if (ok) {
-        /* Only call if we haven't already handled OSSL_PKEY_PARAM_PRIV_KEY */
-        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
-        if (p == NULL || p->data != NULL) {
-            if (!wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PRIV_KEY,
-                    dh->priv, dh->privSz)) {
-                ok = 0;
             }
         }
     }

@@ -118,11 +118,15 @@ int test_shake_256(void *data);
 
 #ifdef WP_HAVE_HMAC
 int test_hmac_create(void *data);
+int test_hmac_dup(void *data);
+int test_mac_key_match(void *data);
+int test_mac_sig_dup(void *data);
 #endif /* WP_HAVE_HMAC */
 
 #ifdef WP_HAVE_CMAC
 int test_cmac_create(void *data);
-#endif /* WP_HAVE_HMAC */
+int test_cmac_dup(void *data);
+#endif /* WP_HAVE_CMAC */
 
 #ifdef WP_HAVE_GMAC
 int test_gmac_create(void *data);
@@ -147,6 +151,7 @@ int test_krb5kdf(void *data);
 #ifdef WP_HAVE_DES3CBC
 int test_des3_cbc(void *data);
 int test_des3_cbc_stream(void *data);
+int test_des3_tls_cbc(void *data);
 #endif
 
 #ifdef WP_HAVE_AESECB
@@ -225,6 +230,7 @@ int test_random(void *data);
 
 /* DRBG SEED-SRC hierarchy tests */
 int test_rand_seed(void *data);
+int test_drbg_reseed(void *data);
 
 /* Seccomp sandbox test - mimics OpenSSH fork+sandbox behavior */
 int test_seccomp_sandbox(void *data);
@@ -280,6 +286,8 @@ int test_rsa_fromdata(void* data);
 int test_rsa_decode_pkcs8(void* data);
 int test_rsa_encode_pkcs8(void* data);
 int test_rsa_null_init(void* data);
+int test_rsa_pss_mgf1_get_params(void *data);
+int test_rsa_kem(void *data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH
@@ -428,6 +436,7 @@ int test_ecx_sign_verify_raw_priv(void *data);
 int test_ecx_sign_verify_raw_pub(void *data);
 int test_ecx_misc(void *data);
 int test_ecx_null_init(void *data);
+int test_ecx_dup(void *data);
 #endif
 
 int test_pkcs7_x509_sign_verify(void *data);

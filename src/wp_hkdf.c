@@ -716,6 +716,9 @@ static int wp_kdf_tls1_3_derive(wp_HkdfCtx* ctx, unsigned char* key,
                 ok = 0;
             }
         }
+        else {
+            ok = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

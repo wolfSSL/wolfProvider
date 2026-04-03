@@ -223,10 +223,11 @@ void wp_mac_free(wp_Mac* mac)
         int rc;
 
         rc = wc_LockMutex(&mac->mutex);
-        cnt = --mac->refCnt;
-        if (rc == 0) {
-            wc_UnLockMutex(&mac->mutex);
+        if (rc != 0) {
+            return;
         }
+        cnt = --mac->refCnt;
+        wc_UnLockMutex(&mac->mutex);
     #else
         cnt = --mac->refCnt;
     #endif
@@ -318,6 +319,10 @@ static int wp_mac_has(const wp_Mac* mac, int selection)
     if (mac == NULL) {
        ok = 0;
     }
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+        /* MAC keys do not have a public key component. */
+        ok = 0;
+    }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         ok &= mac->key != NULL;
     }
@@ -344,11 +349,13 @@ static int wp_mac_match(const wp_Mac* mac1, const wp_Mac* mac2, int selection)
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-        (mac1->keyLen != MAX_SIZE_T) && ((mac1->keyLen != mac2->keyLen) ||
-        (XMEMCMP(mac1->key, mac2->key, mac1->keyLen) != 0) ||
-        (XMEMCMP(mac1->cipher, mac2->cipher, WP_MAX_CIPH_NAME_SIZE) != 0))) {
-        ok = 0;
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+        if ((mac1->keyLen == MAX_SIZE_T) || (mac2->keyLen == MAX_SIZE_T) ||
+            (mac1->keyLen != mac2->keyLen) ||
+            (CRYPTO_memcmp(mac1->key, mac2->key, mac1->keyLen) != 0) ||
+            (XMEMCMP(mac1->cipher, mac2->cipher, WP_MAX_CIPH_NAME_SIZE) != 0)) {
+            ok = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

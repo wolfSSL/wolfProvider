@@ -418,10 +418,15 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
         int i;
         unsigned char off = inLen % DES_BLOCK_SIZE;
         unsigned char pad = DES_BLOCK_SIZE - off - 1;
-        for (i = off; i < DES_BLOCK_SIZE; i++) {
-            out[inLen - off + i] = pad;
+        if (outSize < inLen + pad + 1) {
+            ok = 0;
         }
-        inLen += pad + 1;
+        if (ok) {
+            for (i = off; i < DES_BLOCK_SIZE; i++) {
+                out[inLen - off + i] = pad;
+            }
+            inLen += pad + 1;
+        }
     }
     if (ctx->bufSz != 0) {
         size_t len = DES_BLOCK_SIZE - ctx->bufSz;
@@ -578,21 +583,22 @@ static int wp_des3_block_final_dec(wp_Des3BlockCtx* ctx, unsigned char *out,
 
     if (ok && ctx->pad) {
         unsigned char pad;
+        unsigned char invalid;
+        unsigned char i;
 
         pad = ctx->buf[DES_BLOCK_SIZE - 1];
-        if ((pad == 0) || (pad > DES_BLOCK_SIZE)) {
+        invalid = wp_ct_byte_mask_eq(pad, 0) |
+                  ~wp_ct_int_mask_gte(DES_BLOCK_SIZE, (int)pad);
+        for (i = 0; i < DES_BLOCK_SIZE; i++) {
+            unsigned char mask = wp_ct_int_mask_gte((int)i,
+                DES_BLOCK_SIZE - (int)pad);
+            invalid |= mask & wp_ct_byte_mask_ne(ctx->buf[i], pad);
+        }
+        if (invalid) {
             ok = 0;
         }
-        if (ok) {
-            unsigned char len = DES_BLOCK_SIZE;
-            unsigned char i;
-
-            for (i = 0; i < pad; i++) {
-                if (ctx->buf[--len] != pad) {
-                    return 0;
-                }
-            }
-            ctx->bufSz = len;
+        else {
+            ctx->bufSz = DES_BLOCK_SIZE - pad;
         }
     }
 

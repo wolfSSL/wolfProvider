@@ -481,7 +481,7 @@ static int wp_seed_src_generate(wp_SeedSrcCtx* ctx, unsigned char* out,
         memcpy(out, buf, outLen);
     }
     if (buf != NULL) {
-        OPENSSL_free(buf);
+        OPENSSL_clear_free(buf, outLen);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
