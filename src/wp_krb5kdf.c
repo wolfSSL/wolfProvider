@@ -476,6 +476,9 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
     if (ok && (wp_kdf_krb5kdf_expected_key_size(ctx) != (int)ctx->keySz)) {
         ok = 0;
     }
+    if (ok && (ctx->constant == NULL || ctx->constantSz == 0)) {
+        ok = 0;
+    }
     if (ok) {
         XMEMSET(key, 0, keyLen);
 
