@@ -1172,7 +1172,7 @@ byte wp_ct_byte_mask_eq(byte a, byte b)
  */
 byte wp_ct_byte_mask_ne(byte a, byte b)
 {
-    return (((int32_t)b - a) >> 31) & (((int32_t)a - b) >> 31);
+    return (((int32_t)b - a) >> 31) | (((int32_t)a - b) >> 31);
 }
 
 /**

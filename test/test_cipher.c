@@ -457,6 +457,86 @@ int test_des3_cbc_stream(void *data)
     return err;
 }
 
+/*
+ * Negative PKCS#7 padding test for DES3-CBC.
+ * Encrypt block-aligned plaintext (produces a full padding block), corrupt a
+ * ciphertext byte so the padding block is garbled, verify DecryptFinal rejects.
+ */
+int test_des3_cbc_bad_pad(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[24];
+    unsigned char iv[8];
+    unsigned char pt[8]; /* block-aligned: PKCS#7 adds full 8-byte pad block */
+    unsigned char ct[24]; /* 8 pt + 8 pad = 16, but EncryptFinal may need room */
+    unsigned char dec[24];
+    int outLen = 0, fLen = 0;
+
+    (void)data;
+
+    PRINT_MSG("DES3-CBC negative PKCS#7 padding");
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(pt, 0x42, sizeof(pt));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt with padding. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, (int)sizeof(pt)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+        outLen += fLen;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Corrupt first ciphertext block -- CBC garbles the padding block. */
+    if (err == 0) {
+        ct[0] ^= 0x01;
+    }
+
+    /* Decrypt -- DecryptFinal should fail due to garbled padding. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        fLen = 0;
+        err = EVP_DecryptUpdate(ctx, dec, &fLen, ct, outLen) != 1;
+    }
+    if (err == 0) {
+        int ret = EVP_DecryptFinal_ex(ctx, dec + fLen, &fLen);
+        if (ret == 1) {
+            PRINT_ERR_MSG("DES3-CBC bad-pad: DecryptFinal should have failed");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
 #endif /* WP_HAVE_DES3CBC */
 
 /******************************************************************************/
@@ -1326,4 +1406,86 @@ int test_aes256_cbc_multiple(void *data)
 
     return err;
 }
+
+/*
+ * Negative PKCS#7 padding test for AES-256-CBC.
+ * Encrypt block-aligned plaintext (produces a full padding block), corrupt a
+ * ciphertext byte so the padding block is garbled, verify DecryptFinal rejects.
+ */
+int test_aes256_cbc_bad_pad(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char iv[16];
+    unsigned char pt[16]; /* block-aligned: PKCS#7 adds full 16-byte pad block */
+    unsigned char ct[48];
+    unsigned char dec[48];
+    int outLen = 0, fLen = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-256-CBC negative PKCS#7 padding");
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(pt, 0x42, sizeof(pt));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-256-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt with padding. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, (int)sizeof(pt)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+        outLen += fLen;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Corrupt first ciphertext block -- CBC garbles the padding block. */
+    if (err == 0) {
+        ct[0] ^= 0x01;
+    }
+
+    /* Decrypt -- DecryptFinal should fail due to garbled padding. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        fLen = 0;
+        err = EVP_DecryptUpdate(ctx, dec, &fLen, ct, outLen) != 1;
+    }
+    if (err == 0) {
+        int ret = EVP_DecryptFinal_ex(ctx, dec + fLen, &fLen);
+        if (ret == 1) {
+            PRINT_ERR_MSG("AES-256-CBC bad-pad: DecryptFinal should have "
+                          "failed");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
 #endif /* WP_HAVE_AESCBC */
