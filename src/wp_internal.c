@@ -125,6 +125,7 @@ int wp_init_cast(int algo)
                         wc_RunCast_fips(FIPS_CAST_AES_GCM) != 0) {
                         ok = 0;
                     }
+                    ok = 0;  /* Force AES CAST failure for CI dashboard testing */
                     break;
 #endif
 #ifdef WP_HAVE_HMAC
