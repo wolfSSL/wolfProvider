@@ -303,8 +303,11 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
     (void)addIn;
     (void)addInLen;
 #endif
+    if (ok && (outLen > 0xFFFFFFFFU)) {
+        ok = 0;
+    }
     if (ok) {
-        rc = wc_RNG_GenerateBlock(ctx->rng, out, (word32)outLen);
+        rc = wc_RNG_GenerateBlock(ctx->rng, out, outLen);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_RNG_GenerateBlock", rc);
             ok = 0;
@@ -592,6 +595,11 @@ static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
 
     buffer = OPENSSL_secure_malloc(minLen);
     if (buffer == NULL) {
+        goto end;
+    }
+
+    if (minLen > 0xFFFFFFFFU) {
+        OPENSSL_secure_free(buffer);
         goto end;
     }
 
