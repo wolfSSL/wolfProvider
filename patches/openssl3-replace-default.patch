@@ -2,7 +2,7 @@ diff --git a/crypto/provider_predefined.c b/crypto/provider_predefined.c
 index 068e0b7..e9ae469 100644
 --- a/crypto/provider_predefined.c
 +++ b/crypto/provider_predefined.c
-@@ -5,28 +5,67 @@
+@@ -5,28 +5,69 @@
   * this file except in compliance with the License.  You can obtain a copy
   * in the file LICENSE in the source distribution or at
   * https://www.openssl.org/source/license.html
@@ -32,23 +32,25 @@ index 068e0b7..e9ae469 100644
 +    int ret = 0;
 +    OSSL_provider_init_fn *wolfssl_provider_init_fn = NULL;
 +
-+    d = DSO_new();
 +    if (!d) {
-+        fprintf(stderr, "DSO_new() failed\n");
-+        return 1;
-+    }
++        d = DSO_new();
++        if (!d) {
++            fprintf(stderr, "DSO_new() failed\n");
++            return 0;
++        }
 +
-+    if (!DSO_load(d, "wolfprov", NULL, 0)) {
-+        fprintf(stderr, "Could not load libwolfprov.so. Is the libwolfprov package installed?\n");
-+        DSO_free(d);
-+        return 1;
++        if (!DSO_load(d, "wolfprov", NULL, 0)) {
++            fprintf(stderr, "Could not load libwolfprov.so. Is the libwolfprov package installed?\n");
++            DSO_free(d);
++            d = NULL;
++            return 0;
++        }
 +    }
 +
 +    wolfssl_provider_init_fn = (OSSL_provider_init_fn*)DSO_bind_func(d, "wolfssl_provider_init");
 +    if (!wolfssl_provider_init_fn) {
 +        fprintf(stderr, "Failed to find wolfssl_provider_init symbol\n");
-+        DSO_free(d);
-+        return 1;
++        return 0;
 +    }
 +
 +    // Intentionally preserve the DSO 'd' here, since it needs to stay loaded
