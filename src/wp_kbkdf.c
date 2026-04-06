@@ -623,7 +623,9 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
             ok = 0;
         }
         else {
-            XMEMCPY(k_i, ctx->iv, ctx->ivLen);
+            if (ctx->ivLen > 0) {
+                XMEMCPY(k_i, ctx->iv, ctx->ivLen);
+            }
             k_i_len = ctx->ivLen;
             /* Prep [L]2 */
             wp_c32toa((word32)(keyLen * 8), (byte *)&beL);
