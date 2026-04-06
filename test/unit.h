@@ -87,6 +87,7 @@ typedef struct TEST_CASE {
 } TEST_CASE;
 
 int test_logging(void *data);
+int test_ct_masks(void *data);
 
 #define WP_VALGRIND_TEST 0x1
 
