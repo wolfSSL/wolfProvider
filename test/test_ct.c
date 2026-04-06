@@ -50,7 +50,7 @@ int test_ct_masks(void *data)
                               "0x%02x", a, b, neRes, expNe);
                 err = 1;
             }
-            if ((byte)~eqRes != neRes) {
+            if ((byte)(eqRes ^ 0xFFU) != neRes) {
                 PRINT_ERR_MSG("ct_byte_mask ne/eq mismatch at (%d, %d): "
                               "~eq=0x%02x ne=0x%02x", a, b,
                               (byte)~eqRes, neRes);
