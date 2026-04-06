@@ -793,7 +793,7 @@ static int wp_EncryptedInfoGet(wp_EncryptedInfo* info, const char* cipherInfo)
 
     /* determine cipher information */
 #if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
-    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc128, XSTRLEN(kEncTypeAesCbc128)) == 0) {
+    if (XSTRCMP(cipherInfo, kEncTypeAesCbc128) == 0) {
         info->cipherType = WC_CIPHER_AES_CBC;
         info->keySz = AES_128_KEY_SIZE;
         if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
@@ -801,7 +801,7 @@ static int wp_EncryptedInfoGet(wp_EncryptedInfo* info, const char* cipherInfo)
     else
 #endif
 #if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_192)
-    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc192, XSTRLEN(kEncTypeAesCbc192)) == 0) {
+    if (XSTRCMP(cipherInfo, kEncTypeAesCbc192) == 0) {
         info->cipherType = WC_CIPHER_AES_CBC;
         info->keySz = AES_192_KEY_SIZE;
         if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
@@ -809,7 +809,7 @@ static int wp_EncryptedInfoGet(wp_EncryptedInfo* info, const char* cipherInfo)
     else
 #endif
 #if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_256)
-    if (XSTRNCMP(cipherInfo, kEncTypeAesCbc256, XSTRLEN(kEncTypeAesCbc256)) == 0) {
+    if (XSTRCMP(cipherInfo, kEncTypeAesCbc256) == 0) {
         info->cipherType = WC_CIPHER_AES_CBC;
         info->keySz = AES_256_KEY_SIZE;
         if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
@@ -1113,7 +1113,7 @@ int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
             *len += readLen;
         }
         /* Last line should have footer. */
-        if (XMEMCMP(buf, "-----END ", 8) == 0) {
+        if (XMEMCMP(buf, "-----END ", 9) == 0) {
             break;
         }
     }

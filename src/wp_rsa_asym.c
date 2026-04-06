@@ -466,27 +466,43 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
             if (ok) {
                 byte mask;
                 byte negMask;
+                byte rand[WOLFSSL_MAX_MASTER_KEY_LENGTH];
+                int i;
 
-                XMEMSET(out, 0, outSize);
-                PRIVATE_KEY_UNLOCK();
-                rc = wc_RsaPrivateDecrypt(in, (word32)inLen, out,
-                    (word32)outSize, wp_rsa_get_key(ctx->rsa));
-                PRIVATE_KEY_LOCK();
-
-                /* Constant time checking of master secret. */
-                mask  = wp_ct_byte_mask_eq(out[0], ctx->clientVersion >> 8);
-                mask &= wp_ct_byte_mask_eq(out[1], ctx->clientVersion);
-                if (ctx->negVersion > 0) {
-                    /* Check for negotiated version as well. */
-                    negMask  = wp_ct_byte_mask_eq(out[0], ctx->negVersion >> 8);
-                    negMask &= wp_ct_byte_mask_eq(out[1], ctx->negVersion);
-                    mask |= negMask;
-                }
-                rc &= (int)(char)mask;
-
-                if (rc <= 0) {
-                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaPrivateDecrypt TLS padding", rc);
+                /* Implicit rejection: always generate random fallback
+                 * to prevent Bleichenbacher-style oracle attacks. */
+                rc = wc_RNG_GenerateBlock(&ctx->rng, rand,
+                    WOLFSSL_MAX_MASTER_KEY_LENGTH);
+                if (rc != 0) {
                     ok = 0;
+                }
+                if (ok) {
+                    XMEMSET(out, 0, outSize);
+                    PRIVATE_KEY_UNLOCK();
+                    rc = wc_RsaPrivateDecrypt(in, (word32)inLen, out,
+                        (word32)outSize, wp_rsa_get_key(ctx->rsa));
+                    PRIVATE_KEY_LOCK();
+
+                    /* Constant time checking of master secret. */
+                    mask  = wp_ct_byte_mask_eq(out[0],
+                        ctx->clientVersion >> 8);
+                    mask &= wp_ct_byte_mask_eq(out[1], ctx->clientVersion);
+                    if (ctx->negVersion > 0) {
+                        negMask  = wp_ct_byte_mask_eq(out[0],
+                            ctx->negVersion >> 8);
+                        negMask &= wp_ct_byte_mask_eq(out[1],
+                            ctx->negVersion);
+                        mask |= negMask;
+                    }
+                    /* Combine decrypt success with version check. */
+                    mask &= wp_ct_int_mask_gte(rc, 1);
+
+                    /* Constant-time select: real result or random fallback. */
+                    for (i = 0; i < WOLFSSL_MAX_MASTER_KEY_LENGTH; i++) {
+                        out[i] = wp_ct_byte_mask_sel(mask, out[i], rand[i]);
+                    }
+                    OPENSSL_cleanse(rand, sizeof(rand));
+                    rc = WOLFSSL_MAX_MASTER_KEY_LENGTH;
                 }
             }
         }
@@ -551,7 +567,7 @@ static int wp_rsaa_setup_md(wp_RsaAsymCtx* ctx, const char* mdName,
             }
             else {
                 OPENSSL_strlcpy(ctx->mgf1MdName, mdName,
-                    sizeof(ctx->oaepMdName));
+                    sizeof(ctx->mgf1MdName));
             }
         }
     }
