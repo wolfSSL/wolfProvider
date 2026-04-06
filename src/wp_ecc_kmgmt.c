@@ -350,7 +350,7 @@ static wp_Ecc* wp_ecc_new(WOLFPROV_CTX *provCtx)
             }
         }
 
-    #ifndef SINGLE_THREADED
+    #ifndef WP_SINGLE_THREADED
         if (ok) {
             rc = wc_InitMutex(&ecc->mutex);
             if (rc != 0) {
