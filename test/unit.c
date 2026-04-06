@@ -202,11 +202,14 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_SHAKE_256
     TEST_DECL(test_shake_256, NULL),
 #endif
+    TEST_DECL(test_digest_multi_update, NULL),
 #ifdef WP_HAVE_HMAC
     TEST_DECL(test_hmac_create, NULL),
+    TEST_DECL(test_hmac_multi_update, NULL),
 #endif
 #ifdef WP_HAVE_CMAC
     TEST_DECL(test_cmac_create, &flags),
+    TEST_DECL(test_cmac_multi_update, &flags),
 #endif
 #ifdef WP_HAVE_GMAC
     TEST_DECL(test_gmac_create, &flags),
@@ -248,6 +251,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes256_cbc_stream, NULL),
     TEST_DECL(test_aes256_cbc_multiple, NULL),
     TEST_DECL(test_aes256_cbc_bad_pad, NULL),
+    TEST_DECL(test_aes_cbc_large_update, NULL),
 #endif
 #ifdef WP_HAVE_AESCTR
     TEST_DECL(test_aes128_ctr_stream, NULL),
@@ -271,6 +275,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_gcm_fixed, NULL),
     TEST_DECL(test_aes128_gcm_tls, NULL),
     TEST_DECL(test_aes128_gcm_set_iv_inv, NULL),
+    TEST_DECL(test_aes128_gcm_key_then_iv, NULL),
 #endif
 #ifdef WP_HAVE_AESCCM
     TEST_DECL(test_aes128_ccm, NULL),
@@ -317,6 +322,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_decode_pkcs8, NULL),
     TEST_DECL(test_rsa_encode_pkcs8, NULL),
     TEST_DECL(test_rsa_null_init, NULL),
+    TEST_DECL(test_rsa_param_prefix_match, NULL),
+    TEST_DECL(test_rsa_kem_prefix_match, NULL),
 #endif /* WP_HAVE_RSA */
 #ifdef WP_HAVE_EC_P192
     #ifdef WP_HAVE_ECKEYGEN

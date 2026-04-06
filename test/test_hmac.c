@@ -295,6 +295,102 @@ int test_hmac_create(void *data)
     return ret;
 }
 
+/******************************************************************************/
+
+/**
+ * Test that HMAC produces consistent results when data is fed in many small
+ * updates vs. a single large update. Exercises the chunked update path
+ * (F-1639).
+ */
+static int test_hmac_multi_update_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err;
+    EVP_MAC *emac = NULL;
+    EVP_MAC_CTX *ctx = NULL;
+    OSSL_PARAM params[3];
+    char digest[] = "SHA-256";
+    unsigned char key[] = "test-hmac-multi-update-key";
+    unsigned char data[4096];
+    unsigned char macOne[32];
+    unsigned char macMulti[32];
+    size_t macOneSz = sizeof(macOne);
+    size_t macMultiSz = sizeof(macMulti);
+    size_t i;
+
+    RAND_bytes(data, sizeof(data));
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
+        digest, 0);
+    params[1] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        (void *)key, sizeof(key));
+    params[2] = OSSL_PARAM_construct_end();
+
+    err = (emac = EVP_MAC_fetch(libCtx, "HMAC", NULL)) == NULL;
+
+    /* Single update */
+    if (err == 0) {
+        err = (ctx = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_MAC_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, data, sizeof(data)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macOne, &macOneSz, sizeof(macOne)) != 1;
+    }
+    EVP_MAC_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Many small updates (128 bytes each) */
+    if (err == 0) {
+        err = (ctx = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_MAC_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1;
+    }
+    for (i = 0; err == 0 && i < sizeof(data); i += 128) {
+        err = EVP_MAC_update(ctx, data + i, 128) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macMulti, &macMultiSz,
+            sizeof(macMulti)) != 1;
+    }
+    if (err == 0) {
+        if (macOneSz != macMultiSz ||
+            memcmp(macOne, macMulti, macOneSz) != 0) {
+            PRINT_ERR_MSG("Multi-update HMAC doesn't match single update");
+            err = 1;
+        }
+    }
+
+    EVP_MAC_CTX_free(ctx);
+    EVP_MAC_free(emac);
+    return err;
+}
+
+int test_hmac_multi_update(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("HMAC multi-update with OpenSSL");
+    err = test_hmac_multi_update_helper(osslLibCtx);
+    if (err == 0) {
+        PRINT_MSG("HMAC multi-update with wolfProvider");
+        err = test_hmac_multi_update_helper(wpLibCtx);
+    }
+    return err;
+}
+
 #endif /* WP_HAVE_HMAC */
 
 
