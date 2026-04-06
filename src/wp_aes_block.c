@@ -431,45 +431,65 @@ static int wp_aes_block_dinit(wp_AesBlockCtx *ctx, const unsigned char *key,
 static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
     const unsigned char *in, size_t inLen)
 {
-    int rc;
+    int rc = 0;
 
-#ifdef WP_HAVE_AESCBC
-    if (ctx->mode == EVP_CIPH_CBC_MODE) {
-        if (ctx->enc) {
-            rc = wc_AesCbcEncrypt(&ctx->aes, out, in, (word32)inLen);
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcEncrypt", rc);
+    while ((rc == 0) && (inLen > 0)) {
+        /* Chunk must be block-aligned (AES block size = 16). */
+        word32 chunk = (inLen > 0xFFFFFFF0U) ? 0xFFFFFFF0U : (word32)inLen;
+
+    #ifdef WP_HAVE_AESCBC
+        if (ctx->mode == EVP_CIPH_CBC_MODE) {
+            if (ctx->enc) {
+                rc = wc_AesCbcEncrypt(&ctx->aes, out, in, chunk);
+                if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                        "wc_AesCbcEncrypt", rc);
+                }
+            }
+            else {
+                rc = wc_AesCbcDecrypt(&ctx->aes, out, in, chunk);
+                if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                        "wc_AesCbcDecrypt", rc);
+                }
             }
         }
-        else {
-            rc = wc_AesCbcDecrypt(&ctx->aes, out, in, (word32)inLen);
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcDecrypt", rc);
+        else
+    #endif
+    #ifdef WP_HAVE_AESECB
+        if (ctx->mode == EVP_CIPH_ECB_MODE) {
+            if (ctx->enc) {
+                rc = wc_AesEcbEncrypt(&ctx->aes, out, in, chunk);
+                if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                        "wc_AesEcbEncrypt", rc);
+                }
+            }
+            else {
+                rc = wc_AesEcbDecrypt(&ctx->aes, out, in, chunk);
+                if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                        "wc_AesEcbDecrypt", rc);
+                }
             }
         }
-        XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        else
+    #endif
+        {
+            rc = -1;
+        }
+
+        in += chunk;
+        out += chunk;
+        inLen -= chunk;
     }
-    else
-#endif
-#ifdef WP_HAVE_AESECB
-    if (ctx->mode == EVP_CIPH_ECB_MODE) {
-        if (ctx->enc) {
-            rc = wc_AesEcbEncrypt(&ctx->aes, out, in, (word32)inLen);
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesEcbEncrypt", rc);
-            }
+
+    if (rc == 0) {
+    #ifdef WP_HAVE_AESCBC
+        if (ctx->mode == EVP_CIPH_CBC_MODE) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
         }
-        else {
-            rc = wc_AesEcbDecrypt(&ctx->aes, out, in, (word32)inLen);
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesEcbDecrypt", rc);
-            }
-        }
-    }
-    else
-#endif
-    {
-        rc = -1;
+    #endif
     }
 
     return rc == 0;

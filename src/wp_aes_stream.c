@@ -532,13 +532,18 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
 
 #ifdef WP_HAVE_AESCTR
     if (ctx->mode == EVP_CIPH_CTR_MODE) {
-        int rc;
-
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
-        rc = wc_AesCtrEncrypt(&ctx->aes, out, in, (word32)inLen);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCtrEncrypt", rc);
-            ok = 0;
+        while (ok && (inLen > 0)) {
+            word32 chunk = (inLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)inLen;
+            int rc = wc_AesCtrEncrypt(&ctx->aes, out, in, chunk);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_AesCtrEncrypt", rc);
+                ok = 0;
+            }
+            in += chunk;
+            out += chunk;
+            inLen -= chunk;
         }
         if (ok) {
             XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
@@ -548,17 +553,24 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
 #endif
 #ifdef WP_HAVE_AESCFB
     if (ctx->mode == EVP_CIPH_CFB_MODE) {
-        int rc;
-
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
-        if (ctx->enc) {
-            rc = wc_AesCfbEncrypt(&ctx->aes, out, in, (word32)inLen);
-        }else {
-            rc = wc_AesCfbDecrypt(&ctx->aes, out, in, (word32)inLen);
-        }
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCfbEncrypt/wc_AesCfbDecrypt", rc);
-            ok = 0;
+        while (ok && (inLen > 0)) {
+            word32 chunk = (inLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)inLen;
+            int rc;
+            if (ctx->enc) {
+                rc = wc_AesCfbEncrypt(&ctx->aes, out, in, chunk);
+            }
+            else {
+                rc = wc_AesCfbDecrypt(&ctx->aes, out, in, chunk);
+            }
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_AesCfbEncrypt/wc_AesCfbDecrypt", rc);
+                ok = 0;
+            }
+            in += chunk;
+            out += chunk;
+            inLen -= chunk;
         }
         if (ok) {
             XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
@@ -682,7 +694,9 @@ static int wp_aes_stream_cipher(wp_AesStreamCtx* ctx, unsigned char* out,
         ok = 0;
     }
 
-    *outLen = inLen;
+    if (ok) {
+        *outLen = inLen;
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
