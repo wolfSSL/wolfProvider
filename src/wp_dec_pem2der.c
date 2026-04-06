@@ -158,7 +158,7 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
 
     /* Skip '-----BEGIN <name>-----\n'. */
     base64Data = data + 16 + nameLen + 1;
-    base64Len = len - 16 + nameLen + 1;
+    base64Len = len - (16 + nameLen + 1);
     footer = XSTRSTR(base64Data, "-----END ");
     if (footer == NULL) {
         info->consumed = len;
