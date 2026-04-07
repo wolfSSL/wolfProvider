@@ -224,6 +224,9 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_KRB5KDF
     TEST_DECL(test_krb5kdf, NULL),
 #endif
+#ifdef WP_HAVE_SSHKDF
+    TEST_DECL(test_sshkdf, NULL),
+#endif
 #ifdef WP_HAVE_DES3CBC
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_des3_cbc, NULL),

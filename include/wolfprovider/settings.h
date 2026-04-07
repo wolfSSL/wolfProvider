@@ -116,6 +116,9 @@
 #ifndef NO_PWDBASED
     #define WP_HAVE_PBE
 #endif
+#ifdef WOLFSSL_WOLFSSH
+    #define WP_HAVE_SSHKDF
+#endif
 
 #ifndef NO_DH
     #define WP_HAVE_DH
