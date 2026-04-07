@@ -211,6 +211,7 @@ int test_aes128_ccm(void *data);
 int test_aes192_ccm(void *data);
 int test_aes256_ccm(void *data);
 int test_aes128_ccm_tls(void *data);
+int test_aes_ccm_bad_tag(void *data);
 
 #endif /* WP_HAVE_AESCCM */
 

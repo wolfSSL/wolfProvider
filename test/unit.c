@@ -279,6 +279,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes256_ccm, NULL),
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
     TEST_DECL(test_aes128_ccm_tls, NULL),
+    TEST_DECL(test_aes_ccm_bad_tag, NULL),
 #endif
 #endif
 #ifdef WP_HAVE_RANDOM
