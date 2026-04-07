@@ -535,6 +535,77 @@ static int test_hkdf_fail(void)
     return err;
 }
 
+/*
+ * Test that HKDF Extract-Only mode rejects output lengths that do not match
+ * the hash digest size.
+ */
+static int test_hkdf_extract_only_bad_len(OSSL_LIB_CTX *libCtx)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    unsigned char inKey[32] = { 0, };
+    unsigned char salt[32] = { 0, };
+    unsigned char out[64];
+    size_t len;
+    int mdSize;
+
+    PRINT_MSG("HKDF Extract-Only with wrong output length");
+
+    mdSize = EVP_MD_get_size(EVP_sha256());
+
+    ctx = EVP_PKEY_CTX_new_from_name(libCtx, "HKDF", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_hkdf_mode(ctx, EVP_PKEY_HKDEF_MODE_EXTRACT_ONLY) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set1_hkdf_key(ctx, inKey, sizeof(inKey)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set1_hkdf_salt(ctx, salt, sizeof(salt)) != 1;
+    }
+
+    /* Request wrong length (too short) -- must fail */
+    if (err == 0) {
+        len = (size_t)(mdSize - 1);
+        if (EVP_PKEY_derive(ctx, out, &len) == 1) {
+            PRINT_ERR_MSG("Extract-Only should reject len %zu (md=%d)",
+                          len, mdSize);
+            err = 1;
+        }
+    }
+
+    /* Request wrong length (too long) -- must fail */
+    if (err == 0) {
+        len = (size_t)(mdSize + 1);
+        if (EVP_PKEY_derive(ctx, out, &len) == 1) {
+            PRINT_ERR_MSG("Extract-Only should reject len %zu (md=%d)",
+                          len, mdSize);
+            err = 1;
+        }
+    }
+
+    /* Request correct length -- must succeed */
+    if (err == 0) {
+        len = (size_t)mdSize;
+        if (EVP_PKEY_derive(ctx, out, &len) != 1) {
+            PRINT_ERR_MSG("Extract-Only should accept len %zu", len);
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
 #define NUM_MODES     3
 
 int test_hkdf(void *data)
@@ -573,6 +644,9 @@ int test_hkdf(void *data)
     }
     if (err == 0) {
         err = test_hkdf_fail();
+    }
+    if (err == 0) {
+        err = test_hkdf_extract_only_bad_len(wpLibCtx);
     }
 
     return err;
