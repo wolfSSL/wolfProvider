@@ -422,6 +422,110 @@ cleanup:
 }
 
 /**
+ * Test that SEED-SRC remains usable after a child DRBG instantiates from it.
+ * Instantiates two child DRBGs from the same SEED-SRC parent and verifies
+ * both can generate random bytes.
+ */
+static int test_seed_src_multi_child(OSSL_LIB_CTX *libCtx, const char *propq)
+{
+    int err = 0;
+    EVP_RAND *seed_src = NULL;
+    EVP_RAND *ctr_drbg = NULL;
+    EVP_RAND_CTX *seed_ctx = NULL;
+    EVP_RAND_CTX *child1_ctx = NULL;
+    EVP_RAND_CTX *child2_ctx = NULL;
+    unsigned char buf[32];
+    OSSL_PARAM params[2];
+
+    PRINT_MSG("Testing SEED-SRC survives multiple child DRBG instantiations");
+
+    seed_src = EVP_RAND_fetch(libCtx, "SEED-SRC", propq);
+    ctr_drbg = EVP_RAND_fetch(libCtx, "CTR-DRBG", propq);
+    if (seed_src == NULL || ctr_drbg == NULL) {
+        PRINT_ERR_MSG("Failed to fetch RAND algorithms");
+        err = 1;
+        goto cleanup;
+    }
+
+    seed_ctx = EVP_RAND_CTX_new(seed_src, NULL);
+    if (seed_ctx == NULL) {
+        PRINT_ERR_MSG("Failed to create SEED-SRC context");
+        err = 1;
+        goto cleanup;
+    }
+    if (EVP_RAND_instantiate(seed_ctx, 0, 0, NULL, 0, NULL) != 1) {
+        PRINT_ERR_MSG("Failed to instantiate SEED-SRC");
+        err = 1;
+        goto cleanup;
+    }
+
+    /* First child DRBG: instantiate from SEED-SRC (calls get_seed + clear_seed) */
+    child1_ctx = EVP_RAND_CTX_new(ctr_drbg, seed_ctx);
+    if (child1_ctx == NULL) {
+        PRINT_ERR_MSG("Failed to create first child DRBG");
+        err = 1;
+        goto cleanup;
+    }
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_CIPHER,
+                                                  (char*)"AES-256-CTR", 0);
+    params[1] = OSSL_PARAM_construct_end();
+    if (EVP_RAND_CTX_set_params(child1_ctx, params) != 1) {
+        PRINT_ERR_MSG("Failed to set first child DRBG params");
+        err = 1;
+        goto cleanup;
+    }
+    if (EVP_RAND_instantiate(child1_ctx, 256, 0, NULL, 0, NULL) != 1) {
+        PRINT_ERR_MSG("Failed to instantiate first child DRBG");
+        err = 1;
+        goto cleanup;
+    }
+    PRINT_MSG("First child DRBG instantiated OK");
+
+    /* Second child DRBG: instantiate from same SEED-SRC.
+     * Before the fix, this fails because clear_seed set SEED-SRC to
+     * UNINITIALISED and get_seed returns 0. */
+    child2_ctx = EVP_RAND_CTX_new(ctr_drbg, seed_ctx);
+    if (child2_ctx == NULL) {
+        PRINT_ERR_MSG("Failed to create second child DRBG");
+        err = 1;
+        goto cleanup;
+    }
+    if (EVP_RAND_CTX_set_params(child2_ctx, params) != 1) {
+        PRINT_ERR_MSG("Failed to set second child DRBG params");
+        err = 1;
+        goto cleanup;
+    }
+    if (EVP_RAND_instantiate(child2_ctx, 256, 0, NULL, 0, NULL) != 1) {
+        PRINT_ERR_MSG("Failed to instantiate second child DRBG from same "
+                      "SEED-SRC");
+        err = 1;
+        goto cleanup;
+    }
+    PRINT_MSG("Second child DRBG instantiated OK");
+
+    /* Verify both children can generate */
+    if (EVP_RAND_generate(child1_ctx, buf, sizeof(buf), 256, 0, NULL, 0) != 1) {
+        PRINT_ERR_MSG("Failed to generate from first child DRBG");
+        err = 1;
+        goto cleanup;
+    }
+    if (EVP_RAND_generate(child2_ctx, buf, sizeof(buf), 256, 0, NULL, 0) != 1) {
+        PRINT_ERR_MSG("Failed to generate from second child DRBG");
+        err = 1;
+        goto cleanup;
+    }
+    PRINT_MSG("Both child DRBGs generate OK after shared SEED-SRC parent");
+
+cleanup:
+    EVP_RAND_CTX_free(child2_ctx);
+    EVP_RAND_CTX_free(child1_ctx);
+    EVP_RAND_CTX_free(seed_ctx);
+    EVP_RAND_free(ctr_drbg);
+    EVP_RAND_free(seed_src);
+    return err;
+}
+
+/**
  * Main test entry point - runs tests with OpenSSL default provider and wolfProvider.
  */
 int test_rand_seed(void *data)
@@ -461,6 +565,9 @@ int test_rand_seed(void *data)
     }
     if (err == 0) {
         err = test_seed_src_three_level(wpLibCtx, NULL);
+    }
+    if (err == 0) {
+        err = test_seed_src_multi_child(wpLibCtx, NULL);
     }
 
     if (err == 0) {

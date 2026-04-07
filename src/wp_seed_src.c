@@ -689,10 +689,8 @@ end:
 static void wp_seed_src_clear_seed(wp_SeedSrcCtx* ctx, unsigned char* seed,
     size_t seedLen)
 {
+    (void)ctx;
     OPENSSL_secure_clear_free(seed, seedLen);
-    if (ctx != NULL) {
-        ctx->state = EVP_RAND_STATE_UNINITIALISED;
-    }
 }
 
 /**
