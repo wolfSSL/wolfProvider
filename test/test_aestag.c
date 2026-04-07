@@ -1196,6 +1196,116 @@ int test_aes128_gcm_set_iv_inv(void *data)
                                     EVP_GCM_TLS_FIXED_IV_LEN, 12);
 }
 
+/******************************************************************************/
+
+/*
+ * GCM streaming decryption with a tampered authentication tag.
+ * Verifies that DecryptFinal correctly rejects a forged tag.
+ */
+static int test_aes_gcm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char iv[12];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "GCM plaintext for tag test";
+    unsigned char ct[64];
+    unsigned char tag[16];
+    unsigned char dec[64];
+    int outLen = 0, fLen = 0;
+
+    memset(key, 0xAA, keyLen);
+    memset(iv, 0xBB, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)sizeof(aad)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt,
+                                (int)sizeof(pt)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+        outLen += fLen;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Tamper with the tag */
+    if (err == 0) {
+        tag[0] ^= 0x01;
+    }
+
+    /* Decrypt with tampered tag -- must fail at DecryptFinal */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &fLen, aad,
+                                (int)sizeof(aad)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, dec, &fLen, ct, outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag) != 1;
+    }
+    if (err == 0) {
+        int ret = EVP_DecryptFinal_ex(ctx, dec + fLen, &fLen);
+        if (ret == 1) {
+            PRINT_ERR_MSG("%s bad-tag: DecryptFinal should have failed",
+                          cipherName);
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_gcm_bad_tag(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM streaming decryption with tampered tag");
+    err = test_aes_gcm_bad_tag_helper(wpLibCtx, "AES-128-GCM", 16);
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM streaming decryption with tampered tag");
+        err = test_aes_gcm_bad_tag_helper(wpLibCtx, "AES-256-GCM", 32);
+    }
+
+    return err;
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/
