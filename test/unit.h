@@ -358,6 +358,10 @@ int test_ecdh_x448_keygen(void *data);
 
 #endif /* WP_HAVE_ECKEYGEN */
 
+#ifdef WP_HAVE_X25519
+int test_ecdh_x25519_vector(void *data);
+#endif /* WP_HAVE_X25519 */
+
 #ifdef WP_HAVE_EC_P192
 int test_ecdh_p192(void *data);
 #endif /* WP_HAVE_EC_P192 */

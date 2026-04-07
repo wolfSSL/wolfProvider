@@ -970,6 +970,78 @@ int test_ecdh_p521(void *data)
 }
 #endif /* WP_HAVE_EC_P521 */
 
+#ifdef WP_HAVE_X25519
+/* RFC 7748 Section 6.1 X25519 test vectors. */
+static const unsigned char x25519_alice_priv[] = {
+    0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d,
+    0x3c, 0x16, 0xc1, 0x72, 0x51, 0xb2, 0x66, 0x45,
+    0xdf, 0x4c, 0x2f, 0x87, 0xeb, 0xc0, 0x99, 0x2a,
+    0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9, 0x2c, 0x2a
+};
+static const unsigned char x25519_bob_priv[] = {
+    0x5d, 0xab, 0x08, 0x7e, 0x62, 0x4a, 0x8a, 0x4b,
+    0x79, 0xe1, 0x7f, 0x8b, 0x83, 0x80, 0x0e, 0xe6,
+    0x6f, 0x3b, 0xb1, 0x29, 0x26, 0x18, 0xb6, 0xfd,
+    0x1c, 0x2f, 0x8b, 0x27, 0xff, 0x88, 0xe0, 0xeb
+};
+static const unsigned char x25519_shared_secret[] = {
+    0x4a, 0x5d, 0x9d, 0x5b, 0xa4, 0xce, 0x2d, 0xe1,
+    0x72, 0x8e, 0x3b, 0xf4, 0x80, 0x35, 0x0f, 0x25,
+    0xe0, 0x7e, 0x21, 0xc9, 0x47, 0xd1, 0x9e, 0x33,
+    0x76, 0xf0, 0x9b, 0x3c, 0x1e, 0x16, 0x17, 0x42
+};
+
+/*
+ * X25519 known-answer ECDH test using RFC 7748 Section 6.1 vectors.
+ * Validates order-reduction and endian-swap logic in wp_x25519_derive by
+ * comparing the derived shared secret against the expected RFC output.
+ */
+int test_ecdh_x25519_vector(void *data)
+{
+    int err = 0;
+    EVP_PKEY *keyA = NULL;
+    EVP_PKEY *keyB = NULL;
+    unsigned char *secret = NULL;
+
+    (void)data;
+
+    PRINT_MSG("X25519 ECDH known-answer test (RFC 7748 Sec 6.1)");
+
+    keyA = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "X25519", NULL,
+        x25519_alice_priv, sizeof(x25519_alice_priv));
+    if (keyA == NULL) {
+        PRINT_ERR_MSG("Failed to import X25519 Alice private key");
+        err = 1;
+    }
+    if (err == 0) {
+        keyB = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "X25519", NULL,
+            x25519_bob_priv, sizeof(x25519_bob_priv));
+        if (keyB == NULL) {
+            PRINT_ERR_MSG("Failed to import X25519 Bob private key");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = test_ecdh_derive(keyA, keyB, &secret, 32);
+    }
+    if (err == 0) {
+        if (memcmp(secret, x25519_shared_secret, 32) != 0) {
+            PRINT_ERR_MSG("X25519 shared secret does not match expected");
+            PRINT_BUFFER("Got", secret, 32);
+            PRINT_BUFFER("Expected",
+                (unsigned char *)x25519_shared_secret, 32);
+            err = 1;
+        }
+    }
+
+    OPENSSL_free(secret);
+    EVP_PKEY_free(keyB);
+    EVP_PKEY_free(keyA);
+
+    return err;
+}
+#endif /* WP_HAVE_X25519 */
+
 #endif /* WP_HAVE_ECDH */
 
 #ifdef WP_HAVE_ECDSA

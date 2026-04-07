@@ -407,6 +407,7 @@ TEST_CASE test_case[] = {
     #ifdef WP_HAVE_ECKEYGEN
         TEST_DECL(test_ecdh_x25519_keygen, NULL),
     #endif
+        TEST_DECL(test_ecdh_x25519_vector, NULL),
     #endif
 #endif
 #ifdef WP_HAVE_X448
