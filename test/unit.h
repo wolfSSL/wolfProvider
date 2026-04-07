@@ -87,6 +87,7 @@ typedef struct TEST_CASE {
 } TEST_CASE;
 
 int test_logging(void *data);
+int test_ct_masks(void *data);
 
 #define WP_VALGRIND_TEST 0x1
 
@@ -147,6 +148,7 @@ int test_krb5kdf(void *data);
 #ifdef WP_HAVE_DES3CBC
 int test_des3_cbc(void *data);
 int test_des3_cbc_stream(void *data);
+int test_des3_cbc_bad_pad(void *data);
 #endif
 
 #ifdef WP_HAVE_AESECB
@@ -169,6 +171,7 @@ int test_aes128_cbc_stream(void *data);
 int test_aes192_cbc_stream(void *data);
 int test_aes256_cbc_stream(void *data);
 int test_aes256_cbc_multiple(void *data);
+int test_aes256_cbc_bad_pad(void *data);
 
 #endif
 
@@ -437,6 +440,13 @@ int test_x509_cert(void *data);
     defined(WP_HAVE_ECDH) && defined(WP_HAVE_SHA384)
 int test_tls12_cbc(void *data);
 int test_tls12_cbc_ossl(void *data);
+int test_aes_tls_cbc_bad_pad(void *data);
+#endif
+
+#ifdef WP_HAVE_DES3CBC
+#if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
+int test_des3_tls_cbc_bad_pad(void *data);
+#endif
 #endif
 
 #endif /* UNIT_H */

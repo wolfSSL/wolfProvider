@@ -1152,7 +1152,7 @@ BIO* wp_corebio_get_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio)
 /**
  * Constant time, set mask when first value is equal to second.
  *
- * @param [in] a  First valuue.
+ * @param [in] a  First value.
  * @param [in] b  Second value.
  * @return  All bits set when true.
  * @return  0 when false.
@@ -1165,20 +1165,20 @@ byte wp_ct_byte_mask_eq(byte a, byte b)
 /**
  * Constant time, set mask when first value is not equal to second.
  *
- * @param [in] a  First valuue.
+ * @param [in] a  First value.
  * @param [in] b  Second value.
  * @return  All bits set when true.
  * @return  0 when false.
  */
 byte wp_ct_byte_mask_ne(byte a, byte b)
 {
-    return (((int32_t)b - a) >> 31) & (((int32_t)a - b) >> 31);
+    return ~wp_ct_byte_mask_eq(a, b);
 }
 
 /**
  * Constant time, set mask when first value is greater than or equal second.
  *
- * @param [in] a  First valuue.
+ * @param [in] a  First value.
  * @param [in] b  Second value.
  * @return  All bits set when true.
  * @return  0 when false.

@@ -171,6 +171,7 @@ static unsigned long flags = 0;
 
 TEST_CASE test_case[] = {
     TEST_DECL(test_logging, &debug),
+    TEST_DECL(test_ct_masks, NULL),
 #ifdef WP_HAVE_SHA1
     TEST_DECL(test_sha, NULL),
 #endif
@@ -227,6 +228,7 @@ TEST_CASE test_case[] = {
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_des3_cbc, NULL),
         TEST_DECL(test_des3_cbc_stream, NULL),
+        TEST_DECL(test_des3_cbc_bad_pad, NULL),
     #endif
 #endif
 #ifdef WP_HAVE_AESECB
@@ -245,6 +247,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes192_cbc_stream, NULL),
     TEST_DECL(test_aes256_cbc_stream, NULL),
     TEST_DECL(test_aes256_cbc_multiple, NULL),
+    TEST_DECL(test_aes256_cbc_bad_pad, NULL),
 #endif
 #ifdef WP_HAVE_AESCTR
     TEST_DECL(test_aes128_ctr_stream, NULL),
@@ -446,6 +449,12 @@ TEST_CASE test_case[] = {
     defined(WP_HAVE_ECDH) && defined(WP_HAVE_SHA384)
     TEST_DECL(test_tls12_cbc_ossl, NULL),
     TEST_DECL(test_tls12_cbc, NULL),
+    TEST_DECL(test_aes_tls_cbc_bad_pad, NULL),
+#endif
+#ifdef WP_HAVE_DES3CBC
+    #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
+        TEST_DECL(test_des3_tls_cbc_bad_pad, NULL),
+    #endif
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
