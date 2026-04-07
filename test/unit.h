@@ -442,7 +442,7 @@ int test_ecx_misc(void *data);
 int test_ecx_null_init(void *data);
 #ifdef WP_HAVE_X25519
 int test_ecx_x25519_raw_priv_roundtrip(void *data);
-#endif
+#endif /* WP_HAVE_X25519 */
 #endif
 
 int test_pkcs7_x509_sign_verify(void *data);

@@ -561,8 +561,13 @@ static int wp_ecx_get_params_priv_key(wp_Ecx* ecx, OSSL_PARAM params[])
                 ok = 0;
             }
             if (ok && ecx->clamped) {
-                ((unsigned char*)p->data)[0         ] = ecx->unclamped[0];
-                ((unsigned char*)p->data)[outLen - 1] = ecx->unclamped[1];
+                if ((outLen < 2) || (p->data_size < outLen)) {
+                    ok = 0;
+                }
+                else {
+                    ((unsigned char*)p->data)[0         ] = ecx->unclamped[0];
+                    ((unsigned char*)p->data)[outLen - 1] = ecx->unclamped[1];
+                }
             }
         }
         p->return_size = outLen;

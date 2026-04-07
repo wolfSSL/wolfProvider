@@ -1212,6 +1212,7 @@ static int test_aes_gcm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
     unsigned char iv[12];
     unsigned char aad[] = "additional data";
     unsigned char pt[] = "GCM plaintext for tag test";
+    int ptLen = (int)(sizeof(pt) - 1);
     unsigned char ct[64];
     unsigned char tag[16];
     unsigned char dec[64];
@@ -1236,11 +1237,10 @@ static int test_aes_gcm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
     }
     if (err == 0) {
         err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
-                                (int)sizeof(aad)) != 1;
+                                (int)(sizeof(aad) - 1)) != 1;
     }
     if (err == 0) {
-        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt,
-                                (int)sizeof(pt)) != 1;
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
     }
     if (err == 0) {
         err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
@@ -1268,7 +1268,7 @@ static int test_aes_gcm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
     }
     if (err == 0) {
         err = EVP_DecryptUpdate(ctx, NULL, &fLen, aad,
-                                (int)sizeof(aad)) != 1;
+                                (int)(sizeof(aad) - 1)) != 1;
     }
     if (err == 0) {
         err = EVP_DecryptUpdate(ctx, dec, &fLen, ct, outLen) != 1;
@@ -1371,7 +1371,7 @@ static int test_aes_ccm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
     unsigned char iv[13];
     unsigned char aad[] = "additional data";
     unsigned char pt[] = "CCM plaintext for tag test";
-    int ptLen = (int)sizeof(pt);
+    int ptLen = (int)(sizeof(pt) - 1);
     unsigned char ct[64];
     unsigned char tag[16];
     unsigned char dec[64];
@@ -1409,7 +1409,7 @@ static int test_aes_ccm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
     }
     if (err == 0) {
         err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
-                                (int)sizeof(aad)) != 1;
+                                (int)(sizeof(aad) - 1)) != 1;
     }
     if (err == 0) {
         err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
@@ -1453,7 +1453,7 @@ static int test_aes_ccm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
     }
     if (err == 0) {
         err = EVP_DecryptUpdate(ctx, NULL, &fLen, aad,
-                                (int)sizeof(aad)) != 1;
+                                (int)(sizeof(aad) - 1)) != 1;
     }
     if (err == 0) {
         /* CCM DecryptUpdate should fail with bad tag */
