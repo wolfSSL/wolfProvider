@@ -361,6 +361,9 @@ int test_ecdh_x448_keygen(void *data);
 #ifdef WP_HAVE_X25519
 int test_ecdh_x25519_vector(void *data);
 #endif /* WP_HAVE_X25519 */
+#ifdef WP_HAVE_X448
+int test_ecdh_x448_vector(void *data);
+#endif /* WP_HAVE_X448 */
 
 #ifdef WP_HAVE_EC_P192
 int test_ecdh_p192(void *data);
