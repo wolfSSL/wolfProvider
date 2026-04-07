@@ -560,6 +560,10 @@ static int wp_ecx_get_params_priv_key(wp_Ecx* ecx, OSSL_PARAM params[])
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPriv", rc);
                 ok = 0;
             }
+            if (ok && ecx->clamped) {
+                ((unsigned char*)p->data)[0         ] = ecx->unclamped[0];
+                ((unsigned char*)p->data)[outLen - 1] = ecx->unclamped[1];
+            }
         }
         p->return_size = outLen;
     }
