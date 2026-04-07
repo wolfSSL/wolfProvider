@@ -444,6 +444,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_sign_verify_raw_pub, NULL),
     TEST_DECL(test_ecx_misc, NULL),
     TEST_DECL(test_ecx_null_init, NULL),
+#ifdef WP_HAVE_X25519
+    TEST_DECL(test_ecx_x25519_raw_priv_roundtrip, NULL),
+#endif
 #endif
 
     TEST_DECL(test_pkcs7_x509_sign_verify, NULL),
