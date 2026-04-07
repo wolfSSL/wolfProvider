@@ -96,7 +96,7 @@ static wp_Kdf* wp_kdf_new(WOLFPROV_CTX *provCtx)
         kdf = (wp_Kdf*)OPENSSL_zalloc(sizeof(*kdf));
     }
     if (kdf != NULL) {
-    #ifndef SINGLE_THREADED
+    #ifndef WP_SINGLE_THREADED
         int rc = wc_InitMutex(&kdf->mutex);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitMutex", rc);

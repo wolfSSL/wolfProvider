@@ -130,7 +130,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
     if (ctx->padMode == RSA_PKCS1_PSS_PADDING && ctx->minSaltLen != -1) {
         wp_rsa_get_pss_mds(ctx->rsa, &localMdName, NULL);
         if (mdName != NULL &&
-            XSTRNCASECMP(localMdName, mdName, XSTRLEN(localMdName)) != 0) {
+            XSTRCASECMP(localMdName, mdName) != 0) {
             ok = 0;
         }
     }
@@ -197,7 +197,7 @@ static int wp_rsa_setup_md(wp_RsaSigCtx* ctx, const char* mdName,
                 }
             }
             else {
-                OPENSSL_strlcpy(ctx->mgf1MdName, mdName, sizeof(ctx->mdName));
+                OPENSSL_strlcpy(ctx->mgf1MdName, mdName, sizeof(ctx->mgf1MdName));
             }
         }
     }

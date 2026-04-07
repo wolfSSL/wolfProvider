@@ -374,16 +374,25 @@ static int wp_des3_block_dinit(wp_Des3BlockCtx *ctx, const unsigned char *key,
 static int wp_des3_block_doit(wp_Des3BlockCtx *ctx, unsigned char *out,
     const unsigned char *in, size_t inLen)
 {
-    int rc;
+    int rc = 0;
 
     if (ctx->mode == EVP_CIPH_CBC_MODE) {
-        if (ctx->enc) {
-            rc = wc_Des3_CbcEncrypt(&ctx->des3, out, in, (word32)inLen);
+        while ((rc == 0) && (inLen > 0)) {
+            /* Chunk must be block-aligned (DES3 block size = 8). */
+            word32 chunk = (inLen > 0xFFFFFFF8U) ? 0xFFFFFFF8U : (word32)inLen;
+            if (ctx->enc) {
+                rc = wc_Des3_CbcEncrypt(&ctx->des3, out, in, chunk);
+            }
+            else {
+                rc = wc_Des3_CbcDecrypt(&ctx->des3, out, in, chunk);
+            }
+            in += chunk;
+            out += chunk;
+            inLen -= chunk;
         }
-        else {
-            rc = wc_Des3_CbcDecrypt(&ctx->des3, out, in, (word32)inLen);
+        if (rc == 0) {
+            XMEMCPY(ctx->iv, ctx->des3.reg, ctx->ivLen);
         }
-        XMEMCPY(ctx->iv, ctx->des3.reg, ctx->ivLen);
     }
     else
     {

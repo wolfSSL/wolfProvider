@@ -1488,4 +1488,107 @@ int test_aes256_cbc_bad_pad(void *data)
     return err;
 }
 
+/******************************************************************************/
+
+/**
+ * Test AES-CBC encrypt/decrypt roundtrip with a large buffer processed in
+ * multiple update calls. Validates the chunked loop path in
+ * wp_aes_block_doit (F-1641).
+ */
+static int test_aes_cbc_large_update_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx = NULL;
+    EVP_CIPHER *cipher = NULL;
+    unsigned char key[32];
+    unsigned char iv[16];
+    unsigned char plain[8192];
+    unsigned char enc[8192 + 16];
+    unsigned char dec[8192 + 16];
+    int outLen;
+    int fLen;
+    int totalEnc = 0;
+    int totalDec = 0;
+    size_t i;
+
+    RAND_bytes(key, sizeof(key));
+    RAND_bytes(iv, sizeof(iv));
+    RAND_bytes(plain, sizeof(plain));
+
+    err = (cipher = EVP_CIPHER_fetch(libCtx, "AES-256-CBC", "")) == NULL;
+
+    /* Encrypt in 1024-byte chunks */
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    for (i = 0; err == 0 && i < sizeof(plain); i += 1024) {
+        err = EVP_EncryptUpdate(ctx, enc + totalEnc, &outLen,
+            plain + i, 1024) != 1;
+        if (err == 0) {
+            totalEnc += outLen;
+        }
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, enc + totalEnc, &fLen) != 1;
+        totalEnc += fLen;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Decrypt in 1024-byte chunks */
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    for (i = 0; err == 0 && (int)i < totalEnc; i += 1024) {
+        int chunk = (totalEnc - (int)i < 1024) ? totalEnc - (int)i : 1024;
+        err = EVP_DecryptUpdate(ctx, dec + totalDec, &outLen,
+            enc + i, chunk) != 1;
+        if (err == 0) {
+            totalDec += outLen;
+        }
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, dec + totalDec, &fLen) != 1;
+        totalDec += fLen;
+    }
+    if (err == 0) {
+        if (totalDec != (int)sizeof(plain) ||
+            memcmp(dec, plain, sizeof(plain)) != 0) {
+            PRINT_ERR_MSG("AES-CBC large update decrypt mismatch");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_cbc_large_update(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-CBC large update with OpenSSL");
+    err = test_aes_cbc_large_update_helper(osslLibCtx);
+    if (err == 0) {
+        PRINT_MSG("AES-CBC large update with wolfProvider");
+        err = test_aes_cbc_large_update_helper(wpLibCtx);
+    }
+    return err;
+}
+
 #endif /* WP_HAVE_AESCBC */

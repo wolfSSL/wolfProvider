@@ -261,7 +261,7 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     }
 
     /* Dispose of the EPKI data buffer. */
-    OPENSSL_free(data);
+    OPENSSL_clear_free(data, len);
 
     OPENSSL_cleanse(password, sizeof(password));
 
