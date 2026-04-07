@@ -271,6 +271,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_gcm_fixed, NULL),
     TEST_DECL(test_aes128_gcm_tls, NULL),
     TEST_DECL(test_aes128_gcm_set_iv_inv, NULL),
+    TEST_DECL(test_aes_gcm_bad_tag, NULL),
 #endif
 #ifdef WP_HAVE_AESCCM
     TEST_DECL(test_aes128_ccm, NULL),
@@ -278,6 +279,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes256_ccm, NULL),
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
     TEST_DECL(test_aes128_ccm_tls, NULL),
+    TEST_DECL(test_aes_ccm_bad_tag, NULL),
 #endif
 #endif
 #ifdef WP_HAVE_RANDOM
@@ -407,6 +409,7 @@ TEST_CASE test_case[] = {
     #ifdef WP_HAVE_ECKEYGEN
         TEST_DECL(test_ecdh_x25519_keygen, NULL),
     #endif
+        TEST_DECL(test_ecdh_x25519_vector, NULL),
     #endif
 #endif
 #ifdef WP_HAVE_X448
@@ -417,6 +420,7 @@ TEST_CASE test_case[] = {
     #ifdef WP_HAVE_ECKEYGEN
         TEST_DECL(test_ecdh_x448_keygen, NULL),
     #endif
+        TEST_DECL(test_ecdh_x448_vector, NULL),
     #endif
 #endif
 #ifdef WP_HAVE_ECKEYGEN
@@ -440,6 +444,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_sign_verify_raw_pub, NULL),
     TEST_DECL(test_ecx_misc, NULL),
     TEST_DECL(test_ecx_null_init, NULL),
+#ifdef WP_HAVE_X25519
+    TEST_DECL(test_ecx_x25519_raw_priv_roundtrip, NULL),
+#endif
 #endif
 
     TEST_DECL(test_pkcs7_x509_sign_verify, NULL),

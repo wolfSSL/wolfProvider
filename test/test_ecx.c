@@ -693,4 +693,71 @@ int test_ecx_null_init(void* data)
     return err;
 }
 
+#ifdef WP_HAVE_X25519
+/*
+ * Test that importing an X25519 private key and reading it back via
+ * EVP_PKEY_get_params returns the original unclamped bytes.
+ * X25519 clamping modifies the first and last byte internally, but the
+ * get_params readback must return the original imported bytes.
+ */
+int test_ecx_x25519_raw_priv_roundtrip(void *data)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    /* RFC 7748 Section 6.1 Alice private key -- first byte 0x77 clamps to
+     * 0x70, last byte 0x2a clamps to 0x6a. */
+    static const unsigned char privKey[] = {
+        0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d,
+        0x3c, 0x16, 0xc1, 0x72, 0x51, 0xb2, 0x66, 0x45,
+        0xdf, 0x4c, 0x2f, 0x87, 0xeb, 0xc0, 0x99, 0x2a,
+        0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9, 0x2c, 0x2a
+    };
+    unsigned char readback[32];
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    PRINT_MSG("X25519 raw private key get_params roundtrip");
+
+    pkey = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "X25519", NULL,
+        privKey, sizeof(privKey));
+    if (pkey == NULL) {
+        PRINT_ERR_MSG("Failed to import X25519 private key");
+        err = 1;
+    }
+
+    /* Use EVP_PKEY_get_params to exercise the get_params code path
+     * (EVP_PKEY_get_raw_private_key uses the export path instead). */
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_PRIV_KEY, readback, sizeof(readback));
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_get_params(pkey, params) != 1) {
+            PRINT_ERR_MSG("EVP_PKEY_get_params for priv key failed");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (params[0].return_size != sizeof(privKey)) {
+            PRINT_ERR_MSG("Readback length mismatch: %zu vs %zu",
+                          params[0].return_size, sizeof(privKey));
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (memcmp(readback, privKey, sizeof(privKey)) != 0) {
+            PRINT_ERR_MSG("X25519 private key get_params does not match "
+                          "original (unclamped bytes not restored)");
+            PRINT_BUFFER("Got", readback, (int)sizeof(privKey));
+            PRINT_BUFFER("Expected", (unsigned char *)privKey,
+                         (int)sizeof(privKey));
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    return err;
+}
+#endif /* WP_HAVE_X25519 */
+
 #endif /* defined(WP_HAVE_ED25519) || defined(WP_HAVE_ECD444) */

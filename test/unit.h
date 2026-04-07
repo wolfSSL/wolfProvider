@@ -201,6 +201,7 @@ int test_aes256_gcm(void *data);
 int test_aes128_gcm_fixed(void *data);
 int test_aes128_gcm_tls(void *data);
 int test_aes128_gcm_set_iv_inv(void *data);
+int test_aes_gcm_bad_tag(void *data);
 
 #endif /* WP_HAVE_AESGCM */
 
@@ -210,6 +211,7 @@ int test_aes128_ccm(void *data);
 int test_aes192_ccm(void *data);
 int test_aes256_ccm(void *data);
 int test_aes128_ccm_tls(void *data);
+int test_aes_ccm_bad_tag(void *data);
 
 #endif /* WP_HAVE_AESCCM */
 
@@ -358,6 +360,13 @@ int test_ecdh_x448_keygen(void *data);
 
 #endif /* WP_HAVE_ECKEYGEN */
 
+#ifdef WP_HAVE_X25519
+int test_ecdh_x25519_vector(void *data);
+#endif /* WP_HAVE_X25519 */
+#ifdef WP_HAVE_X448
+int test_ecdh_x448_vector(void *data);
+#endif /* WP_HAVE_X448 */
+
 #ifdef WP_HAVE_EC_P192
 int test_ecdh_p192(void *data);
 #endif /* WP_HAVE_EC_P192 */
@@ -431,6 +440,9 @@ int test_ecx_sign_verify_raw_priv(void *data);
 int test_ecx_sign_verify_raw_pub(void *data);
 int test_ecx_misc(void *data);
 int test_ecx_null_init(void *data);
+#ifdef WP_HAVE_X25519
+int test_ecx_x25519_raw_priv_roundtrip(void *data);
+#endif /* WP_HAVE_X25519 */
 #endif
 
 int test_pkcs7_x509_sign_verify(void *data);
