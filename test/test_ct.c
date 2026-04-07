@@ -18,8 +18,8 @@
  * along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "unit.h"
 #include <wolfprovider/internal.h>
+#include "unit.h"
 
 int test_ct_masks(void *data)
 {
@@ -39,6 +39,7 @@ int test_ct_masks(void *data)
             byte neRes = wp_ct_byte_mask_ne((byte)a, (byte)b);
             byte expEq = (a == b) ? 0xFF : 0x00;
             byte expNe = (a != b) ? 0xFF : 0x00;
+            byte eqNeg;
 
             if (eqRes != expEq) {
                 PRINT_ERR_MSG("ct_byte_mask_eq(%d, %d) = 0x%02x, expected "
@@ -50,10 +51,11 @@ int test_ct_masks(void *data)
                               "0x%02x", a, b, neRes, expNe);
                 err = 1;
             }
-            if ((byte)(eqRes ^ 0xFFU) != neRes) {
+            eqNeg = (byte)(eqRes ^ (byte)0xFF);
+            if (eqNeg != neRes) {
                 PRINT_ERR_MSG("ct_byte_mask ne/eq mismatch at (%d, %d): "
                               "~eq=0x%02x ne=0x%02x", a, b,
-                              (byte)~eqRes, neRes);
+                              eqNeg, neRes);
                 err = 1;
             }
         }
