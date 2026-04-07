@@ -552,10 +552,15 @@ static int test_hkdf_extract_only_bad_len(OSSL_LIB_CTX *libCtx)
     PRINT_MSG("HKDF Extract-Only with wrong output length");
 
     mdSize = EVP_MD_get_size(EVP_sha256());
-
-    ctx = EVP_PKEY_CTX_new_from_name(libCtx, "HKDF", NULL);
-    if (ctx == NULL) {
+    if (mdSize <= 0) {
+        PRINT_ERR_MSG("EVP_MD_get_size(EVP_sha256()) failed: %d", mdSize);
         err = 1;
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(libCtx, "HKDF", NULL);
+        if (ctx == NULL) {
+            err = 1;
+        }
     }
     if (err == 0) {
         err = EVP_PKEY_derive_init(ctx) != 1;
