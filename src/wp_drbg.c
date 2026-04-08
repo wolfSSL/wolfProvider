@@ -307,7 +307,7 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
         ok = 0;
     }
     if (ok) {
-        rc = wc_RNG_GenerateBlock(ctx->rng, out, outLen);
+        rc = wc_RNG_GenerateBlock(ctx->rng, out, (word32)outLen);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_RNG_GenerateBlock", rc);
             ok = 0;
