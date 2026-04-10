@@ -1203,13 +1203,14 @@ static wp_EcxGenCtx* wp_ecx_gen_init(WOLFPROV_CTX* provCtx,
         int rc;
         int ok = 1;
 
-        rc = wc_InitRng(&ctx->rng);
+        /* provCtx assigned before RNG init: ctx->provCtx->devId must be valid */
+        ctx->provCtx = provCtx;
+        rc = wc_InitRng_ex(&ctx->rng, NULL, ctx->provCtx->devId);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRng", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRng_ex", rc);
             ok = 0;
         }
         if (ok) {
-            ctx->provCtx = provCtx;
             ctx->name = name;
             if (!wp_ecx_gen_set_params(ctx, params)) {
                 wc_FreeRng(&ctx->rng);

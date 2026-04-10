@@ -49,6 +49,7 @@ static const OSSL_PARAM wolfssl_param_types[] = {
     OSSL_PARAM_DEFN(OSSL_PROV_PARAM_VERSION, OSSL_PARAM_UTF8_PTR, NULL, 0),
     OSSL_PARAM_DEFN(OSSL_PROV_PARAM_BUILDINFO, OSSL_PARAM_UTF8_PTR, NULL, 0),
     OSSL_PARAM_DEFN(OSSL_PROV_PARAM_STATUS, OSSL_PARAM_INTEGER, NULL, 0),
+    OSSL_PARAM_int("wolfprovider_devid", NULL),
     OSSL_PARAM_END
 };
 
@@ -218,6 +219,9 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
     WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_DRBG);
 
     ctx = (WOLFPROV_CTX*)OPENSSL_zalloc(sizeof(*ctx));
+    if (ctx != NULL) {
+        ctx->devId = INVALID_DEVID;
+    }
     if ((ctx != NULL) && (wc_InitRng(&ctx->rng) != 0)) {
         OPENSSL_free(ctx);
         ctx = NULL;
@@ -368,6 +372,49 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
             ok = 0;
         }
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/*
+ * Get the table of parameters that can be set on wolfProv.
+ *
+ * @param [in] provCtx  Unused.
+ * @return  Table of settable parameters.
+ */
+static const OSSL_PARAM* wolfprov_settable_params(void* provCtx)
+{
+    static const OSSL_PARAM settable[] = {
+        OSSL_PARAM_int("wolfprovider_devid", NULL),
+        OSSL_PARAM_END
+    };
+    (void)provCtx;
+    return settable;
+}
+
+/*
+ * Set parameters on the provider context.
+ *
+ * @param [in] provCtx  Provider context.
+ * @param [in] params   Parameters to set.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wolfprov_set_params(void* provCtx, const OSSL_PARAM params[])
+{
+    int ok = 1;
+    const OSSL_PARAM* p;
+    WOLFPROV_CTX* ctx = (WOLFPROV_CTX*)provCtx;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wolfprov_set_params");
+
+    p = OSSL_PARAM_locate_const(params, "wolfprovider_devid");
+    if (p != NULL) {
+        if (!OSSL_PARAM_get_int(p, &ctx->devId)) {
+            ok = 0;
+        }
+    }
+
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -1214,6 +1261,8 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
     { OSSL_FUNC_PROVIDER_TEARDOWN,        (DFUNC)wolfprov_teardown            },
     { OSSL_FUNC_PROVIDER_GETTABLE_PARAMS, (DFUNC)wolfprov_gettable_params     },
     { OSSL_FUNC_PROVIDER_GET_PARAMS,      (DFUNC)wolfprov_get_params          },
+    { OSSL_FUNC_PROVIDER_SETTABLE_PARAMS, (DFUNC)wolfprov_settable_params     },
+    { OSSL_FUNC_PROVIDER_SET_PARAMS,      (DFUNC)wolfprov_set_params          },
     { OSSL_FUNC_PROVIDER_QUERY_OPERATION, (DFUNC)wolfprov_query               },
     { OSSL_FUNC_PROVIDER_GET_CAPABILITIES,
                                          (DFUNC)wolfssl_prov_get_capabilities },

@@ -146,6 +146,7 @@ typedef struct WOLFPROV_CTX {
    wolfSSL_Mutex rng_mutex;
 #endif
    BIO_METHOD *coreBioMethod;
+   int devId;
 } WOLFPROV_CTX;
 
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
