@@ -334,7 +334,7 @@ static wp_Ecc* wp_ecc_new(WOLFPROV_CTX *provCtx)
         int ok = 1;
         int rc;
 
-        rc = wc_ecc_init_ex(&ecc->key, NULL, INVALID_DEVID);
+        rc = wc_ecc_init_ex(&ecc->key, NULL, provCtx->devId);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_init_ex", rc);
             ok = 0;
