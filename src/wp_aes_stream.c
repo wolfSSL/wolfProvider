@@ -534,7 +534,9 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
     if (ctx->mode == EVP_CIPH_CTR_MODE) {
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         while (ok && (inLen > 0)) {
-            word32 chunk = (inLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)inLen;
+            /* Cap chunk to largest word32 multiple of AES_BLOCK_SIZE so the
+             * IV/counter state is consistent across chunk boundaries. */
+            word32 chunk = (inLen > 0xFFFFFFF0U) ? 0xFFFFFFF0U : (word32)inLen;
             int rc = wc_AesCtrEncrypt(&ctx->aes, out, in, chunk);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
@@ -555,7 +557,9 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
     if (ctx->mode == EVP_CIPH_CFB_MODE) {
         XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         while (ok && (inLen > 0)) {
-            word32 chunk = (inLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)inLen;
+            /* Cap chunk to largest word32 multiple of AES_BLOCK_SIZE so the
+             * IV/counter state is consistent across chunk boundaries. */
+            word32 chunk = (inLen > 0xFFFFFFF0U) ? 0xFFFFFFF0U : (word32)inLen;
             int rc;
             if (ctx->enc) {
                 rc = wc_AesCfbEncrypt(&ctx->aes, out, in, chunk);

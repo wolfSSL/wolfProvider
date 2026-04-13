@@ -463,6 +463,9 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
             if (ctx->clientVersion <= 0) {
                 ok = 0;
             }
+            if (ok && (outSize < WOLFSSL_MAX_MASTER_KEY_LENGTH)) {
+                ok = 0;
+            }
             if (ok) {
                 byte mask;
                 byte negMask;

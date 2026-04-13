@@ -153,6 +153,7 @@ int test_krb5kdf(void *data);
 int test_des3_cbc(void *data);
 int test_des3_cbc_stream(void *data);
 int test_des3_cbc_bad_pad(void *data);
+int test_des3_cbc_large_update(void *data);
 #endif
 
 #ifdef WP_HAVE_AESECB
@@ -185,6 +186,7 @@ int test_aes_cbc_large_update(void *data);
 int test_aes128_ctr_stream(void *data);
 int test_aes192_ctr_stream(void *data);
 int test_aes256_ctr_stream(void *data);
+int test_aes_ctr_large_update(void *data);
 
 #endif
 
@@ -193,6 +195,7 @@ int test_aes256_ctr_stream(void *data);
 int test_aes128_cfb_stream(void *data);
 int test_aes192_cfb_stream(void *data);
 int test_aes256_cfb_stream(void *data);
+int test_aes_cfb_large_update(void *data);
 
 #endif
 

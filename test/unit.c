@@ -232,6 +232,7 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_des3_cbc, NULL),
         TEST_DECL(test_des3_cbc_stream, NULL),
         TEST_DECL(test_des3_cbc_bad_pad, NULL),
+        TEST_DECL(test_des3_cbc_large_update, NULL),
     #endif
 #endif
 #ifdef WP_HAVE_AESECB
@@ -257,11 +258,13 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_ctr_stream, NULL),
     TEST_DECL(test_aes192_ctr_stream, NULL),
     TEST_DECL(test_aes256_ctr_stream, NULL),
+    TEST_DECL(test_aes_ctr_large_update, NULL),
 #endif
 #ifdef WP_HAVE_AESCFB
     TEST_DECL(test_aes128_cfb_stream, NULL),
     TEST_DECL(test_aes192_cfb_stream, NULL),
     TEST_DECL(test_aes256_cfb_stream, NULL),
+    TEST_DECL(test_aes_cfb_large_update, NULL),
 #endif
 #ifdef WP_HAVE_AESCTS
     TEST_DECL(test_aes128_cts, NULL),

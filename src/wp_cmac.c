@@ -90,6 +90,9 @@ static wp_CmacCtx* wp_cmac_new(WOLFPROV_CTX* provCtx)
 static void wp_cmac_free(wp_CmacCtx* macCtx)
 {
     if (macCtx != NULL) {
+    #ifndef HAVE_FIPS
+        wc_CmacFree(&macCtx->cmac);
+    #endif
         OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
         OPENSSL_clear_free(macCtx, sizeof(*macCtx));
     }

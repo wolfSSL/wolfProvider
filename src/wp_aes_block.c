@@ -433,6 +433,19 @@ static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
 {
     int rc = 0;
 
+    /* Reject unsupported modes up-front so an inLen == 0 call with a
+     * non-CBC/non-ECB mode does not silently succeed. */
+    if (1
+    #ifdef WP_HAVE_AESCBC
+        && (ctx->mode != EVP_CIPH_CBC_MODE)
+    #endif
+    #ifdef WP_HAVE_AESECB
+        && (ctx->mode != EVP_CIPH_ECB_MODE)
+    #endif
+        ) {
+        return 0;
+    }
+
     while ((rc == 0) && (inLen > 0)) {
         /* Chunk must be block-aligned (AES block size = 16). */
         word32 chunk = (inLen > 0xFFFFFFF0U) ? 0xFFFFFFF0U : (word32)inLen;
