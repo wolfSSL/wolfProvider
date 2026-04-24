@@ -24,6 +24,7 @@
 
 #include <openssl/store.h>
 #include <openssl/core_names.h>
+#include <openssl/param_build.h>
 
 #ifdef WP_HAVE_RSA
 
@@ -1501,12 +1502,17 @@ int test_rsa_fromdata(void* data)
 #ifdef EVP_PKEY_PRIVATE_KEY
             EVP_PKEY_PRIVATE_KEY, /* added in 3.0.12 and 3.1.4 */
 #endif
+            EVP_PKEY_KEY_PARAMETERS,
         };
 
         /* Parameter data fields */
         unsigned long rsa_n = 0xbc747fc5;
         unsigned long rsa_e = 0x10001;
         unsigned long rsa_d = 0x7b133399;
+#if OPENSSL_VERSION_NUMBER >= 0x30200010L
+        unsigned long rsa_p = 0x397;
+        unsigned long rsa_q = 0x3a9;
+#endif
         const char *foo = "some string";
         size_t foo_l = strlen(foo);
         const char bar[] = "some other string";
@@ -1563,6 +1569,40 @@ int test_rsa_fromdata(void* data)
             { "bar", OSSL_PARAM_UTF8_STRING, (void *)&bar, sizeof(bar) - 1, 0 },
             OSSL_PARAM_END
         };
+#if OPENSSL_VERSION_NUMBER >= 0x30200010L
+        OSSL_PARAM params_null[] = {
+            OSSL_PARAM_ulong("n", NULL),
+            OSSL_PARAM_ulong("e", NULL),
+            OSSL_PARAM_ulong("d", NULL),
+            { "foo", OSSL_PARAM_UTF8_PTR, NULL, foo_l, 0 },
+            { "bar", OSSL_PARAM_UTF8_STRING, NULL, sizeof(bar) - 1, 0 },
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_nedpq[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_ulong("rsa-factor1", &rsa_p),
+            OSSL_PARAM_ulong("rsa-factor2", &rsa_q),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_nepq_null[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", NULL),
+            OSSL_PARAM_ulong("rsa-factor1", &rsa_p),
+            OSSL_PARAM_ulong("rsa-factor2", &rsa_q),
+            OSSL_PARAM_END
+        };
+        OSSL_PARAM params_nedq_null[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_ulong("rsa-factor1", NULL),
+            OSSL_PARAM_ulong("rsa-factor2", &rsa_q),
+            OSSL_PARAM_END
+        };
+#endif /* OPENSSL_VERSION_NUMBER >= 3.2.1 */
         OSSL_PARAM* params_table[] = {
             params_none,
             params_n,
@@ -1574,6 +1614,12 @@ int test_rsa_fromdata(void* data)
             params_ned,
             params_extra_ulong,
             params_extra_str,
+#if OPENSSL_VERSION_NUMBER >= 0x30200010L
+            params_null,
+            params_nedpq,
+            params_nepq_null,
+            params_nedq_null,
+#endif /* OPENSSL_VERSION_NUMBER >= 3.2.1 */
         };
 
         for (unsigned i = 0; i < ARRAY_SIZE(selections); i++) {
@@ -2130,6 +2176,292 @@ int test_rsa_null_init(void* data)
     if (err == 0) {
         err = test_rsa_null_sign_init_ex(wpLibCtx);
     }
+
+    return err;
+}
+
+static int test_rsa_key_integrity_helper(OSSL_PARAM_BLD* bld, BIGNUM* p,
+    BIGNUM* q, BIGNUM* n, BIGNUM* e, BIGNUM* d)
+{
+    int err = 0;
+    int ossl_err;
+    int wolf_err;
+    OSSL_PARAM* params = NULL;
+    EVP_PKEY_CTX* ctx_ossl = NULL;
+    EVP_PKEY_CTX* ctx_wolf = NULL;
+    EVP_PKEY* pkey_ossl = NULL;
+    EVP_PKEY* pkey_wolf = NULL;
+
+    if (err == 0) {
+        err |= OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_FACTOR1, p) != 1;
+        err |= OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_FACTOR2, q) != 1;
+        err |= OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_N, n) != 1;
+        err |= OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_E, e) != 1;
+        err |= OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_D, d) != 1;
+    }
+    if (err == 0) {
+        params = OSSL_PARAM_BLD_to_param(bld);
+        err = params == NULL;
+    }
+
+    if (err == 0) {
+        ctx_ossl = EVP_PKEY_CTX_new_from_name(osslLibCtx, "RSA", NULL);
+        ctx_wolf = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL);
+        err = (ctx_ossl == NULL) || (ctx_wolf == NULL);
+    }
+    if (err == 0) {
+        err |= EVP_PKEY_fromdata_init(ctx_ossl) != 1;
+        err |= EVP_PKEY_fromdata_init(ctx_wolf) != 1;
+    }
+    if (err == 0) {
+        ossl_err = EVP_PKEY_fromdata(ctx_ossl, &pkey_ossl, EVP_PKEY_KEYPAIR,
+                                                                        params);
+        wolf_err = EVP_PKEY_fromdata(ctx_wolf, &pkey_wolf, EVP_PKEY_KEYPAIR,
+                                                                        params);
+
+        if (ossl_err != wolf_err) {
+            PRINT_MSG("EVP_PKEY_fromdata status mismatch (OSSL %d WOLF %d)",
+                                                            ossl_err, wolf_err);
+            err = 1;
+        }
+        else if (wolf_err == 0) {
+            PRINT_MSG("Successfully failed to load keys");
+            err = -1;
+        }
+        else if (wolf_err == 1) {
+            if (EVP_PKEY_eq(pkey_ossl, pkey_wolf) != 1 ||
+                    EVP_PKEY_parameters_eq(pkey_ossl, pkey_wolf) != 1) {
+                PRINT_MSG("EVP_PKEY_eq / EVP_PKEY_parameters_eq failed");
+                err = 1;
+            }
+        }
+    }
+
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctx_ossl);
+        EVP_PKEY_CTX_free(ctx_wolf);
+        ctx_ossl = EVP_PKEY_CTX_new_from_pkey(osslLibCtx, pkey_ossl, NULL);
+        ctx_wolf = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey_wolf, NULL);
+        err = (ctx_ossl == NULL) || (ctx_wolf == NULL);
+    }
+    if (err == 0) {
+        ossl_err = EVP_PKEY_param_check(ctx_ossl) != 1;
+        wolf_err = EVP_PKEY_param_check(ctx_wolf) != 1;
+        if (ossl_err != wolf_err){
+            PRINT_MSG("param_check err: OSSL %d WOLF %d", ossl_err, wolf_err);
+            err |= 1;
+        }
+
+        ossl_err = EVP_PKEY_public_check(ctx_ossl) != 1;
+        wolf_err = EVP_PKEY_public_check(ctx_wolf) != 1;
+        if (ossl_err != wolf_err){
+            PRINT_MSG("public_check err: OSSL %d WOLF %d", ossl_err, wolf_err);
+            err |= 1;
+        }
+
+        ossl_err = EVP_PKEY_private_check(ctx_ossl) != 1;
+        wolf_err = EVP_PKEY_private_check(ctx_wolf) != 1;
+        if (ossl_err != wolf_err){
+            PRINT_MSG("private_check err: OSSL %d WOLF %d", ossl_err, wolf_err);
+            err |= 1;
+        }
+
+#ifdef WOLFSSL_RSA_KEY_CHECK
+        ossl_err = EVP_PKEY_pairwise_check(ctx_ossl) != 1;
+        wolf_err = EVP_PKEY_pairwise_check(ctx_wolf) != 1;
+        if (ossl_err != wolf_err){
+            PRINT_MSG("pairwise_check err: OSSL %d WOLF %d", ossl_err, wolf_err);
+            err |= 1;
+        }
+#endif
+    }
+
+    EVP_PKEY_free(pkey_ossl);
+    EVP_PKEY_free(pkey_wolf);
+    EVP_PKEY_CTX_free(ctx_ossl);
+    EVP_PKEY_CTX_free(ctx_wolf);
+    OSSL_PARAM_free(params);
+
+    return err == 1;
+}
+
+int test_rsa_key_integrity(void* data)
+{
+    (void)data;
+    int err = 0;
+    PKCS8_PRIV_KEY_INFO* p8inf = NULL;
+    OSSL_PARAM_BLD* bld = NULL;
+    EVP_PKEY* pkey = NULL;
+    BIGNUM* p = NULL;
+    BIGNUM* q = NULL;
+    BIGNUM* n = NULL;
+    BIGNUM* e = NULL;
+    BIGNUM* d = NULL;
+    BIGNUM* bignums[5];
+    size_t loop;
+    BIGNUM* num = NULL;
+    BN_ULONG num_val;
+    const unsigned char* pder = rsa_key_der_2048_pkcs8;
+
+    /* steal parameters from existing key so they can be fuzzed */
+    p8inf = d2i_PKCS8_PRIV_KEY_INFO(NULL, (const unsigned char **)&pder,
+                                            sizeof(rsa_key_der_2048_pkcs8));
+    err = p8inf == NULL;
+    if (err == 0) {
+        pkey = EVP_PKCS82PKEY_ex(p8inf, osslLibCtx, NULL);
+        err = pkey == NULL;
+    }
+    if (err == 0) {
+        err |= EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_FACTOR1, &p) != 1;
+        err |= EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_FACTOR2, &q) != 1;
+        err |= EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_N, &n) != 1;
+        err |= EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_E, &e) != 1;
+        err |= EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_D, &d) != 1;
+        err |= (p == NULL) || (q == NULL) || (n == NULL) ||
+            (e == NULL) || (d == NULL);
+        bignums[0] = p;
+        bignums[1] = q;
+        bignums[2] = n;
+        bignums[3] = e;
+        bignums[4] = d;
+    }
+    if (err == 0) {
+        bld = OSSL_PARAM_BLD_new();
+        err = bld == NULL;
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Validate with valid key");
+        err = test_rsa_key_integrity_helper(bld, p, q, n, e, d);
+    }
+
+    if (err == 0) {
+        num = BN_new();
+        err = num == NULL;
+    }
+
+    for (loop = 0; err == 0 && loop < ARRAY_SIZE(bignums); loop++) {
+        switch (loop) {
+        case 0:
+            PRINT_MSG("Validate with p -= 1, 2");
+            break;
+        case 1:
+            PRINT_MSG("Validate with q -= 1, 2");
+            break;
+        case 2:
+            PRINT_MSG("Validate with n -= 1, 2");
+            break;
+        case 3:
+            PRINT_MSG("Validate with e -= 1, 2");
+            break;
+        case 4:
+            PRINT_MSG("Validate with d -= 1, 2");
+            break;
+        default:
+            err = 1;
+            break;
+        }
+
+        for (num_val = 1; err == 0 && num_val <= 2; num_val++) {
+            BIGNUM* bignum = bignums[loop];
+            err = BN_set_word(num, num_val) != 1;
+
+            PRINT_MSG("%lu:", num_val);
+            if (BN_sub(bignum, bignum, num) != 1) {
+                err = 1;
+            }
+            else if ((err = test_rsa_key_integrity_helper(bld, p, q, n, e, d)) == 0) {
+                err = BN_add(bignum, bignum, num) != 1;
+            }
+        }
+    }
+
+    for (loop = 0; err == 0 && loop < ARRAY_SIZE(bignums); loop++) {
+        switch (loop) {
+        case 0:
+            PRINT_MSG("Validate with p = 0, 1, 2, 3");
+            break;
+        case 1:
+            PRINT_MSG("Validate with q = 0, 1, 2, 3");
+            break;
+        case 2:
+            PRINT_MSG("Validate with n = 0, 1, 2, 3");
+            break;
+        case 3:
+            PRINT_MSG("Validate with e = 0, 1, 2, 3");
+            break;
+        case 4:
+            PRINT_MSG("Validate with d = 0, 1, 2, 3");
+            break;
+        default:
+            err = 1;
+            break;
+        }
+
+        for (num_val = 0; err == 0 && num_val <= 3; num_val++) {
+            BIGNUM* bignum = bignums[loop];
+            err = BN_copy(num, bignum) == NULL;
+
+            PRINT_MSG("%lu:", num_val);
+            if (err != 1 && (BN_set_word(bignum, num_val) != 1 ||
+                    test_rsa_key_integrity_helper(bld, p, q, n, e, d) != 0)) {
+                err = 1;
+            }
+            if (err != 1 && BN_copy(bignum, num) == NULL) {
+                err = 1;
+            }
+        }
+    }
+
+/* OSSL_PARAM_BLD does not support negative BN's until after 3.1.8 */
+#if OPENSSL_VERSION_NUMBER > 0x30100080L
+    for (loop = 0; err == 0 && loop < ARRAY_SIZE(bignums); loop++) {
+        switch (loop) {
+        case 0:
+            PRINT_MSG("Validate with negative p");
+            break;
+        case 1:
+            PRINT_MSG("Validate with negative q");
+            break;
+        case 2:
+            PRINT_MSG("Validate with negative n");
+            break;
+        case 3:
+            PRINT_MSG("Validate with negative e");
+            break;
+        case 4:
+            PRINT_MSG("Validate with negative d");
+            break;
+        default:
+            err = 1;
+            break;
+        }
+
+        BIGNUM* bignum = bignums[loop];
+        BN_set_negative(bignum, 1);
+
+        if (err != 1 && test_rsa_key_integrity_helper(bld, p, q, n, e, d) != 0) {
+            err = 1;
+        }
+
+        BN_set_negative(bignum, 0);
+    }
+#endif /* OPENSSL_VERSION_NUMBER > 3.1.8 */
+
+    if (err == 0) {
+        PRINT_MSG("Validate with NULL values");
+        err = test_rsa_key_integrity_helper(bld, NULL, NULL, NULL, NULL, NULL);
+    }
+
+    BN_free(p);
+    BN_free(q);
+    BN_free(n);
+    BN_free(e);
+    BN_free(d);
+    BN_free(num);
+    PKCS8_PRIV_KEY_INFO_free(p8inf);
+    EVP_PKEY_free(pkey);
+    OSSL_PARAM_BLD_free(bld);
 
     return err;
 }
