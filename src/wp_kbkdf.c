@@ -177,13 +177,15 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
                 if (!OSSL_PARAM_get_utf8_string_ptr(p, &mode)) {
                     ok = 0;
                 }
-                if (ok) {
-                    if (XSTRCMP(mode, "FEEDBACK") == 0) {
-                        ctx->mode = WP_KDF_MODE_FEEDBACK;
-                    }
-                    else {
-                        ok = 0;
-                    }
+                if (XSTRCMP(mode, "COUNTER") == 0) {
+                    ctx->mode = WP_KDF_MODE_COUNTER;
+                }
+                else if (XSTRCMP(mode, "FEEDBACK") == 0) {
+                    ctx->mode = WP_KDF_MODE_FEEDBACK;
+                }
+                else {
+                    WOLFPROV_MSG(WP_LOG_COMP_KDF, "Invalid KDF mode: %s", mode);
+                    ok = 0;
                 }
             }
         }
