@@ -370,7 +370,10 @@ static void wp_c32toa(word32 wc_u32, byte* c) {
 }
 
 #ifdef WP_HAVE_HMAC
-#define WP_MAX_HASH_BLOCK_SIZE 128
+/* Must be large enough for the HMAC block size of every supported hash.
+ * SHA3-224 has the largest HMAC block size of any currently supported
+ * digest at 144 bytes. */
+#define WP_MAX_HASH_BLOCK_SIZE 144
 
 static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
     size_t keyLen)
@@ -383,14 +386,18 @@ static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kbkdf_init_hmac");
 
-    if (keyLen < blockSize) {
+    if (blockSize > sizeof(localKey) || keyLen > sizeof(localKey)) {
+        ok = 0;
+    }
+
+    if (ok && keyLen < blockSize) {
         /* wolfSSL FIPS needs a key that is at least block size in length with
          * the unused parts zeroed out.
          */
         XMEMSET(localKey + keyLen, 0, blockSize - keyLen);
         localKeyLen = blockSize;
     }
-    else {
+    else if (ok) {
         localKeyLen = (word32)keyLen;
     }
 

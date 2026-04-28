@@ -242,6 +242,21 @@ static int test_kbkdf_feedback(void)
             err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256), "SHA384");
         }
     }
+    /* SHA3-224 (144 byte HMAC block) and SHA3-256 (136 byte block) both
+     * exceed the legacy 128-byte localKey buffer in wp_kbkdf_init_hmac;
+     * exercising them here guards against the stack overflow regressing. */
+    if (err == 0) {
+        err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key128, sizeof(key128), "SHA3-224");
+        if (err == 0) {
+            err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256), "SHA3-224");
+        }
+    }
+    if (err == 0) {
+        err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key128, sizeof(key128), "SHA3-256");
+        if (err == 0) {
+            err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256), "SHA3-256");
+        }
+    }
 
     return err;
 }
