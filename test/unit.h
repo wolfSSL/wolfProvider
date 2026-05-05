@@ -117,13 +117,17 @@ int test_shake_256(void *data);
 
 #endif /* WP_HAVE_DIGEST */
 
+int test_digest_multi_update(void *data);
+
 #ifdef WP_HAVE_HMAC
 int test_hmac_create(void *data);
+int test_hmac_multi_update(void *data);
 #endif /* WP_HAVE_HMAC */
 
 #ifdef WP_HAVE_CMAC
 int test_cmac_create(void *data);
-#endif /* WP_HAVE_HMAC */
+int test_cmac_multi_update(void *data);
+#endif /* WP_HAVE_CMAC */
 
 #ifdef WP_HAVE_GMAC
 int test_gmac_create(void *data);
@@ -152,6 +156,7 @@ int test_sshkdf(void *data);
 int test_des3_cbc(void *data);
 int test_des3_cbc_stream(void *data);
 int test_des3_cbc_bad_pad(void *data);
+int test_des3_cbc_large_update(void *data);
 #endif
 
 #ifdef WP_HAVE_AESECB
@@ -175,6 +180,7 @@ int test_aes192_cbc_stream(void *data);
 int test_aes256_cbc_stream(void *data);
 int test_aes256_cbc_multiple(void *data);
 int test_aes256_cbc_bad_pad(void *data);
+int test_aes_cbc_large_update(void *data);
 
 #endif
 
@@ -183,6 +189,7 @@ int test_aes256_cbc_bad_pad(void *data);
 int test_aes128_ctr_stream(void *data);
 int test_aes192_ctr_stream(void *data);
 int test_aes256_ctr_stream(void *data);
+int test_aes_ctr_large_update(void *data);
 
 #endif
 
@@ -191,6 +198,7 @@ int test_aes256_ctr_stream(void *data);
 int test_aes128_cfb_stream(void *data);
 int test_aes192_cfb_stream(void *data);
 int test_aes256_cfb_stream(void *data);
+int test_aes_cfb_large_update(void *data);
 
 #endif
 
@@ -204,6 +212,7 @@ int test_aes256_gcm(void *data);
 int test_aes128_gcm_fixed(void *data);
 int test_aes128_gcm_tls(void *data);
 int test_aes128_gcm_set_iv_inv(void *data);
+int test_aes128_gcm_key_then_iv(void *data);
 
 #endif /* WP_HAVE_AESGCM */
 
@@ -286,6 +295,8 @@ int test_rsa_fromdata(void* data);
 int test_rsa_decode_pkcs8(void* data);
 int test_rsa_encode_pkcs8(void* data);
 int test_rsa_null_init(void* data);
+int test_rsa_param_prefix_match(void* data);
+int test_rsa_kem_prefix_match(void* data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH

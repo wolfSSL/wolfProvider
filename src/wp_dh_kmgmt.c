@@ -401,7 +401,7 @@ static wp_Dh* wp_dh_new(WOLFPROV_CTX *provCtx)
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitDhKey_ex", rc);
             ok = 0;
         }
-    #ifndef SINGLE_THREADED
+    #ifndef WP_SINGLE_THREADED
         if (ok) {
             rc = wc_InitMutex(&dh->mutex);
             if (rc != 0) {

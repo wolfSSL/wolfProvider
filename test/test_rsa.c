@@ -2134,4 +2134,136 @@ int test_rsa_null_init(void* data)
     return err;
 }
 
+/******************************************************************************/
+
+/**
+ * Test that RSA param import rejects prefix-matching param names (F-505).
+ * The old code used XSTRNCMP with strlen(p->key) which let "rsa-factor"
+ * (without the "1" suffix) incorrectly match "rsa-factor1" in the param table.
+ */
+int test_rsa_param_prefix_match(void* data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    BIGNUM *factor = NULL;
+    unsigned long rsa_n = 0xbc747fc5;
+    unsigned long rsa_e = 0x10001;
+    unsigned long rsa_d = 0x7b133399;
+    unsigned long bogus = 0xdeadbeef;
+
+    (void)data;
+
+    PRINT_MSG("Test RSA param prefix match (wolfProvider)");
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        /* Import with "rsa-factor" — a prefix of "rsa-factor1".
+         * On unfixed code, this prefix-matches "rsa-factor1" and loads
+         * the bogus value into the p factor slot. On fixed code, the
+         * param is ignored (unknown name). */
+        OSSL_PARAM params[] = {
+            OSSL_PARAM_ulong("n", &rsa_n),
+            OSSL_PARAM_ulong("e", &rsa_e),
+            OSSL_PARAM_ulong("d", &rsa_d),
+            OSSL_PARAM_ulong(OSSL_PKEY_PARAM_RSA_FACTOR, &bogus),
+            OSSL_PARAM_END
+        };
+
+        PRINT_MSG("Import with prefix param '" OSSL_PKEY_PARAM_RSA_FACTOR "'");
+        err = EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) != 1;
+    }
+    if (err == 0) {
+        /* Read back rsa-factor1. On fixed code, it should not be set. */
+        PRINT_MSG("Read back rsa-factor1 to check for prefix contamination");
+        if (EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_FACTOR1,
+                &factor) == 1 && factor != NULL) {
+            if (BN_get_word(factor) == bogus) {
+                PRINT_ERR_MSG("Prefix param incorrectly matched rsa-factor1");
+                err = 1;
+            }
+        }
+    }
+
+    BN_free(factor);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/******************************************************************************/
+
+/**
+ * Test that RSA KEM rejects prefix-matching operation names (F-834).
+ * The old code used XSTRNCMP with sizeof-1 which let "RSASVE_extra"
+ * incorrectly match "RSASVE".
+ */
+int test_rsa_kem_prefix_match(void* data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *genCtx = NULL;
+    EVP_PKEY_CTX *kemCtx = NULL;
+    EVP_PKEY *pkey = NULL;
+    int rc;
+
+    (void)data;
+
+    PRINT_MSG("Test RSA KEM operation prefix match (wolfProvider)");
+
+    /* Generate RSA key */
+    PRINT_MSG("Generate RSA 2048 key for KEM prefix test");
+    genCtx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL);
+    if (genCtx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(genCtx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_keygen_bits(genCtx, 2048) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(genCtx, &pkey) != 1;
+    }
+
+    /* Try KEM encapsulate init with wrong operation name */
+    if (err == 0) {
+        kemCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
+        if (kemCtx == NULL) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate_init(kemCtx, NULL) != 1;
+    }
+    if (err == 0) {
+        /* Set a bogus operation that is a prefix extension of RSASVE.
+         * On unfixed code, this prefix-matches and is accepted.
+         * On fixed code, it is rejected. */
+        OSSL_PARAM params[] = {
+            OSSL_PARAM_utf8_string(OSSL_KEM_PARAM_OPERATION,
+                (char *)"RSASVE_extra", 0),
+            OSSL_PARAM_END
+        };
+
+        PRINT_MSG("Set KEM operation to 'RSASVE_extra' (should fail)");
+        rc = EVP_PKEY_CTX_set_params(kemCtx, params);
+        if (rc == 1) {
+            PRINT_ERR_MSG("Prefix operation name incorrectly accepted");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_CTX_free(kemCtx);
+    EVP_PKEY_CTX_free(genCtx);
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
 #endif /* WP_HAVE_RSA */

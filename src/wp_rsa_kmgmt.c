@@ -470,7 +470,7 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
             ok = 0;
         }
 
-    #ifndef SINGLE_THREADED
+    #ifndef WP_SINGLE_THREADED
         if (ok) {
             rc = wc_InitMutex(&rsa->mutex);
             if (rc != 0) {
@@ -600,7 +600,7 @@ static int wp_rsa_pss_params_set_pss_defaults(wp_RsaPssParams* pss)
     pss->hashType = WP_RSA_PSS_DIGEST_DEF;
     pss->mgf = WP_RSA_PSS_MGF_DEF;
     XSTRNCPY(pss->mdName, "SHA-1", sizeof(pss->mdName));
-    XSTRNCPY(pss->mgfMdName, "SHA-1", sizeof(pss->mdName));
+    XSTRNCPY(pss->mgfMdName, "SHA-1", sizeof(pss->mgfMdName));
     pss->saltLen = WP_RSA_DEFAULT_SALT_LEN;
     pss->derTrailer = 1; /* Default: RFC8017 A.2.3 */
 
@@ -1229,7 +1229,7 @@ static int wp_rsa_import_key_data(wp_Rsa* rsa, const OSSL_PARAM params[],
             p = &params[i];
             index = -1;
             for (j = 0; j < (int)ARRAY_SIZE(wp_rsa_param_key); j++) {
-                if (XSTRNCMP(p->key, wp_rsa_param_key[j], XSTRLEN(p->key)) == 0) {
+                if (XSTRCMP(p->key, wp_rsa_param_key[j]) == 0) {
                     index = j;
                     break;
                 }

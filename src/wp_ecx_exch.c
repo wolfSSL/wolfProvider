@@ -250,21 +250,32 @@ static int wp_x25519_derive(wp_EcxCtx* ctx, unsigned char* secret,
             ok = 0;
         }
         if (ok) {
+            /* Constant-time: always subtract, then select based on
+             * whether secret >= order. */
+            unsigned char reduced[CURVE25519_KEYSIZE];
+            int16_t carry = 0;
+            byte gt = 0;
+            byte eq = 0xFF;
+
+            for (i = CURVE25519_KEYSIZE - 1; i >= 0; i--) {
+                carry += secret[i];
+                carry -= wp_curve25519_order[i];
+                reduced[i] = (unsigned char)carry;
+                carry >>= 8;
+            }
+            /* Determine if secret >= order in constant time. */
             for (i = 0; i < CURVE25519_KEYSIZE; i++) {
-                if (secret[i] != wp_curve25519_order[i]) {
-                    break;
-                }
+                gt |= eq & wp_ct_int_mask_gte(secret[i],
+                    wp_curve25519_order[i] + 1);
+                eq &= wp_ct_byte_mask_eq(secret[i],
+                    wp_curve25519_order[i]);
             }
-            if ((i < CURVE25519_KEYSIZE) &&
-                (secret[i] > wp_curve25519_order[i])) {
-                int16_t carry = 0;
-                for (i = CURVE25519_KEYSIZE - 1; i >= 0; i--) {
-                    carry += secret[i];
-                    carry -= wp_curve25519_order[i];
-                    secret[i] = (unsigned char)carry;
-                    carry >>= 8;
-                }
+            /* Select reduced if secret >= order. */
+            for (i = 0; i < CURVE25519_KEYSIZE; i++) {
+                secret[i] = wp_ct_byte_mask_sel(gt | eq, reduced[i],
+                    secret[i]);
             }
+            OPENSSL_cleanse(reduced, sizeof(reduced));
         }
         if (ok) {
             *secLen = len;

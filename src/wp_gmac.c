@@ -93,10 +93,11 @@ static wp_GmacCtx* wp_gmac_new(WOLFPROV_CTX* provCtx)
 static void wp_gmac_free(wp_GmacCtx* macCtx)
 {
     if (macCtx != NULL) {
+        wc_AesFree(&macCtx->gmac.aes);
         OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
         OPENSSL_cleanse(macCtx->iv, macCtx->ivLen);
         OPENSSL_clear_free(macCtx->data, macCtx->dataLen);
-        OPENSSL_free(macCtx);
+        OPENSSL_clear_free(macCtx, sizeof(*macCtx));
     }
 }
 

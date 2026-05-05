@@ -1488,4 +1488,167 @@ int test_aes256_cbc_bad_pad(void *data)
     return err;
 }
 
+/******************************************************************************/
+
 #endif /* WP_HAVE_AESCBC */
+
+#if defined(WP_HAVE_AESCBC) || defined(WP_HAVE_AESCTR) || \
+    defined(WP_HAVE_AESCFB) || defined(WP_HAVE_DES3CBC)
+/**
+ * Test cipher encrypt/decrypt roundtrip with a large buffer processed in
+ * multiple update calls. Validates the chunked loop path used by
+ * wp_aes_block_doit, wp_aes_stream_doit, and wp_des3_block_doit
+ * (F-1641, F-1642, F-1643).
+ */
+static int test_cipher_large_update_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen, int ivLen)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx = NULL;
+    EVP_CIPHER *cipher = NULL;
+    unsigned char key[32];
+    unsigned char iv[16];
+    unsigned char plain[8192];
+    unsigned char enc[8192 + 16];
+    unsigned char dec[8192 + 16];
+    int outLen;
+    int fLen;
+    int totalEnc = 0;
+    int totalDec = 0;
+    size_t i;
+
+    RAND_bytes(key, keyLen);
+    if (ivLen > 0) {
+        RAND_bytes(iv, ivLen);
+    }
+    RAND_bytes(plain, sizeof(plain));
+
+    err = (cipher = EVP_CIPHER_fetch(libCtx, cipherName, "")) == NULL;
+
+    /* Encrypt in 1024-byte chunks */
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    for (i = 0; err == 0 && i < sizeof(plain); i += 1024) {
+        err = EVP_EncryptUpdate(ctx, enc + totalEnc, &outLen,
+            plain + i, 1024) != 1;
+        if (err == 0) {
+            totalEnc += outLen;
+        }
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, enc + totalEnc, &fLen) != 1;
+        totalEnc += fLen;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Decrypt in 1024-byte chunks */
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    for (i = 0; err == 0 && (int)i < totalEnc; i += 1024) {
+        int chunk = (totalEnc - (int)i < 1024) ? totalEnc - (int)i : 1024;
+        err = EVP_DecryptUpdate(ctx, dec + totalDec, &outLen,
+            enc + i, chunk) != 1;
+        if (err == 0) {
+            totalDec += outLen;
+        }
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, dec + totalDec, &fLen) != 1;
+        totalDec += fLen;
+    }
+    if (err == 0) {
+        if (totalDec != (int)sizeof(plain) ||
+            memcmp(dec, plain, sizeof(plain)) != 0) {
+            PRINT_ERR_MSG("AES-CBC large update decrypt mismatch");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+#endif /* any large-update-testable cipher */
+
+#ifdef WP_HAVE_AESCBC
+int test_aes_cbc_large_update(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-CBC large update with OpenSSL");
+    err = test_cipher_large_update_helper(osslLibCtx, "AES-256-CBC", 32, 16);
+    if (err == 0) {
+        PRINT_MSG("AES-CBC large update with wolfProvider");
+        err = test_cipher_large_update_helper(wpLibCtx, "AES-256-CBC", 32, 16);
+    }
+    return err;
+}
+#endif /* WP_HAVE_AESCBC */
+
+#ifdef WP_HAVE_AESCTR
+int test_aes_ctr_large_update(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-CTR large update with OpenSSL");
+    err = test_cipher_large_update_helper(osslLibCtx, "AES-256-CTR", 32, 16);
+    if (err == 0) {
+        PRINT_MSG("AES-CTR large update with wolfProvider");
+        err = test_cipher_large_update_helper(wpLibCtx, "AES-256-CTR", 32, 16);
+    }
+    return err;
+}
+#endif /* WP_HAVE_AESCTR */
+
+#ifdef WP_HAVE_AESCFB
+int test_aes_cfb_large_update(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-CFB large update with OpenSSL");
+    err = test_cipher_large_update_helper(osslLibCtx, "AES-256-CFB", 32, 16);
+    if (err == 0) {
+        PRINT_MSG("AES-CFB large update with wolfProvider");
+        err = test_cipher_large_update_helper(wpLibCtx, "AES-256-CFB", 32, 16);
+    }
+    return err;
+}
+#endif /* WP_HAVE_AESCFB */
+
+#ifdef WP_HAVE_DES3CBC
+int test_des3_cbc_large_update(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("DES3-CBC large update with OpenSSL");
+    err = test_cipher_large_update_helper(osslLibCtx, "DES-EDE3-CBC", 24, 8);
+    if (err == 0) {
+        PRINT_MSG("DES3-CBC large update with wolfProvider");
+        err = test_cipher_large_update_helper(wpLibCtx, "DES-EDE3-CBC", 24, 8);
+    }
+    return err;
+}
+#endif /* WP_HAVE_DES3CBC */

@@ -190,7 +190,7 @@ static wp_Mac* wp_mac_new(WOLFPROV_CTX *provCtx, int type)
         mac = (wp_Mac*)OPENSSL_zalloc(sizeof(*mac));
     }
     if (mac != NULL) {
-    #ifndef SINGLE_THREADED
+    #ifndef WP_SINGLE_THREADED
         int rc = wc_InitMutex(&mac->mutex);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitMutex", rc);

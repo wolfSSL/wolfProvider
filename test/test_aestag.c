@@ -1196,6 +1196,117 @@ int test_aes128_gcm_set_iv_inv(void *data)
                                     EVP_GCM_TLS_FIXED_IV_LEN, 12);
 }
 
+/******************************************************************************/
+
+/**
+ * Test GCM decrypt init with key only (NULL IV), then set IV via params.
+ * Without the F-175 fix, this would crash with a NULL pointer dereference
+ * under WOLFSSL_AESGCM_STREAM.
+ */
+static int test_gcm_key_then_iv_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err;
+    EVP_CIPHER_CTX *encCtx = NULL;
+    EVP_CIPHER_CTX *decCtx = NULL;
+    EVP_CIPHER *cipher = NULL;
+    unsigned char key[16];
+    unsigned char iv[12];
+    unsigned char msg[] = "GCM key-then-iv test";
+    unsigned char aad[] = "additional data";
+    unsigned char enc[sizeof(msg) + 16];
+    unsigned char dec[sizeof(msg) + 16];
+    unsigned char tag[16];
+    int encLen = 0;
+    int decLen = 0;
+    int fLen = 0;
+
+    RAND_bytes(key, sizeof(key));
+    RAND_bytes(iv, sizeof(iv));
+
+    err = (cipher = EVP_CIPHER_fetch(libCtx, "AES-128-GCM", "")) == NULL;
+
+    /* Encrypt normally to produce ciphertext + tag */
+    if (err == 0) {
+        err = (encCtx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(encCtx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(encCtx, NULL, &encLen, aad,
+            sizeof(aad)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(encCtx, enc, &encLen, msg,
+            sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(encCtx, enc + encLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(encCtx, EVP_CTRL_AEAD_GET_TAG, sizeof(tag),
+            tag) != 1;
+    }
+    EVP_CIPHER_CTX_free(encCtx);
+
+    /* Decrypt with key-only init, then set IV separately */
+    if (err == 0) {
+        err = (decCtx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        /* Init with key but NULL IV */
+        err = EVP_DecryptInit_ex(decCtx, cipher, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        /* Set IV via ctrl */
+        err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_AEAD_SET_IVLEN,
+            sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(decCtx, NULL, NULL, NULL, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(decCtx, EVP_CTRL_AEAD_SET_TAG, sizeof(tag),
+            tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(decCtx, NULL, &decLen, aad,
+            sizeof(aad)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(decCtx, dec, &decLen, enc, encLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(decCtx, dec + decLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        if (decLen != (int)sizeof(msg) ||
+            memcmp(dec, msg, sizeof(msg)) != 0) {
+            PRINT_ERR_MSG("GCM key-then-iv decrypt mismatch");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(decCtx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes128_gcm_key_then_iv(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("GCM key-then-iv with OpenSSL");
+    err = test_gcm_key_then_iv_helper(osslLibCtx);
+    if (err == 0) {
+        PRINT_MSG("GCM key-then-iv with wolfProvider");
+        err = test_gcm_key_then_iv_helper(wpLibCtx);
+    }
+    return err;
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/

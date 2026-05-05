@@ -153,10 +153,15 @@ static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
 {                                                                              \
     int ok = 1;                                                                \
     WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_update");                           \
-    int rc = upd(ctx, in, (word32)inLen);                                      \
-    if (rc != 0) {                                                             \
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #upd, rc);            \
-        ok = 0;                                                                \
+    while (ok && (inLen > 0)) {                                                \
+        word32 chunk = (inLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)inLen;    \
+        int rc = upd(ctx, in, chunk);                                          \
+        if (rc != 0) {                                                         \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #upd, rc);        \
+            ok = 0;                                                            \
+        }                                                                      \
+        in += chunk;                                                           \
+        inLen -= chunk;                                                        \
     }                                                                          \
     WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \

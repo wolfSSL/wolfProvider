@@ -539,8 +539,7 @@ static int wp_rsakem_set_ctx_params(wp_RsaKemCtx* ctx,
         ok = 0;
     }
     if (ok && (op != NULL)) {
-        if (XSTRNCMP(OSSL_KEM_PARAM_OPERATION_RSASVE, op,
-                sizeof(OSSL_KEM_PARAM_OPERATION_RSASVE) - 1) == 0) {
+        if (XSTRCMP(OSSL_KEM_PARAM_OPERATION_RSASVE, op) == 0) {
             ctx->op = WP_RSA_KEM_OP_RSASVE;
         }
         else {

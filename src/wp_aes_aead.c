@@ -488,7 +488,9 @@ static int wp_aead_set_param_tag(wp_AeadCtx* ctx,
     if (ok && ((sz == 0) || ((p->data != NULL) && ctx->enc))) {
         ok = 0;
     }
-    ctx->tagLen = sz;
+    if (ok) {
+        ctx->tagLen = sz;
+    }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -1122,7 +1124,7 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
             ok = 0;
         }
     }
-    if (ok) {
+    if (ok && (iv != NULL)) {
         XMEMCPY(ctx->iv, iv, ivLen);
         ctx->ivState = IV_STATE_BUFFERED;
         ctx->ivSet = 0;

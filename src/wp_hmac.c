@@ -248,14 +248,19 @@ static int wp_hmac_update(wp_HmacCtx* macCtx, const unsigned char* data,
     size_t dataLen)
 {
     int ok = 1;
-    int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_hmac_update");
 
-    rc = wc_HmacUpdate(&macCtx->hmac, data, (word32)dataLen);
-    if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HmacUpdate", rc);
-        ok = 0;
+    while (ok && (dataLen > 0)) {
+        word32 chunk = (dataLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)dataLen;
+        int rc = wc_HmacUpdate(&macCtx->hmac, data, chunk);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HmacUpdate",
+                rc);
+            ok = 0;
+        }
+        data += chunk;
+        dataLen -= chunk;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

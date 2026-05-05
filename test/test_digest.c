@@ -283,4 +283,84 @@ int test_shake_256(void *data)
 
 /******************************************************************************/
 
+/**
+ * Test that digest produces consistent results when data is fed in many small
+ * updates vs. a single large update. Exercises the chunked update path
+ * (F-1635).
+ */
+static int test_digest_multi_update_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err;
+    EVP_MD_CTX *ctx = NULL;
+    EVP_MD *md = NULL;
+    unsigned char data[8192];
+    unsigned char digestOne[64];
+    unsigned char digestMulti[64];
+    unsigned int dLenOne = sizeof(digestOne);
+    unsigned int dLenMulti = sizeof(digestMulti);
+    size_t i;
+
+    RAND_bytes(data, sizeof(data));
+
+    err = (md = EVP_MD_fetch(libCtx, "SHA-256", "")) == NULL;
+
+    /* Single update */
+    if (err == 0) {
+        err = (ctx = EVP_MD_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DigestInit(ctx, md) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestUpdate(ctx, data, sizeof(data)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestFinal_ex(ctx, digestOne, &dLenOne) != 1;
+    }
+    EVP_MD_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Many small updates (64 bytes each) */
+    if (err == 0) {
+        err = (ctx = EVP_MD_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DigestInit(ctx, md) != 1;
+    }
+    for (i = 0; err == 0 && i < sizeof(data); i += 64) {
+        err = EVP_DigestUpdate(ctx, data + i, 64) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestFinal_ex(ctx, digestMulti, &dLenMulti) != 1;
+    }
+    if (err == 0) {
+        if (dLenOne != dLenMulti ||
+            memcmp(digestOne, digestMulti, dLenOne) != 0) {
+            PRINT_ERR_MSG("Multi-update digest doesn't match single update");
+            err = 1;
+        }
+    }
+
+    EVP_MD_CTX_free(ctx);
+    EVP_MD_free(md);
+    return err;
+}
+
+int test_digest_multi_update(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("Digest multi-update with OpenSSL");
+    err = test_digest_multi_update_helper(osslLibCtx);
+    if (err == 0) {
+        PRINT_MSG("Digest multi-update with wolfProvider");
+        err = test_digest_multi_update_helper(wpLibCtx);
+    }
+    return err;
+}
+
+/******************************************************************************/
+
 #endif /* WP_HAVE_DIGEST */

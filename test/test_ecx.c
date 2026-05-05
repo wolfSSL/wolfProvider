@@ -694,3 +694,4 @@ int test_ecx_null_init(void* data)
 }
 
 #endif /* defined(WP_HAVE_ED25519) || defined(WP_HAVE_ECD444) */
+
