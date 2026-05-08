@@ -177,13 +177,15 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
                 if (!OSSL_PARAM_get_utf8_string_ptr(p, &mode)) {
                     ok = 0;
                 }
-                if (ok) {
-                    if (XSTRCMP(mode, "FEEDBACK") == 0) {
-                        ctx->mode = WP_KDF_MODE_FEEDBACK;
-                    }
-                    else {
-                        ok = 0;
-                    }
+                if (XSTRCMP(mode, "COUNTER") == 0) {
+                    ctx->mode = WP_KDF_MODE_COUNTER;
+                }
+                else if (XSTRCMP(mode, "FEEDBACK") == 0) {
+                    ctx->mode = WP_KDF_MODE_FEEDBACK;
+                }
+                else {
+                    WOLFPROV_MSG(WP_LOG_COMP_KDF, "Invalid KDF mode: %s", mode);
+                    ok = 0;
                 }
             }
         }
@@ -355,7 +357,10 @@ static const OSSL_PARAM* wp_kdf_kbkdf_gettable_ctx_params(wp_KbkdfCtx* ctx,
 }
 
 #ifdef WP_HAVE_HMAC
-#define WP_MAX_HASH_BLOCK_SIZE 128
+/* Must be large enough for the HMAC block size of every supported hash.
+ * SHA3-224 has the largest HMAC block size of any currently supported
+ * digest at 144 bytes. */
+#define WP_MAX_HASH_BLOCK_SIZE 144
 
 static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
     size_t keyLen)
@@ -368,14 +373,18 @@ static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kbkdf_init_hmac");
 
-    if (keyLen < blockSize) {
+    if (blockSize > sizeof(localKey) || keyLen > sizeof(localKey)) {
+        ok = 0;
+    }
+
+    if (ok && keyLen < blockSize) {
         /* wolfSSL FIPS needs a key that is at least block size in length with
          * the unused parts zeroed out.
          */
         XMEMSET(localKey + keyLen, 0, blockSize - keyLen);
         localKeyLen = blockSize;
     }
-    else {
+    else if (ok) {
         localKeyLen = (word32)keyLen;
     }
 
