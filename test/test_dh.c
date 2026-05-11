@@ -718,4 +718,198 @@ int test_dh_krb5_keygen(void *data)
     return err;
 }
 
+/* Derive a shared secret between keyA (priv) and keyB (peer) using libCtx,
+ * setting the OSSL_EXCHANGE_PARAM_PAD parameter to `pad`. The caller owns the
+ * returned buffer and must free it with OPENSSL_free. */
+static int test_dh_derive_with_pad(OSSL_LIB_CTX *libCtx, EVP_PKEY *keyA,
+    EVP_PKEY *keyB, int pad, unsigned char **secret, size_t *secretLen)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(libCtx, keyA, NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_int(OSSL_EXCHANGE_PARAM_PAD, &pad);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(ctx, params) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_set_peer(ctx, keyB) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, NULL, secretLen) <= 0;
+    }
+    if (err == 0) {
+        *secret = (unsigned char*)OPENSSL_malloc(*secretLen);
+        err = *secret == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, *secret, secretLen) <= 0;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/**
+ * Test DH shared secret front-padding via OSSL_EXCHANGE_PARAM_PAD.
+ *
+ * With padding enabled, the derived secret must be front-padded with zeros to
+ * the prime byte length. With padding disabled, the secret retains its natural
+ * length (which is shorter when the high bytes of g^(ab) mod p are zero).
+ *
+ * Because a leading-zero shared secret occurs with probability ~1/256 per
+ * byte, we loop generating fresh keys until the natural length is shorter
+ * than the prime length so the padding code path actually executes.
+ */
+int test_dh_pad(void *data)
+{
+    int err = 0;
+    DH *dh = NULL;
+    EVP_PKEY *params = NULL;
+    BIGNUM *p = NULL;
+    BIGNUM *g = NULL;
+    EVP_PKEY_CTX *kgCtx = NULL;
+    EVP_PKEY *keyA = NULL;
+    EVP_PKEY *keyB = NULL;
+    unsigned char *secretPad = NULL;
+    unsigned char *secretNoPad = NULL;
+    size_t secretPadLen = 0;
+    size_t secretNoPadLen = 0;
+    const size_t maxLen = sizeof(dh_p);
+    int iter;
+    const int maxIter = 4096;
+    int hitShortCase = 0;
+
+    (void)data;
+
+    PRINT_MSG("Test DH secret front-padding via OSSL_EXCHANGE_PARAM_PAD");
+
+    dh = DH_new();
+    err = dh == NULL;
+    if (err == 0) {
+        p = BN_bin2bn(dh_p, sizeof(dh_p), NULL);
+        err = p == NULL;
+    }
+    if (err == 0) {
+        g = BN_bin2bn(dh_g, sizeof(dh_g), NULL);
+        err = g == NULL;
+    }
+    if (err == 0) {
+        err = DH_set0_pqg(dh, p, NULL, g) == 0;
+        if (err == 0) {
+            /* DH_set0_pqg takes ownership on success. */
+            p = NULL;
+            g = NULL;
+        }
+    }
+    if (err == 0) {
+        params = EVP_PKEY_new();
+        err = params == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_set1_DH(params, dh) != 1;
+    }
+
+    for (iter = 0; (err == 0) && (iter < maxIter); ++iter) {
+        /* Fresh key pair each iteration. */
+        EVP_PKEY_CTX_free(kgCtx);
+        EVP_PKEY_free(keyA);
+        EVP_PKEY_free(keyB);
+        kgCtx = NULL;
+        keyA = NULL;
+        keyB = NULL;
+
+        kgCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, params, NULL);
+        err = kgCtx == NULL;
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(kgCtx) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen(kgCtx, &keyA) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen(kgCtx, &keyB) != 1;
+        }
+
+        /* Derive without padding. */
+        if (err == 0) {
+            err = test_dh_derive_with_pad(wpLibCtx, keyA, keyB, 0,
+                &secretNoPad, &secretNoPadLen);
+        }
+        /* Natural length must never exceed the prime byte length. */
+        if (err == 0 && secretNoPadLen > maxLen) {
+            PRINT_ERR_MSG("Unpadded secret length %zu exceeds prime length %zu",
+                secretNoPadLen, maxLen);
+            err = 1;
+        }
+
+        /* Derive with padding using the same keys. */
+        if (err == 0) {
+            err = test_dh_derive_with_pad(wpLibCtx, keyA, keyB, 1,
+                &secretPad, &secretPadLen);
+        }
+        /* Padded length must always equal the prime byte length. */
+        if (err == 0 && secretPadLen != maxLen) {
+            PRINT_ERR_MSG("Padded secret length %zu != prime length %zu",
+                secretPadLen, maxLen);
+            err = 1;
+        }
+
+        /* When the natural length is shorter than the prime length, verify
+         * that the padded version is the unpadded version front-padded with
+         * zero bytes. */
+        if (err == 0 && secretNoPadLen < maxLen) {
+            size_t padBytes = maxLen - secretNoPadLen;
+            size_t i;
+
+            hitShortCase = 1;
+            for (i = 0; (err == 0) && (i < padBytes); ++i) {
+                if (secretPad[i] != 0) {
+                    PRINT_ERR_MSG("Padded secret byte %zu = 0x%02x, want 0",
+                        i, secretPad[i]);
+                    err = 1;
+                }
+            }
+            if (err == 0 && memcmp(secretPad + padBytes, secretNoPad,
+                    secretNoPadLen) != 0) {
+                PRINT_ERR_MSG("Padded tail does not match unpadded secret");
+                err = 1;
+            }
+        }
+
+        OPENSSL_free(secretNoPad);
+        OPENSSL_free(secretPad);
+        secretNoPad = NULL;
+        secretPad = NULL;
+
+        if (err == 0 && hitShortCase) {
+            break;
+        }
+    }
+
+    if (err == 0 && !hitShortCase) {
+        PRINT_ERR_MSG("Did not produce a short shared secret in %d iterations; "
+            "front-padding code path not exercised", maxIter);
+        err = 1;
+    }
+
+    OPENSSL_free(secretNoPad);
+    OPENSSL_free(secretPad);
+    EVP_PKEY_CTX_free(kgCtx);
+    EVP_PKEY_free(keyA);
+    EVP_PKEY_free(keyB);
+    EVP_PKEY_free(params);
+    BN_free(p);
+    BN_free(g);
+    DH_free(dh);
+
+    return err;
+}
+
 #endif /* WP_HAVE_DH */

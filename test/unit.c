@@ -304,6 +304,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_invalid_kdf_strings, NULL),
     TEST_DECL(test_dh_decode, NULL),
     TEST_DECL(test_dh_krb5_keygen, NULL),
+    TEST_DECL(test_dh_pad, NULL),
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif
