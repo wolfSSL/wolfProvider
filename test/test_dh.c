@@ -718,4 +718,472 @@ int test_dh_krb5_keygen(void *data)
     return err;
 }
 
+/* Derive a shared secret between keyA (priv) and keyB (peer) using libCtx,
+ * setting the OSSL_EXCHANGE_PARAM_PAD parameter to `pad`. The caller owns the
+ * returned buffer and must free it with OPENSSL_free. */
+static int test_dh_derive_with_pad(OSSL_LIB_CTX *libCtx, EVP_PKEY *keyA,
+    EVP_PKEY *keyB, int pad, unsigned char **secret, size_t *secretLen)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(libCtx, keyA, NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_int(OSSL_EXCHANGE_PARAM_PAD, &pad);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(ctx, params) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_set_peer(ctx, keyB) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, NULL, secretLen) <= 0;
+    }
+    if (err == 0) {
+        *secret = (unsigned char*)OPENSSL_malloc(*secretLen);
+        err = *secret == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, *secret, secretLen) <= 0;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/**
+ * Test DH shared secret front-padding via OSSL_EXCHANGE_PARAM_PAD.
+ *
+ * With padding enabled, the derived secret must be front-padded with zeros to
+ * the prime byte length. With padding disabled, the secret retains its natural
+ * length (which is shorter when the high bytes of g^(ab) mod p are zero).
+ *
+ * Because a leading-zero shared secret occurs with probability ~1/256 per
+ * byte, we loop generating fresh keys until the natural length is shorter
+ * than the prime length so the padding code path actually executes.
+ */
+int test_dh_pad(void *data)
+{
+    int err = 0;
+    DH *dh = NULL;
+    EVP_PKEY *params = NULL;
+    BIGNUM *p = NULL;
+    BIGNUM *g = NULL;
+    EVP_PKEY_CTX *kgCtx = NULL;
+    EVP_PKEY *keyA = NULL;
+    EVP_PKEY *keyB = NULL;
+    unsigned char *secretPad = NULL;
+    unsigned char *secretNoPad = NULL;
+    size_t secretPadLen = 0;
+    size_t secretNoPadLen = 0;
+    const size_t maxLen = sizeof(dh_p);
+    int iter;
+    const int maxIter = 4096;
+    int hitShortCase = 0;
+
+    (void)data;
+
+    PRINT_MSG("Test DH secret front-padding via OSSL_EXCHANGE_PARAM_PAD");
+
+    dh = DH_new();
+    err = dh == NULL;
+    if (err == 0) {
+        p = BN_bin2bn(dh_p, sizeof(dh_p), NULL);
+        err = p == NULL;
+    }
+    if (err == 0) {
+        g = BN_bin2bn(dh_g, sizeof(dh_g), NULL);
+        err = g == NULL;
+    }
+    if (err == 0) {
+        err = DH_set0_pqg(dh, p, NULL, g) == 0;
+        if (err == 0) {
+            /* DH_set0_pqg takes ownership on success. */
+            p = NULL;
+            g = NULL;
+        }
+    }
+    if (err == 0) {
+        params = EVP_PKEY_new();
+        err = params == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_set1_DH(params, dh) != 1;
+    }
+
+    for (iter = 0; (err == 0) && (iter < maxIter); ++iter) {
+        /* Fresh key pair each iteration. */
+        EVP_PKEY_CTX_free(kgCtx);
+        EVP_PKEY_free(keyA);
+        EVP_PKEY_free(keyB);
+        kgCtx = NULL;
+        keyA = NULL;
+        keyB = NULL;
+
+        kgCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, params, NULL);
+        err = kgCtx == NULL;
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(kgCtx) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen(kgCtx, &keyA) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen(kgCtx, &keyB) != 1;
+        }
+
+        /* Derive without padding. */
+        if (err == 0) {
+            err = test_dh_derive_with_pad(wpLibCtx, keyA, keyB, 0,
+                &secretNoPad, &secretNoPadLen);
+        }
+        /* Natural length must never exceed the prime byte length. */
+        if (err == 0 && secretNoPadLen > maxLen) {
+            PRINT_ERR_MSG("Unpadded secret length %zu exceeds prime length %zu",
+                secretNoPadLen, maxLen);
+            err = 1;
+        }
+
+        /* Derive with padding using the same keys. */
+        if (err == 0) {
+            err = test_dh_derive_with_pad(wpLibCtx, keyA, keyB, 1,
+                &secretPad, &secretPadLen);
+        }
+        /* Padded length must always equal the prime byte length. */
+        if (err == 0 && secretPadLen != maxLen) {
+            PRINT_ERR_MSG("Padded secret length %zu != prime length %zu",
+                secretPadLen, maxLen);
+            err = 1;
+        }
+
+        /* When the natural length is shorter than the prime length, verify
+         * that the padded version is the unpadded version front-padded with
+         * zero bytes. */
+        if (err == 0 && secretNoPadLen < maxLen) {
+            size_t padBytes = maxLen - secretNoPadLen;
+            size_t i;
+
+            hitShortCase = 1;
+            for (i = 0; (err == 0) && (i < padBytes); ++i) {
+                if (secretPad[i] != 0) {
+                    PRINT_ERR_MSG("Padded secret byte %zu = 0x%02x, want 0",
+                        i, secretPad[i]);
+                    err = 1;
+                }
+            }
+            if (err == 0 && memcmp(secretPad + padBytes, secretNoPad,
+                    secretNoPadLen) != 0) {
+                PRINT_ERR_MSG("Padded tail does not match unpadded secret");
+                err = 1;
+            }
+        }
+
+        OPENSSL_free(secretNoPad);
+        OPENSSL_free(secretPad);
+        secretNoPad = NULL;
+        secretPad = NULL;
+
+        if (err == 0 && hitShortCase) {
+            break;
+        }
+    }
+
+    if (err == 0 && !hitShortCase) {
+        PRINT_ERR_MSG("Did not produce a short shared secret in %d iterations; "
+            "front-padding code path not exercised", maxIter);
+        err = 1;
+    }
+
+    OPENSSL_free(secretNoPad);
+    OPENSSL_free(secretPad);
+    EVP_PKEY_CTX_free(kgCtx);
+    EVP_PKEY_free(keyA);
+    EVP_PKEY_free(keyB);
+    EVP_PKEY_free(params);
+    BN_free(p);
+    BN_free(g);
+    DH_free(dh);
+
+    return err;
+}
+
+#if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
+/* Apply X9.63 KDF using OpenSSL's reference implementation. */
+static int test_dh_x963_kdf_ref(const unsigned char* secret, size_t secLen,
+    const char* mdName, const unsigned char* ukm, size_t ukmLen,
+    unsigned char* out, size_t outLen)
+{
+    int err = 0;
+    EVP_KDF *kdf = NULL;
+    EVP_KDF_CTX *kctx = NULL;
+    OSSL_PARAM params[4];
+    OSSL_PARAM *p = params;
+
+    kdf = EVP_KDF_fetch(osslLibCtx, OSSL_KDF_NAME_X963KDF, NULL);
+    err = kdf == NULL;
+    if (err == 0) {
+        kctx = EVP_KDF_CTX_new(kdf);
+        err = kctx == NULL;
+    }
+    if (err == 0) {
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
+            (char*)mdName, 0);
+        *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+            (unsigned char*)secret, secLen);
+        if (ukm != NULL && ukmLen > 0) {
+            *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
+                (unsigned char*)ukm, ukmLen);
+        }
+        *p = OSSL_PARAM_construct_end();
+
+        err = EVP_KDF_derive(kctx, out, outLen, params) <= 0;
+    }
+
+    EVP_KDF_CTX_free(kctx);
+    EVP_KDF_free(kdf);
+    return err;
+}
+
+/* Derive raw DH shared secret (no KDF) using wolfProvider. Caller frees. */
+static int test_dh_derive_raw(EVP_PKEY *key, EVP_PKEY *peerKey,
+    unsigned char **pSecret, size_t *pSecretLen)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    unsigned char *secret = NULL;
+    size_t len = 0;
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_set_peer(ctx, peerKey) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, NULL, &len) <= 0;
+    }
+    if (err == 0) {
+        secret = (unsigned char*)OPENSSL_malloc(len);
+        err = secret == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, secret, &len) <= 0;
+    }
+    if (err == 0) {
+        *pSecret = secret;
+        *pSecretLen = len;
+        secret = NULL;
+    }
+
+    OPENSSL_free(secret);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/* Derive via wolfProvider with X9.63 KDF parameters set. */
+static int test_dh_derive_with_x963(EVP_PKEY *key, EVP_PKEY *peerKey,
+    const char* mdName, size_t outLen, const unsigned char* ukm, size_t ukmLen,
+    unsigned char *out, size_t outBufLen)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[5];
+    OSSL_PARAM *p = params;
+    size_t derivedLen = outBufLen;
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_set_peer(ctx, peerKey) <= 0;
+    }
+    if (err == 0) {
+        /* wolfProvider maps the X942KDF-ASN1 type string to its internal X963
+         * KDF implementation (wc_X963_KDF). */
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_EXCHANGE_PARAM_KDF_TYPE,
+            (char*)OSSL_KDF_NAME_X942KDF_ASN1, 0);
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_EXCHANGE_PARAM_KDF_DIGEST,
+            (char*)mdName, 0);
+        *p++ = OSSL_PARAM_construct_size_t(OSSL_EXCHANGE_PARAM_KDF_OUTLEN,
+            &outLen);
+        if (ukm != NULL && ukmLen > 0) {
+            *p++ = OSSL_PARAM_construct_octet_string(
+                OSSL_EXCHANGE_PARAM_KDF_UKM, (unsigned char*)ukm, ukmLen);
+        }
+        *p = OSSL_PARAM_construct_end();
+
+        err = EVP_PKEY_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, out, &derivedLen) <= 0;
+    }
+    if (err == 0 && derivedLen != outLen) {
+        PRINT_ERR_MSG("KDF output length %zu != requested %zu", derivedLen,
+            outLen);
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/**
+ * Test DH key derivation through the X9.63 KDF path.
+ *
+ * The provider's WP_KDF_X963 branch in wp_dh_derive (1) allocates a temporary
+ * buffer sized to the prime length, (2) runs the raw DH agreement into it,
+ * (3) feeds the result through wc_X963_KDF, and (4) securely frees the
+ * temporary. We validate by computing the same KDF output independently via
+ * OpenSSL's X963KDF and comparing.
+ */
+int test_dh_x963_kdf(void *data)
+{
+    int err = 0;
+    DH *dh = NULL;
+    EVP_PKEY *params = NULL;
+    BIGNUM *p = NULL;
+    BIGNUM *g = NULL;
+    EVP_PKEY_CTX *kgCtx = NULL;
+    EVP_PKEY *keyA = NULL;
+    EVP_PKEY *keyB = NULL;
+    unsigned char *raw = NULL;
+    size_t rawLen = 0;
+    unsigned char wpOut[96];
+    unsigned char refOut[96];
+    unsigned char tooSmallBuf[8];
+    size_t tooSmallLen;
+    static const unsigned char ukm[] = {
+        0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6, 0x07, 0x18,
+        0x29, 0x3a, 0x4b, 0x5c, 0x6d, 0x7e, 0x8f, 0x90
+    };
+    static const struct {
+        const char* md;
+        size_t outLen;
+        int withUkm;
+    } cases[] = {
+        { "SHA256", 16, 0 },
+        { "SHA256", 32, 0 },
+        { "SHA256", 48, 0 },
+        { "SHA256", 64, 0 },
+        { "SHA256", 32, 1 },
+    };
+    size_t i;
+
+    (void)data;
+
+    PRINT_MSG("DH X9.63 KDF derivation");
+
+    dh = DH_new();
+    err = dh == NULL;
+    if (err == 0) {
+        p = BN_bin2bn(dh_p, sizeof(dh_p), NULL);
+        err = p == NULL;
+    }
+    if (err == 0) {
+        g = BN_bin2bn(dh_g, sizeof(dh_g), NULL);
+        err = g == NULL;
+    }
+    if (err == 0) {
+        err = DH_set0_pqg(dh, p, NULL, g) == 0;
+        if (err == 0) {
+            p = NULL;
+            g = NULL;
+        }
+    }
+    if (err == 0) {
+        params = EVP_PKEY_new();
+        err = params == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_set1_DH(params, dh) != 1;
+    }
+
+    /* Generate one fresh key pair for both ends. */
+    if (err == 0) {
+        kgCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, params, NULL);
+        err = kgCtx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(kgCtx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(kgCtx, &keyA) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(kgCtx, &keyB) != 1;
+    }
+
+    /* Snapshot the raw DH shared secret once - it's the same input the KDF
+     * branch feeds to wc_X963_KDF regardless of requested output length. */
+    if (err == 0) {
+        err = test_dh_derive_raw(keyA, keyB, &raw, &rawLen);
+    }
+
+    for (i = 0; (err == 0) && (i < sizeof(cases) / sizeof(cases[0])); ++i) {
+        const unsigned char *ukmPtr = cases[i].withUkm ? ukm : NULL;
+        size_t ukmLen = cases[i].withUkm ? sizeof(ukm) : 0;
+
+        memset(wpOut, 0, sizeof(wpOut));
+        memset(refOut, 0, sizeof(refOut));
+
+        err = test_dh_derive_with_x963(keyA, keyB, cases[i].md,
+            cases[i].outLen, ukmPtr, ukmLen, wpOut, sizeof(wpOut));
+        if (err == 0) {
+            err = test_dh_x963_kdf_ref(raw, rawLen, cases[i].md, ukmPtr,
+                ukmLen, refOut, cases[i].outLen);
+        }
+        if (err == 0 && memcmp(wpOut, refOut, cases[i].outLen) != 0) {
+            PRINT_ERR_MSG("X9.63 KDF output mismatch (md=%s outLen=%zu ukm=%d)",
+                cases[i].md, cases[i].outLen, cases[i].withUkm);
+            PRINT_BUFFER("wolfProvider", wpOut, cases[i].outLen);
+            PRINT_BUFFER("OpenSSL X963KDF", refOut, cases[i].outLen);
+            err = 1;
+        }
+        /* No bytes beyond the requested length should have been written. */
+        if (err == 0) {
+            size_t j;
+            for (j = cases[i].outLen; j < sizeof(wpOut); ++j) {
+                if (wpOut[j] != 0) {
+                    PRINT_ERR_MSG("KDF wrote past requested length at byte %zu",
+                        j);
+                    err = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    /* Failure mode: caller's buffer smaller than the requested KDF output.
+     * wp_dh_kdf_derive should return failure rather than overflow. */
+    if (err == 0) {
+        tooSmallLen = sizeof(tooSmallBuf);
+        if (test_dh_derive_with_x963(keyA, keyB, "SHA256", 32, NULL, 0,
+                tooSmallBuf, tooSmallLen) == 0) {
+            PRINT_ERR_MSG("DH X963 KDF derive accepted under-sized buffer");
+            err = 1;
+        }
+    }
+
+    OPENSSL_free(raw);
+    EVP_PKEY_CTX_free(kgCtx);
+    EVP_PKEY_free(keyA);
+    EVP_PKEY_free(keyB);
+    EVP_PKEY_free(params);
+    BN_free(p);
+    BN_free(g);
+    DH_free(dh);
+
+    return err;
+}
+#endif /* HAVE_X963_KDF && WP_HAVE_SHA256 */
+
 #endif /* WP_HAVE_DH */

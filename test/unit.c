@@ -304,6 +304,10 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_invalid_kdf_strings, NULL),
     TEST_DECL(test_dh_decode, NULL),
     TEST_DECL(test_dh_krb5_keygen, NULL),
+    TEST_DECL(test_dh_pad, NULL),
+#if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
+    TEST_DECL(test_dh_x963_kdf, NULL),
+#endif
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif
@@ -373,6 +377,9 @@ TEST_CASE test_case[] = {
     #endif
         TEST_DECL(test_ecdh_invalid_kdf_strings, NULL),
         TEST_DECL(test_ecdh_p256, NULL),
+        #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
+        TEST_DECL(test_ecdh_x963_kdf, NULL),
+        #endif
     #endif
     #ifdef WP_HAVE_ECDSA
         TEST_DECL(test_ecdsa_p256_pkey, NULL),
