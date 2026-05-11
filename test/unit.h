@@ -309,6 +309,9 @@ int test_dh_decode(void *data);
 int test_dh_get_params(void *data);
 int test_dh_krb5_keygen(void *data);
 int test_dh_pad(void *data);
+#if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
+int test_dh_x963_kdf(void *data);
+#endif
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC
