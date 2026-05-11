@@ -304,6 +304,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_invalid_kdf_strings, NULL),
     TEST_DECL(test_dh_decode, NULL),
     TEST_DECL(test_dh_krb5_keygen, NULL),
+    TEST_DECL(test_dh_fromdata_oversize, NULL),
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif
@@ -327,6 +328,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_load_key, NULL),
     TEST_DECL(test_rsa_load_cert, NULL),
     TEST_DECL(test_rsa_fromdata, NULL),
+    TEST_DECL(test_rsa_fromdata_oversize, NULL),
     TEST_DECL(test_rsa_decode_pkcs8, NULL),
     TEST_DECL(test_rsa_encode_pkcs8, NULL),
     TEST_DECL(test_rsa_null_init, NULL),
@@ -385,6 +387,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ec_auto_derive_pubkey, NULL),
     TEST_DECL(test_ec_null_init, NULL),
     TEST_DECL(test_ec_print_public, NULL),
+    TEST_DECL(test_ec_fromdata_oversize, NULL),
 #endif
 #ifdef WP_HAVE_EC_P384
     #ifdef WP_HAVE_ECKEYGEN
