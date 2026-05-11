@@ -374,6 +374,9 @@ TEST_CASE test_case[] = {
     #endif
         TEST_DECL(test_ecdh_invalid_kdf_strings, NULL),
         TEST_DECL(test_ecdh_p256, NULL),
+        #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
+        TEST_DECL(test_ecdh_x963_kdf, NULL),
+        #endif
     #endif
     #ifdef WP_HAVE_ECDSA
         TEST_DECL(test_ecdsa_p256_pkey, NULL),

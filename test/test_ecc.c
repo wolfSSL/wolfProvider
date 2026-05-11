@@ -906,6 +906,179 @@ int test_ecdh_invalid_kdf_strings(void *data)
 
     return err;
 }
+
+#if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
+/* Apply X9.63 KDF using OpenSSL's reference implementation so we can compare
+ * against wolfProvider's output. */
+static int test_ecdh_x963_kdf_ref(const unsigned char* secret, size_t secLen,
+    const char* mdName, const unsigned char* ukm, size_t ukmLen,
+    unsigned char* out, size_t outLen)
+{
+    int err = 0;
+    EVP_KDF *kdf = NULL;
+    EVP_KDF_CTX *kctx = NULL;
+    OSSL_PARAM params[4];
+    OSSL_PARAM *p = params;
+
+    kdf = EVP_KDF_fetch(osslLibCtx, OSSL_KDF_NAME_X963KDF, NULL);
+    err = kdf == NULL;
+    if (err == 0) {
+        kctx = EVP_KDF_CTX_new(kdf);
+        err = kctx == NULL;
+    }
+    if (err == 0) {
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
+            (char*)mdName, 0);
+        *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+            (unsigned char*)secret, secLen);
+        if (ukm != NULL && ukmLen > 0) {
+            *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
+                (unsigned char*)ukm, ukmLen);
+        }
+        *p = OSSL_PARAM_construct_end();
+
+        err = EVP_KDF_derive(kctx, out, outLen, params) <= 0;
+    }
+
+    EVP_KDF_CTX_free(kctx);
+    EVP_KDF_free(kdf);
+    return err;
+}
+
+/* Run wolfProvider's ECDH derive with X9.63 KDF parameters set, returning the
+ * KDF output. */
+static int test_ecdh_derive_with_x963(EVP_PKEY *key, EVP_PKEY *peerKey,
+    const char* mdName, size_t outLen, const unsigned char* ukm, size_t ukmLen,
+    unsigned char *out)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[5];
+    OSSL_PARAM *p = params;
+    size_t derivedLen = outLen;
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_set_peer(ctx, peerKey) != 1;
+    }
+    if (err == 0) {
+        /* wolfProvider currently maps the X942KDF-ASN1 type string to its
+         * internal X963 KDF implementation (wc_X963_KDF). */
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_EXCHANGE_PARAM_KDF_TYPE,
+            (char*)OSSL_KDF_NAME_X942KDF_ASN1, 0);
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_EXCHANGE_PARAM_KDF_DIGEST,
+            (char*)mdName, 0);
+        *p++ = OSSL_PARAM_construct_size_t(OSSL_EXCHANGE_PARAM_KDF_OUTLEN,
+            &outLen);
+        if (ukm != NULL && ukmLen > 0) {
+            *p++ = OSSL_PARAM_construct_octet_string(
+                OSSL_EXCHANGE_PARAM_KDF_UKM, (unsigned char*)ukm, ukmLen);
+        }
+        *p = OSSL_PARAM_construct_end();
+
+        err = EVP_PKEY_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, out, &derivedLen) != 1;
+    }
+    if (err == 0 && derivedLen != outLen) {
+        PRINT_ERR_MSG("KDF output length %zu != requested %zu", derivedLen,
+            outLen);
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+int test_ecdh_x963_kdf(void *data)
+{
+    int err = 0;
+    EVP_PKEY *keyA = NULL;
+    EVP_PKEY *keyB = NULL;
+    const unsigned char *p;
+    unsigned char wpOut[64];
+    unsigned char refOut[64];
+    static const unsigned char ukm[] = {
+        0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6, 0x07, 0x18,
+        0x29, 0x3a, 0x4b, 0x5c, 0x6d, 0x7e, 0x8f, 0x90
+    };
+    /* The X9.63 KDF requires (outLen + hashLen - 1)/hashLen counter blocks; we
+     * cover outLen < hashLen, outLen == hashLen, and outLen > hashLen so more
+     * than one counter iteration runs. */
+    static const struct {
+        const char* md;
+        size_t outLen;
+        int withUkm;
+    } cases[] = {
+        { "SHA256", 16, 0 },
+        { "SHA256", 32, 0 },
+        { "SHA256", 48, 0 },
+        { "SHA256", 32, 1 },
+    };
+    size_t i;
+
+    (void)data;
+
+    PRINT_MSG("ECDH X9.63 KDF derivation");
+
+    p = ecc_key_der_256;
+    keyA = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
+        wpLibCtx, NULL);
+    err = keyA == NULL;
+    if (err == 0) {
+        p = ecc_peerkey_der_256;
+        keyB = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p,
+            sizeof(ecc_peerkey_der_256), wpLibCtx, NULL);
+        err = keyB == NULL;
+    }
+
+    for (i = 0; (err == 0) && (i < sizeof(cases) / sizeof(cases[0])); ++i) {
+        const unsigned char *ukmPtr = cases[i].withUkm ? ukm : NULL;
+        size_t ukmLen = cases[i].withUkm ? sizeof(ukm) : 0;
+
+        memset(wpOut, 0, sizeof(wpOut));
+        memset(refOut, 0, sizeof(refOut));
+
+        err = test_ecdh_derive_with_x963(keyA, keyB, cases[i].md,
+            cases[i].outLen, ukmPtr, ukmLen, wpOut);
+        if (err == 0) {
+            err = test_ecdh_x963_kdf_ref(ecc_derived_256,
+                sizeof(ecc_derived_256), cases[i].md, ukmPtr, ukmLen, refOut,
+                cases[i].outLen);
+        }
+        if (err == 0 && memcmp(wpOut, refOut, cases[i].outLen) != 0) {
+            PRINT_ERR_MSG("X9.63 KDF output mismatch (md=%s outLen=%zu ukm=%d)",
+                cases[i].md, cases[i].outLen, cases[i].withUkm);
+            PRINT_BUFFER("wolfProvider", wpOut, cases[i].outLen);
+            PRINT_BUFFER("OpenSSL X963KDF", refOut, cases[i].outLen);
+            err = 1;
+        }
+        /* Any tail bytes beyond outLen must remain untouched - guards against
+         * the derive writing past the requested length. */
+        if (err == 0) {
+            size_t j;
+            for (j = cases[i].outLen; j < sizeof(wpOut); ++j) {
+                if (wpOut[j] != 0) {
+                    PRINT_ERR_MSG("KDF wrote past requested length at byte %zu",
+                        j);
+                    err = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    EVP_PKEY_free(keyA);
+    EVP_PKEY_free(keyB);
+
+    return err;
+}
+#endif /* HAVE_X963_KDF && WP_HAVE_SHA256 */
 #endif /* WP_HAVE_EC_P256 */
 
 #ifdef WP_HAVE_EC_P192

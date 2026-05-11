@@ -391,6 +391,9 @@ int test_ecdh_p224(void *data);
 #ifdef WP_HAVE_EC_P256
 int test_ecdh_invalid_kdf_strings(void *data);
 int test_ecdh_p256(void *data);
+#if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
+int test_ecdh_x963_kdf(void *data);
+#endif
 #endif /* WP_HAVE_EC_P256 */
 #ifdef WP_HAVE_EC_P384
 int test_ecdh_p384(void *data);
