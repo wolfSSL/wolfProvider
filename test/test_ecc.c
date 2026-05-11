@@ -2791,6 +2791,58 @@ int test_ec_print_public(void* data)
 
     return err;
 }
+
+/* Pass an oversize OSSL_PARAM (>1024 bytes) for the EC private key component
+ * to EVP_PKEY_fromdata so wp_mp_read_unsigned_bin_le (wp_params.c) hits its
+ * size-guard branch via wp_params_get_mp in wp_ecc_import_keypair. Expect
+ * failure rather than the stack buffer overflow that would happen without
+ * the guard. This path also covers ECDH, whose key import shares
+ * wp_ecc_kmgmt. */
+int test_ec_fromdata_oversize(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx_wolf = NULL;
+    EVP_PKEY *pkey_wolf = NULL;
+    unsigned char priv_oversize[2048];
+    char group_name[] = "prime256v1";
+    OSSL_PARAM params[3];
+    int status;
+
+    (void)data;
+    memset(priv_oversize, 0xAA, sizeof(priv_oversize));
+
+    PRINT_MSG("Testing EVP_PKEY_fromdata with oversize EC PRIV_KEY component");
+
+    ctx_wolf = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL);
+    if (ctx_wolf == NULL) {
+        err = 1;
+    }
+
+    if (err == 0) {
+        err |= EVP_PKEY_fromdata_init(ctx_wolf) != 1;
+    }
+
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+                                                     group_name, 0);
+        params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_PRIV_KEY,
+                                            priv_oversize,
+                                            sizeof(priv_oversize));
+        params[2] = OSSL_PARAM_construct_end();
+
+        status = EVP_PKEY_fromdata(ctx_wolf, &pkey_wolf, EVP_PKEY_KEYPAIR,
+                                   params);
+        if (status == 1) {
+            PRINT_MSG("EVP_PKEY_fromdata unexpectedly succeeded with 2048-byte"
+                      " EC PRIV_KEY");
+            err = 1;
+        }
+        EVP_PKEY_free(pkey_wolf);
+    }
+
+    EVP_PKEY_CTX_free(ctx_wolf);
+    return err;
+}
 #endif /* WP_HAVE_EC_P256 */
 
 #endif /* WP_HAVE_ECC */
