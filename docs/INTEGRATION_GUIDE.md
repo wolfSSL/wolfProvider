@@ -30,6 +30,7 @@ This retrieves dependencies (OpenSSL and wolfSSL) and compiles them as necessary
 | `--openssl-dir=/path` | Use existing OpenSSL installation |
 | `--replace-default` | Make wolfProvider the default provider |
 | `--enable-replace-default-testing` | Enable unit testing with replace-default |
+| `--enable-pqc` | Enable ML-KEM and ML-DSA post-quantum algorithms (adds `--enable-mlkem --enable-dilithium --enable-experimental` to wolfSSL). Requires wolfSSL post-v5.9.1-stable. |
 
 **Examples:**
 
@@ -82,6 +83,7 @@ sudo make install
 | `--enable-pwdbased` | PKCS#12 support |
 | `--enable-hmac-copy` | Faster repeated HMAC with same key (wolfSSL 5.7.8+) |
 | `--enable-sp=yes,asm --enable-sp-math-all` | SP Integer maths |
+| `--enable-mlkem --enable-dilithium --enable-experimental` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL post-v5.9.1-stable). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
 
 **Optional CPPFLAGS:**
 
@@ -148,6 +150,58 @@ This makes replace default mode useful for testing scenarios where you want to e
 **Warning:** This option patches OpenSSL to export internal symbols that are not part of the public API. This configuration:
 - Should only be used for development and testing
 - Is not suitable for production deployments
+
+---
+
+## Post-Quantum Cryptography (ML-KEM and ML-DSA)
+
+wolfProvider supports NIST's post-quantum algorithms via the wolfSSL backend:
+
+| Algorithm | Standard | Parameter Sets |
+|-----------|----------|----------------|
+| ML-KEM (key encapsulation) | FIPS 203 | ML-KEM-512, ML-KEM-768, ML-KEM-1024 |
+| ML-DSA (digital signature)  | FIPS 204 | ML-DSA-44, ML-DSA-65, ML-DSA-87 |
+
+ML-DSA uses pure mode with an empty context string (FIPS 204 sec 5.2, Algorithm 22) — interoperable with OpenSSL 3.5+'s native ML-DSA.
+
+### Requirements
+
+- **wolfSSL**: post-v5.9.1-stable (i.e. v5.9.2-stable or master). Older releases lack the `wc_MlDsaKey_*` and `wc_dilithium_sign_ctx_msg` API surface that wolfProvider's PQC code uses.
+- **OpenSSL**: any 3.x. OpenSSL 3.5+ is required only for cross-provider interop against its native ML-KEM/ML-DSA implementations.
+
+### Building with PQC
+
+```bash
+./scripts/build-wolfprovider.sh --enable-pqc
+```
+
+This adds `--enable-mlkem --enable-dilithium --enable-experimental` to the wolfSSL configure step. wolfProvider auto-detects the resulting `WOLFSSL_HAVE_MLKEM` / `HAVE_DILITHIUM` macros via `include/wolfprovider/settings.h` (gated on `__has_include` of the corresponding wolfSSL headers) and registers the six PQC algorithms.
+
+### Usage Example
+
+```bash
+# Generate an ML-DSA-65 key with wolfProvider
+OPENSSL_CONF=provider.conf openssl genpkey -algorithm ML-DSA-65 -out key.pem
+
+# Sign and verify with ML-DSA-65
+OPENSSL_CONF=provider.conf openssl pkeyutl -sign -inkey key.pem -in msg.bin -out sig.bin
+OPENSSL_CONF=provider.conf openssl pkeyutl -verify -pubin -inkey pub.pem -sigfile sig.bin -in msg.bin
+```
+
+The OpenSSL CLI can also enumerate available algorithms:
+
+```bash
+OPENSSL_CONF=provider.conf openssl list -kem-algorithms -provider libwolfprov
+OPENSSL_CONF=provider.conf openssl list -signature-algorithms -provider libwolfprov
+```
+
+### Validation
+
+A standalone three-way interop validator (`test/pqc_interop.test`) cross-checks every ML-KEM / ML-DSA combination against:
+- OpenSSL 3.5+'s native default provider
+- wolfSSL's `wc_*` APIs directly (no provider abstraction)
+
+This proves wolfProvider's raw-key, ciphertext, and signature bytes are FIPS 203 / 204 standards-compliant. The CI workflow `.github/workflows/wolfssl-versions-pqc.yml` runs this validator on every PR, plus a backward-compatibility build against pre-PQC wolfSSL to verify the no-symbol path still builds cleanly.
 
 ---
 
