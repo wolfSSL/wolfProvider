@@ -477,4 +477,19 @@ int test_des3_tls_cbc_bad_pad(void *data);
 #endif
 #endif
 
+#ifdef WP_HAVE_MLKEM
+int test_mlkem_keygen(void *data);
+int test_mlkem_encap_decap(void *data);
+int test_mlkem_decap_tampered_ct(void *data);
+int test_mlkem_decap_wrong_key(void *data);
+#endif
+
+#ifdef WP_HAVE_MLDSA
+int test_mldsa_keygen(void *data);
+int test_mldsa_sign_verify(void *data);
+int test_mldsa_verify_tampered_sig(void *data);
+int test_mldsa_verify_tampered_msg(void *data);
+int test_mldsa_verify_wrong_key(void *data);
+#endif
+
 #endif /* UNIT_H */

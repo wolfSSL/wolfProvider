@@ -478,6 +478,21 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_des3_tls_cbc_bad_pad, NULL),
     #endif
 #endif
+
+#ifdef WP_HAVE_MLKEM
+    TEST_DECL(test_mlkem_keygen, NULL),
+    TEST_DECL(test_mlkem_encap_decap, NULL),
+    TEST_DECL(test_mlkem_decap_tampered_ct, NULL),
+    TEST_DECL(test_mlkem_decap_wrong_key, NULL),
+#endif
+
+#ifdef WP_HAVE_MLDSA
+    TEST_DECL(test_mldsa_keygen, NULL),
+    TEST_DECL(test_mldsa_sign_verify, NULL),
+    TEST_DECL(test_mldsa_verify_tampered_sig, NULL),
+    TEST_DECL(test_mldsa_verify_tampered_msg, NULL),
+    TEST_DECL(test_mldsa_verify_wrong_key, NULL),
+#endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
 
