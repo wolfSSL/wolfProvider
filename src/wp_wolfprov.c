@@ -671,6 +671,14 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
     { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
       wp_mlkem1024_keymgmt_functions, "ML-KEM-1024" },
 #endif
+#ifdef WP_HAVE_MLDSA
+    { WP_NAMES_ML_DSA_44, WOLFPROV_PROPERTIES,
+      wp_mldsa44_keymgmt_functions, "ML-DSA-44" },
+    { WP_NAMES_ML_DSA_65, WOLFPROV_PROPERTIES,
+      wp_mldsa65_keymgmt_functions, "ML-DSA-65" },
+    { WP_NAMES_ML_DSA_87, WOLFPROV_PROPERTIES,
+      wp_mldsa87_keymgmt_functions, "ML-DSA-87" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -728,6 +736,14 @@ static const OSSL_ALGORITHM wolfprov_signature[] = {
 #ifdef WP_HAVE_CMAC
     { WP_NAMES_CMAC, WOLFPROV_PROPERTIES, wp_cmac_signature_functions,
       "" },
+#endif
+#ifdef WP_HAVE_MLDSA
+    { WP_NAMES_ML_DSA_44, WOLFPROV_PROPERTIES,
+      wp_mldsa_signature_functions, "" },
+    { WP_NAMES_ML_DSA_65, WOLFPROV_PROPERTIES,
+      wp_mldsa_signature_functions, "" },
+    { WP_NAMES_ML_DSA_87, WOLFPROV_PROPERTIES,
+      wp_mldsa_signature_functions, "" },
 #endif
 
     { NULL, NULL, NULL, NULL }
