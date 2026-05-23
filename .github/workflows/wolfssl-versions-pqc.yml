@@ -1,62 +1,108 @@
 name: wolfSSL Versions (PQC)
 
-# Backward-compatibility matrix for ML-KEM and ML-DSA.
+# Backward-compatibility matrix for ML-KEM and ML-DSA. Mirrors wolfTPM's
+# wolfssl-versions-pqc.yml pattern: a discover-versions job dynamically
+# resolves the latest -stable wolfSSL tag and decides if it is past the PQC
+# floor, then the build job runs three rows -- pre-PQC floor, dynamically
+# resolved latest -stable, and master.
 #
-# Three rows:
-#   - pre-PQC wolfSSL (e.g. v5.7.0-stable):
-#       wolfSSL is built without --enable-mlkem/--enable-dilithium. wolfProvider
-#       auto-detects via settings.h that PQC macros are undefined; the PQC
-#       source files compile to no-ops; the ML-KEM/ML-DSA tests are skipped.
-#       Proves the no-symbol path still builds and runs cleanly.
-#   - latest stable wolfSSL with PQC enabled:
-#       --enable-pqc is passed to scripts/build-wolfprovider.sh, which adds
-#       --enable-mlkem --enable-dilithium --enable-experimental to wolfSSL.
-#       wolfProvider's settings.h picks up WP_HAVE_MLKEM and WP_HAVE_MLDSA;
-#       the PQC tests run and must pass.
-#   - master wolfSSL with PQC enabled:
-#       Same as above against the development tip.
+# PQC_FLOOR is v5.9.1-stable: the wc_MlDsaKey_* / wc_dilithium_sign_ctx_msg
+# API that wolfProvider's PQC code depends on lands post-v5.9.1-stable
+# (wolfSSL PR #10436), so v5.9.2-stable+ is the first PQC-eligible release.
+# Older wolfSSL versions skip the PQC code paths via settings.h gating and
+# only verify the no-symbol path still builds.
 
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  pqc_version_test:
+  discover-versions:
+    name: Resolve wolfSSL version matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      latest-stable: ${{ steps.set-matrix.outputs.latest-stable }}
+    steps:
+      - name: Resolve latest -stable wolfSSL tag
+        id: set-matrix
+        run: |
+          set -euo pipefail
+          LATEST=$(git ls-remote --tags --refs \
+              https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
+              | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+          if [ -z "${LATEST:-}" ]; then
+            echo "::error::Could not resolve latest wolfSSL -stable tag"
+            exit 1
+          fi
+          echo "Latest stable wolfSSL: $LATEST"
+          echo "latest-stable=$LATEST" >> "$GITHUB_OUTPUT"
+          # Enable PQC when $LATEST is strictly newer than v5.9.1-stable
+          # (i.e. v5.9.2-stable, v5.10+, v6+, ...). Anything at or before
+          # the floor lacks the wc_MlDsaKey_* / wc_dilithium_sign_ctx_msg
+          # API and stays on the no-symbol path.
+          PQC_FLOOR="v5.9.1-stable"
+          if [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$LATEST" \
+                  | sort -V | tail -n1)" != "$PQC_FLOOR" ]; then
+            LATEST_PQC_ELIGIBLE=true
+          else
+            LATEST_PQC_ELIGIBLE=false
+          fi
+          echo "latest-stable PQC eligible: $LATEST_PQC_ELIGIBLE"
+          MATRIX=$(jq -nc \
+              --arg latest "$LATEST" \
+              --argjson latest_pqc "$LATEST_PQC_ELIGIBLE" '{
+            include: [
+              {"name":"pre-PQC (v5.8.0-stable, PQC disabled)",
+               "wolfssl-ref":"v5.8.0-stable","pqc":false},
+              {"name":("latest stable (" + $latest + ", PQC " +
+                       (if $latest_pqc then "enabled" else "disabled" end) + ")"),
+               "wolfssl-ref":$latest,"pqc":$latest_pqc},
+              {"name":"master (PQC enabled)",
+               "wolfssl-ref":"master","pqc":true}
+            ]
+          }')
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  pqc-build-test:
     name: ${{ matrix.name }}
+    needs: discover-versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: pre-PQC (v5.7.0-stable, PQC disabled)
-            wolfssl_ref: v5.7.0-stable
-            pqc: false
-          - name: latest stable (v5.8.4-stable, PQC enabled)
-            wolfssl_ref: v5.8.4-stable
-            pqc: true
-          - name: master (PQC enabled)
-            wolfssl_ref: master
-            pqc: true
+      matrix: ${{ fromJson(needs.discover-versions.outputs.matrix) }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Build and test wolfProvider (PQC=${{ matrix.pqc }})
+      # OpenSSL is pinned to 3.5.4 on every row so the cross-provider interop
+      # test can verify against the default provider's native ML-KEM/ML-DSA.
+      # OpenSSL 3.5 is the first release with native PQC support; older 3.x
+      # versions can build wolfProvider but the interop step would have
+      # nothing to compare against on the default-provider side.
+      - name: Build wolfProvider (PQC=${{ matrix.pqc }})
         run: |
           if [ "${{ matrix.pqc }}" = "true" ]; then
-            WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+            OPENSSL_TAG=openssl-3.5.4 \
+            WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
               ./scripts/build-wolfprovider.sh --enable-pqc
           else
-            WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+            OPENSSL_TAG=openssl-3.5.4 \
+            WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
               ./scripts/build-wolfprovider.sh
           fi
 
@@ -64,20 +110,23 @@ jobs:
         run: |
           if [ "${{ matrix.pqc }}" = "true" ]; then
             ./test/unit.test --list | grep -q 'test_mlkem_keygen' \
-              || { echo 'ERROR: PQC tests missing in PQC-enabled build'; exit 1; }
+              || { echo 'ERROR: PQC tests missing in PQC-enabled build'; \
+                   exit 1; }
             ./test/unit.test --list | grep -q 'test_mldsa_sign_verify' \
-              || { echo 'ERROR: ML-DSA tests missing in PQC-enabled build'; exit 1; }
+              || { echo 'ERROR: ML-DSA tests missing in PQC-enabled build'; \
+                   exit 1; }
           else
-            if ./test/unit.test --list | grep -qE 'test_mlkem|test_mldsa'; then
-              echo 'ERROR: PQC tests present in pre-PQC build (should be skipped)'
+            if ./test/unit.test --list | grep -qE 'test_mlkem|test_mldsa'; \
+            then
+              echo 'ERROR: PQC tests present in pre-PQC build (should skip)'
               exit 1
             fi
           fi
 
       # Three-way interop: wolfProvider <-> OpenSSL default <-> wolfSSL direct.
-      # Proves wolfProvider's raw-key, ciphertext, and signature bytes are
-      # FIPS 203/204 standards-compliant by cross-checking against two
-      # independent reference implementations.
+      # Only runs on PQC-enabled rows; OpenSSL 3.5+ has native ML-KEM/ML-DSA
+      # in the default provider, so this proves wolfProvider's bytes are
+      # FIPS 203/204 standards-compliant against two reference implementations.
       - name: Three-way PQC interop validation
         if: matrix.pqc == true
         run: |

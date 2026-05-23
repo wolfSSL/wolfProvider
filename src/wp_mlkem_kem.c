@@ -266,13 +266,13 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
 }
 
 /**
- * Get ctx params. None supported.
+ * Get ctx params. None supported; checks ctx is non-NULL to match other
+ * provider implementations.
  */
 static int wp_mlkem_kem_get_ctx_params(wp_MlKemCtx* ctx, OSSL_PARAM* params)
 {
-    (void)ctx;
     (void)params;
-    return 1;
+    return ctx != NULL;
 }
 
 static const OSSL_PARAM* wp_mlkem_kem_gettable_ctx_params(wp_MlKemCtx* ctx,
@@ -287,14 +287,14 @@ static const OSSL_PARAM* wp_mlkem_kem_gettable_ctx_params(wp_MlKemCtx* ctx,
 }
 
 /**
- * Set ctx params. None supported.
+ * Set ctx params. None supported; checks ctx is non-NULL to match other
+ * provider implementations.
  */
 static int wp_mlkem_kem_set_ctx_params(wp_MlKemCtx* ctx,
     const OSSL_PARAM params[])
 {
-    (void)ctx;
     (void)params;
-    return 1;
+    return ctx != NULL;
 }
 
 static const OSSL_PARAM* wp_mlkem_kem_settable_ctx_params(wp_MlKemCtx* ctx,

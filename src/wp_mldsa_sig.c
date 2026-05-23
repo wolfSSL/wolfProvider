@@ -371,6 +371,9 @@ static int wp_mldsa_digest_signverify_update(wp_MlDsaSigCtx* ctx,
 static int wp_mldsa_digest_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     size_t* sigLen, size_t sigSize)
 {
+    if (ctx == NULL) {
+        return 0;
+    }
     return wp_mldsa_sign(ctx, sig, sigLen, sigSize, ctx->mdBuf, ctx->mdLen);
 }
 
@@ -385,17 +388,20 @@ static int wp_mldsa_digest_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
 static int wp_mldsa_digest_verify_final(wp_MlDsaSigCtx* ctx,
     const unsigned char* sig, size_t sigLen)
 {
+    if (ctx == NULL) {
+        return 0;
+    }
     return wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
 }
 
 /**
- * Get ctx params. None supported.
+ * Get ctx params. None supported; checks ctx is non-NULL to match other
+ * provider implementations.
  */
 static int wp_mldsa_get_ctx_params(wp_MlDsaSigCtx* ctx, OSSL_PARAM* params)
 {
-    (void)ctx;
     (void)params;
-    return 1;
+    return ctx != NULL;
 }
 
 static const OSSL_PARAM* wp_mldsa_gettable_ctx_params(wp_MlDsaSigCtx* ctx,
@@ -410,14 +416,14 @@ static const OSSL_PARAM* wp_mldsa_gettable_ctx_params(wp_MlDsaSigCtx* ctx,
 }
 
 /**
- * Set ctx params. None supported.
+ * Set ctx params. None supported; checks ctx is non-NULL to match other
+ * provider implementations.
  */
 static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
     const OSSL_PARAM params[])
 {
-    (void)ctx;
     (void)params;
-    return 1;
+    return ctx != NULL;
 }
 
 static const OSSL_PARAM* wp_mldsa_settable_ctx_params(wp_MlDsaSigCtx* ctx,
