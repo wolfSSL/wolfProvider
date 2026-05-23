@@ -74,6 +74,16 @@ jobs:
             fi
           fi
 
+      # Three-way interop: wolfProvider <-> OpenSSL default <-> wolfSSL direct.
+      # Proves wolfProvider's raw-key, ciphertext, and signature bytes are
+      # FIPS 203/204 standards-compliant by cross-checking against two
+      # independent reference implementations.
+      - name: Three-way PQC interop validation
+        if: matrix.pqc == true
+        run: |
+          LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib" \
+            ./test/pqc_interop.test
+
       - name: Print errors on failure
         if: ${{ failure() }}
         run: |

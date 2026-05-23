@@ -267,8 +267,11 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     }
     if (ok) {
         word32 outLen = sigSz;
-        rc = wc_dilithium_sign_msg(msg, (word32)msgLen, sig, &outLen,
-            (MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), &ctx->rng);
+        /* FIPS 204 sec 5.2 (Algorithm 22): pure ML-DSA prepends 0x00, ctxLen,
+         * and ctx before the message. OpenSSL uses an empty context by
+         * default; use the ctx variant with empty ctx to interop. */
+        rc = wc_dilithium_sign_ctx_msg(NULL, 0, msg, (word32)msgLen, sig,
+            &outLen, (MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), &ctx->rng);
         if (rc != 0) {
             ok = 0;
         }
@@ -300,8 +303,9 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
         return 0;
     }
 
-    rc = wc_dilithium_verify_msg(sig, (word32)sigLen, msg, (word32)msgLen,
-        &res, (MlDsaKey*)wp_mldsa_get_key(ctx->mldsa));
+    /* Match the sign path: FIPS 204 pure ML-DSA with empty context. */
+    rc = wc_dilithium_verify_ctx_msg(sig, (word32)sigLen, NULL, 0, msg,
+        (word32)msgLen, &res, (MlDsaKey*)wp_mldsa_get_key(ctx->mldsa));
     if ((rc != 0) || (res != 1)) {
         ok = 0;
     }
