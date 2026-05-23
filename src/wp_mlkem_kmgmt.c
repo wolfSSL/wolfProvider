@@ -698,13 +698,18 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
                 p->return_size = outLen;
             }
             else if (mlkem->hasPub) {
-                rc = wc_MlKemKey_EncodePublicKey(&mlkem->key,
-                    (unsigned char*)p->data, outLen);
-                if (rc != 0) {
+                if (p->data_size < outLen) {
                     ok = 0;
                 }
                 else {
-                    p->return_size = outLen;
+                    rc = wc_MlKemKey_EncodePublicKey(&mlkem->key,
+                        (unsigned char*)p->data, outLen);
+                    if (rc != 0) {
+                        ok = 0;
+                    }
+                    else {
+                        p->return_size = outLen;
+                    }
                 }
             }
         }
@@ -717,13 +722,18 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
                 p->return_size = outLen;
             }
             else if (mlkem->hasPriv) {
-                rc = wc_MlKemKey_EncodePrivateKey(&mlkem->key,
-                    (unsigned char*)p->data, outLen);
-                if (rc != 0) {
+                if (p->data_size < outLen) {
                     ok = 0;
                 }
                 else {
-                    p->return_size = outLen;
+                    rc = wc_MlKemKey_EncodePrivateKey(&mlkem->key,
+                        (unsigned char*)p->data, outLen);
+                    if (rc != 0) {
+                        ok = 0;
+                    }
+                    else {
+                        p->return_size = outLen;
+                    }
                 }
             }
         }
@@ -886,8 +896,11 @@ static void wp_mlkem_gen_cleanup(wp_MlKemGenCtx* ctx)
 /**
  * Return the algorithm name for OSSL_FUNC_KEYMGMT_QUERY_OPERATION_NAME.
  *
+ * ML-KEM has no associated operation name lookup; return NULL so OpenSSL
+ * falls back to the algorithm name from the dispatch table.
+ *
  * @param [in] op  Operation type. Unused.
- * @return  Empty string (default).
+ * @return  NULL.
  */
 static const char* wp_mlkem_query_operation_name(int op)
 {

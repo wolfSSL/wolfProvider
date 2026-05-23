@@ -131,14 +131,27 @@ static int evp_pkey_export_raw(EVP_PKEY* src, unsigned char** pub,
     if (priv != NULL) { *priv = NULL; *privLen = 0; }
 
     if (EVP_PKEY_get_octet_string_param(src, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0,
-            pubLen) != 1) return 0;
+            pubLen) != 1) {
+        return 0;
+    }
     *pub = OPENSSL_malloc(*pubLen);
+    if (*pub == NULL) {
+        return 0;
+    }
     if (EVP_PKEY_get_octet_string_param(src, OSSL_PKEY_PARAM_PUB_KEY, *pub,
-            *pubLen, pubLen) != 1) return 0;
+            *pubLen, pubLen) != 1) {
+        OPENSSL_free(*pub); *pub = NULL; *pubLen = 0;
+        return 0;
+    }
     if (priv != NULL) {
         if (EVP_PKEY_get_octet_string_param(src, OSSL_PKEY_PARAM_PRIV_KEY,
                 NULL, 0, privLen) == 1) {
             *priv = OPENSSL_malloc(*privLen);
+            if (*priv == NULL) {
+                OPENSSL_free(*pub); *pub = NULL; *pubLen = 0;
+                *privLen = 0;
+                return 0;
+            }
             if (EVP_PKEY_get_octet_string_param(src, OSSL_PKEY_PARAM_PRIV_KEY,
                     *priv, *privLen, privLen) != 1) {
                 OPENSSL_free(*priv); *priv = NULL; *privLen = 0;
@@ -205,7 +218,12 @@ static int evp_encap(OSSL_LIB_CTX* lib, EVP_PKEY* k, unsigned char** ct,
     if (!e || EVP_PKEY_encapsulate_init(e, NULL) != 1) goto end;
     if (EVP_PKEY_encapsulate(e, NULL, ctLen, NULL, ssLen) != 1) goto end;
     *ct = OPENSSL_malloc(*ctLen);
+    if (*ct == NULL) goto end;
     ok = (EVP_PKEY_encapsulate(e, *ct, ctLen, ss, ssLen) == 1);
+    if (!ok) {
+        OPENSSL_free(*ct);
+        *ct = NULL;
+    }
 end:
     EVP_PKEY_CTX_free(e);
     return ok;
@@ -240,12 +258,18 @@ static int wc_mlkem_encap_direct(const char* alg, const unsigned char* pub,
     if (rc != 0) { wc_MlKemKey_Free(&key); return 0; }
     rc = wc_MlKemKey_CipherTextSize(&key, &ctSize);
     if (rc != 0) { wc_MlKemKey_Free(&key); return 0; }
-    *ct = OPENSSL_malloc(ctSize);
-    *ctLen = ctSize;
     if (ssCap < WC_ML_KEM_SS_SZ) { wc_MlKemKey_Free(&key); return 0; }
+    *ct = OPENSSL_malloc(ctSize);
+    if (*ct == NULL) { wc_MlKemKey_Free(&key); return 0; }
+    *ctLen = ctSize;
     rc = wc_MlKemKey_Encapsulate(&key, *ct, ss, &g_rng);
     wc_MlKemKey_Free(&key);
-    return rc == 0;
+    if (rc != 0) {
+        OPENSSL_free(*ct);
+        *ct = NULL;
+        return 0;
+    }
+    return 1;
 }
 
 /* wolfSSL-direct decapsulate. */
@@ -284,10 +308,16 @@ static int evp_sign(OSSL_LIB_CTX* lib, EVP_PKEY* k, const unsigned char* msg,
 {
     int ok = 0;
     EVP_MD_CTX* s = EVP_MD_CTX_new();
+    if (s == NULL) return 0;
     if (EVP_DigestSignInit_ex(s, NULL, NULL, lib, NULL, k, NULL) != 1) goto end;
     if (EVP_DigestSign(s, NULL, sigLen, msg, msgLen) != 1) goto end;
     *sig = OPENSSL_malloc(*sigLen);
+    if (*sig == NULL) goto end;
     ok = (EVP_DigestSign(s, *sig, sigLen, msg, msgLen) == 1);
+    if (!ok) {
+        OPENSSL_free(*sig);
+        *sig = NULL;
+    }
 end:
     EVP_MD_CTX_free(s);
     return ok;
@@ -298,6 +328,7 @@ static int evp_verify(OSSL_LIB_CTX* lib, EVP_PKEY* k, const unsigned char* msg,
 {
     int ok = 0;
     EVP_MD_CTX* v = EVP_MD_CTX_new();
+    if (v == NULL) return 0;
     if (EVP_DigestVerifyInit_ex(v, NULL, NULL, lib, NULL, k, NULL) != 1)
         goto end;
     ok = (EVP_DigestVerify(v, sig, sigLen, msg, msgLen) == 1);
@@ -327,6 +358,7 @@ static int wc_mldsa_sign_direct(const char* alg, const unsigned char* priv,
     sigSz = wc_dilithium_sig_size(&key);
     if (sigSz <= 0) { wc_dilithium_free(&key); return 0; }
     *sig = OPENSSL_malloc(sigSz);
+    if (*sig == NULL) { wc_dilithium_free(&key); return 0; }
     outLen = (word32)sigSz;
     rc = wc_dilithium_sign_ctx_msg(NULL, 0, msg, (word32)msgLen, *sig, &outLen,
         &key, &g_rng);

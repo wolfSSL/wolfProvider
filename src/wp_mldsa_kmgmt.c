@@ -689,13 +689,19 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
                 p->return_size = outLen;
             }
             else if (mldsa->hasPub) {
-                rc = wc_dilithium_export_public(&mldsa->key,
-                    (unsigned char*)p->data, &outLen);
-                if (rc != 0) {
+                if (p->data_size < outLen) {
                     ok = 0;
                 }
                 else {
-                    p->return_size = outLen;
+                    outLen = (word32)p->data_size;
+                    rc = wc_dilithium_export_public(&mldsa->key,
+                        (unsigned char*)p->data, &outLen);
+                    if (rc != 0) {
+                        ok = 0;
+                    }
+                    else {
+                        p->return_size = outLen;
+                    }
                 }
             }
         }
@@ -708,13 +714,19 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
                 p->return_size = outLen;
             }
             else if (mldsa->hasPriv) {
-                rc = wc_dilithium_export_private(&mldsa->key,
-                    (unsigned char*)p->data, &outLen);
-                if (rc != 0) {
+                if (p->data_size < outLen) {
                     ok = 0;
                 }
                 else {
-                    p->return_size = outLen;
+                    outLen = (word32)p->data_size;
+                    rc = wc_dilithium_export_private(&mldsa->key,
+                        (unsigned char*)p->data, &outLen);
+                    if (rc != 0) {
+                        ok = 0;
+                    }
+                    else {
+                        p->return_size = outLen;
+                    }
                 }
             }
         }
