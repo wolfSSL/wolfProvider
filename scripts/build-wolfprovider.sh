@@ -32,6 +32,8 @@ show_help() {
   echo "  --debug-silent             Debug logging compiled in but silent by default. Use WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS env vars to enable at runtime. Requires --debug."
   echo "  --enable-seed-src          Enable SEED-SRC entropy source with /dev/urandom caching for fork-safe entropy."
   echo "                             Note: This also enables WC_RNG_SEED_CB in wolfSSL."
+  echo "  --enable-pqc               Build wolfSSL with ML-KEM and ML-DSA post-quantum algorithms enabled."
+  echo "                             Adds --enable-mlkem --enable-dilithium --enable-experimental to wolfSSL configure."
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -51,6 +53,7 @@ show_help() {
   echo "  WOLFPROV_FIPS_BASELINE     If set to 1, applies FIPS baseline patch to OpenSSL (mutually exclusive with WOLFPROV_REPLACE_DEFAULT)"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
   echo "  WOLFPROV_SEED_SRC          If set to 1, enables SEED-SRC with /dev/urandom caching (also enables WC_RNG_SEED_CB in wolfSSL)"
+  echo "  WOLFPROV_PQC               If set to 1, enables ML-KEM and ML-DSA post-quantum algorithms in wolfSSL"
   echo ""
 }
 
@@ -145,6 +148,9 @@ for arg in "$@"; do
             ;;
         --enable-seed-src)
             WOLFPROV_SEED_SRC=1
+            ;;
+        --enable-pqc)
+            WOLFPROV_PQC=1
             ;;
         *)
             args_wrong+="$arg, "

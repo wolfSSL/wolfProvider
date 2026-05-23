@@ -169,6 +169,18 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
+#ifdef WOLFSSL_HAVE_MLKEM
+    #define WP_HAVE_MLKEM
+    #define WP_HAVE_ML_KEM_512
+    #define WP_HAVE_ML_KEM_768
+    #define WP_HAVE_ML_KEM_1024
+#endif
+#ifdef HAVE_DILITHIUM
+    #define WP_HAVE_MLDSA
+    #define WP_HAVE_ML_DSA_44
+    #define WP_HAVE_ML_DSA_65
+    #define WP_HAVE_ML_DSA_87
+#endif
 #if !defined(NO_AES_CBC) && (defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC))
     #define WP_HAVE_KBKDF
 #endif

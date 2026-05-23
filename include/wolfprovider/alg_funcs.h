@@ -170,6 +170,16 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_DH             "DH"
 #define WP_NAMES_DHX            "DHX"
 
+/* ML-KEM names (NIST FIPS 203). */
+#define WP_NAMES_ML_KEM_512     "ML-KEM-512"
+#define WP_NAMES_ML_KEM_768     "ML-KEM-768"
+#define WP_NAMES_ML_KEM_1024    "ML-KEM-1024"
+
+/* ML-DSA names (NIST FIPS 204). */
+#define WP_NAMES_ML_DSA_44      "ML-DSA-44"
+#define WP_NAMES_ML_DSA_65      "ML-DSA-65"
+#define WP_NAMES_ML_DSA_87      "ML-DSA-87"
+
 /* DRBG names. */
 #define WP_NAMES_SEED_SRC       "SEED-SRC"
 #define WP_NAMES_CTR_DRBG       "CTR-DRBG"
@@ -325,12 +335,14 @@ extern const OSSL_DISPATCH wp_ed25519_signature_functions[];
 extern const OSSL_DISPATCH wp_ed448_signature_functions[];
 extern const OSSL_DISPATCH wp_hmac_signature_functions[];
 extern const OSSL_DISPATCH wp_cmac_signature_functions[];
+extern const OSSL_DISPATCH wp_mldsa_signature_functions[];
 
 /* Asymmetric cipher implementations. */
 extern const OSSL_DISPATCH wp_rsa_asym_cipher_functions[];
 
 /* KEM implementations. */
 extern const OSSL_DISPATCH wp_rsa_asym_kem_functions[];
+extern const OSSL_DISPATCH wp_mlkem_asym_kem_functions[];
 
 /* Key Management implementations. */
 extern const OSSL_DISPATCH wp_rsa_keymgmt_functions[];
@@ -344,6 +356,12 @@ extern const OSSL_DISPATCH wp_dh_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_hmac_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_cmac_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_kdf_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlkem512_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlkem768_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlkem1024_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_keymgmt_functions[];
 
 /* Key exchange implementations. */
 extern const OSSL_DISPATCH wp_ecdh_keyexch_functions[];
