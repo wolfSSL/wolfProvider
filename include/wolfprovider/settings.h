@@ -183,17 +183,40 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
+/* PQC: gate on both wolfSSL feature macro AND header availability. On wolfSSL
+ * master with --enable-all-crypto (no --enable-experimental), the feature
+ * macros can be defined in options.h while the mlkem.h / dilithium.h headers
+ * are not installed, so probe the headers too. */
 #ifdef WOLFSSL_HAVE_MLKEM
-    #define WP_HAVE_MLKEM
-    #define WP_HAVE_ML_KEM_512
-    #define WP_HAVE_ML_KEM_768
-    #define WP_HAVE_ML_KEM_1024
+    #if defined(__has_include)
+        #if __has_include(<wolfssl/wolfcrypt/mlkem.h>) && \
+            __has_include(<wolfssl/wolfcrypt/wc_mlkem.h>)
+            #define WP_HAVE_MLKEM
+            #define WP_HAVE_ML_KEM_512
+            #define WP_HAVE_ML_KEM_768
+            #define WP_HAVE_ML_KEM_1024
+        #endif
+    #else
+        #define WP_HAVE_MLKEM
+        #define WP_HAVE_ML_KEM_512
+        #define WP_HAVE_ML_KEM_768
+        #define WP_HAVE_ML_KEM_1024
+    #endif
 #endif
 #ifdef HAVE_DILITHIUM
-    #define WP_HAVE_MLDSA
-    #define WP_HAVE_ML_DSA_44
-    #define WP_HAVE_ML_DSA_65
-    #define WP_HAVE_ML_DSA_87
+    #if defined(__has_include)
+        #if __has_include(<wolfssl/wolfcrypt/dilithium.h>)
+            #define WP_HAVE_MLDSA
+            #define WP_HAVE_ML_DSA_44
+            #define WP_HAVE_ML_DSA_65
+            #define WP_HAVE_ML_DSA_87
+        #endif
+    #else
+        #define WP_HAVE_MLDSA
+        #define WP_HAVE_ML_DSA_44
+        #define WP_HAVE_ML_DSA_65
+        #define WP_HAVE_ML_DSA_87
+    #endif
 #endif
 #if !defined(NO_AES_CBC) && (defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC))
     #define WP_HAVE_KBKDF
