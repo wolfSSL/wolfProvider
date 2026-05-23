@@ -123,6 +123,21 @@ jobs:
       # Only runs on PQC-enabled rows; OpenSSL 3.5+ has native ML-KEM/ML-DSA
       # in the default provider, so this proves wolfProvider's bytes are
       # FIPS 203/204 standards-compliant against two reference implementations.
+      - name: Diagnose OpenSSL default provider PQC support
+        if: matrix.pqc == true
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/openssl-install/lib"
+          echo "--- OpenSSL version ---"
+          ./openssl-install/bin/openssl version -a
+          echo "--- libraries linked into pqc_interop.test ---"
+          ldd ./test/pqc_interop.test | grep -E "libcrypto|libssl" || true
+          echo "--- default provider KEM algorithms ---"
+          ./openssl-install/bin/openssl list -kem-algorithms -provider default \
+            | grep -i ml-kem || echo "NO ML-KEM in default provider"
+          echo "--- default provider signature algorithms ---"
+          ./openssl-install/bin/openssl list -signature-algorithms -provider default \
+            | grep -i ml-dsa || echo "NO ML-DSA in default provider"
+
       - name: Three-way PQC interop validation
         if: matrix.pqc == true
         run: |
