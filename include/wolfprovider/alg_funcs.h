@@ -232,6 +232,26 @@ void wp_ecx_free(wp_Ecx* ecx);
 void* wp_ecx_get_key(wp_Ecx* ecx);
 wolfSSL_Mutex* wp_ecx_get_mutex(wp_Ecx* ecx);
 
+/* Internal ML-KEM types and functions. */
+typedef struct wp_MlKem wp_MlKem;
+typedef struct wp_MlKemData wp_MlKemData;
+
+int wp_mlkem_up_ref(wp_MlKem* mlkem);
+void wp_mlkem_free(wp_MlKem* mlkem);
+void* wp_mlkem_get_key(wp_MlKem* mlkem);
+const wp_MlKemData* wp_mlkem_get_data(const wp_MlKem* mlkem);
+word32 wp_mlkem_data_ct_size(const wp_MlKemData* data);
+word32 wp_mlkem_data_ss_size(const wp_MlKemData* data);
+
+/* Internal ML-DSA types and functions. */
+typedef struct wp_MlDsa wp_MlDsa;
+
+int wp_mldsa_up_ref(wp_MlDsa* mldsa);
+void wp_mldsa_free(wp_MlDsa* mldsa);
+void* wp_mldsa_get_key(wp_MlDsa* mldsa);
+int wp_mldsa_get_level(const wp_MlDsa* mldsa);
+int wp_mldsa_get_sig_size(const wp_MlDsa* mldsa);
+
 /* Internal DH types and functions. */
 typedef struct wp_Dh wp_Dh;
 
