@@ -65,16 +65,19 @@
 #define WP_NAME "libwolfprov"
 
 static OSSL_LIB_CTX* wp_ctx;
-static OSSL_LIB_CTX* oss_ctx;
+/* oss_ctx is NULL = use OpenSSL's global default library context. The global
+ * ctx auto-loads the default provider on first use, so we don't have to
+ * explicitly load it (which can run into per-ctx algorithm registration
+ * quirks across OpenSSL builds). wolfProvider stays in its own isolated
+ * wp_ctx with an explicit search path. */
+#define oss_ctx ((OSSL_LIB_CTX*)NULL)
 static OSSL_PROVIDER* wp_prov;
-static OSSL_PROVIDER* def_prov;
 static WC_RNG g_rng;
 
 static int load_all(const char* wp_path)
 {
     wp_ctx = OSSL_LIB_CTX_new();
-    oss_ctx = OSSL_LIB_CTX_new();
-    if (wp_ctx == NULL || oss_ctx == NULL) return 0;
+    if (wp_ctx == NULL) return 0;
 
     OSSL_PROVIDER_set_default_search_path(wp_ctx, wp_path);
     wp_prov = OSSL_PROVIDER_load(wp_ctx, WP_NAME);
@@ -83,9 +86,12 @@ static int load_all(const char* wp_path)
         ERR_print_errors_fp(stderr);
         return 0;
     }
-    def_prov = OSSL_PROVIDER_load(oss_ctx, "default");
-    if (def_prov == NULL) {
-        fprintf(stderr, "Failed to load OpenSSL default provider\n");
+    /* Sanity check: the global default provider should advertise ML-KEM-512
+     * when running against OpenSSL 3.5+. Fail fast with a clear message if
+     * not (e.g. when the wrong libcrypto is loaded at runtime). */
+    if (!OSSL_PROVIDER_available(NULL, "default")) {
+        fprintf(stderr, "OpenSSL default provider unavailable in global "
+            "context\n");
         return 0;
     }
     if (wc_InitRng(&g_rng) != 0) {
@@ -99,9 +105,7 @@ static void unload_all(void)
 {
     wc_FreeRng(&g_rng);
     if (wp_prov) OSSL_PROVIDER_unload(wp_prov);
-    if (def_prov) OSSL_PROVIDER_unload(def_prov);
     if (wp_ctx) OSSL_LIB_CTX_free(wp_ctx);
-    if (oss_ctx) OSSL_LIB_CTX_free(oss_ctx);
 }
 
 /* Map "ML-KEM-512/768/1024" to wolfSSL type enum. */
