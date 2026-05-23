@@ -175,8 +175,9 @@
  * are not installed, so probe the headers too. */
 #ifdef WOLFSSL_HAVE_MLKEM
     #if defined(__has_include)
-        #if __has_include(<wolfssl/wolfcrypt/mlkem.h>) && \
-            __has_include(<wolfssl/wolfcrypt/wc_mlkem.h>)
+        /* wc_mlkem.h is present in both v5.9.1-stable (alongside mlkem.h)
+         * and on master (where mlkem.h was removed). Probe wc_mlkem.h only. */
+        #if __has_include(<wolfssl/wolfcrypt/wc_mlkem.h>)
             #define WP_HAVE_MLKEM
             #define WP_HAVE_ML_KEM_512
             #define WP_HAVE_ML_KEM_768

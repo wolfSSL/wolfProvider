@@ -58,7 +58,6 @@
 
 #if defined(WP_HAVE_MLKEM) && defined(WP_HAVE_MLDSA)
 
-#include <wolfssl/wolfcrypt/mlkem.h>
 #include <wolfssl/wolfcrypt/wc_mlkem.h>
 #include <wolfssl/wolfcrypt/dilithium.h>
 #include <wolfssl/wolfcrypt/random.h>
