@@ -665,19 +665,19 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
 
 #ifdef WP_HAVE_MLKEM
     { WP_NAMES_ML_KEM_512, WOLFPROV_PROPERTIES,
-      wp_mlkem512_keymgmt_functions, "ML-KEM-512" },
+      wp_mlkem512_keymgmt_functions, "" },
     { WP_NAMES_ML_KEM_768, WOLFPROV_PROPERTIES,
-      wp_mlkem768_keymgmt_functions, "ML-KEM-768" },
+      wp_mlkem768_keymgmt_functions, "" },
     { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
-      wp_mlkem1024_keymgmt_functions, "ML-KEM-1024" },
+      wp_mlkem1024_keymgmt_functions, "" },
 #endif
 #ifdef WP_HAVE_MLDSA
     { WP_NAMES_ML_DSA_44, WOLFPROV_PROPERTIES,
-      wp_mldsa44_keymgmt_functions, "ML-DSA-44" },
+      wp_mldsa44_keymgmt_functions, "" },
     { WP_NAMES_ML_DSA_65, WOLFPROV_PROPERTIES,
-      wp_mldsa65_keymgmt_functions, "ML-DSA-65" },
+      wp_mldsa65_keymgmt_functions, "" },
     { WP_NAMES_ML_DSA_87, WOLFPROV_PROPERTIES,
-      wp_mldsa87_keymgmt_functions, "ML-DSA-87" },
+      wp_mldsa87_keymgmt_functions, "" },
 #endif
 
     { NULL, NULL, NULL, NULL }

@@ -62,6 +62,11 @@ typedef struct wp_MlDsaSigCtx {
  * @param [in]      dataLen Length of data in bytes.
  * @return  1 on success, 0 on failure.
  */
+/* Upper bound on the accumulated message buffer (64 MiB). ML-DSA messages
+ * are typically small (handshake transcripts, certificates); a cap prevents
+ * a hostile caller from driving OOM via unbounded digest_sign_update. */
+#define WP_MLDSA_BUF_MAX (64UL * 1024UL * 1024UL)
+
 static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
     size_t dataLen)
 {
@@ -71,6 +76,9 @@ static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
 
     needed = ctx->mdLen + dataLen;
     if (needed < ctx->mdLen) {
+        ok = 0;
+    }
+    if (ok && (needed > WP_MLDSA_BUF_MAX)) {
         ok = 0;
     }
     if (ok && (needed > ctx->mdCap)) {
@@ -165,7 +173,7 @@ static wp_MlDsaSigCtx* wp_mldsa_dupctx(wp_MlDsaSigCtx* srcCtx)
 {
     wp_MlDsaSigCtx* dstCtx = NULL;
 
-    if (!wolfssl_prov_is_running()) {
+    if ((!wolfssl_prov_is_running()) || (srcCtx == NULL)) {
         return NULL;
     }
 
@@ -265,6 +273,11 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     if (*sigLen < sigSz) {
         ok = 0;
     }
+    /* wolfSSL's dilithium API takes a 32-bit message length. Reject >4 GiB
+     * messages explicitly rather than silently truncating. */
+    if (ok && (msgLen > 0xFFFFFFFFU)) {
+        ok = 0;
+    }
     if (ok) {
         word32 outLen = sigSz;
         /* FIPS 204 sec 5.2 (Algorithm 22): pure ML-DSA prepends 0x00, ctxLen,
@@ -300,6 +313,11 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     int res = 0;
 
     if ((ctx == NULL) || (ctx->mldsa == NULL)) {
+        return 0;
+    }
+    /* wolfSSL's dilithium API takes 32-bit lengths. Reject oversize inputs
+     * explicitly rather than silently truncating. */
+    if ((sigLen > 0xFFFFFFFFU) || (msgLen > 0xFFFFFFFFU)) {
         return 0;
     }
 

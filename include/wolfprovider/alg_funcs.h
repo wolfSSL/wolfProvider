@@ -241,7 +241,9 @@ void wp_mlkem_free(wp_MlKem* mlkem);
 void* wp_mlkem_get_key(wp_MlKem* mlkem);
 const wp_MlKemData* wp_mlkem_get_data(const wp_MlKem* mlkem);
 word32 wp_mlkem_data_ct_size(const wp_MlKemData* data);
-word32 wp_mlkem_data_ss_size(const wp_MlKemData* data);
+/* ML-KEM shared secret size is a FIPS 203 constant (32 bytes) independent
+ * of the parameter set. */
+#define WP_MLKEM_SS_SIZE 32
 
 /* Internal ML-DSA types and functions. */
 typedef struct wp_MlDsa wp_MlDsa;
