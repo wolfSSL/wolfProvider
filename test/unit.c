@@ -490,6 +490,7 @@ TEST_CASE test_case[] = {
 
 #ifdef WP_HAVE_MLKEM
     TEST_DECL(test_mlkem_keygen, NULL),
+    TEST_DECL(test_mlkem_import_export_roundtrip, NULL),
     TEST_DECL(test_mlkem_encap_decap, NULL),
     TEST_DECL(test_mlkem_decap_tampered_ct, NULL),
     TEST_DECL(test_mlkem_decap_wrong_key, NULL),
@@ -497,6 +498,7 @@ TEST_CASE test_case[] = {
 
 #ifdef WP_HAVE_MLDSA
     TEST_DECL(test_mldsa_keygen, NULL),
+    TEST_DECL(test_mldsa_import_export_roundtrip, NULL),
     TEST_DECL(test_mldsa_sign_verify, NULL),
     TEST_DECL(test_mldsa_verify_tampered_sig, NULL),
     TEST_DECL(test_mldsa_verify_tampered_msg, NULL),

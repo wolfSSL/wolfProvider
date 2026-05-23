@@ -154,6 +154,109 @@ int test_mlkem_keygen(void* data)
 }
 
 /**
+ * Test ML-KEM raw key import/export round-trip.
+ *
+ * For each level: keygen, export both pub and priv via EVP_PKEY_todata,
+ * import into a fresh EVP_PKEY via EVP_PKEY_fromdata, re-export, and verify
+ * the bytes match exactly. Proves the OSSL_PARAM marshaling for raw keys is
+ * lossless in both directions.
+ */
+int test_mlkem_import_export_roundtrip(void* data)
+{
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k1 = NULL;
+    EVP_PKEY* k2 = NULL;
+    EVP_PKEY_CTX* ctx = NULL;
+    OSSL_PARAM* params = NULL;
+    unsigned char* pub1 = NULL;
+    unsigned char* pub2 = NULL;
+    unsigned char* priv1 = NULL;
+    unsigned char* priv2 = NULL;
+    size_t pub1Len = 0, pub2Len = 0, priv1Len = 0, priv2Len = 0;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < MLKEM_LEVEL_COUNT); i++) {
+        const mlkem_test_level* lvl = &mlkem_levels[i];
+        PRINT_MSG("Import/export roundtrip %s", lvl->name);
+
+        err = mlkem_keygen(lvl->name, &k1);
+        if (err == 0) {
+            err = mlkem_get_pub(k1, &pub1, &pub1Len);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_octet_string_param(k1, OSSL_PKEY_PARAM_PRIV_KEY,
+                NULL, 0, &priv1Len) != 1;
+        }
+        if (err == 0) {
+            priv1 = (unsigned char*)OPENSSL_malloc(priv1Len);
+            err = (priv1 == NULL);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_octet_string_param(k1, OSSL_PKEY_PARAM_PRIV_KEY,
+                priv1, priv1Len, &priv1Len) != 1;
+        }
+
+        if (err == 0) {
+            ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, lvl->name, NULL);
+            err = (ctx == NULL) || EVP_PKEY_fromdata_init(ctx) != 1;
+        }
+        if (err == 0) {
+            OSSL_PARAM_BLD* bld = OSSL_PARAM_BLD_new();
+            err = (bld == NULL)
+                || OSSL_PARAM_BLD_push_octet_string(bld,
+                    OSSL_PKEY_PARAM_PUB_KEY, pub1, pub1Len) != 1
+                || OSSL_PARAM_BLD_push_octet_string(bld,
+                    OSSL_PKEY_PARAM_PRIV_KEY, priv1, priv1Len) != 1;
+            if (err == 0) {
+                params = OSSL_PARAM_BLD_to_param(bld);
+                err = (params == NULL);
+            }
+            OSSL_PARAM_BLD_free(bld);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_fromdata(ctx, &k2, EVP_PKEY_KEYPAIR, params) != 1;
+        }
+        if (err == 0) {
+            err = mlkem_get_pub(k2, &pub2, &pub2Len);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_octet_string_param(k2, OSSL_PKEY_PARAM_PRIV_KEY,
+                NULL, 0, &priv2Len) != 1;
+        }
+        if (err == 0) {
+            priv2 = (unsigned char*)OPENSSL_malloc(priv2Len);
+            err = (priv2 == NULL);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_octet_string_param(k2, OSSL_PKEY_PARAM_PRIV_KEY,
+                priv2, priv2Len, &priv2Len) != 1;
+        }
+        if (err == 0) {
+            err = (pub1Len != pub2Len) ||
+                (memcmp(pub1, pub2, pub1Len) != 0);
+            if (err) PRINT_ERR_MSG("Public key roundtrip mismatch");
+        }
+        if (err == 0) {
+            err = (priv1Len != priv2Len) ||
+                (memcmp(priv1, priv2, priv1Len) != 0);
+            if (err) PRINT_ERR_MSG("Private key roundtrip mismatch");
+        }
+
+        OPENSSL_free(pub1); pub1 = NULL;
+        OPENSSL_free(pub2); pub2 = NULL;
+        OPENSSL_clear_free(priv1, priv1Len); priv1 = NULL; priv1Len = 0;
+        OPENSSL_clear_free(priv2, priv2Len); priv2 = NULL; priv2Len = 0;
+        OSSL_PARAM_free(params); params = NULL;
+        EVP_PKEY_CTX_free(ctx); ctx = NULL;
+        EVP_PKEY_free(k1); k1 = NULL;
+        EVP_PKEY_free(k2); k2 = NULL;
+    }
+    return err;
+}
+
+/**
  * Test ML-KEM encapsulate / decapsulate round trip via EVP_PKEY API.
  */
 int test_mlkem_encap_decap(void* data)
