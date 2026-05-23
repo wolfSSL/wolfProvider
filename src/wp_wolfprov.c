@@ -663,6 +663,15 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
     { WP_NAMES_TLS1_3_KDF, WOLFPROV_PROPERTIES, wp_kdf_keymgmt_functions,
       "HKDF" },
 
+#ifdef WP_HAVE_MLKEM
+    { WP_NAMES_ML_KEM_512, WOLFPROV_PROPERTIES,
+      wp_mlkem512_keymgmt_functions, "ML-KEM-512" },
+    { WP_NAMES_ML_KEM_768, WOLFPROV_PROPERTIES,
+      wp_mlkem768_keymgmt_functions, "ML-KEM-768" },
+    { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
+      wp_mlkem1024_keymgmt_functions, "ML-KEM-1024" },
+#endif
+
     { NULL, NULL, NULL, NULL }
 };
 
@@ -741,6 +750,14 @@ static const OSSL_ALGORITHM wolfprov_asym_kem[] = {
 #ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WOLFPROV_PROPERTIES, wp_rsa_asym_kem_functions,
       "" },
+#endif
+#ifdef WP_HAVE_MLKEM
+    { WP_NAMES_ML_KEM_512, WOLFPROV_PROPERTIES,
+      wp_mlkem_asym_kem_functions, "" },
+    { WP_NAMES_ML_KEM_768, WOLFPROV_PROPERTIES,
+      wp_mlkem_asym_kem_functions, "" },
+    { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
+      wp_mlkem_asym_kem_functions, "" },
 #endif
     { NULL, NULL, NULL, NULL }
 };
