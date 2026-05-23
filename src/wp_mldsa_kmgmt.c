@@ -874,18 +874,6 @@ static void wp_mldsa_gen_cleanup(wp_MlDsaGenCtx* ctx)
     }
 }
 
-/**
- * Return the algorithm name for OSSL_FUNC_KEYMGMT_QUERY_OPERATION_NAME.
- *
- * @param [in] op  Operation type. Unused.
- * @return  NULL (default).
- */
-static const char* wp_mldsa_query_operation_name(int op)
-{
-    (void)op;
-    return NULL;
-}
-
 /* Per-level new() and gen_init() trampolines. */
 
 static wp_MlDsa* wp_mldsa44_new(WOLFPROV_CTX* provCtx)
@@ -901,6 +889,24 @@ static wp_MlDsa* wp_mldsa65_new(WOLFPROV_CTX* provCtx)
 static wp_MlDsa* wp_mldsa87_new(WOLFPROV_CTX* provCtx)
 {
     return wp_mldsa_new(provCtx, &mldsa87Data);
+}
+
+static const char* wp_mldsa44_query_operation_name(int op)
+{
+    (void)op;
+    return "ML-DSA-44";
+}
+
+static const char* wp_mldsa65_query_operation_name(int op)
+{
+    (void)op;
+    return "ML-DSA-65";
+}
+
+static const char* wp_mldsa87_query_operation_name(int op)
+{
+    (void)op;
+    return "ML-DSA-87";
 }
 
 static wp_MlDsaGenCtx* wp_mldsa44_gen_init(WOLFPROV_CTX* provCtx,
@@ -958,7 +964,7 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
     { OSSL_FUNC_KEYMGMT_EXPORT_TYPES,                                          \
         (DFUNC)wp_mldsa_export_types                           },              \
     { OSSL_FUNC_KEYMGMT_QUERY_OPERATION_NAME,                                  \
-        (DFUNC)wp_mldsa_query_operation_name                   },              \
+        (DFUNC)wp_##alg##_query_operation_name                 },              \
     { 0, NULL }                                                                \
 };
 

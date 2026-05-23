@@ -180,6 +180,12 @@ static wp_MlDsaSigCtx* wp_mldsa_dupctx(wp_MlDsaSigCtx* srcCtx)
         }
         dstCtx->mldsa = srcCtx->mldsa;
     }
+    if (srcCtx->mdLen > 0) {
+        if (!wp_mldsa_buf_append(dstCtx, srcCtx->mdBuf, srcCtx->mdLen)) {
+            wp_mldsa_freectx(dstCtx);
+            return NULL;
+        }
+    }
     return dstCtx;
 }
 
