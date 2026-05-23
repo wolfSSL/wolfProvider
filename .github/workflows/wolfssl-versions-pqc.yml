@@ -1,0 +1,82 @@
+name: wolfSSL Versions (PQC)
+
+# Backward-compatibility matrix for ML-KEM and ML-DSA.
+#
+# Three rows:
+#   - pre-PQC wolfSSL (e.g. v5.7.0-stable):
+#       wolfSSL is built without --enable-mlkem/--enable-dilithium. wolfProvider
+#       auto-detects via settings.h that PQC macros are undefined; the PQC
+#       source files compile to no-ops; the ML-KEM/ML-DSA tests are skipped.
+#       Proves the no-symbol path still builds and runs cleanly.
+#   - latest stable wolfSSL with PQC enabled:
+#       --enable-pqc is passed to scripts/build-wolfprovider.sh, which adds
+#       --enable-mlkem --enable-dilithium --enable-experimental to wolfSSL.
+#       wolfProvider's settings.h picks up WP_HAVE_MLKEM and WP_HAVE_MLDSA;
+#       the PQC tests run and must pass.
+#   - master wolfSSL with PQC enabled:
+#       Same as above against the development tip.
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pqc_version_test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pre-PQC (v5.7.0-stable, PQC disabled)
+            wolfssl_ref: v5.7.0-stable
+            pqc: false
+          - name: latest stable (v5.8.4-stable, PQC enabled)
+            wolfssl_ref: v5.8.4-stable
+            pqc: true
+          - name: master (PQC enabled)
+            wolfssl_ref: master
+            pqc: true
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build and test wolfProvider (PQC=${{ matrix.pqc }})
+        run: |
+          if [ "${{ matrix.pqc }}" = "true" ]; then
+            WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+              ./scripts/build-wolfprovider.sh --enable-pqc
+          else
+            WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+              ./scripts/build-wolfprovider.sh
+          fi
+
+      - name: Confirm PQC tests present (or absent) as expected
+        run: |
+          if [ "${{ matrix.pqc }}" = "true" ]; then
+            ./test/unit.test --list | grep -q 'test_mlkem_keygen' \
+              || { echo 'ERROR: PQC tests missing in PQC-enabled build'; exit 1; }
+            ./test/unit.test --list | grep -q 'test_mldsa_sign_verify' \
+              || { echo 'ERROR: ML-DSA tests missing in PQC-enabled build'; exit 1; }
+          else
+            if ./test/unit.test --list | grep -qE 'test_mlkem|test_mldsa'; then
+              echo 'ERROR: PQC tests present in pre-PQC build (should be skipped)'
+              exit 1
+            fi
+          fi
+
+      - name: Print errors on failure
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ]; then
+            cat test-suite.log
+          fi
