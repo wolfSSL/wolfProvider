@@ -31,7 +31,6 @@
 
 #ifdef WP_HAVE_MLKEM
 
-#include <wolfssl/wolfcrypt/mlkem.h>
 #include <wolfssl/wolfcrypt/wc_mlkem.h>
 
 /** Supported selections (key parts) in this key manager for ML-KEM. */

@@ -25,7 +25,7 @@
 
 #ifdef WP_HAVE_MLKEM
 
-#include <wolfssl/wolfcrypt/mlkem.h>
+#include <wolfssl/wolfcrypt/wc_mlkem.h>
 
 /* Per-level metadata. */
 typedef struct mlkem_test_level {
@@ -53,7 +53,7 @@ static const mlkem_test_level mlkem_levels[] = {
  * @param [out] pkey  Generated EVP_PKEY (caller frees).
  * @return  0 on success, non-zero on failure.
  */
-static int mlkem_keygen(const char* name, EVP_PKEY** pkey)
+static int wp_test_mlkem_keygen(const char* name, EVP_PKEY** pkey)
 {
     int err = 0;
     EVP_PKEY_CTX* ctx = NULL;
@@ -120,9 +120,9 @@ int test_mlkem_keygen(void* data)
         const mlkem_test_level* lvl = &mlkem_levels[i];
         PRINT_MSG("Keygen %s", lvl->name);
 
-        err = mlkem_keygen(lvl->name, &pkey1);
+        err = wp_test_mlkem_keygen(lvl->name, &pkey1);
         if (err == 0) {
-            err = mlkem_keygen(lvl->name, &pkey2);
+            err = wp_test_mlkem_keygen(lvl->name, &pkey2);
         }
         if (err == 0) {
             err = mlkem_get_pub(pkey1, &pub1, &pub1Len);
@@ -181,7 +181,7 @@ int test_mlkem_import_export_roundtrip(void* data)
         const mlkem_test_level* lvl = &mlkem_levels[i];
         PRINT_MSG("Import/export roundtrip %s", lvl->name);
 
-        err = mlkem_keygen(lvl->name, &k1);
+        err = wp_test_mlkem_keygen(lvl->name, &k1);
         if (err == 0) {
             err = mlkem_get_pub(k1, &pub1, &pub1Len);
         }
@@ -279,7 +279,7 @@ int test_mlkem_encap_decap(void* data)
         const mlkem_test_level* lvl = &mlkem_levels[i];
         PRINT_MSG("Encap/Decap %s", lvl->name);
 
-        err = mlkem_keygen(lvl->name, &pkey);
+        err = wp_test_mlkem_keygen(lvl->name, &pkey);
 
         if (err == 0) {
             ectx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
@@ -357,7 +357,7 @@ int test_mlkem_decap_tampered_ct(void* data)
         const mlkem_test_level* lvl = &mlkem_levels[i];
         PRINT_MSG("Decap tampered ct %s", lvl->name);
 
-        err = mlkem_keygen(lvl->name, &pkey);
+        err = wp_test_mlkem_keygen(lvl->name, &pkey);
         if (err == 0) {
             ectx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
             err = (ectx == NULL);
@@ -431,9 +431,9 @@ int test_mlkem_decap_wrong_key(void* data)
         const mlkem_test_level* lvl = &mlkem_levels[i];
         PRINT_MSG("Decap wrong key %s", lvl->name);
 
-        err = mlkem_keygen(lvl->name, &keyA);
+        err = wp_test_mlkem_keygen(lvl->name, &keyA);
         if (err == 0) {
-            err = mlkem_keygen(lvl->name, &keyB);
+            err = wp_test_mlkem_keygen(lvl->name, &keyB);
         }
         if (err == 0) {
             ectx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, keyA, NULL);

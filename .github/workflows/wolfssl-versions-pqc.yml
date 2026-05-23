@@ -104,22 +104,20 @@ jobs:
               ./scripts/build-wolfprovider.sh
           fi
 
-      - name: Confirm PQC tests present (or absent) as expected
+      # On PQC-enabled rows the PQC tests must be present. We do NOT assert
+      # absence on the no-PQC rows because v5.9.x's --enable-all-crypto now
+      # auto-enables MLKEM/DILITHIUM, so the "latest stable" row will pick up
+      # PQC at the wolfSSL level even without --enable-pqc. wolfProvider
+      # auto-detects and compiles in the PQC code in that case, which is fine.
+      - name: Confirm PQC tests present on PQC-enabled rows
+        if: matrix.pqc == true
         run: |
-          if [ "${{ matrix.pqc }}" = "true" ]; then
-            ./test/unit.test --list | grep -q 'test_mlkem_keygen' \
-              || { echo 'ERROR: PQC tests missing in PQC-enabled build'; \
-                   exit 1; }
-            ./test/unit.test --list | grep -q 'test_mldsa_sign_verify' \
-              || { echo 'ERROR: ML-DSA tests missing in PQC-enabled build'; \
-                   exit 1; }
-          else
-            if ./test/unit.test --list | grep -qE 'test_mlkem|test_mldsa'; \
-            then
-              echo 'ERROR: PQC tests present in pre-PQC build (should skip)'
-              exit 1
-            fi
-          fi
+          ./test/unit.test --list | grep -q 'test_mlkem_keygen' \
+            || { echo 'ERROR: PQC tests missing in PQC-enabled build'; \
+                 exit 1; }
+          ./test/unit.test --list | grep -q 'test_mldsa_sign_verify' \
+            || { echo 'ERROR: ML-DSA tests missing in PQC-enabled build'; \
+                 exit 1; }
 
       # Three-way interop: wolfProvider <-> OpenSSL default <-> wolfSSL direct.
       # Only runs on PQC-enabled rows; OpenSSL 3.5+ has native ML-KEM/ML-DSA
