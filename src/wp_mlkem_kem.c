@@ -95,7 +95,7 @@ static wp_MlKemCtx* wp_mlkem_kem_dupctx(wp_MlKemCtx* srcCtx)
 {
     wp_MlKemCtx* dstCtx = NULL;
 
-    if (!wolfssl_prov_is_running()) {
+    if ((!wolfssl_prov_is_running()) || (srcCtx == NULL)) {
         return NULL;
     }
 
@@ -179,9 +179,12 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
 
     data = wp_mlkem_get_data(ctx->mlkem);
     ctSize = wp_mlkem_data_ct_size(data);
-    ssSize = wp_mlkem_data_ss_size(data);
+    ssSize = WP_MLKEM_SS_SIZE;
 
-    if ((out == NULL) || (secret == NULL)) {
+    /* Size-only query: out == NULL with outLen/secretLen set per OpenSSL
+     * KEM encapsulate contract. Mixed-NULL is a caller bug, not a size
+     * query, so reject it explicitly. */
+    if (out == NULL) {
         if (outLen != NULL) {
             *outLen = ctSize;
         }
@@ -189,6 +192,9 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
             *secretLen = ssSize;
         }
         return 1;
+    }
+    if (secret == NULL) {
+        return 0;
     }
 
     if (ok && (*outLen < ctSize)) {
@@ -236,7 +242,7 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
     }
 
     data = wp_mlkem_get_data(ctx->mlkem);
-    ssSize = wp_mlkem_data_ss_size(data);
+    ssSize = WP_MLKEM_SS_SIZE;
     ctSize = wp_mlkem_data_ct_size(data);
 
     if (out == NULL) {

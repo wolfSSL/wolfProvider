@@ -290,19 +290,22 @@ static wp_MlDsa* wp_mldsa_dup(const wp_MlDsa* src, int selection)
     word32 privLen;
     int rc;
     int ok = 1;
-
-    (void)selection;
+    int dupPub;
+    int dupPriv;
 
     if (!wolfssl_prov_is_running() || (src == NULL)) {
         return NULL;
     }
+    dupPub = ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && src->hasPub;
+    dupPriv = ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
+              && src->hasPriv;
 
     dst = wp_mldsa_new(src->provCtx, src->data);
     if (dst == NULL) {
         return NULL;
     }
 
-    if (src->hasPub) {
+    if (dupPub) {
         pubLen = src->data->pubKeySize;
         pubBuf = (unsigned char*)OPENSSL_malloc(pubLen);
         if (pubBuf == NULL) {
@@ -328,7 +331,7 @@ static wp_MlDsa* wp_mldsa_dup(const wp_MlDsa* src, int selection)
         pubBuf = NULL;
     }
 
-    if (ok && src->hasPriv) {
+    if (ok && dupPriv) {
         privLen = src->data->privKeySize;
         privBuf = (unsigned char*)OPENSSL_malloc(privLen);
         if (privBuf == NULL) {
@@ -449,6 +452,34 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
         }
         OPENSSL_free(bufA);
         OPENSSL_free(bufB);
+        bufA = NULL;
+        bufB = NULL;
+    }
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+        lenA = a->data->privKeySize;
+        lenB = b->data->privKeySize;
+        bufA = (unsigned char*)OPENSSL_malloc(lenA);
+        bufB = (unsigned char*)OPENSSL_malloc(lenB);
+        if ((bufA == NULL) || (bufB == NULL)) {
+            ok = 0;
+        }
+        if (ok) {
+            rc = wc_dilithium_export_private((MlDsaKey*)&a->key, bufA, &lenA);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            rc = wc_dilithium_export_private((MlDsaKey*)&b->key, bufB, &lenB);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok && ((lenA != lenB) || (XMEMCMP(bufA, bufB, lenA) != 0))) {
+            ok = 0;
+        }
+        OPENSSL_clear_free(bufA, lenA);
+        OPENSSL_clear_free(bufB, lenB);
     }
     return ok;
 }
@@ -470,6 +501,8 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
     unsigned char* pubData = NULL;
     size_t privLen = 0;
     size_t pubLen = 0;
+    unsigned char* derivedPub = NULL;
+    word32 derivedPubLen = 0;
 
     if (!wolfssl_prov_is_running() || (mldsa == NULL)) {
         ok = 0;
@@ -490,6 +523,18 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
             }
             if (ok) {
                 mldsa->hasPriv = 1;
+                /* FIPS 204 raw private key embeds the public seed; probe
+                 * whether wolfSSL populated the public portion as a side
+                 * effect of import_private. If so, set hasPub so downstream
+                 * tools (e.g. openssl pkey -in priv.der) can emit SPKI. */
+                derivedPubLen = mldsa->data->pubKeySize;
+                derivedPub = (unsigned char*)OPENSSL_malloc(derivedPubLen);
+                if (derivedPub != NULL) {
+                    if (wc_dilithium_export_public(&mldsa->key, derivedPub,
+                            &derivedPubLen) == 0) {
+                        mldsa->hasPub = 1;
+                    }
+                }
             }
         }
     }
@@ -497,6 +542,16 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
         if (!wp_params_get_octet_string_ptr(params, OSSL_PKEY_PARAM_PUB_KEY,
                 &pubData, &pubLen)) {
             ok = 0;
+        }
+        /* Consistency check: if both priv and pub were supplied AND priv
+         * import gave us a derived pub, the supplied pub must match.
+         * Rejects attacker-supplied or corrupted mismatched keypairs. */
+        if (ok && (pubData != NULL) && (privData != NULL)
+                && (derivedPub != NULL) && mldsa->hasPub) {
+            if ((derivedPubLen != pubLen) ||
+                    (XMEMCMP(derivedPub, pubData, pubLen) != 0)) {
+                ok = 0;
+            }
         }
         if (ok && (pubData != NULL)) {
             rc = wc_dilithium_import_public(pubData, (word32)pubLen,
@@ -512,6 +567,7 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
     if (ok && (privData == NULL) && (pubData == NULL)) {
         ok = 0;
     }
+    OPENSSL_free(derivedPub);
     return ok;
 }
 
@@ -662,6 +718,10 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
     int rc;
     OSSL_PARAM* p;
 
+    if (mldsa == NULL) {
+        return 0;
+    }
+
     p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_BITS);
     if ((p != NULL) &&
             !OSSL_PARAM_set_int(p, (int)mldsa->data->pubKeySize * 8)) {
@@ -704,6 +764,10 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
                     }
                 }
             }
+            else {
+                /* Buffer supplied but no public key available. */
+                p->return_size = 0;
+            }
         }
     }
     if (ok) {
@@ -728,6 +792,10 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
                         p->return_size = outLen;
                     }
                 }
+            }
+            else {
+                /* Buffer supplied but no private key available. */
+                p->return_size = 0;
             }
         }
     }
