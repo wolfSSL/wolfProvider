@@ -235,6 +235,11 @@ install_wolfssl() {
                 fi
                 if [ $RET_CODE != 0 ]; then
                     printf "ERROR checking out FIPS (return code: $RET_CODE)\n"
+                    if [ -f "$LOG_FILE" ]; then
+                        printf "\n--- %s output: ---\n" "$fips_check_script"
+                        cat "$LOG_FILE"
+                        printf "--- end %s output ---\n\n" "$fips_check_script"
+                    fi
                     rm -rf ${WOLFSSL_INSTALL_DIR}
                     do_cleanup
                     exit 1
