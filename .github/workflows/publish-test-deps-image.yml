@@ -1,0 +1,59 @@
+name: Publish test-deps image
+
+# Builds docker/wolfprovider-test-deps/Dockerfile and pushes it to
+# ghcr.io/wolfssl/wolfprovider-test-deps:bookworm.
+#
+# Fires when the Dockerfile (or this workflow file) changes on master.
+# The pushed package stays private -- consumer workflows running on
+# wolfSSL/wolfProvider use the canonical GITHUB_TOKEN, which has read
+# access to the org's private packages.
+
+on:
+  push:
+    branches: [ 'master', 'main' ]
+    paths:
+      - 'docker/wolfprovider-test-deps/**'
+      - '.github/workflows/publish-test-deps-image.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: publish-test-deps-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    # Only the canonical repo's runner has a token authorized to push
+    # to ghcr.io/wolfssl/*. Forks won't have that scope, so skip.
+    if: github.repository == 'wolfSSL/wolfProvider'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/wolfprovider-test-deps
+          file: docker/wolfprovider-test-deps/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+            ghcr.io/wolfssl/wolfprovider-test-deps:bookworm-${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+          cache-to: type=inline
