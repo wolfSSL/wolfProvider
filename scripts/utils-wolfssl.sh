@@ -22,7 +22,22 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-general.sh
 
 WOLFSSL_GIT=${WOLFSSL_GIT:-"https://github.com/wolfSSL/wolfssl.git"}
-WOLFSSL_TAG=${WOLFSSL_TAG:-"v5.8.4-stable"}
+# Resolve WOLFSSL_TAG dynamically so we don't have to hand-bump on every release.
+# Order: explicit WOLFSSL_TAG (caller override) -> WOLFSSL_LATEST (Jenkins "Resolve
+# versions" stage already sets this with zero extra HTTP cost) -> GitHub releases
+# API (for local runs without Jenkins) -> hardcoded floor as a last-resort safety
+# net in case GitHub is unreachable.
+if [ -z "$WOLFSSL_TAG" ]; then
+    if [ -n "$WOLFSSL_LATEST" ]; then
+        WOLFSSL_TAG="$WOLFSSL_LATEST"
+    else
+        WOLFSSL_TAG=$(curl -fsSL https://api.github.com/repos/wolfSSL/wolfssl/releases/latest 2>/dev/null \
+            | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+            | head -1 \
+            | sed -E 's/.*"([^"]+)"$/\1/')
+    fi
+fi
+WOLFSSL_TAG="${WOLFSSL_TAG:-v5.9.1-stable}"
 WOLFSSL_SOURCE_DIR=${SCRIPT_DIR}/../wolfssl-source
 WOLFSSL_INSTALL_DIR=${SCRIPT_DIR}/../wolfssl-install
 WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
@@ -235,6 +250,13 @@ install_wolfssl() {
                 fi
                 if [ $RET_CODE != 0 ]; then
                     printf "ERROR checking out FIPS (return code: $RET_CODE)\n"
+                    if [ -f "$LOG_FILE" ]; then
+                        echo ""
+                        echo "==> $fips_check_script output:"
+                        cat "$LOG_FILE"
+                        echo "==> end $fips_check_script output"
+                        echo ""
+                    fi
                     rm -rf ${WOLFSSL_INSTALL_DIR}
                     do_cleanup
                     exit 1
