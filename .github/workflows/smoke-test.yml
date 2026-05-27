@@ -22,8 +22,14 @@ concurrency:
   group: smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# _discover-versions.yml (the reusable workflow we call below) declares
+# permissions: { contents: read, packages: read } for its `oras login
+# ghcr.io` step. Workflow-level permissions clamp every job including
+# reusable workflows, so we must grant packages:read here or the
+# discover_versions job startup_failures before any container spawns.
 permissions:
   contents: read
+  packages: read
 
 jobs:
   discover_versions:
