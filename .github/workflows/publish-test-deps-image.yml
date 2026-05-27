@@ -3,10 +3,15 @@ name: Publish test-deps image
 # Builds docker/wolfprovider-test-deps/Dockerfile and pushes it to
 # ghcr.io/wolfssl/wolfprovider-test-deps:bookworm.
 #
-# Fires when the Dockerfile (or this workflow file) changes on master.
-# The pushed package stays private -- consumer workflows running on
-# wolfSSL/wolfProvider use the canonical GITHUB_TOKEN, which has read
-# access to the org's private packages.
+# Triggers:
+#   - push to master/main when the Dockerfile changes -> rebuilds :bookworm
+#   - pull_request_target when the Dockerfile changes  -> rebuilds :bookworm
+#     from the PR head SHA, so PR jobs that consume the image (sanitizers,
+#     static-analysis, multi-compiler, OSP) actually see the updated deps.
+#     pull_request_target runs from BASE with canonical secrets, so the
+#     ghcr push has the right scope; checkout pins to the PR head SHA so
+#     the build sees the PR's Dockerfile.
+#   - workflow_dispatch for manual rebuilds
 
 on:
   push:
@@ -14,9 +19,16 @@ on:
     paths:
       - 'docker/wolfprovider-test-deps/**'
       - '.github/workflows/publish-test-deps-image.yml'
+  pull_request_target:
+    paths:
+      - 'docker/wolfprovider-test-deps/**'
+      - '.github/workflows/publish-test-deps-image.yml'
   workflow_dispatch: {}
 
 concurrency:
+  # Global single group: only one build at a time, since every run
+  # publishes to the shared :bookworm tag. Per-PR groups would still let
+  # two PRs race to overwrite the tag.
   group: publish-test-deps-image
   cancel-in-progress: false
 
@@ -26,15 +38,35 @@ permissions:
 
 jobs:
   publish:
-    # Only the canonical repo's runner has a token authorized to push
-    # to ghcr.io/wolfssl/*. Forks won't have that scope, so skip.
-    if: github.repository == 'wolfSSL/wolfProvider'
+    # Canonical repo only - forks lack the ghcr push scope.
+    # For pull_request_target, also require the author to be an OWNER or
+    # MEMBER of the org. Without this gate, any fork PR that edits the
+    # Dockerfile could smuggle arbitrary RUN steps that exfiltrate the
+    # canonical GITHUB_TOKEN (it has packages:write here).
+    if: |
+      github.repository == 'wolfSSL/wolfProvider' &&
+      (
+        github.event_name != 'pull_request_target' ||
+        contains(fromJSON('["OWNER", "MEMBER"]'),
+                 github.event.pull_request.author_association)
+      )
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
+          # For pull_request_target, default checkout pulls BASE. We need
+          # the PR head SHA so the build sees the PR's Dockerfile.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+
+      - name: Resolve image SHA
+        id: sha
+        run: |
+          # On pull_request_target, github.sha is the BASE commit, not
+          # what we built. Use the checked-out HEAD so the SHA-suffixed
+          # tag matches the image's actual contents.
+          echo "image_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -54,6 +86,6 @@ jobs:
           push: true
           tags: |
             ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
-            ghcr.io/wolfssl/wolfprovider-test-deps:bookworm-${{ github.sha }}
+            ghcr.io/wolfssl/wolfprovider-test-deps:bookworm-${{ steps.sha.outputs.image_sha }}
           cache-from: type=registry,ref=ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
           cache-to: type=inline
