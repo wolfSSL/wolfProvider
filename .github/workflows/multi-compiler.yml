@@ -121,9 +121,9 @@ jobs:
       - name: Print errors
         if: ${{ failure() }}
         run: |
-          if [ -f test-suite.log ]; then
-            cat test-suite.log
-          fi
-          if [ -f config.log ]; then
-            cat config.log
-          fi
+          for f in scripts/build-release.log scripts/build-debug.log test-suite.log config.log; do
+            if [ -f "$f" ]; then
+              echo "=== $f (last 200 lines) ==="
+              tail -200 "$f"
+            fi
+          done
