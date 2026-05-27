@@ -1,10 +1,11 @@
 name: Nightly OSP Suite
 
-# Wave 1 = v5.9.1-stable, Wave 2 = v5.8.4-stable. A wave1-done fan-in job
-# gates Wave 2 with if: always() so a single Wave 1 failure doesn't skip
-# the older-line coverage. multi-compiler and static-analysis run once
-# outside the waves (multi-compiler iterates its own wolfssl matrix;
-# static-analysis isn't wolfssl-version sensitive).
+# Wave 1 = each workflow's default matrix (master + latest discovered
+# wolfssl stable). Stays dynamic across version bumps.
+# Wave 2 = v5.8.4-stable pinned (back-compat line), gated on wave1-done
+# with if: always() so a single Wave 1 failure doesn't skip the
+# older-line coverage. multi-compiler and static-analysis run once
+# outside the waves.
 
 on:
   schedule:
@@ -27,47 +28,47 @@ concurrency:
 
 jobs:
   # === Wave 1: v5.9.1-stable ===
-  bind9-591:           { uses: ./.github/workflows/bind9.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  cjose-591:           { uses: ./.github/workflows/cjose.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  curl-591:            { uses: ./.github/workflows/curl.yml,            with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  debian-package-591:  { uses: ./.github/workflows/debian-package.yml,  with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  git-ssh-dr-591:      { uses: ./.github/workflows/git-ssh-dr.yml,      with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  grpc-591:            { uses: ./.github/workflows/grpc.yml,            with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  hostap-591:          { uses: ./.github/workflows/hostap.yml,          with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  iperf-591:           { uses: ./.github/workflows/iperf.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  krb5-591:            { uses: ./.github/workflows/krb5.yml,            with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libcryptsetup-591:   { uses: ./.github/workflows/libcryptsetup.yml,   with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libeac3-591:         { uses: ./.github/workflows/libeac3.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libfido2-591:        { uses: ./.github/workflows/libfido2.yml,        with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libhashkit2-591:     { uses: ./.github/workflows/libhashkit2.yml,     with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libnice-591:         { uses: ./.github/workflows/libnice.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  liboauth2-591:       { uses: ./.github/workflows/liboauth2.yml,       with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  librelp-591:         { uses: ./.github/workflows/librelp.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libssh2-591:         { uses: ./.github/workflows/libssh2.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libtss2-591:         { uses: ./.github/workflows/libtss2.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  libwebsockets-591:   { uses: ./.github/workflows/libwebsockets.yml,   with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  net-snmp-591:        { uses: ./.github/workflows/net-snmp.yml,        with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  nginx-591:           { uses: ./.github/workflows/nginx.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  openldap-591:        { uses: ./.github/workflows/openldap.yml,        with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  opensc-591:          { uses: ./.github/workflows/opensc.yml,          with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  openssh-591:         { uses: ./.github/workflows/openssh.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  openssl-version-591: { uses: ./.github/workflows/openssl-version.yml, with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  openvpn-591:         { uses: ./.github/workflows/openvpn.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  pam-pkcs11-591:      { uses: ./.github/workflows/pam-pkcs11.yml,      with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  ppp-591:             { uses: ./.github/workflows/ppp.yml,             with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  python3-ntp-591:     { uses: ./.github/workflows/python3-ntp.yml,     with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  qt5network5-591:     { uses: ./.github/workflows/qt5network5.yml,     with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  rsync-591:           { uses: ./.github/workflows/rsync.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  socat-591:           { uses: ./.github/workflows/socat.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  sscep-591:           { uses: ./.github/workflows/sscep.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  sssd-591:            { uses: ./.github/workflows/sssd.yml,            with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  stunnel-591:         { uses: ./.github/workflows/stunnel.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  systemd-591:         { uses: ./.github/workflows/systemd.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  tcpdump-591:         { uses: ./.github/workflows/tcpdump.yml,         with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  tnftp-591:           { uses: ./.github/workflows/tnftp.yml,           with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  tpm2-tools-591:      { uses: ./.github/workflows/tpm2-tools.yml,      with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  x11vnc-591:          { uses: ./.github/workflows/x11vnc.yml,          with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
-  xmlsec-591:          { uses: ./.github/workflows/xmlsec.yml,          with: { wolfssl_refs_json: '["v5.9.1-stable"]' } }
+  bind9-591:           { uses: ./.github/workflows/bind9.yml,           }
+  cjose-591:           { uses: ./.github/workflows/cjose.yml,           }
+  curl-591:            { uses: ./.github/workflows/curl.yml,            }
+  debian-package-591:  { uses: ./.github/workflows/debian-package.yml,  }
+  git-ssh-dr-591:      { uses: ./.github/workflows/git-ssh-dr.yml,      }
+  grpc-591:            { uses: ./.github/workflows/grpc.yml,            }
+  hostap-591:          { uses: ./.github/workflows/hostap.yml,          }
+  iperf-591:           { uses: ./.github/workflows/iperf.yml,           }
+  krb5-591:            { uses: ./.github/workflows/krb5.yml,            }
+  libcryptsetup-591:   { uses: ./.github/workflows/libcryptsetup.yml,   }
+  libeac3-591:         { uses: ./.github/workflows/libeac3.yml,         }
+  libfido2-591:        { uses: ./.github/workflows/libfido2.yml,        }
+  libhashkit2-591:     { uses: ./.github/workflows/libhashkit2.yml,     }
+  libnice-591:         { uses: ./.github/workflows/libnice.yml,         }
+  liboauth2-591:       { uses: ./.github/workflows/liboauth2.yml,       }
+  librelp-591:         { uses: ./.github/workflows/librelp.yml,         }
+  libssh2-591:         { uses: ./.github/workflows/libssh2.yml,         }
+  libtss2-591:         { uses: ./.github/workflows/libtss2.yml,         }
+  libwebsockets-591:   { uses: ./.github/workflows/libwebsockets.yml,   }
+  net-snmp-591:        { uses: ./.github/workflows/net-snmp.yml,        }
+  nginx-591:           { uses: ./.github/workflows/nginx.yml,           }
+  openldap-591:        { uses: ./.github/workflows/openldap.yml,        }
+  opensc-591:          { uses: ./.github/workflows/opensc.yml,          }
+  openssh-591:         { uses: ./.github/workflows/openssh.yml,         }
+  openssl-version-591: { uses: ./.github/workflows/openssl-version.yml, }
+  openvpn-591:         { uses: ./.github/workflows/openvpn.yml,         }
+  pam-pkcs11-591:      { uses: ./.github/workflows/pam-pkcs11.yml,      }
+  ppp-591:             { uses: ./.github/workflows/ppp.yml,             }
+  python3-ntp-591:     { uses: ./.github/workflows/python3-ntp.yml,     }
+  qt5network5-591:     { uses: ./.github/workflows/qt5network5.yml,     }
+  rsync-591:           { uses: ./.github/workflows/rsync.yml,           }
+  socat-591:           { uses: ./.github/workflows/socat.yml,           }
+  sscep-591:           { uses: ./.github/workflows/sscep.yml,           }
+  sssd-591:            { uses: ./.github/workflows/sssd.yml,            }
+  stunnel-591:         { uses: ./.github/workflows/stunnel.yml,         }
+  systemd-591:         { uses: ./.github/workflows/systemd.yml,         }
+  tcpdump-591:         { uses: ./.github/workflows/tcpdump.yml,         }
+  tnftp-591:           { uses: ./.github/workflows/tnftp.yml,           }
+  tpm2-tools-591:      { uses: ./.github/workflows/tpm2-tools.yml,      }
+  x11vnc-591:          { uses: ./.github/workflows/x11vnc.yml,          }
+  xmlsec-591:          { uses: ./.github/workflows/xmlsec.yml,          }
 
   # Fan-in between waves. if: always() so Wave 1 failures don't skip Wave 2.
   wave1-done:
