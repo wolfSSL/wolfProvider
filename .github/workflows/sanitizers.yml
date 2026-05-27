@@ -90,12 +90,15 @@ jobs:
             ./scripts/build-wolfprovider.sh
 
       - name: Run wolfprov unit tests (make test) under sanitizers
+        # bash needed for `source` - container default shell is dash.
+        shell: bash
         run: |
           export LD_PRELOAD="$(gcc -print-file-name=libasan.so)"
           source scripts/env-setup
           make test
 
       - name: Run cmd-tests under sanitizers
+        shell: bash
         run: |
           export LD_PRELOAD="$(gcc -print-file-name=libasan.so)"
           source scripts/env-setup
@@ -170,6 +173,7 @@ jobs:
             ./scripts/build-wolfprovider.sh
 
       - name: Run wolfprov unit tests (make test) under TSan
+        shell: bash
         run: |
           # `|| true`: env-setup's provider check fails under TSan
           # (stock openssl can't dlopen a TSan-instrumented provider).
