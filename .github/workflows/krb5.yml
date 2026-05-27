@@ -2,7 +2,13 @@ name: KRB5 Tests
 
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch: {}
 
 jobs:
@@ -20,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
@@ -38,7 +44,7 @@ jobs:
       fail-fast: false
       matrix:
         krb5_ref: [ 'krb5-1.20.1-final' ]
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
@@ -99,11 +105,9 @@ jobs:
           fetch-depth: 1
       - run: |
           cd krb5
-          if [ "${{ matrix.fips_ref }}" = "FIPS" ]; then
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/krb5/${{ matrix.krb5_ref }}-wolfprov-fips.patch
-          else
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/krb5/${{ matrix.krb5_ref }}-wolfprov.patch
-          fi
+          PROJVER="${{ matrix.krb5_ref }}"; PROJVER="${PROJVER#krb5-}"
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp krb5 "$PROJVER" ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
+          patch -p1 < "$PATCH"
 
       - name: Build and test KRB5 with wolfProvider
         working-directory: krb5

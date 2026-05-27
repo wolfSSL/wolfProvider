@@ -2,7 +2,13 @@ name: Socat Tests
 
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch: {}
 
 jobs:
@@ -20,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
@@ -39,7 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         socat_ref: [ 'socat-1.8.0.0' ]
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
@@ -106,7 +112,9 @@ jobs:
       - name: Apply OSP patch to socat
         working-directory: ./${{ matrix.socat_ref }}
         run: |
-          patch -p0 < $GITHUB_WORKSPACE/osp/wolfProvider/socat/${{ matrix.socat_ref }}-wolfprov.patch
+          PROJVER="${{ matrix.socat_ref }}"; PROJVER="${PROJVER#socat-}"
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp socat "$PROJVER" ${{ matrix.wolfssl_ref }})
+          patch -p0 < "$PATCH"
 
       - name: Run socat tests
         working-directory: ./${{ matrix.socat_ref }}

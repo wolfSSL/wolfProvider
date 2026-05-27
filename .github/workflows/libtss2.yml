@@ -2,7 +2,13 @@ name: tpm2-tss Tests
 
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch: {}
 
 jobs:
@@ -21,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         tpm2_tss_ref: [ '4.1.3']
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
@@ -65,7 +71,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd tpm2_tss_repo
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libtss2/libtss2-${{ matrix.tpm2_tss_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp libtss2 ${{ matrix.tpm2_tss_ref }} ${{ matrix.wolfssl_ref }})
+          patch -p1 < "$PATCH"
 
       - name: Build and install tpm2-tss
         working-directory: tpm2_tss_repo

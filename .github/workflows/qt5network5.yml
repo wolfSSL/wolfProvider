@@ -2,7 +2,13 @@ name: qtbase Network Tests
 
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch: {}
 
 jobs:
@@ -20,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
@@ -37,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         qt_ref: [ 'v5.15.8-lts-lgpl' ]
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
@@ -99,7 +105,8 @@ jobs:
 
       - run: |
           cd qt5_repo
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/qtbase/qtbase-${{ matrix.qt_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp qtbase ${{ matrix.qt_ref }} ${{ matrix.wolfssl_ref }})
+          patch -p1 < "$PATCH"
 
       - name: Configure Qt
         working-directory: qt5_repo

@@ -80,6 +80,19 @@ jobs:
             OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
+          # v5.8.4-stable representative coverage (back-compat for the
+          # 5.8 line). Two compilers - one gcc, one clang - so we don't
+          # double the 11-compiler matrix.
+          - CC: gcc-12
+            CXX: g++-12
+            OS: ubuntu-latest
+            wolfssl_ref: v5.8.4-stable
+            openssl_ref: master
+          - CC: clang-14
+            CXX: clang++-14
+            OS: ubuntu-latest
+            wolfssl_ref: v5.8.4-stable
+            openssl_ref: master
     steps:
       - name: Verify or install compiler
         run: |

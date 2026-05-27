@@ -2,7 +2,13 @@ name: PPP Tests
 
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch: {}
 
 jobs:
@@ -20,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
@@ -40,7 +46,7 @@ jobs:
         # specifically the lack of a test suite, necessary configure options,
         # and compatibility with newer versions of openssl
         ppp_ref: [ 'v2.5.2' ]
-        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
@@ -103,11 +109,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd ppp_repo
-          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/ppp/ppp-FIPS-${{ matrix.ppp_ref }}-wolfprov.patch
-          else
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/ppp/ppp-${{ matrix.ppp_ref }}-wolfprov.patch
-          fi
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp ppp ${{ matrix.ppp_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
+          patch -p1 < "$PATCH"
 
       - name: Build and install PPP
         working-directory: ppp_repo
