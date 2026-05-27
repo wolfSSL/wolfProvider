@@ -16,10 +16,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         # core build toolchain
         build-essential gcc g++ make m4 gettext \
+        gcc-11 g++-11 gcc-12 g++-12 \
         autoconf automake autoconf-archive autopoint autotools-dev \
         libtool libtool-bin pkg-config pkgconf \
         cmake meson ninja-build bison flex gperf gengetopt help2man \
         clang clang-tools cppcheck libc++-dev \
+        clang-13 clang-15 \
         # vcs, transport, compression, scripting
         git git-all curl wget ca-certificates patch xxd dpkg-dev jq \
         gawk perl python3 python3-pip python3-venv python3-wheel \
