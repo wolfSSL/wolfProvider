@@ -1,73 +1,97 @@
-name: Multi-Compiler Tests
+name: Nightly Multi-Compiler Tests
 
-# START OF COMMON SECTION
+# Runs the FULL multi-compiler matrix (gcc-9..14, clang-12..15) on
+# Ubuntu runners. PR-time multi-compiler.yml is restricted to the
+# compilers that ship in the test-deps container (Debian Bookworm:
+# gcc-11, gcc-12, clang-13..15) to avoid the apt-get hangs that were
+# cancelling PR jobs after 20 minutes. This nightly job restores
+# coverage of the dropped compilers (gcc-9, gcc-10, gcc-13, gcc-14,
+# clang-12) plus everything in between.
+
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE*'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/dependabot.yml'
-      - '.gitignore'
-      - 'AUTHORS'
-      - 'COPYING'
-      - 'README*'
-      - 'CHANGELOG*'
+  workflow_call: {}
+  workflow_dispatch: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-# END OF COMMON SECTION
 
 jobs:
   build_wolfprovider:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: Build with compiler ${{ matrix.CC }}, wolfssl ${{ matrix.wolfssl_ref }}, OpenSSL ${{ matrix.openssl_ref }}
-    runs-on: ubuntu-22.04
-    container:
-      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
-      env:
-        DEBIAN_FRONTEND: noninteractive
-    timeout-minutes: 20
+    name: Nightly build ${{ matrix.CC }} on ${{ matrix.OS }}, wolfssl ${{ matrix.wolfssl_ref }}, OpenSSL ${{ matrix.openssl_ref }}
+    runs-on: ${{ matrix.OS }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
-      # PR-time matrix is intentionally narrow: only compilers that ship
-      # in Debian Bookworm (the test-deps image base). Dropped vs the
-      # prior matrix: gcc-9, gcc-10, gcc-13, gcc-14, clang-12. Full
-      # cross-compiler coverage (including those) runs in the nightly
-      # multi-compiler job called from nightly-osp.yml.
       matrix:
         include:
+          - CC: gcc-9
+            CXX: g++-9
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-10
+            CXX: g++-10
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-10
+            CXX: g++-10
+            OS: ubuntu-22.04
+            wolfssl_ref: v5.8.0-stable
+            openssl_ref: master
           - CC: gcc-11
             CXX: g++-11
+            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
           - CC: gcc-12
             CXX: g++-12
+            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
-          - CC: gcc-12
-            CXX: g++-12
-            wolfssl_ref: v5.8.0-stable
+          - CC: gcc-13
+            CXX: g++-13
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-14
+            CXX: g++-14
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: clang-12
+            CXX: clang++-12
+            OS: ubuntu-22.04
+            wolfssl_ref: master
             openssl_ref: master
           - CC: clang-13
             CXX: clang++-13
+            OS: ubuntu-22.04
             wolfssl_ref: master
             openssl_ref: master
           - CC: clang-14
             CXX: clang++-14
+            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
           - CC: clang-15
             CXX: clang++-15
+            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
     steps:
+      - name: Verify or install compiler
+        run: |
+          # Most matrix compilers are pre-installed on the GitHub-hosted
+          # Ubuntu runners. Only apt-install if the binary isn't already
+          # on PATH - skips the slow `apt-get update` whenever possible.
+          if ! command -v ${{ matrix.CC }} >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }}
+          fi
+          ${{ matrix.CC }} --version
+
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -79,7 +103,6 @@ jobs:
           sha=$(./scripts/resolve-ref.sh "${{ matrix.openssl_ref }}" "openssl/openssl")
           echo "ref=$sha" >> "$GITHUB_OUTPUT"
         env:
-          # Used token to bypass rate limits
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get WolfSSL commit hash
@@ -88,26 +111,21 @@ jobs:
           sha=$(./scripts/resolve-ref.sh "${{ matrix.wolfssl_ref }}" "wolfssl/wolfssl")
           echo "ref=$sha" >> "$GITHUB_OUTPUT"
         env:
-          # Used token to bypass rate limits
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Look for a cached version of OpenSSL -- with this compiler version
       - name: Checking OpenSSL in cache
         uses: actions/cache@v4
         id: openssl-cache
         with:
-          path: |
-            openssl-install
+          path: openssl-install
           key: openssl-depends-${{ matrix.CC }}-${{ steps.openssl-ref.outputs.ref }}
           lookup-only: false
 
-      # Look for a cached version of WolfSSL -- with this compiler version
       - name: Checking WolfSSL in cache
         uses: actions/cache@v4
         id: wolfssl-cache
         with:
-          path: |
-            wolfssl-install
+          path: wolfssl-install
           key: wolfssl-depends-${{ matrix.CC }}-${{ steps.wolfssl-ref.outputs.ref }}
           lookup-only: false
 
