@@ -12,17 +12,16 @@ jobs:
   cppcheck:
     name: cppcheck Static Analysis
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     timeout-minutes: 30
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cppcheck
 
       - name: Build dependencies (OpenSSL and wolfSSL)
         run: |
@@ -103,17 +102,16 @@ jobs:
   scan-build:
     name: clang Static Analyzer (scan-build)
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     timeout-minutes: 45
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang clang-tools build-essential autoconf automake libtool pkg-config
 
       - name: Build dependencies (OpenSSL and wolfSSL)
         run: |
@@ -188,6 +186,10 @@ jobs:
   infer:
     name: Facebook Infer Static Analysis
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     timeout-minutes: 60
     steps:
       - name: Checkout wolfProvider
@@ -195,18 +197,17 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install dependencies
+      - name: Install Infer
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential autoconf automake libtool pkg-config python3 opam
-          
-          # Install Infer
+          # Infer ships as a ~100MB tarball - left outside the test-deps
+          # image to keep the image small. opam (its OCaml dependency) is
+          # baked into the image.
           VERSION=1.1.0
           cd /tmp
           wget https://github.com/facebook/infer/releases/download/v${VERSION}/infer-linux64-v${VERSION}.tar.xz
           tar xf infer-linux64-v${VERSION}.tar.xz
-          sudo mv infer-linux64-v${VERSION} /opt/infer
-          sudo ln -sf /opt/infer/bin/infer /usr/local/bin/infer
+          mv infer-linux64-v${VERSION} /opt/infer
+          ln -sf /opt/infer/bin/infer /usr/local/bin/infer
 
       - name: Build dependencies (OpenSSL and wolfSSL)
         run: |

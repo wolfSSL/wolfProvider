@@ -81,6 +81,8 @@ RUN apt-get update \
         check apache2-dev acl attr fakeroot \
         asciidoctor docbook-xsl pandoc xsltproc man2html \
         memcached vsftpd pps-tools tshark \
+        # static-analysis (infer needs opam) + libnice (libunwind-dev)
+        opam libunwind-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Perl modules used by app test suites. Baked in so transient CPAN

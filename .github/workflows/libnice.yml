@@ -82,13 +82,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install dependencies
-        run: |
-          apt update
-          apt install -y \
-            build-essential pkg-config meson ninja-build libglib2.0-dev \
-            libgstreamer1.0-dev libunwind-dev gstreamer1.0-plugins-base-apps
-
       - name: Download libnice
         uses: actions/checkout@v4
         with:
