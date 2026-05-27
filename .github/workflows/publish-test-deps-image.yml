@@ -3,10 +3,15 @@ name: Publish test-deps image
 # Builds docker/wolfprovider-test-deps/Dockerfile and pushes it to
 # ghcr.io/wolfssl/wolfprovider-test-deps:bookworm.
 #
-# Fires when the Dockerfile (or this workflow file) changes on master.
-# The pushed package stays private -- consumer workflows running on
-# wolfSSL/wolfProvider use the canonical GITHUB_TOKEN, which has read
-# access to the org's private packages.
+# Triggers:
+#   - push to master/main when the Dockerfile changes -> rebuilds :bookworm
+#   - pull_request_target when the Dockerfile changes  -> rebuilds :bookworm
+#     from the PR head SHA, so PR jobs that consume the image (sanitizers,
+#     static-analysis, multi-compiler, OSP) actually see the updated deps.
+#     pull_request_target runs from BASE with canonical secrets, so the
+#     ghcr push has the right scope; checkout pins to the PR head SHA so
+#     the build sees the PR's Dockerfile.
+#   - workflow_dispatch for manual rebuilds
 
 on:
   push:
@@ -14,10 +19,15 @@ on:
     paths:
       - 'docker/wolfprovider-test-deps/**'
       - '.github/workflows/publish-test-deps-image.yml'
+  pull_request_target:
+    paths:
+      - 'docker/wolfprovider-test-deps/**'
+      - '.github/workflows/publish-test-deps-image.yml'
   workflow_dispatch: {}
 
 concurrency:
-  group: publish-test-deps-image
+  # Serialize per-PR/branch so two pushes don't race to overwrite :bookworm.
+  group: publish-test-deps-image-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -26,14 +36,16 @@ permissions:
 
 jobs:
   publish:
-    # Only the canonical repo's runner has a token authorized to push
-    # to ghcr.io/wolfssl/*. Forks won't have that scope, so skip.
+    # Canonical repo only - forks lack the ghcr push scope.
     if: github.repository == 'wolfSSL/wolfProvider'
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
+          # For pull_request_target, default checkout pulls BASE. We need
+          # the PR head SHA so the build sees the PR's Dockerfile.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - name: Set up Docker Buildx
