@@ -26,8 +26,10 @@ on:
   workflow_dispatch: {}
 
 concurrency:
-  # Serialize per-PR/branch so two pushes don't race to overwrite :bookworm.
-  group: publish-test-deps-image-${{ github.event.pull_request.number || github.ref }}
+  # Global single group: only one build at a time, since every run
+  # publishes to the shared :bookworm tag. Per-PR groups would still let
+  # two PRs race to overwrite the tag.
+  group: publish-test-deps-image
   cancel-in-progress: false
 
 permissions:
@@ -37,7 +39,17 @@ permissions:
 jobs:
   publish:
     # Canonical repo only - forks lack the ghcr push scope.
-    if: github.repository == 'wolfSSL/wolfProvider'
+    # For pull_request_target, also require the author to be an OWNER or
+    # MEMBER of the org. Without this gate, any fork PR that edits the
+    # Dockerfile could smuggle arbitrary RUN steps that exfiltrate the
+    # canonical GITHUB_TOKEN (it has packages:write here).
+    if: |
+      github.repository == 'wolfSSL/wolfProvider' &&
+      (
+        github.event_name != 'pull_request_target' ||
+        contains(fromJSON('["OWNER", "MEMBER"]'),
+                 github.event.pull_request.author_association)
+      )
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -47,6 +59,14 @@ jobs:
           # the PR head SHA so the build sees the PR's Dockerfile.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+
+      - name: Resolve image SHA
+        id: sha
+        run: |
+          # On pull_request_target, github.sha is the BASE commit, not
+          # what we built. Use the checked-out HEAD so the SHA-suffixed
+          # tag matches the image's actual contents.
+          echo "image_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -66,6 +86,6 @@ jobs:
           push: true
           tags: |
             ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
-            ghcr.io/wolfssl/wolfprovider-test-deps:bookworm-${{ github.sha }}
+            ghcr.io/wolfssl/wolfprovider-test-deps:bookworm-${{ steps.sha.outputs.image_sha }}
           cache-from: type=registry,ref=ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
           cache-to: type=inline
