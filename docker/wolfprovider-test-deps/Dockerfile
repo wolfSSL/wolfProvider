@@ -21,7 +21,7 @@ RUN apt-get update \
         cmake meson ninja-build bison flex gperf gengetopt help2man \
         clang clang-tools cppcheck libc++-dev \
         # vcs, transport, compression, scripting
-        git git-all curl wget ca-certificates patch xxd dpkg-dev \
+        git git-all curl wget ca-certificates patch xxd dpkg-dev jq \
         gawk perl python3 python3-pip python3-venv python3-wheel \
         python3-setuptools python3-yaml python3-jinja2 python3-six \
         python3-pytest python3-dnspython python3-hypothesis \
