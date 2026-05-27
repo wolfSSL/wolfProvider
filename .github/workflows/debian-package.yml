@@ -1,19 +1,15 @@
 name: Debian Package Test
 
-# START OF COMMON SECTION
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+  workflow_call: {}
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,30 +17,32 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true, false ]
 
   libwolfprov-replace-default:
     name: libwolfprov ${{ matrix.replace_default && 'replace-default' || 'standalone' }} ${{ matrix.fips_ref }}
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     # Run inside Debian Bookworm to match packaging environment
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true, false ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -70,11 +68,6 @@ jobs:
               ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
                 ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
                 ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
-          else 
-            # Install standard OpenSSL packages
-            apt-get update
-            apt-get install -y \
-              openssl libssl3 libssl-dev
           fi
 
       - name: Install wolfSSL and wolfProvider packages

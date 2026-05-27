@@ -1,19 +1,16 @@
 name: Libcryptsetup Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,27 +18,28 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   test_cryptsetup:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         cryptsetup_ref: [ 'v2.6.1' ]
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
@@ -86,14 +84,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install dependencies
-        run: |
-          apt-get update
-          apt-get install -y \
-            build-essential autoconf asciidoctor gettext autopoint libtool \
-            pkg-config uuid-dev libdevmapper-dev libpopt-dev libjson-c-dev \
-            libargon2-dev libblkid-dev bsdextrautils kmod util-linux cryptsetup-bin
- 
       - name: Checkout cryptsetup
         uses: actions/checkout@v4
         with:
@@ -120,18 +110,7 @@ jobs:
             --disable-ssh-token
           make -j$(nproc)
 
-      # According to ChatGPT, the following tests are excluded since they use 
-      # crypto kernel rather than openssl:
-      # bitlk-compat-test → does activation via dm-crypt (kernel).
-      # reencryption-compat-test → kernel dm-crypt online reencryption.
-      # verity-compat-test → dm-verity (kernel).
-      # integrity-compat-test → dm-integrity (kernel).
-      # blockwise-compat-test / luks2-*reencryption* → scsi_debug / kernel paths.
-      # unit-wipe-test → direct I/O expectations that depend on kernel/devices.
-      # Instead, only run the following tests:
-      # - vectors-test
-      # - run-all-symbols
-      # - unit-utils-crypt-test
+      # Only the openssl-backend tests; others need kernel dm-*.
       - name: Run cryptsetup tests
         working-directory: cryptsetup
         run: |

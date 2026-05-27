@@ -1,45 +1,41 @@
 name: tpm2-tss Tests
+
+
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call: {}
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   test_tpm2_tss:
+    needs: discover_versions
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    container:
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         tpm2_tss_ref: [ '4.1.3']
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-      - name: Install test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libcunit1-dev autoconf-archive \
-            gettext libcmocka-dev build-essential autoconf automake libtool \
-            libjson-c-dev libcurl4-openssl-dev acl libusb-1.0-0-dev git \
-            pkg-config uuid-dev
-
-      # ensure libssl-dev is not installed
-      - name: Ensure libssl-dev is not installed
+      # Drop stock libssl-dev so tpm2-tss configure picks the
+      # wolfssl-built openssl headers.
+      - name: Remove stock libssl-dev
         run: |
           if dpkg -l | grep -q libssl-dev; then
-            echo "libssl-dev is installed, removing it to avoid conflicts"
-            sudo apt-get remove -y libssl-dev
-          else
-            echo "libssl-dev is not installed, no action needed"
+            apt-get remove -y libssl-dev
           fi
 
       - name: Checkout wolfProvider
@@ -49,7 +45,9 @@ jobs:
 
       - name: Build wolfProvider
         run: |
-          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+          OPENSSL_TAG=${{ matrix.openssl_ref }} \
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+            ./scripts/build-wolfprovider.sh
 
       - name: Checkout tpm2-tss
         uses: actions/checkout@v4
@@ -71,6 +69,8 @@ jobs:
 
       - name: Build and install tpm2-tss
         working-directory: tpm2_tss_repo
+        # env-setup uses `source` (bashism); default sh would fail.
+        shell: bash
         run: |
           source $GITHUB_WORKSPACE/scripts/env-setup
           ./bootstrap
@@ -81,11 +81,12 @@ jobs:
 
       - name: Run tpm2-tss tests
         working-directory: tpm2_tss_repo
+        shell: bash
         run: |
           source $GITHUB_WORKSPACE/scripts/env-setup
           export ${{ matrix.force_fail }}
           make check 2>&1 || true
-          if $(grep -q "FAIL: test/unit" test-suite.log); then
+          if grep -q "FAIL: test/unit" test-suite.log; then
             TEST_RESULT=1
             echo "Expected zero failures"
           else

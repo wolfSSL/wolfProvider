@@ -1,0 +1,193 @@
+name: Sanitizers
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'AUTHORS'
+      - 'COPYING'
+      - 'README*'
+      - 'CHANGELOG*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+jobs:
+  discover_versions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_discover-versions.yml
+
+  sanitizers:
+    needs: discover_versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: ASan+UBSan (wolfSSL ${{ matrix.wolfssl_ref }} / ${{ needs.discover_versions.outputs.openssl_latest_ref }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+    env:
+      # detect_leaks=0: OpenSSL keeps provider-registry allocs alive.
+      # detect_odr_violation=0: libwolfprov is linked + dlopen'd in
+      # test/unit.test -- false-positive ODR.
+      ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=0:print_stacktrace=1:detect_odr_violation=0
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install host build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential autoconf automake libtool pkg-config \
+            git curl wget patch m4 gettext
+
+      - name: Cache OpenSSL + wolfssl source/install (sanitizers)
+        uses: actions/cache@v4
+        with:
+          path: |
+            openssl-source
+            openssl-install
+            wolfssl-source
+            wolfssl-install
+          key: san-${{ runner.os }}-${{ needs.discover_versions.outputs.openssl_latest_ref }}-${{ matrix.wolfssl_ref }}-${{ hashFiles('scripts/utils-openssl.sh', 'scripts/utils-wolfssl.sh', 'scripts/build-wolfprovider.sh', '.github/workflows/sanitizers.yml') }}
+
+      - name: Build wolfProvider with sanitizers
+        env:
+          SAN_FLAGS: "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g"
+        run: |
+          OPENSSL_INSTALL_DIR="${GITHUB_WORKSPACE}/openssl-install"
+          export WOLFSSL_CONFIG_CFLAGS="\
+            -I${OPENSSL_INSTALL_DIR}/include \
+            -DWC_RSA_NO_PADDING \
+            -DWOLFSSL_PUBLIC_MP \
+            -DHAVE_PUBLIC_FFDHE \
+            -DHAVE_FFDHE_6144 \
+            -DHAVE_FFDHE_8192 \
+            -DWOLFSSL_PSS_LONG_SALT \
+            -DWOLFSSL_PSS_SALT_LEN_DISCOVER \
+            -DRSA_MIN_SIZE=1024 \
+            -DWOLFSSL_OLD_OID_SUM \
+            ${SAN_FLAGS}"
+          export WOLFPROV_CONFIG_CFLAGS="${SAN_FLAGS}"
+          export WOLFPROV_SKIP_TEST=1
+
+          OPENSSL_TAG=${{ needs.discover_versions.outputs.openssl_latest_ref }} \
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+            ./scripts/build-wolfprovider.sh
+
+      - name: Run wolfprov unit tests (make test) under sanitizers
+        run: |
+          export LD_PRELOAD="$(gcc -print-file-name=libasan.so)"
+          source scripts/env-setup
+          make test
+
+      - name: Run cmd-tests under sanitizers
+        run: |
+          export LD_PRELOAD="$(gcc -print-file-name=libasan.so)"
+          source scripts/env-setup
+          ./scripts/cmd_test/do-cmd-tests.sh
+
+      - name: Dump build/test logs on failure
+        if: ${{ failure() }}
+        run: |
+          for f in test-suite.log scripts/build-release.log scripts/build-debug.log; do
+            if [ -f "$f" ]; then
+              echo "=== $f (last 200 lines) ==="
+              tail -200 "$f"
+            fi
+          done
+
+  tsan:
+    needs: discover_versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: TSan (wolfSSL ${{ matrix.wolfssl_ref }} / ${{ needs.discover_versions.outputs.openssl_latest_ref }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+    env:
+      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:history_size=7
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install host build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential autoconf automake libtool pkg-config \
+            git curl wget patch m4 gettext
+
+      - name: Cache OpenSSL + wolfssl source/install (tsan)
+        uses: actions/cache@v4
+        with:
+          path: |
+            openssl-source
+            openssl-install
+            wolfssl-source
+            wolfssl-install
+          key: tsan-${{ runner.os }}-${{ needs.discover_versions.outputs.openssl_latest_ref }}-${{ matrix.wolfssl_ref }}-${{ hashFiles('scripts/utils-openssl.sh', 'scripts/utils-wolfssl.sh', 'scripts/build-wolfprovider.sh', '.github/workflows/sanitizers.yml') }}
+
+      - name: Build wolfProvider with TSan
+        env:
+          SAN_FLAGS: "-fsanitize=thread -fno-omit-frame-pointer -fno-sanitize-recover=all -g"
+        run: |
+          OPENSSL_INSTALL_DIR="${GITHUB_WORKSPACE}/openssl-install"
+          # -DWOLFSSL_NO_FENCE: gcc TSan rejects atomic_thread_fence.
+          export WOLFSSL_CONFIG_CFLAGS="\
+            -I${OPENSSL_INSTALL_DIR}/include \
+            -DWC_RSA_NO_PADDING \
+            -DWOLFSSL_PUBLIC_MP \
+            -DHAVE_PUBLIC_FFDHE \
+            -DHAVE_FFDHE_6144 \
+            -DHAVE_FFDHE_8192 \
+            -DWOLFSSL_PSS_LONG_SALT \
+            -DWOLFSSL_PSS_SALT_LEN_DISCOVER \
+            -DRSA_MIN_SIZE=1024 \
+            -DWOLFSSL_OLD_OID_SUM \
+            -DWOLFSSL_NO_FENCE \
+            ${SAN_FLAGS}"
+          export WOLFPROV_CONFIG_CFLAGS="${SAN_FLAGS}"
+          export WOLFPROV_SKIP_TEST=1
+
+          OPENSSL_TAG=${{ needs.discover_versions.outputs.openssl_latest_ref }} \
+          WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+            ./scripts/build-wolfprovider.sh
+
+      - name: Run wolfprov unit tests (make test) under TSan
+        run: |
+          # `|| true`: env-setup's provider check fails under TSan
+          # (stock openssl can't dlopen a TSan-instrumented provider).
+          source scripts/env-setup || true
+          make test
+
+      - name: Dump build/test logs on failure
+        if: ${{ failure() }}
+        run: |
+          for f in test-suite.log scripts/build-release.log scripts/build-debug.log; do
+            if [ -f "$f" ]; then
+              echo "=== $f (last 200 lines) ==="
+              tail -200 "$f"
+            fi
+          done

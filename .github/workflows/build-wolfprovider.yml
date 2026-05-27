@@ -90,7 +90,14 @@ jobs:
         run: |
           ORAS_VERSION="1.2.2"
           ORAS_CHECKSUM="bff970346470e5ef888e9f2c0bf7f8ee47283f5a45207d6e7a037da1fb0eae0d"
-          curl -sLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          rm -f "oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          for attempt in 1 2 3; do
+            if curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"; then
+              break
+            fi
+            echo "ORAS download attempt $attempt failed."
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 10))
+          done
           echo "${ORAS_CHECKSUM}  oras_${ORAS_VERSION}_linux_amd64.tar.gz" | sha256sum -c - || {
             echo "ERROR: ORAS checksum verification failed!"
             exit 1
@@ -108,33 +115,47 @@ jobs:
             --username ${{ github.repository_owner }} \
             --password-stdin ghcr.io
 
-      # ── Debian build: pull .deb packages from ghcr.io ──
+      # Debian build: pull .deb packages from ghcr.io (canonical-repo runs only; fork tokens 401).
       - name: Download pre-built packages from ghcr.io
         if: steps.check_artifact.outcome != 'success' && github.repository == 'wolfSSL/wolfProvider' && inputs.build_type == 'debian'
         run: |
           mkdir -p ${{ env.WOLFSSL_PACKAGES_PATH }}
           mkdir -p ${{ env.OPENSSL_PACKAGES_PATH }}
 
+          oras_pull_with_retry() {
+            local image="$1"
+            local outdir="$2"
+            for attempt in 1 2 3; do
+              if oras pull "$image" -o "$outdir"; then
+                return 0
+              fi
+              echo "oras pull $image attempt $attempt failed."
+              [ "$attempt" -lt 3 ] && sleep $((attempt * 15))
+            done
+            echo "ERROR: oras pull $image failed after 3 attempts."
+            return 1
+          }
+
           # Pull wolfSSL packages based on FIPS variant
           if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
             echo "Pulling FIPS wolfSSL packages..."
-            oras pull ghcr.io/wolfssl/wolfprovider/debs:fips \
-              -o ${{ env.WOLFSSL_PACKAGES_PATH }}
+            oras_pull_with_retry ghcr.io/wolfssl/wolfprovider/debs:fips \
+              ${{ env.WOLFSSL_PACKAGES_PATH }}
           else
             echo "Pulling non-FIPS wolfSSL packages..."
-            oras pull ghcr.io/wolfssl/wolfprovider/debs:nonfips \
-              -o ${{ env.WOLFSSL_PACKAGES_PATH }}
+            oras_pull_with_retry ghcr.io/wolfssl/wolfprovider/debs:nonfips \
+              ${{ env.WOLFSSL_PACKAGES_PATH }}
           fi
 
           # Pull OpenSSL packages based on replace_default setting
           if [ "${{ inputs.replace_default }}" = "true" ]; then
             echo "Pulling OpenSSL replace-default packages..."
-            oras pull ghcr.io/wolfssl/wolfprovider/debs:openssl-replace-default \
-              -o ${{ env.OPENSSL_PACKAGES_PATH }}
+            oras_pull_with_retry ghcr.io/wolfssl/wolfprovider/debs:openssl-replace-default \
+              ${{ env.OPENSSL_PACKAGES_PATH }}
           else
             echo "Pulling OpenSSL default packages..."
-            oras pull ghcr.io/wolfssl/wolfprovider/debs:openssl-default \
-              -o ${{ env.OPENSSL_PACKAGES_PATH }}
+            oras_pull_with_retry ghcr.io/wolfssl/wolfprovider/debs:openssl-default \
+              ${{ env.OPENSSL_PACKAGES_PATH }}
           fi
 
           # Validate that we actually got .deb files
@@ -164,8 +185,13 @@ jobs:
       - name: Install xz-utils
         if: steps.check_artifact.outcome != 'success' && inputs.build_type == 'yocto'
         run: |
-          apt-get update
-          apt-get install -y xz-utils
+          for attempt in 1 2 3; do
+            if apt-get update && apt-get install -y xz-utils; then
+              break
+            fi
+            echo "apt attempt $attempt failed."
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 10))
+          done
 
       - name: Download WIC images from ghcr.io
         if: steps.check_artifact.outcome != 'success' && github.repository == 'wolfSSL/wolfProvider' && inputs.build_type == 'yocto'
@@ -174,8 +200,14 @@ jobs:
 
           TAG="${{ steps.prepare_artifact_name.outputs.fips_str }}-${{ steps.prepare_artifact_name.outputs.config_str }}"
           echo "Pulling ghcr.io/wolfssl/wolfprovider/wics:${TAG}..."
-          oras pull "ghcr.io/wolfssl/wolfprovider/wics:${TAG}" \
-            -o ${{ env.YOCTO_IMAGES_PATH }}
+          for attempt in 1 2 3; do
+            if oras pull "ghcr.io/wolfssl/wolfprovider/wics:${TAG}" \
+                 -o ${{ env.YOCTO_IMAGES_PATH }}; then
+              break
+            fi
+            echo "WIC pull attempt $attempt failed."
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 15))
+          done
 
           cd ${{ env.YOCTO_IMAGES_PATH }}
 

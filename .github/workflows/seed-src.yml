@@ -6,6 +6,18 @@ on:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'AUTHORS'
+      - 'COPYING'
+      - 'README*'
+      - 'CHANGELOG*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,18 +25,23 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
+  discover_versions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_discover-versions.yml
+
   seed_src_test:
+    needs: discover_versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: SEED-SRC Test
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [
-          'master',
-          'v5.8.4-stable']
-        openssl_ref: [
-          'openssl-3.5.4',
-          'openssl-3.0.17']
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+        openssl_ref:
+          - ${{ needs.discover_versions.outputs.openssl_latest_ref }}
+          - openssl-3.0.17
 
     steps:
       - name: Checkout wolfProvider

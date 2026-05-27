@@ -1,16 +1,12 @@
 name: Static Analysis
 
-# START OF COMMON SECTION
 on:
-  schedule:
-    # Run nightly at 2 AM UTC
-    - cron: '0 2 * * *'
-  workflow_dispatch:
+  workflow_call: {}
+  workflow_dispatch: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-# END OF COMMON SECTION
 
 jobs:
   cppcheck:

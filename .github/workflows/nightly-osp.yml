@@ -1,0 +1,189 @@
+name: Nightly OSP Suite
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are we triggering manually? (annotation only)'
+        required: false
+        default: 'manual nightly run'
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+concurrency:
+  group: nightly-osp
+  cancel-in-progress: false
+
+jobs:
+  bind9:          { uses: ./.github/workflows/bind9.yml }
+  cjose:          { uses: ./.github/workflows/cjose.yml }
+  curl:           { uses: ./.github/workflows/curl.yml }
+  debian-package: { uses: ./.github/workflows/debian-package.yml }
+  git-ssh-dr:     { uses: ./.github/workflows/git-ssh-dr.yml }
+  grpc:           { uses: ./.github/workflows/grpc.yml }
+  hostap:         { uses: ./.github/workflows/hostap.yml }
+  iperf:          { uses: ./.github/workflows/iperf.yml }
+  krb5:           { uses: ./.github/workflows/krb5.yml }
+  libcryptsetup:  { uses: ./.github/workflows/libcryptsetup.yml }
+  libeac3:        { uses: ./.github/workflows/libeac3.yml }
+  libfido2:       { uses: ./.github/workflows/libfido2.yml }
+  libhashkit2:    { uses: ./.github/workflows/libhashkit2.yml }
+  libnice:        { uses: ./.github/workflows/libnice.yml }
+  liboauth2:      { uses: ./.github/workflows/liboauth2.yml }
+  librelp:        { uses: ./.github/workflows/librelp.yml }
+  libssh2:        { uses: ./.github/workflows/libssh2.yml }
+  libtss2:        { uses: ./.github/workflows/libtss2.yml }
+  libwebsockets:  { uses: ./.github/workflows/libwebsockets.yml }
+  net-snmp:       { uses: ./.github/workflows/net-snmp.yml }
+  nginx:          { uses: ./.github/workflows/nginx.yml }
+  openldap:       { uses: ./.github/workflows/openldap.yml }
+  opensc:         { uses: ./.github/workflows/opensc.yml }
+  openssh:        { uses: ./.github/workflows/openssh.yml }
+  openvpn:        { uses: ./.github/workflows/openvpn.yml }
+  pam-pkcs11:     { uses: ./.github/workflows/pam-pkcs11.yml }
+  ppp:            { uses: ./.github/workflows/ppp.yml }
+  python3-ntp:    { uses: ./.github/workflows/python3-ntp.yml }
+  qt5network5:    { uses: ./.github/workflows/qt5network5.yml }
+  rsync:          { uses: ./.github/workflows/rsync.yml }
+  socat:          { uses: ./.github/workflows/socat.yml }
+  sscep:          { uses: ./.github/workflows/sscep.yml }
+  sssd:           { uses: ./.github/workflows/sssd.yml }
+  static-analysis: { uses: ./.github/workflows/static-analysis.yml }
+  stunnel:        { uses: ./.github/workflows/stunnel.yml }
+  systemd:        { uses: ./.github/workflows/systemd.yml }
+  tcpdump:        { uses: ./.github/workflows/tcpdump.yml }
+  tnftp:          { uses: ./.github/workflows/tnftp.yml }
+  tpm2-tools:     { uses: ./.github/workflows/tpm2-tools.yml }
+  x11vnc:         { uses: ./.github/workflows/x11vnc.yml }
+  xmlsec:         { uses: ./.github/workflows/xmlsec.yml }
+  openssl-version: { uses: ./.github/workflows/openssl-version.yml }
+
+  notify:
+    name: Slack notification
+    needs:
+      - bind9
+      - cjose
+      - curl
+      - debian-package
+      - git-ssh-dr
+      - grpc
+      - hostap
+      - iperf
+      - krb5
+      - libcryptsetup
+      - libeac3
+      - libfido2
+      - libhashkit2
+      - libnice
+      - liboauth2
+      - librelp
+      - libssh2
+      - libtss2
+      - libwebsockets
+      - net-snmp
+      - nginx
+      - openldap
+      - opensc
+      - openssh
+      - openvpn
+      - pam-pkcs11
+      - ppp
+      - python3-ntp
+      - qt5network5
+      - rsync
+      - socat
+      - sscep
+      - sssd
+      - static-analysis
+      - stunnel
+      - systemd
+      - tcpdump
+      - tnftp
+      - tpm2-tools
+      - x11vnc
+      - xmlsec
+      - openssl-version
+    if: always()
+    runs-on: ubuntu-latest
+    # Job-level env: step `if:` runs before step `env:` exports.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - name: Compose summary
+        id: summary
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          PASSED=$(echo "$NEEDS_JSON" | jq -r '
+            to_entries[]
+            | select(.value.result == "success")
+            | .key' | sort)
+          FAILED=$(echo "$NEEDS_JSON" | jq -r '
+            to_entries[]
+            | select(.value.result != "success")
+            | "\(.key) (\(.value.result))"' | sort)
+          PASS_COUNT=$(echo "$PASSED" | awk 'NF{c++} END{print c+0}')
+          FAIL_COUNT=$(echo "$FAILED" | awk 'NF{c++} END{print c+0}')
+          TOTAL=$((PASS_COUNT + FAIL_COUNT))
+
+          if [ "$FAIL_COUNT" -eq 0 ]; then
+            COLOR="good"
+            TITLE=":large_green_circle: Nightly OSP: ALL ${TOTAL} PASSED"
+            DETAILS="All OSP workflows green for $(date -u +%Y-%m-%d)."
+          else
+            COLOR="danger"
+            TITLE=":red_circle: Nightly OSP: ${FAIL_COUNT} of ${TOTAL} FAILED"
+            DETAILS=$'Failed:\n```\n'"${FAILED}"$'\n```'
+          fi
+
+          {
+            echo "color=$COLOR"
+            echo "title<<SUMMARY_EOF"
+            echo "$TITLE"
+            echo "SUMMARY_EOF"
+            echo "details<<SUMMARY_EOF"
+            echo "$DETAILS"
+            echo "Run: $RUN_URL"
+            echo "SUMMARY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post to Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          TITLE: ${{ steps.summary.outputs.title }}
+          DETAILS: ${{ steps.summary.outputs.details }}
+          COLOR: ${{ steps.summary.outputs.color }}
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -n \
+            --arg title "$TITLE" \
+            --arg details "$DETAILS" \
+            --arg color "$COLOR" \
+            '{
+              attachments: [{
+                color: $color,
+                title: $title,
+                text: $details,
+                mrkdwn_in: ["text"]
+              }]
+            }')
+          curl -fsS -X POST -H 'Content-type: application/json' \
+            --data "$PAYLOAD" "$SLACK_WEBHOOK_URL" >/dev/null
+
+      - name: Log to job output (always)
+        env:
+          TITLE: ${{ steps.summary.outputs.title }}
+          DETAILS: ${{ steps.summary.outputs.details }}
+        run: |
+          {
+            echo "## $TITLE"
+            echo ""
+            echo "$DETAILS"
+          } >> "$GITHUB_STEP_SUMMARY"

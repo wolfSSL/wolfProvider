@@ -1,19 +1,16 @@
 name: hostap and wpa supplicant Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**']
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,30 +18,32 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   test_hostap:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     # Run inside Debian Bookworm with privileged access for UML
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       options: --privileged --cap-add=ALL -v /dev:/dev
       env:
         DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
     timeout-minutes: 90
     strategy:
+      fail-fast: false
       matrix:
-        hostap_ref: [ 'main' ]
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        hostap_ref: [ 'hostap_2_11' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -98,15 +97,9 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install hostap dependencies
+      - name: Install hostap-specific Python crypto module
         run: |
-          apt-get update
-          apt-get install -y libpcap0.8 libpcap-dev curl libcurl4-openssl-dev \
-            libnl-3-dev binutils-dev libiberty-dev libnl-genl-3-dev libnl-route-3-dev \
-            libdbus-1-dev bridge-utils tshark python3-pycryptodome libsqlite3-dev \
-            libzstd1 wireless-tools iw build-essential autoconf automake libtool \
-            pkg-config git wget ca-certificates flex bison bc libxml2-dev zlib1g-dev \
-            python3-pip psmisc iproute2 procps net-tools systemd kmod wireless-regdb
+          # hostap test scripts need pip's cryptography, not the apt one.
           apt-get remove -y python3-cryptography 2>/dev/null || true
           pip install --no-cache-dir --force-reinstall --break-system-packages cryptography
 
@@ -125,7 +118,11 @@ jobs:
       - name: Apply hostap patches for wolfProvider
         run: |
           cd hostap
-          patch -p1 < "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov.patch"
+          if [ "${{ matrix.fips_ref }}" = "FIPS" ]; then
+            patch -p1 < "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov-fips.patch"
+          else
+            patch -p1 < "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov.patch"
+          fi
 
       - name: Checkout linux
         uses: actions/checkout@v4

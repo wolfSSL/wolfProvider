@@ -1,17 +1,16 @@
 name: Git SSH Default Replace Tests
 
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -19,30 +18,32 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   git-ssh-default-replace-test:
     runs-on: ubuntu-22.04
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
         key_type: [ 'rsa', 'ecdsa', 'ed25519', 'chacha20-poly1305' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
-        iterations: [ 10 ] # Total of 50 runs
+        iterations: [ 10 ] # Total of 80 runs
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
@@ -83,13 +84,6 @@ jobs:
         $GITHUB_WORKSPACE/scripts/verify-install.sh \
           ${{ matrix.replace_default && '--replace-default' || '' }} \
           ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
-
-    - name: Set up environment
-      run: |
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y openssh-client openssh-server expect xxd git \
-          net-tools git-all
 
     - name: Run git + replace default + ssh test
       shell: bash

@@ -155,7 +155,9 @@ install_wolfprov() {
 
     # Build the replacement default library after wolfprov to avoid linker errors
     # but before testing so that the library is present if needed
-    if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" != "1" ]; then
+    if [ "$WOLFPROV_SKIP_TEST" = "1" ]; then
+        printf "\tWARNING: Skipping unit tests (WOLFPROV_SKIP_TEST=1).\n"
+    elif [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$WOLFPROV_REPLACE_DEFAULT_TESTING" != "1" ]; then
         printf "\tWARNING: Skipping tests in replace mode (use --enable-replace-default-testing to enable)...\n"
     elif [ "$WOLFPROV_FIPS_BASELINE" = "1" ]; then
         printf "\tWARNING: Skipping unit tests in FIPS baseline mode (algorithms removed, tests will fail)...\n"

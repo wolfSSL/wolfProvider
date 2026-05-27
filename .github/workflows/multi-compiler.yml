@@ -6,6 +6,18 @@ on:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'AUTHORS'
+      - 'COPYING'
+      - 'README*'
+      - 'CHANGELOG*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,6 +26,7 @@ concurrency:
 
 jobs:
   build_wolfprovider:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Build with compiler ${{ matrix.CC }}, wolfssl ${{ matrix.wolfssl_ref }}, OpenSSL ${{ matrix.openssl_ref }}
     runs-on: ${{ matrix.OS }}
     timeout-minutes: 20

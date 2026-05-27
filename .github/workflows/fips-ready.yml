@@ -6,6 +6,18 @@ on:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'AUTHORS'
+      - 'COPYING'
+      - 'README*'
+      - 'CHANGELOG*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,15 +25,22 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
+  discover_versions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_discover-versions.yml
+
   fips_ready_test:
+    needs: discover_versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: FIPS Ready Bundle Test
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         wolfssl_bundle_ref: [ '5.8.2' ]
-        openssl_ref: [ 'openssl-3.5.0' ]
-        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
+        # force_fail collapsed into sequential runs in the test step
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -56,7 +75,10 @@ jobs:
         run: |
           # Run cmd tests to verify functionality
           export WOLFSSL_ISFIPS=1
-          export ${{matrix.force_fail}}
           source scripts/env-setup
 
-          ${{ matrix.force_fail }} ./scripts/cmd_test/do-cmd-tests.sh
+          # --- normal mode ---
+          ./scripts/cmd_test/do-cmd-tests.sh
+
+          # --- force-fail mode ---
+          WOLFPROV_FORCE_FAIL=1 ./scripts/cmd_test/do-cmd-tests.sh

@@ -1,0 +1,146 @@
+name: Discover wolfSSL + OpenSSL versions
+
+on:
+  workflow_call:
+    outputs:
+      wolfssl_ref:
+        description: 'Plain string, actual wolfSSL version in the wolfprov nonfips .deb on ghcr (e.g. v5.8.4-stable)'
+        value: ${{ jobs.discover.outputs.wolfssl_ref }}
+      wolfssl_ref_array:
+        description: 'JSON array of master + actual .deb wolfssl ref for matrix use'
+        value: ${{ jobs.discover.outputs.wolfssl_ref_array }}
+      wolfssl_latest_ref:
+        description: 'Plain string, latest v*-stable tag upstream wolfssl has'
+        value: ${{ jobs.discover.outputs.wolfssl_latest_ref }}
+      wolfssl_latest_ref_array:
+        description: 'JSON array form: master + latest upstream stable'
+        value: ${{ jobs.discover.outputs.wolfssl_latest_ref_array }}
+      openssl_ref:
+        description: 'Plain string. Bookworm stock OpenSSL (matches the wolfprov .deb).'
+        value: ${{ jobs.discover.outputs.openssl_ref }}
+      openssl_ref_array:
+        description: 'JSON array form of openssl_ref'
+        value: ${{ jobs.discover.outputs.openssl_ref_array }}
+      openssl_latest_ref:
+        description: 'Plain string, latest upstream openssl-3.x.y release tag (e.g. openssl-3.6.2)'
+        value: ${{ jobs.discover.outputs.openssl_latest_ref }}
+      openssl_latest_ref_array:
+        description: 'JSON array form of openssl_latest_ref'
+        value: ${{ jobs.discover.outputs.openssl_latest_ref_array }}
+      openssl_all_releases_array:
+        description: 'JSON array of every upstream openssl-3.X.Y release tag, sorted ascending. Used by openssl-version.yml so the sweep tracks upstream automatically.'
+        value: ${{ jobs.discover.outputs.openssl_all_releases_array }}
+
+jobs:
+  discover:
+    name: Resolve wolfSSL + OpenSSL refs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      wolfssl_ref: ${{ steps.resolve.outputs.wolfssl_ref }}
+      wolfssl_ref_array: ${{ steps.resolve.outputs.wolfssl_ref_array }}
+      wolfssl_latest_ref: ${{ steps.resolve.outputs.wolfssl_latest_ref }}
+      wolfssl_latest_ref_array: ${{ steps.resolve.outputs.wolfssl_latest_ref_array }}
+      openssl_ref: ${{ steps.resolve.outputs.openssl_ref }}
+      openssl_ref_array: ${{ steps.resolve.outputs.openssl_ref_array }}
+      openssl_latest_ref: ${{ steps.resolve.outputs.openssl_latest_ref }}
+      openssl_latest_ref_array: ${{ steps.resolve.outputs.openssl_latest_ref_array }}
+      openssl_all_releases_array: ${{ steps.resolve.outputs.openssl_all_releases_array }}
+    steps:
+      - name: Install ORAS
+        run: |
+          set -euo pipefail
+          ORAS_VERSION="1.2.2"
+          curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          tar xzf "oras_${ORAS_VERSION}_linux_amd64.tar.gz" oras
+          sudo mv oras /usr/local/bin/oras
+          rm -f "oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          oras version
+
+      - name: Login to ghcr.io (best-effort)
+        continue-on-error: true
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin
+
+      - name: Resolve versions
+        id: resolve
+        run: |
+          set -euo pipefail
+
+          # wolfSSL: probe the .deb on ghcr.io.
+          WOLFSSL_DEB_REF=""
+          PROBE_DIR=$(mktemp -d)
+          if oras pull ghcr.io/wolfssl/wolfprovider/debs:nonfips -o "$PROBE_DIR" >/dev/null 2>&1; then
+            DEB_FILE=$(find "$PROBE_DIR" -name 'libwolfssl_*.deb' | head -1)
+            if [ -n "${DEB_FILE:-}" ]; then
+              # libwolfssl_5.8.4+commercial.fips.linuxv5.2.4+1_amd64.deb
+              # -> 5.8.4
+              VER=$(basename "$DEB_FILE" \
+                | sed -E 's|^libwolfssl_([0-9]+\.[0-9]+\.[0-9]+).*|\1|')
+              if [ -n "$VER" ]; then
+                WOLFSSL_DEB_REF="v${VER}-stable"
+              fi
+            fi
+          fi
+          rm -rf "$PROBE_DIR"
+
+          # wolfSSL: latest upstream -stable tag.
+          WOLFSSL_LATEST=$(git ls-remote --tags --refs https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
+                            | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+          if [ -z "${WOLFSSL_LATEST:-}" ]; then
+            echo "::error::Could not resolve latest wolfSSL -stable tag"
+            exit 1
+          fi
+
+          # Fall back if the .deb probe failed.
+          if [ -z "${WOLFSSL_DEB_REF:-}" ]; then
+            echo "::warning::Could not probe wolfssl version from ghcr .deb; falling back to upstream latest ($WOLFSSL_LATEST). Matrix label may not match the actual installed library."
+            WOLFSSL_DEB_REF="$WOLFSSL_LATEST"
+          fi
+
+          # OpenSSL: Bookworm stock (matches the wolfprov .deb).
+          OSSL_RAW=$(docker run --rm debian:bookworm sh -c \
+            'apt-get update -qq >/dev/null 2>&1 && apt-cache madison openssl | head -1' \
+            | awk '{print $3}')
+          if [ -z "${OSSL_RAW:-}" ]; then
+            echo "::error::Could not resolve Bookworm OpenSSL version"
+            exit 1
+          fi
+          OSSL=$(echo "$OSSL_RAW" | sed 's/-.*//')
+
+          # OpenSSL: all upstream release tags >= floor.
+          # Floor 3.0.6 -- 3.0.3-3.0.5 have an ECX EVP_PKEY_cmp bug.
+          OSSL_FLOOR="openssl-3.0.6"
+          OSSL_ALL=$(git ls-remote --tags --refs https://github.com/openssl/openssl.git 'openssl-3.*' \
+                     | awk -F/ '{print $NF}' \
+                     | grep -E '^openssl-3\.[0-9]+\.[0-9]+$' \
+                     | sort -V \
+                     | awk -v floor="$OSSL_FLOOR" '$0 == floor {p=1} p')
+          if [ -z "${OSSL_ALL:-}" ]; then
+            echo "::error::Could not resolve upstream OpenSSL release tags (floor=$OSSL_FLOOR)"
+            exit 1
+          fi
+          OSSL_ALL_JSON=$(printf '%s\n' "$OSSL_ALL" | jq -R . | jq -s -c .)
+          OSSL_LATEST=$(echo "$OSSL_ALL" | tail -n 1)
+
+          echo "wolfSSL .deb ref (actual ghcr deb):  $WOLFSSL_DEB_REF"
+          echo "wolfSSL upstream latest -stable:    $WOLFSSL_LATEST"
+          echo "OpenSSL Bookworm stock:             openssl-$OSSL (raw: $OSSL_RAW)"
+          echo "OpenSSL upstream latest:            $OSSL_LATEST"
+          echo "OpenSSL upstream releases tracked:  $(echo "$OSSL_ALL" | wc -l) tags"
+
+          {
+            echo "wolfssl_ref=$WOLFSSL_DEB_REF"
+            echo "wolfssl_ref_array=[\"master\",\"$WOLFSSL_DEB_REF\"]"
+            echo "wolfssl_latest_ref=$WOLFSSL_LATEST"
+            echo "wolfssl_latest_ref_array=[\"master\",\"$WOLFSSL_LATEST\"]"
+            echo "openssl_ref=openssl-$OSSL"
+            echo "openssl_ref_array=[\"openssl-$OSSL\"]"
+            echo "openssl_latest_ref=$OSSL_LATEST"
+            echo "openssl_latest_ref_array=[\"$OSSL_LATEST\"]"
+            echo "openssl_all_releases_array=$OSSL_ALL_JSON"
+          } >> "$GITHUB_OUTPUT"
