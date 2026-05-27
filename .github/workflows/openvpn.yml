@@ -105,7 +105,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd openvpn
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openvpn/openvpn-${{ matrix.openvpn_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp openvpn ${{ matrix.openvpn_ref }} ${{ matrix.wolfssl_ref }})
+          patch -p1 < "$PATCH"
 
       - name: Build OpenVPN
         working-directory: openvpn

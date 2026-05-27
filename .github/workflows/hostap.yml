@@ -118,11 +118,8 @@ jobs:
       - name: Apply hostap patches for wolfProvider
         run: |
           cd hostap
-          if [ "${{ matrix.fips_ref }}" = "FIPS" ]; then
-            patch -p1 < "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov-fips.patch"
-          else
-            patch -p1 < "$GITHUB_WORKSPACE/osp/wolfProvider/hostap/hostap-${{ matrix.hostap_ref }}-wolfprov.patch"
-          fi
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp hostap ${{ matrix.hostap_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
+          patch -p1 < "$PATCH"
 
       - name: Checkout linux
         uses: actions/checkout@v4

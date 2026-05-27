@@ -99,7 +99,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd ntpsec
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/python3-ntp/python3-ntp-FIPS-${{ matrix.python3-ntp_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp python3-ntp ${{ matrix.python3-ntp_ref }} ${{ matrix.wolfssl_ref }} --fips)
+          patch -p1 < "$PATCH"
 
       - name: Build ntpsec
         working-directory: ntpsec

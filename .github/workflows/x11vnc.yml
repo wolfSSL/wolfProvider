@@ -98,7 +98,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd x11vnc
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/x11vnc/x11vnc-${{ matrix.x11vnc_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp x11vnc ${{ matrix.x11vnc_ref }} ${{ matrix.wolfssl_ref }})
+          patch -p1 < "$PATCH"
 
       - name: Build x11vnc
         working-directory: x11vnc

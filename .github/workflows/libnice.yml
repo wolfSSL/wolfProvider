@@ -98,7 +98,8 @@ jobs:
       - run: |
           if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
             cd libnice
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/libnice/libnice-${{ matrix.libnice_ref }}-wolfprov.patch
+            PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp libnice ${{ matrix.libnice_ref }} ${{ matrix.wolfssl_ref }})
+            patch -p1 < "$PATCH"
           fi
 
       - name: Build libnice

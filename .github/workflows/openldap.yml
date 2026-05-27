@@ -99,7 +99,8 @@ jobs:
       - run: |
           cd openldap
           # Apply the wolfProvider patch
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openldap/openldap-${{ matrix.openldap_ref }}-debian-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp openldap ${{ matrix.openldap_ref }}-debian ${{ matrix.wolfssl_ref }})
+          patch -p1 < "$PATCH"
 
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap

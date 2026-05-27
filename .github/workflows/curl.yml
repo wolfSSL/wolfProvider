@@ -99,11 +99,11 @@ jobs:
 
       - name: Apply OSP curl patch
         run: |
-          PATCH=$GITHUB_WORKSPACE/osp/wolfProvider/curl/${{ matrix.curl_ref }}-wolfprov.patch
-          if [ -f "$PATCH" ]; then
+          PROJVER="${{ matrix.curl_ref }}"; PROJVER="${PROJVER#curl-}"
+          if PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp curl "$PROJVER" ${{ matrix.wolfssl_ref }} 2>/dev/null); then
             cd curl && patch -p1 < "$PATCH"
           else
-            echo "no OSP curl patch for ${{ matrix.curl_ref }}, skipping"
+            echo "no OSP curl patch for ${{ matrix.curl_ref }} / wolfssl ${{ matrix.wolfssl_ref }}, skipping"
           fi
 
       - name: Build curl

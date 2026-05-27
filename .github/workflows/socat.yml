@@ -106,7 +106,9 @@ jobs:
       - name: Apply OSP patch to socat
         working-directory: ./${{ matrix.socat_ref }}
         run: |
-          patch -p0 < $GITHUB_WORKSPACE/osp/wolfProvider/socat/${{ matrix.socat_ref }}-wolfprov.patch
+          PROJVER="${{ matrix.socat_ref }}"; PROJVER="${PROJVER#socat-}"
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp socat "$PROJVER" ${{ matrix.wolfssl_ref }})
+          patch -p0 < "$PATCH"
 
       - name: Run socat tests
         working-directory: ./${{ matrix.socat_ref }}

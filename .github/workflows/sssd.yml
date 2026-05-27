@@ -64,7 +64,8 @@ jobs:
           git checkout ${{ matrix.sssd_ref }}
 
           # Apply patch for testing
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/sssd/sssd-${{ matrix.sssd_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp sssd ${{ matrix.sssd_ref }} ${{ matrix.wolfssl_ref }})
+          patch -p1 < "$PATCH"
 
           # Configure and build SSSD with wolfProvider
           autoreconf -ivf

@@ -103,11 +103,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd ppp_repo
-          if [ ${{ matrix.fips_ref == 'FIPS' }} ]; then
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/ppp/ppp-FIPS-${{ matrix.ppp_ref }}-wolfprov.patch
-          else
-            patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/ppp/ppp-${{ matrix.ppp_ref }}-wolfprov.patch
-          fi
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp ppp ${{ matrix.ppp_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
+          patch -p1 < "$PATCH"
 
       - name: Build and install PPP
         working-directory: ppp_repo
