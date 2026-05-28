@@ -110,7 +110,9 @@ jobs:
         if: ${{ matrix.stunnel_ref == 'stunnel-5.67' }}
         working-directory: ./stunnel
         run: |
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp stunnel WPFF-5.67 ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
+          # stunnel ships one patch for both FIPS and non-FIPS (the two
+          # were byte-identical), so no --fips variant.
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp stunnel WPFF-5.67 ${{ matrix.wolfssl_ref }})
           patch -p1 < "$PATCH"
 
       - name: Build Stunnel
