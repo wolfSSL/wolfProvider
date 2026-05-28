@@ -1,10 +1,6 @@
 name: OSP Triage Report
 
 on:
-  # TEMP(testing): post a report on push to the test branch, against a fixed
-  # finished run, so we can validate Slack output without a nightly. REVERT before merge.
-  push:
-    branches: [ ci-draft-pause ]
   workflow_run:
     workflows: ["Nightly OSP Suite"]
     types: [completed]
