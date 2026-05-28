@@ -56,8 +56,6 @@ DEFAULT_TIER = 2
 
 SEV_ORDER = ["Critical", "High", "Medium", "Low"]
 SEV_RANK = {s: i for i, s in enumerate(SEV_ORDER)}
-SEV_CIRCLE = {"Critical": "\U0001F534", "High": "\U0001F7E0",
-              "Medium": "\U0001F7E1", "Low": "\U0001F535"}
 TIER_SEV = {1: "High", 2: "Medium", 3: "Low"}  # fallback when AI absent
 SPARK = "▁▂▃▄▅▆▇█"
 
@@ -428,8 +426,8 @@ def main():
     ]
 
     if reals:
-        meter = "  ".join(f"{SEV_CIRCLE[s]} {sum(1 for r in reals if r[0] == s)} {s}"
-                          for s in SEV_ORDER if any(r[0] == s for r in reals))
+        meter = " · ".join(f"{sum(1 for r in reals if r[0] == s)} {s}"
+                           for s in SEV_ORDER if any(r[0] == s for r in reals))
         blocks.append(section(f"*Severity:*   {meter}"))
     if headline:
         blocks.append(section(headline))
@@ -440,7 +438,7 @@ def main():
         blocks.append(section(f"*Real failures — {n_real_suites} suite(s), action needed*"))
         for sev, name, url, symptom, hyp, nxt in reals:
             link = f"  <{url}|logs>" if url else ""
-            lines = [f"{SEV_CIRCLE[sev]} *{sev} · `{name}`*{link}",
+            lines = [f"*{sev} · `{name}`*{link}",
                      f"   • {symptom}"]
             if hyp:
                 lines.append(f"   • _cause:_ {hyp}")
@@ -450,7 +448,7 @@ def main():
 
     if flakes:
         blocks.append({"type": "divider"})
-        flake_lines = ["\U0001F7E1 *Flakes — infra, auto-retried (glance only)*"]
+        flake_lines = ["*Flakes — infra, auto-retried (glance only)*"]
         flake_lines += [f"   `{p}` — {w}" for p, w in flakes]
         for chunk in chunk_lines(flake_lines):
             blocks.append(section(chunk))
