@@ -4,9 +4,11 @@ on:
   workflow_call: {}
   workflow_dispatch: {}
 
+# run-scoped: a reusable workflow's group keys off the caller, so a shared
+# group would let one nightly run cancel another's static analysis.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   cppcheck:
