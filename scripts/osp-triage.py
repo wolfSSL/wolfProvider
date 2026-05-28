@@ -139,15 +139,20 @@ def ai_triage(failures):
         parts.append(f"### {f['name']}\nfailing steps: {', '.join(f['steps']) or 'n/a'}\n"
                      f"log tail:\n{f['log'][-AI_LOG_CHARS:]}\n")
     prompt = (
-        "You are triaging the wolfProvider nightly OSP CI suite. Each job below "
-        "already failed TWICE (an automatic retry did not clear it), so default "
-        "to REAL unless the log clearly shows an INFRASTRUCTURE FLAKE "
-        "(GitHub runner/network/container/registry/download).\n"
-        "For each job give a terse one-line root-cause note (<=110 chars; if "
-        "real, add a brief fix hint).\n"
+        "You are triaging failures in the wolfProvider nightly OSP CI suite. "
+        "Each job below failed twice (an auto-retry did not clear it). "
+        "Infra-setup failures are already filtered out, so treat these as real "
+        "test/build failures unless THIS job's own log clearly shows a "
+        "network/registry/download hiccup.\n"
+        "Judge each job ONLY from its own log. Do not speculate about outages "
+        "or reference other jobs. For each give:\n"
+        "  verdict: \"real\" (wolfProvider/OSP-patch regression) or \"flake\".\n"
+        "  note: ONE specific line <=110 chars naming the failing test/symptom; "
+        "if real, add a concrete fix hint.\n"
+        "Also write headline: <=120 chars, plain and accurate, summarizing the "
+        "real regressions only.\n"
         "Respond with ONLY compact JSON:\n"
-        '{"headline":"<=120 char overall read","jobs":{"<name>":'
-        '{"verdict":"real"|"flake","note":"..."}}}\n\n'
+        '{"headline":"...","jobs":{"<name>":{"verdict":"real"|"flake","note":"..."}}}\n\n'
         + "\n".join(parts)
     )
     body = {"model": CLAUDE_MODEL, "max_tokens": 800,
@@ -164,8 +169,10 @@ def ai_triage(failures):
         text = resp["content"][0]["text"]
         m = re.search(r"\{.*\}", text, re.S)
         return json.loads(m.group(0)) if m else None
+    except urllib.error.HTTPError as e:
+        return {"headline": f"AI triage unavailable (HTTP {e.code})", "jobs": {}}
     except Exception as e:
-        return {"headline": f"AI triage unavailable: {e}", "jobs": {}}
+        return {"headline": f"AI triage unavailable ({type(e).__name__})", "jobs": {}}
 
 
 def post_slack(color, fallback, blocks):
@@ -267,67 +274,67 @@ def main():
                 if j.get("conclusion") in ("failure", "cancelled")}
         recovered = sorted(prev - {prefix_of(j["name"]) for j in failed})
 
-    # Survivors (failed after the retry) grouped per OSP — gather logs for AI.
+    # Survivors grouped per OSP. Infra-setup failures are obvious flakes and are
+    # NOT sent to the AI; everything else gets a Claude verdict + note.
     survivors = OrderedDict()
     for j in failed:
         survivors.setdefault(prefix_of(j["name"]), []).append(j)
-    fails_data = []
-    for prefix, gjobs in survivors.items():
-        rep = gjobs[0]
-        fails_data.append({"name": prefix, "steps": failing_steps(rep),
-                           "log": scrub(step_body(fetch_log(rep["id"])))})
 
-    ai = ai_triage(fails_data)
-    headline = ai.get("headline", "") if ai else ""
+    flakes, candidates = [], []
+    for prefix, gjobs in survivors.items():
+        steps = failing_steps(gjobs[0])
+        infra = next((s for s in steps if s in INFRA_STEPS), None)
+        if infra:
+            flakes.append((prefix, f"infra setup failed ({infra})"))
+        else:
+            candidates.append({"name": prefix, "steps": steps,
+                               "log": scrub(step_body(fetch_log(gjobs[0]["id"])))})
+
+    ai = ai_triage(candidates)
+    headline = scrub(ai.get("headline", "")) if ai else ""
     verdicts = ai.get("jobs", {}) if ai else {}
 
-    reals, flakes = [], []
-    for fd in fails_data:
+    reals = []
+    for fd in candidates:
         name = fd["name"]
-        if any(s in INFRA_STEPS for s in fd["steps"]):
-            flakes.append((name, f"infra: failing step "
-                                 f"'{next(s for s in fd['steps'] if s in INFRA_STEPS)}'"))
-            continue
         v = verdicts.get(name, {})
-        verdict, note = v.get("verdict"), v.get("note", "")
-        if verdict == "flake":
-            flakes.append((name, "AI: " + (note or "infra flake")))
-        elif verdict == "real":
-            reals.append((name, "AI: " + (note or "real regression")))
+        note = scrub(v.get("note", "") or "")
+        if v.get("verdict") == "flake":
+            flakes.append((name, note or "transient infra issue"))
+        elif v.get("verdict") == "real":
+            reals.append((name, note or "test/build regression"))
         elif ANTHROPIC_KEY:
-            reals.append((name, note or "failed twice — real"))
+            reals.append((name, note or "failed twice — likely real"))
         else:
-            reals.append((name, "failed twice — needs review (no AI key)"))
+            reals.append((name, "failed twice — needs review"))
 
     total = n_success + len(failed)
     pct = round(100 * n_success / total) if total else 100
     date_str = (run.get("created_at") or "")[:10] or datetime.date.today().isoformat()
 
-    if reals:
-        color, emoji, status = "danger", "\U0001F534", f"{len(reals)} REAL"
-    elif flakes or recovered:
-        color, emoji, status = "warning", "⚠️", "FLAKES ONLY"
+    if not reals:
+        color, status = "good", "healthy"
+    elif pct >= 90:
+        color, status = "warning", f"{len(reals)} real — action needed"
     else:
-        color, emoji, status = "good", "✅", "HEALTHY"
+        color, status = "danger", f"{len(reals)} real — degraded"
 
     flaked_count = len(flakes) + len(recovered)
     blocks = [
         {"type": "header",
-         "text": {"type": "plain_text",
-                  "text": f"wolfProvider Nightly OSP {emoji}", "emoji": True}},
+         "text": {"type": "plain_text", "text": "wolfProvider Nightly OSP",
+                  "emoji": True}},
         {"type": "section", "fields": [
             {"type": "mrkdwn", "text": f"*Date:*\n{date_str}"},
             {"type": "mrkdwn", "text": f"*Status:*\n{status}"},
             {"type": "mrkdwn", "text": f"*Passed:*\n{n_success} / {total}  ({pct}%)"},
-            {"type": "mrkdwn", "text": f"*Failed:*\n{len(reals)} real, {flaked_count} flaked"},
+            {"type": "mrkdwn", "text": f"*Failed:*\n{len(reals)} real · {flaked_count} flaked"},
         ]},
-        section(f"*Breakdown:*   \U0001F7E2 {n_success} passed    "
-                f"\U0001F7E1 {flaked_count} flaked    "
-                f"\U0001F534 {len(reals)} real    "
-                f"⚪ {n_cancelled} cancelled"),
+        section(f"\U0001F7E2 {n_success} passed     \U0001F7E1 {flaked_count} flaked     "
+                f"\U0001F534 {len(reals)} real     ⚪ {n_cancelled} cancelled"),
     ]
     if headline:
-        blocks.append(section(f"_{headline}_"))
+        blocks.append(section(headline))
     if recovered:
         blocks.append(section("*Recovered on retry:* "
                               + ", ".join(f"`{p}`" for p in recovered)))
