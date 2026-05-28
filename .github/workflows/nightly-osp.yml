@@ -18,7 +18,7 @@ on:
     paths-ignore:
       - '.github/workflows/osp-report.yml'
       - '.github/workflows/nightly-osp.yml'
-      - 'scripts/osp-triage.py'
+      - '.github/scripts/osp-triage.py'
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:

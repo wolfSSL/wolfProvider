@@ -2,21 +2,22 @@
 """Triage a nightly-osp run and post one clean Slack health report.
 
 Classification is by RETRY OUTCOME, not guesswork: every job that did not
-succeed is retried once. A job that clears on the retry is a flake; a job
-that fails twice is real and gets reported. Claude only validates the
-survivors and writes the short root-cause notes — it does not decide whether
-to retry.
+succeed is retried once. Cleared on retry = flake; failed twice = a real
+failure. A reproducing test failure is REAL even if it is low-impact or
+unrelated to crypto — that is what severity (P0-P3) is for. "flake" means
+ONLY a transient infra/network/registry hiccup. Claude validates the
+survivors, assigns severity, and writes the symptom/hypothesis/next lines.
 
 Env:
-  GH_REPO              owner/repo (required)
-  RUN_ID               run to analyze (required)
-  GITHUB_TOKEN         token with actions:read (+ actions:write to retry)
-  SLACK_WEBHOOK_URL    optional; if unset or DRY_RUN=true, payload is printed
-  ANTHROPIC_API_KEY    optional; if unset, survivors are reported without notes
-  CLAUDE_MODEL         optional; default claude-sonnet-4-6
-  AUTO_RETRY           "true" to rerun non-passing jobs once before reporting
-  DRY_RUN              "true" to print the Slack payload instead of posting
-  ANALYZE_ATTEMPT      optional; report a specific past attempt as-is
+  GH_REPO            owner/repo (required)
+  RUN_ID             run to analyze (required)
+  GITHUB_TOKEN       token with actions:read (+ actions:write to retry)
+  SLACK_WEBHOOK_URL  optional; if unset or DRY_RUN=true, payload is printed
+  ANTHROPIC_API_KEY  optional; without it survivors report without notes
+  CLAUDE_MODEL       optional; default claude-sonnet-4-6
+  AUTO_RETRY         "true" to rerun non-passing jobs once before reporting
+  DRY_RUN            "true" to print the payload instead of posting
+  ANALYZE_ATTEMPT    optional; report a specific past attempt as-is
 """
 import datetime
 import json
@@ -39,9 +40,21 @@ FORCE_ATTEMPT = os.environ.get("ANALYZE_ATTEMPT")
 
 LOG_TAIL_LINES = 300
 AI_LOG_CHARS = 4000
+WAVE_SUFFIX = re.compile(r"-(?:591|584|\d{3})$")
 
-# A failure in one of these steps is unambiguous infra, not a code regression.
 INFRA_STEPS = {"Set up job", "Initialize containers", "Stop containers"}
+
+# Per-suite tier hint: 1 = crypto/security-critical, 2 = important, 3 = cosmetic.
+# The AI sets per-failure severity (P0-P3) from this tier + the log. Edit freely.
+SUITE_TIER = {
+    "krb5": 1, "openssl-version": 1, "openvpn": 1, "openssh": 1,
+    "stunnel": 1, "nginx": 1, "curl": 1, "net-snmp": 2, "openldap": 2,
+    "socat": 2, "libssh2": 2, "pam-pkcs11": 2, "sssd": 2, "tpm2-tools": 2,
+    "libfido2": 2, "static-analysis": 3, "multi-compiler": 2,
+}
+DEFAULT_TIER = 2
+
+SEV_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 # Secrets scrubbed before any log leaves this process (Slack or Claude).
 SCRUB = [
@@ -112,7 +125,6 @@ def fetch_log(job_id):
 
 
 def step_body(text):
-    """Log with trailing 'Post job cleanup' noise dropped, tail kept."""
     idx = text.find("Post job cleanup.")
     body = text[:idx] if idx > 0 else text
     return "\n".join(body.splitlines()[-LOG_TAIL_LINES:])
@@ -124,38 +136,55 @@ def scrub(text):
     return text
 
 
+def prefix_of(name):
+    return name.split(" / ")[0].strip()
+
+
+def suite_of(prefix):
+    return WAVE_SUFFIX.sub("", prefix)
+
+
+def tier_of(prefix):
+    return SUITE_TIER.get(suite_of(prefix), DEFAULT_TIER)
+
+
 def failing_steps(job):
     return [s.get("name", "").strip() for s in job.get("steps", [])
             if s.get("conclusion") == "failure"]
 
 
 def ai_triage(failures):
-    """One Claude call validating all survivors. Returns
-    {"headline": str, "jobs": {name: {"verdict","note"}}} or None."""
+    """One Claude call. Returns {"headline","jobs":{name:{verdict,severity,
+    symptom,hypothesis,next}}} or None."""
     if not ANTHROPIC_KEY or not failures:
         return None
     parts = []
     for f in failures:
-        parts.append(f"### {f['name']}\nfailing steps: {', '.join(f['steps']) or 'n/a'}\n"
+        parts.append(f"### {f['name']}  (suite tier {f['tier']})\n"
+                     f"failing steps: {', '.join(f['steps']) or 'n/a'}\n"
                      f"log tail:\n{f['log'][-AI_LOG_CHARS:]}\n")
     prompt = (
         "You are triaging failures in the wolfProvider nightly OSP CI suite. "
-        "Each job below failed twice (an auto-retry did not clear it). "
-        "Infra-setup failures are already filtered out, so treat these as real "
-        "test/build failures unless THIS job's own log clearly shows a "
-        "network/registry/download hiccup.\n"
-        "Judge each job ONLY from its own log. Do not speculate about outages "
-        "or reference other jobs. For each give:\n"
-        "  verdict: \"real\" (wolfProvider/OSP-patch regression) or \"flake\".\n"
-        "  note: ONE specific line <=110 chars naming the failing test/symptom; "
-        "if real, add a concrete fix hint.\n"
-        "Also write headline: <=120 chars, plain and accurate, summarizing the "
-        "real regressions only.\n"
-        "Respond with ONLY compact JSON:\n"
-        '{"headline":"...","jobs":{"<name>":{"verdict":"real"|"flake","note":"..."}}}\n\n'
+        "Each job below failed twice (an auto-retry did not clear it). Infra "
+        "setup failures are already filtered out.\n"
+        "Judge each job ONLY from its own log; do not speculate about outages "
+        "or reference other jobs.\n"
+        "verdict: \"flake\" ONLY if THIS log shows a transient network/registry/"
+        "download hiccup. A test that reproducibly FAILS is \"real\" even if it "
+        "is cosmetic or unrelated to crypto — use severity for that, never flake.\n"
+        "severity (real only): P0 crypto/security regression or broad breakage; "
+        "P1 functional regression in a tier-1 suite; P2 real but contained / "
+        "test-harness bug; P3 cosmetic (lint/man-page/docs). Use the suite tier "
+        "as a hint but judge by the actual failure.\n"
+        "symptom: one line, the concrete error. hypothesis: one line, likely "
+        "cause. next: one line, the concrete next action.\n"
+        "headline: <=120 chars, plain, summarizing the real regressions.\n"
+        "Respond with ONLY compact JSON: {\"headline\":\"...\",\"jobs\":{\"<name>\":"
+        "{\"verdict\":\"real|flake\",\"severity\":\"P0|P1|P2|P3\",\"symptom\":\"...\","
+        "\"hypothesis\":\"...\",\"next\":\"...\"}}}\n\n"
         + "\n".join(parts)
     )
-    body = {"model": CLAUDE_MODEL, "max_tokens": 800,
+    body = {"model": CLAUDE_MODEL, "max_tokens": 1200,
             "messages": [{"role": "user", "content": prompt}]}
     req = urllib.request.Request("https://api.anthropic.com/v1/messages",
                                  method="POST")
@@ -196,7 +225,7 @@ def render_text(blocks):
         if t == "header":
             out.append(b["text"]["text"])
         elif t == "divider":
-            out.append("-" * 40)
+            out.append("-" * 48)
         elif t == "section" and "fields" in b:
             out.append("  ".join(f["text"].replace("\n", " ") for f in b["fields"]))
         elif t == "section":
@@ -227,13 +256,7 @@ def run_url():
     return f"{server}/{REPO}/actions/runs/{RUN_ID}"
 
 
-def prefix_of(name):
-    return name.split(" / ")[0].strip()
-
-
 def merged_jobs(attempt):
-    """Final state of every job. After a rerun the latest attempt holds only
-    the re-run subset, so overlay it on attempt 1 for the full picture."""
     if FORCE_ATTEMPT:
         return all_jobs(RUN_ID, attempt=int(FORCE_ATTEMPT))
     latest = all_jobs(RUN_ID)
@@ -256,9 +279,9 @@ def main():
         if nonpass:
             gh(f"/repos/{REPO}/actions/runs/{RUN_ID}/rerun-failed-jobs",
                method="POST")
-            note = (f":hourglass_flowing_sand: *wolfProvider Nightly OSP* — "
-                    f"{len(nonpass)} job(s) didn't pass on attempt 1; retrying "
-                    f"once before triage. <{run_url()}|View run>")
+            note = (f"*wolfProvider Nightly OSP* — {len(nonpass)} job(s) didn't "
+                    f"pass on attempt 1; retrying once before triage. "
+                    f"<{run_url()}|View run>")
             post_slack("warning", note, [section(note)])
             return
 
@@ -274,43 +297,51 @@ def main():
                 if j.get("conclusion") in ("failure", "cancelled")}
         recovered = sorted(prev - {prefix_of(j["name"]) for j in failed})
 
-    # Survivors grouped per OSP. Infra-setup failures are obvious flakes and are
-    # NOT sent to the AI; everything else gets a Claude verdict + note.
+    # Group failed jobs per suite. Infra-setup failures are obvious flakes and
+    # are NOT sent to the AI; everything else gets a verdict + severity.
     survivors = OrderedDict()
     for j in failed:
         survivors.setdefault(prefix_of(j["name"]), []).append(j)
 
-    flakes, candidates = [], []
+    flakes = []          # (prefix, note)
+    flake_jobs = 0
+    candidates = []      # non-infra survivors -> AI
     for prefix, gjobs in survivors.items():
         steps = failing_steps(gjobs[0])
         infra = next((s for s in steps if s in INFRA_STEPS), None)
         if infra:
             flakes.append((prefix, f"infra setup failed ({infra})"))
+            flake_jobs += len(gjobs)
         else:
-            candidates.append({"name": prefix, "steps": steps,
+            candidates.append({"name": prefix, "tier": tier_of(prefix),
+                               "steps": steps, "jobs": gjobs,
+                               "url": gjobs[0].get("html_url", ""),
                                "log": scrub(step_body(fetch_log(gjobs[0]["id"])))})
 
     ai = ai_triage(candidates)
     headline = scrub(ai.get("headline", "")) if ai else ""
     verdicts = ai.get("jobs", {}) if ai else {}
 
-    reals = []
+    reals = []           # (severity, prefix, url, symptom, hypothesis, next)
+    real_jobs = 0
     for fd in candidates:
         name = fd["name"]
         v = verdicts.get(name, {})
-        note = scrub(v.get("note", "") or "")
         if v.get("verdict") == "flake":
-            flakes.append((name, note or "transient infra issue"))
-        elif v.get("verdict") == "real":
-            reals.append((name, note or "test/build regression"))
-        elif ANTHROPIC_KEY:
-            reals.append((name, note or "failed twice — likely real"))
-        else:
-            reals.append((name, "failed twice — needs review"))
+            flakes.append((name, scrub(v.get("symptom", "") or "transient issue")))
+            flake_jobs += len(fd["jobs"])
+            continue
+        sev = v.get("severity") if v.get("severity") in SEV_RANK else \
+            ("P1" if fd["tier"] == 1 else "P2" if fd["tier"] == 2 else "P3")
+        reals.append((sev, name, fd["url"],
+                      scrub(v.get("symptom", "") or "failed twice"),
+                      scrub(v.get("hypothesis", "")),
+                      scrub(v.get("next", ""))))
+        real_jobs += len(fd["jobs"])
+    reals.sort(key=lambda r: SEV_RANK.get(r[0], 9))
 
     total = n_success + len(failed)
     pct = round(100 * n_success / total) if total else 100
-    date_str = (run.get("created_at") or "")[:10] or datetime.date.today().isoformat()
 
     if not reals:
         color, status = "good", "healthy"
@@ -319,19 +350,24 @@ def main():
     else:
         color, status = "danger", f"{len(reals)} real — degraded"
 
-    flaked_count = len(flakes) + len(recovered)
+    date_str = (run.get("created_at") or "")[:10] or datetime.date.today().isoformat()
+    sev_tally = ", ".join(f"{s}:{sum(1 for r in reals if r[0] == s)}"
+                          for s in ("P0", "P1", "P2", "P3")
+                          if any(r[0] == s for r in reals))
+
+    fields = [
+        {"type": "mrkdwn", "text": f"*Date:*\n{date_str}"},
+        {"type": "mrkdwn", "text": f"*Status:*\n{status}"},
+        {"type": "mrkdwn", "text": f"*Pass rate:*\n{n_success} / {total} jobs  ({pct}%)"},
+        {"type": "mrkdwn", "text": f"*Real failures:*\n{len(reals)}"
+                                   + (f"  ({sev_tally})" if sev_tally else "")},
+        {"type": "mrkdwn", "text": f"*Flakes:*\n{len(flakes)} (auto-retried)"},
+        {"type": "mrkdwn", "text": f"*Cancelled:*\n{n_cancelled}"},
+    ]
     blocks = [
-        {"type": "header",
-         "text": {"type": "plain_text", "text": "wolfProvider Nightly OSP",
-                  "emoji": True}},
-        {"type": "section", "fields": [
-            {"type": "mrkdwn", "text": f"*Date:*\n{date_str}"},
-            {"type": "mrkdwn", "text": f"*Status:*\n{status}"},
-            {"type": "mrkdwn", "text": f"*Passed:*\n{n_success} / {total}  ({pct}%)"},
-            {"type": "mrkdwn", "text": f"*Failed:*\n{len(reals)} real · {flaked_count} flaked"},
-        ]},
-        section(f"\U0001F7E2 {n_success} passed     \U0001F7E1 {flaked_count} flaked     "
-                f"\U0001F534 {len(reals)} real     ⚪ {n_cancelled} cancelled"),
+        {"type": "header", "text": {"type": "plain_text",
+                                    "text": "wolfProvider Nightly OSP", "emoji": True}},
+        {"type": "section", "fields": fields},
     ]
     if headline:
         blocks.append(section(headline))
@@ -339,23 +375,31 @@ def main():
         blocks.append(section("*Recovered on retry:* "
                               + ", ".join(f"`{p}`" for p in recovered)))
 
-    if reals or flakes:
+    if reals:
         blocks.append({"type": "divider"})
-        lines = []
-        if reals:
-            lines.append("*\U0001F534 Real failures — action needed:*")
-            lines += [f"`{p}` — {w}" for p, w in reals]
-        if flakes:
-            lines.append("*\U0001F7E1 Flakes — infra, auto-retried:*")
-            lines += [f"`{p}` — {w}" for p, w in flakes]
-        for chunk in chunk_lines(lines):
+        blocks.append(section("\U0001F534 *Real failures — action needed*"))
+        for sev, name, url, symptom, hyp, nxt in reals:
+            link = f"<{url}|logs>" if url else ""
+            lines = [f"*[{sev}] `{name}`*  {link}".rstrip(),
+                     f"   • {symptom}"]
+            if hyp:
+                lines.append(f"   • _cause:_ {hyp}")
+            if nxt:
+                lines.append(f"   • _next:_ {nxt}")
+            blocks.append(section("\n".join(lines)))
+
+    if flakes:
+        blocks.append({"type": "divider"})
+        flake_lines = ["\U0001F7E1 *Flakes — infra, auto-retried (glance only)*"]
+        flake_lines += [f"   `{p}` — {w}" for p, w in flakes]
+        for chunk in chunk_lines(flake_lines):
             blocks.append(section(chunk))
 
     blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
         "text": f"wolfSSL v5.9.1 (Wave 1) + v5.8.4 (Wave 2)  ·  "
                 f"attempt {attempt}  ·  <{run_url()}|View run>"}]})
 
-    fallback = f"wolfProvider Nightly OSP {status}: {n_success}/{total} passed"
+    fallback = f"wolfProvider Nightly OSP: {status} ({n_success}/{total} passed)"
     post_slack(color, fallback, blocks)
 
 

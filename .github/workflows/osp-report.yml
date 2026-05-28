@@ -44,4 +44,4 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AUTO_RETRY: ${{ github.event_name == 'workflow_run' && 'true' || github.event_name == 'workflow_dispatch' && inputs.auto_retry && 'true' || 'false' }}
-        run: python3 scripts/osp-triage.py
+        run: python3 .github/scripts/osp-triage.py
