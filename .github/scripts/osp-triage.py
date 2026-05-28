@@ -54,7 +54,12 @@ SUITE_TIER = {
 }
 DEFAULT_TIER = 2
 
-SEV_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+SEV_ORDER = ["Critical", "High", "Medium", "Low"]
+SEV_RANK = {s: i for i, s in enumerate(SEV_ORDER)}
+SEV_CIRCLE = {"Critical": "\U0001F534", "High": "\U0001F7E0",
+              "Medium": "\U0001F7E1", "Low": "\U0001F535"}
+TIER_SEV = {1: "High", 2: "Medium", 3: "Low"}  # fallback when AI absent
+SPARK = "▁▂▃▄▅▆▇█"
 
 # Secrets scrubbed before any log leaves this process (Slack or Claude).
 SCRUB = [
@@ -172,16 +177,16 @@ def ai_triage(failures):
         "verdict: \"flake\" ONLY if THIS log shows a transient network/registry/"
         "download hiccup. A test that reproducibly FAILS is \"real\" even if it "
         "is cosmetic or unrelated to crypto — use severity for that, never flake.\n"
-        "severity (real only): P0 crypto/security regression or broad breakage; "
-        "P1 functional regression in a tier-1 suite; P2 real but contained / "
-        "test-harness bug; P3 cosmetic (lint/man-page/docs). Use the suite tier "
-        "as a hint but judge by the actual failure.\n"
+        "severity (real only): Critical = crypto/security regression or broad "
+        "breakage; High = functional regression in a tier-1 suite; Medium = "
+        "real but contained / test-harness bug; Low = cosmetic (lint/man-page/"
+        "docs). Use the suite tier as a hint but judge by the actual failure.\n"
         "symptom: one line, the concrete error. hypothesis: one line, likely "
         "cause. next: one line, the concrete next action.\n"
         "headline: <=120 chars, plain, summarizing the real regressions.\n"
         "Respond with ONLY compact JSON: {\"headline\":\"...\",\"jobs\":{\"<name>\":"
-        "{\"verdict\":\"real|flake\",\"severity\":\"P0|P1|P2|P3\",\"symptom\":\"...\","
-        "\"hypothesis\":\"...\",\"next\":\"...\"}}}\n\n"
+        "{\"verdict\":\"real|flake\",\"severity\":\"Critical|High|Medium|Low\","
+        "\"symptom\":\"...\",\"hypothesis\":\"...\",\"next\":\"...\"}}}\n\n"
         + "\n".join(parts)
     )
     body = {"model": CLAUDE_MODEL, "max_tokens": 1200,
@@ -254,6 +259,47 @@ def chunk_lines(lines, limit=2900):
 def run_url():
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     return f"{server}/{REPO}/actions/runs/{RUN_ID}"
+
+
+def pass_rate(run_id):
+    js = all_jobs(run_id)
+    s = sum(1 for j in js if j.get("conclusion") == "success")
+    f = sum(1 for j in js if j.get("conclusion") == "failure")
+    return (s, s + f) if (s + f) else None
+
+
+def history(n=6):
+    """Pass rates of the last n real nightly-osp runs (newest first), for the
+    trend sparkline. Best-effort: returns [] on any error or sparse history."""
+    try:
+        runs = gh(f"/repos/{REPO}/actions/workflows/nightly-osp.yml/runs"
+                  f"?per_page=20&status=completed").get("workflow_runs", [])
+    except Exception:
+        return []
+    out = []
+    for r in runs:
+        if str(r["id"]) == str(RUN_ID) or r.get("conclusion") not in ("success", "failure"):
+            continue
+        try:
+            pr = pass_rate(r["id"])
+        except Exception:
+            continue
+        if pr and pr[1] >= 50:
+            out.append(pr[0] / pr[1])
+        if len(out) >= n:
+            break
+    return out
+
+
+def sparkline(rates):
+    if not rates:
+        return ""
+    chars = []
+    for x in rates:
+        # map a 90-100% band onto the 8 spark levels (clamped)
+        idx = min(7, max(0, int((x - 0.90) / 0.10 * 7)))
+        chars.append(SPARK[idx])
+    return "".join(chars)
 
 
 def merged_jobs(attempt):
@@ -332,7 +378,7 @@ def main():
             flake_jobs += len(fd["jobs"])
             continue
         sev = v.get("severity") if v.get("severity") in SEV_RANK else \
-            ("P1" if fd["tier"] == 1 else "P2" if fd["tier"] == 2 else "P3")
+            TIER_SEV.get(fd["tier"], "Medium")
         reals.append((sev, name, fd["url"],
                       scrub(v.get("symptom", "") or "failed twice"),
                       scrub(v.get("hypothesis", "")),
@@ -340,8 +386,9 @@ def main():
         real_jobs += len(fd["jobs"])
     reals.sort(key=lambda r: SEV_RANK.get(r[0], 9))
 
-    total = n_success + len(failed)
-    pct = round(100 * n_success / total) if total else 100
+    total_pf = n_success + len(failed)            # pass-rate denominator
+    total_all = total_pf + n_cancelled            # every job (breakdown sums to this)
+    pct = round(100 * n_success / total_pf) if total_pf else 100
 
     if not reals:
         color, status = "good", "healthy"
@@ -351,36 +398,49 @@ def main():
         color, status = "danger", f"{len(reals)} real — degraded"
 
     date_str = (run.get("created_at") or "")[:10] or datetime.date.today().isoformat()
-    sev_tally = ", ".join(f"{s}:{sum(1 for r in reals if r[0] == s)}"
-                          for s in ("P0", "P1", "P2", "P3")
-                          if any(r[0] == s for r in reals))
+
+    # Trend vs prior nightlies (best-effort).
+    hist = history()
+    trend = ""
+    if hist:
+        spark = sparkline(list(reversed(hist)) + [n_success / total_pf if total_pf else 1])
+        delta = (n_success / total_pf - hist[0]) * 100 if total_pf else 0
+        arrow = "▲" if delta > 0.05 else "▼" if delta < -0.05 else "▬"
+        trend = f"{spark}  {arrow}{abs(delta):.1f}pp vs last"
 
     fields = [
         {"type": "mrkdwn", "text": f"*Date:*\n{date_str}"},
         {"type": "mrkdwn", "text": f"*Status:*\n{status}"},
-        {"type": "mrkdwn", "text": f"*Pass rate:*\n{n_success} / {total} jobs  ({pct}%)"},
-        {"type": "mrkdwn", "text": f"*Real failures:*\n{len(reals)}"
-                                   + (f"  ({sev_tally})" if sev_tally else "")},
-        {"type": "mrkdwn", "text": f"*Flakes:*\n{len(flakes)} (auto-retried)"},
-        {"type": "mrkdwn", "text": f"*Cancelled:*\n{n_cancelled}"},
+        {"type": "mrkdwn",
+         "text": f"*Pass rate:*\n{n_success} / {total_pf} jobs  ({pct}%)"},
+        {"type": "mrkdwn", "text": f"*Trend:*\n{trend or 'building history'}"},
     ]
+    breakdown = (f"\U0001F7E2 {n_success} passed"
+                 + (f" ({len(recovered)} recovered)" if recovered else "")
+                 + f"     \U0001F7E1 {flake_jobs} flaked"
+                 f"     \U0001F534 {real_jobs} real"
+                 f"     ⚪ {n_cancelled} cancelled")
     blocks = [
         {"type": "header", "text": {"type": "plain_text",
                                     "text": "wolfProvider Nightly OSP", "emoji": True}},
         {"type": "section", "fields": fields},
+        section(breakdown),
     ]
+
+    if reals:
+        meter = "  ".join(f"{SEV_CIRCLE[s]} {sum(1 for r in reals if r[0] == s)} {s}"
+                          for s in SEV_ORDER if any(r[0] == s for r in reals))
+        blocks.append(section(f"*Severity:*   {meter}"))
     if headline:
         blocks.append(section(headline))
-    if recovered:
-        blocks.append(section("*Recovered on retry:* "
-                              + ", ".join(f"`{p}`" for p in recovered)))
 
     if reals:
         blocks.append({"type": "divider"})
-        blocks.append(section("\U0001F534 *Real failures — action needed*"))
+        n_real_suites = len(reals)
+        blocks.append(section(f"*Real failures — {n_real_suites} suite(s), action needed*"))
         for sev, name, url, symptom, hyp, nxt in reals:
-            link = f"<{url}|logs>" if url else ""
-            lines = [f"*[{sev}] `{name}`*  {link}".rstrip(),
+            link = f"  <{url}|logs>" if url else ""
+            lines = [f"{SEV_CIRCLE[sev]} *{sev} · `{name}`*{link}",
                      f"   • {symptom}"]
             if hyp:
                 lines.append(f"   • _cause:_ {hyp}")
@@ -397,9 +457,9 @@ def main():
 
     blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
         "text": f"wolfSSL v5.9.1 (Wave 1) + v5.8.4 (Wave 2)  ·  "
-                f"attempt {attempt}  ·  <{run_url()}|View run>"}]})
+                f"attempt {attempt}  ·  {total_all} jobs  ·  <{run_url()}|View run>"}]})
 
-    fallback = f"wolfProvider Nightly OSP: {status} ({n_success}/{total} passed)"
+    fallback = f"wolfProvider Nightly OSP: {status} ({n_success}/{total_pf} passed)"
     post_slack(color, fallback, blocks)
 
 
