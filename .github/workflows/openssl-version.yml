@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_ref: ${{ inputs.wolfssl_refs_json != "" && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_all_releases_array) }}
     steps:
       - name: Checkout wolfProvider
