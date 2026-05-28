@@ -105,7 +105,7 @@ jobs:
           fetch-depth: 1
       - run: |
           cd ntpsec
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp python3-ntp ${{ matrix.python3-ntp_ref }} ${{ matrix.wolfssl_ref }} --fips)
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp python3-ntp ${{ matrix.python3-ntp_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
           patch -p1 < "$PATCH"
 
       - name: Build ntpsec

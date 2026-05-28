@@ -104,7 +104,7 @@ jobs:
           fetch-depth: 1
       - run: |
           cd libssh2
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp libssh2 ${{ matrix.libssh2_ref }}-debian ${{ matrix.wolfssl_ref }})
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp libssh2 ${{ matrix.libssh2_ref }}-debian ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
           patch -p1 < "$PATCH"
 
       - name: Build libssh2

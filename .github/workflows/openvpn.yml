@@ -111,7 +111,7 @@ jobs:
           fetch-depth: 1
       - run: |
           cd openvpn
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp openvpn ${{ matrix.openvpn_ref }} ${{ matrix.wolfssl_ref }})
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp openvpn ${{ matrix.openvpn_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
           patch -p1 < "$PATCH"
 
       - name: Build OpenVPN

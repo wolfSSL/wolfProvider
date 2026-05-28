@@ -113,7 +113,7 @@ jobs:
         working-directory: ./${{ matrix.socat_ref }}
         run: |
           PROJVER="${{ matrix.socat_ref }}"; PROJVER="${PROJVER#socat-}"
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp socat "$PROJVER" ${{ matrix.wolfssl_ref }})
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp socat "$PROJVER" ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
           patch -p0 < "$PATCH"
 
       - name: Run socat tests

@@ -104,7 +104,7 @@ jobs:
           fetch-depth: 1
       - run: |
           cd x11vnc
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp x11vnc ${{ matrix.x11vnc_ref }} ${{ matrix.wolfssl_ref }})
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp x11vnc ${{ matrix.x11vnc_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
           patch -p1 < "$PATCH"
 
       - name: Build x11vnc

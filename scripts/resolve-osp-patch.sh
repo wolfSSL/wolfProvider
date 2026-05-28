@@ -10,16 +10,16 @@ set -euo pipefail
 #   resolve-osp-patch.sh ./osp libnice 0.1.21 v5.9.1-stable
 #   resolve-osp-patch.sh ./osp krb5 1.20.1-final v5.8.4-stable --fips
 #
-# Naming convention:
-#   Universal filename (no -wolfssl-X.Y.Z- infix) = LATEST patch content,
-#   tracks current wolfssl master / latest stable.
-#   -wolfssl-X.Y.Z- infix = SNAPSHOT pinned to that wolfssl line, used
-#   when the universal patch has diverged and no longer applies cleanly.
+# OSP patch names follow one convention:
+#   <project>/<project>-<projver>[-wolfssl-X.Y.Z]-wolfprov[-fips].patch
+# A bare name (no -wolfssl-X.Y.Z-) is the latest/universal content; a
+# -wolfssl-X.Y.Z- infix is a snapshot pinned to that wolfSSL line.
 #
-# Resolution rule (first match wins):
-#   v5.8.X-stable: try -wolfssl-5.8.4-, then universal
-#   v5.9.X-stable: try -wolfssl-5.9.1-, then universal
-#   master / anything else: just universal
+# Resolution (first match wins):
+#   wolfssl_ref priority:  v5.8.X -> -wolfssl-5.8.4-, then universal
+#                          v5.9.X -> -wolfssl-5.9.1-, then universal
+#                          master/other -> universal
+#   --fips: prefer the -wolfprov-fips.patch, else fall back to -wolfprov.patch
 
 if [ $# -lt 4 ] || [ $# -gt 5 ]; then
     echo "Usage: $0 <osp-dir> <project> <projectversion> <wolfssl_ref> [--fips]" >&2
@@ -30,51 +30,40 @@ OSP_DIR="$1"
 PROJECT="$2"
 PROJVER="$3"
 WOLFSSL_REF="$4"
-FIPS_SUFFIX=""
+WANT_FIPS=""
 if [ "${5:-}" = "--fips" ]; then
-    FIPS_SUFFIX="-fips"
-fi
-
-# opensc uses -wolfprovider, everything else uses -wolfprov.
-BASE_SUFFIX="-wolfprov"
-if [ "$PROJECT" = "opensc" ]; then
-    BASE_SUFFIX="-wolfprovider"
+    WANT_FIPS=1
 fi
 
 DIR="$OSP_DIR/wolfProvider/$PROJECT"
 
-# OSP uses two FIPS naming conventions; try both when --fips is set.
-#   suffix: <project>-<projver>-wolfssl-X.Y.Z-wolfprov-fips.patch
-#   infix:  <project>-FIPS-<projver>-wolfssl-X.Y.Z-wolfprov.patch
-# Empty projver (e.g. libmemcached-FIPS-wolfprov.patch) -> drop trailing dash.
+# Empty projver (e.g. libmemcached-wolfprov-fips.patch) -> no trailing dash.
 if [ -n "$PROJVER" ]; then
-    base_stem="$PROJECT-$PROJVER"
-    fips_infix_stem="$PROJECT-FIPS-$PROJVER"
+    stem="$PROJECT-$PROJVER"
 else
-    base_stem="$PROJECT"
-    fips_infix_stem="$PROJECT-FIPS"
-fi
-stems=("$base_stem")
-fips_suffixes=("")
-if [ -n "$FIPS_SUFFIX" ]; then
-    # FIPS: suffix style, then infix style, then fall back to non-FIPS patch.
-    stems=("$base_stem" "$fips_infix_stem" "$base_stem")
-    fips_suffixes=("$FIPS_SUFFIX" "" "")
+    stem="$PROJECT"
 fi
 
-# Wolfssl-ref-specific infix(es) in priority order. Universal ("") last.
+# wolfSSL-ref-specific snapshot infix(es), universal ("") last.
 case "$WOLFSSL_REF" in
-    v5.8.*)             wolfssl_infixes=("-wolfssl-5.8.4" "") ;;
-    v5.9.*)             wolfssl_infixes=("-wolfssl-5.9.1" "") ;;
-    *)                  wolfssl_infixes=("") ;;
+    v5.8.*)  wolfssl_infixes=("-wolfssl-5.8.4" "") ;;
+    v5.9.*)  wolfssl_infixes=("-wolfssl-5.9.1" "") ;;
+    *)       wolfssl_infixes=("") ;;
 esac
 
+# FIPS suffix preference. A project may ship only one of the two
+# variants; use whichever exists. --fips prefers -fips then non-FIPS;
+# non-FIPS prefers the plain patch then -fips.
+if [ -n "$WANT_FIPS" ]; then
+    fips_suffixes=("-fips" "")
+else
+    fips_suffixes=("" "-fips")
+fi
+
 candidates=()
-for i in "${!stems[@]}"; do
-    stem="${stems[$i]}"
-    fsfx="${fips_suffixes[$i]}"
+for fsfx in "${fips_suffixes[@]}"; do
     for winfix in "${wolfssl_infixes[@]}"; do
-        candidates+=("$DIR/$stem$winfix$BASE_SUFFIX$fsfx.patch")
+        candidates+=("$DIR/$stem$winfix-wolfprov$fsfx.patch")
     done
 done
 
@@ -85,7 +74,7 @@ for f in "${candidates[@]}"; do
     fi
 done
 
-echo "resolve-osp-patch: no patch found for project=$PROJECT version=$PROJVER wolfssl=$WOLFSSL_REF fips=${FIPS_SUFFIX:+yes}" >&2
+echo "resolve-osp-patch: no patch found for project=$PROJECT version=$PROJVER wolfssl=$WOLFSSL_REF fips=${WANT_FIPS:+yes}" >&2
 echo "  tried:" >&2
 for f in "${candidates[@]}"; do
     echo "    $f" >&2

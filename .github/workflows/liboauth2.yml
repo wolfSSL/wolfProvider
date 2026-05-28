@@ -107,7 +107,7 @@ jobs:
         working-directory: liboauth2
         run: |
           # Apply patch from OSP repo
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp liboauth2 ${{ matrix.liboauth2_ref }} ${{ matrix.wolfssl_ref }})
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp liboauth2 ${{ matrix.liboauth2_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
           patch -p1 < "$PATCH"
 
           autoreconf -fiv

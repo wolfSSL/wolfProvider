@@ -122,7 +122,7 @@ jobs:
       - run: |
           cd grpc
           # Apply the wolfProvider patch (FIPS variant - grpc only ships FIPS)
-          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp grpc ${{ matrix.grpc_ref }} ${{ matrix.wolfssl_ref }} --fips)
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp grpc ${{ matrix.grpc_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
           patch -p1 < "$PATCH"
 
       - name: Build grpc with wolfProvider
