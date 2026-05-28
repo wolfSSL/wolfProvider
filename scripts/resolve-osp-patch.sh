@@ -57,8 +57,9 @@ fi
 stems=("$base_stem")
 fips_suffixes=("")
 if [ -n "$FIPS_SUFFIX" ]; then
-    stems=("$base_stem" "$fips_infix_stem")
-    fips_suffixes=("$FIPS_SUFFIX" "")
+    # FIPS: suffix style, then infix style, then fall back to non-FIPS patch.
+    stems=("$base_stem" "$fips_infix_stem" "$base_stem")
+    fips_suffixes=("$FIPS_SUFFIX" "" "")
 fi
 
 # Wolfssl-ref-specific infix(es) in priority order. Universal ("") last.
