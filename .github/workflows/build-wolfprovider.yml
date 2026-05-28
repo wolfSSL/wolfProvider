@@ -136,14 +136,22 @@ jobs:
             return 1
           }
 
-          # Pull wolfSSL packages based on FIPS variant
+          # Pull the wolfSSL deb pinned to this job's wolfssl_ref when it is
+          # a stable tag (vX.Y.Z-stable), so a v5.8.4-stable job gets the
+          # v5.8.4 debs and a v5.9.1-stable job gets the v5.9.1 debs. Any
+          # other ref (e.g. master) falls back to the rolling tag (latest).
+          case "${{ inputs.wolfssl_ref }}" in
+            v[0-9]*-stable) WOLFSSL_TAG_SUFFIX="-${{ inputs.wolfssl_ref }}" ;;
+            *)              WOLFSSL_TAG_SUFFIX="" ;;
+          esac
+
           if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
-            echo "Pulling FIPS wolfSSL packages..."
-            oras_pull_with_retry ghcr.io/wolfssl/wolfprovider/debs:fips \
+            echo "Pulling FIPS wolfSSL packages (fips${WOLFSSL_TAG_SUFFIX})..."
+            oras_pull_with_retry "ghcr.io/wolfssl/wolfprovider/debs:fips${WOLFSSL_TAG_SUFFIX}" \
               ${{ env.WOLFSSL_PACKAGES_PATH }}
           else
-            echo "Pulling non-FIPS wolfSSL packages..."
-            oras_pull_with_retry ghcr.io/wolfssl/wolfprovider/debs:nonfips \
+            echo "Pulling non-FIPS wolfSSL packages (nonfips${WOLFSSL_TAG_SUFFIX})..."
+            oras_pull_with_retry "ghcr.io/wolfssl/wolfprovider/debs:nonfips${WOLFSSL_TAG_SUFFIX}" \
               ${{ env.WOLFSSL_PACKAGES_PATH }}
           fi
 
