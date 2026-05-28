@@ -1,0 +1,356 @@
+#!/usr/bin/env python3
+"""Triage a nightly-osp run and post one clean Slack health report.
+
+Classification is by RETRY OUTCOME, not guesswork: every job that did not
+succeed is retried once. A job that clears on the retry is a flake; a job
+that fails twice is real and gets reported. Claude only validates the
+survivors and writes the short root-cause notes — it does not decide whether
+to retry.
+
+Env:
+  GH_REPO              owner/repo (required)
+  RUN_ID               run to analyze (required)
+  GITHUB_TOKEN         token with actions:read (+ actions:write to retry)
+  SLACK_WEBHOOK_URL    optional; if unset or DRY_RUN=true, payload is printed
+  ANTHROPIC_API_KEY    optional; if unset, survivors are reported without notes
+  CLAUDE_MODEL         optional; default claude-sonnet-4-6
+  AUTO_RETRY           "true" to rerun non-passing jobs once before reporting
+  DRY_RUN              "true" to print the Slack payload instead of posting
+  ANALYZE_ATTEMPT      optional; report a specific past attempt as-is
+"""
+import datetime
+import json
+import os
+import re
+import urllib.error
+import urllib.request
+from collections import OrderedDict
+
+GH_API = "https://api.github.com"
+REPO = os.environ["GH_REPO"]
+RUN_ID = os.environ["RUN_ID"]
+GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL", "")
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+AUTO_RETRY = os.environ.get("AUTO_RETRY", "false").lower() == "true"
+DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true" or not SLACK_WEBHOOK
+FORCE_ATTEMPT = os.environ.get("ANALYZE_ATTEMPT")
+
+LOG_TAIL_LINES = 300
+AI_LOG_CHARS = 4000
+
+# A failure in one of these steps is unambiguous infra, not a code regression.
+INFRA_STEPS = {"Set up job", "Initialize containers", "Stop containers"}
+
+# Secrets scrubbed before any log leaves this process (Slack or Claude).
+SCRUB = [
+    (re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"), "***token***"),
+    (re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+"), "Bearer ***"),
+    (re.compile(r"(?i)(x-api-key|authorization|password|secret|token)"
+                r"(['\"\s:=]+)\S+"), r"\1\2***"),
+    (re.compile(r"eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"),
+     "***jwt***"),
+]
+
+
+def gh(path, method="GET", data=None):
+    url = path if path.startswith("http") else GH_API + path
+    req = urllib.request.Request(url, method=method)
+    req.add_header("Authorization", f"Bearer {GH_TOKEN}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    if data is not None:
+        req.data = json.dumps(data).encode()
+        req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=60) as r:
+        body = r.read()
+    return json.loads(body) if body else {}
+
+
+def all_jobs(run_id, attempt=None):
+    jobs = []
+    base = f"/repos/{REPO}/actions/runs/{run_id}"
+    if attempt:
+        base += f"/attempts/{attempt}"
+    page = 1
+    while True:
+        d = gh(f"{base}/jobs?per_page=100&page={page}")
+        batch = d.get("jobs", [])
+        jobs += batch
+        if len(batch) < 100:
+            break
+        page += 1
+    return jobs
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def fetch_log(job_id):
+    """The logs endpoint 302s to a signed blob URL that rejects the GitHub
+    auth header, so capture the redirect and fetch the Location unauthenticated."""
+    url = f"{GH_API}/repos/{REPO}/actions/jobs/{job_id}/logs"
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {GH_TOKEN}")
+    req.add_header("Accept", "application/vnd.github+json")
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(req, timeout=60) as r:
+            return r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        loc = e.headers.get("Location") if e.code in (301, 302, 303, 307, 308) else None
+        if not loc:
+            return ""
+        try:
+            with urllib.request.urlopen(loc, timeout=60) as r2:
+                return r2.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError:
+            return ""
+
+
+def step_body(text):
+    """Log with trailing 'Post job cleanup' noise dropped, tail kept."""
+    idx = text.find("Post job cleanup.")
+    body = text[:idx] if idx > 0 else text
+    return "\n".join(body.splitlines()[-LOG_TAIL_LINES:])
+
+
+def scrub(text):
+    for pat, repl in SCRUB:
+        text = pat.sub(repl, text)
+    return text
+
+
+def failing_steps(job):
+    return [s.get("name", "").strip() for s in job.get("steps", [])
+            if s.get("conclusion") == "failure"]
+
+
+def ai_triage(failures):
+    """One Claude call validating all survivors. Returns
+    {"headline": str, "jobs": {name: {"verdict","note"}}} or None."""
+    if not ANTHROPIC_KEY or not failures:
+        return None
+    parts = []
+    for f in failures:
+        parts.append(f"### {f['name']}\nfailing steps: {', '.join(f['steps']) or 'n/a'}\n"
+                     f"log tail:\n{f['log'][-AI_LOG_CHARS:]}\n")
+    prompt = (
+        "You are triaging the wolfProvider nightly OSP CI suite. Each job below "
+        "already failed TWICE (an automatic retry did not clear it), so default "
+        "to REAL unless the log clearly shows an INFRASTRUCTURE FLAKE "
+        "(GitHub runner/network/container/registry/download).\n"
+        "For each job give a terse one-line root-cause note (<=110 chars; if "
+        "real, add a brief fix hint).\n"
+        "Respond with ONLY compact JSON:\n"
+        '{"headline":"<=120 char overall read","jobs":{"<name>":'
+        '{"verdict":"real"|"flake","note":"..."}}}\n\n'
+        + "\n".join(parts)
+    )
+    body = {"model": CLAUDE_MODEL, "max_tokens": 800,
+            "messages": [{"role": "user", "content": prompt}]}
+    req = urllib.request.Request("https://api.anthropic.com/v1/messages",
+                                 method="POST")
+    req.add_header("x-api-key", ANTHROPIC_KEY)
+    req.add_header("anthropic-version", "2023-06-01")
+    req.add_header("content-type", "application/json")
+    req.data = json.dumps(body).encode()
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            resp = json.loads(r.read())
+        text = resp["content"][0]["text"]
+        m = re.search(r"\{.*\}", text, re.S)
+        return json.loads(m.group(0)) if m else None
+    except Exception as e:
+        return {"headline": f"AI triage unavailable: {e}", "jobs": {}}
+
+
+def post_slack(color, fallback, blocks):
+    payload = {"attachments": [{"color": color, "fallback": fallback,
+                                "blocks": blocks}]}
+    if DRY_RUN:
+        print("=== DRY RUN (no Slack post) ===\n")
+        print(render_text(blocks))
+        return
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(SLACK_WEBHOOK, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        r.read()
+
+
+def render_text(blocks):
+    out = []
+    for b in blocks:
+        t = b.get("type")
+        if t == "header":
+            out.append(b["text"]["text"])
+        elif t == "divider":
+            out.append("-" * 40)
+        elif t == "section" and "fields" in b:
+            out.append("  ".join(f["text"].replace("\n", " ") for f in b["fields"]))
+        elif t == "section":
+            out.append(b["text"]["text"])
+        elif t == "context":
+            out.append(" ".join(e["text"] for e in b["elements"]))
+    return "\n".join(out)
+
+
+def section(text):
+    return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+
+
+def chunk_lines(lines, limit=2900):
+    buf, size = [], 0
+    for ln in lines:
+        if size + len(ln) + 1 > limit and buf:
+            yield "\n".join(buf)
+            buf, size = [], 0
+        buf.append(ln)
+        size += len(ln) + 1
+    if buf:
+        yield "\n".join(buf)
+
+
+def run_url():
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    return f"{server}/{REPO}/actions/runs/{RUN_ID}"
+
+
+def prefix_of(name):
+    return name.split(" / ")[0].strip()
+
+
+def merged_jobs(attempt):
+    """Final state of every job. After a rerun the latest attempt holds only
+    the re-run subset, so overlay it on attempt 1 for the full picture."""
+    if FORCE_ATTEMPT:
+        return all_jobs(RUN_ID, attempt=int(FORCE_ATTEMPT))
+    latest = all_jobs(RUN_ID)
+    if attempt < 2:
+        return latest
+    merged = {j["name"]: j for j in all_jobs(RUN_ID, attempt=1)}
+    for j in latest:
+        merged[j["name"]] = j
+    return list(merged.values())
+
+
+def main():
+    run = gh(f"/repos/{REPO}/actions/runs/{RUN_ID}")
+    attempt = int(FORCE_ATTEMPT) if FORCE_ATTEMPT else run.get("run_attempt", 1)
+
+    # Phase 1 — retry everything that did not pass, exactly once.
+    if AUTO_RETRY and not FORCE_ATTEMPT and attempt == 1:
+        nonpass = [j for j in all_jobs(RUN_ID)
+                   if j.get("conclusion") in ("failure", "cancelled")]
+        if nonpass:
+            gh(f"/repos/{REPO}/actions/runs/{RUN_ID}/rerun-failed-jobs",
+               method="POST")
+            note = (f":hourglass_flowing_sand: *wolfProvider Nightly OSP* — "
+                    f"{len(nonpass)} job(s) didn't pass on attempt 1; retrying "
+                    f"once before triage. <{run_url()}|View run>")
+            post_slack("warning", note, [section(note)])
+            return
+
+    jobs = merged_jobs(attempt)
+    failed = [j for j in jobs if j.get("conclusion") == "failure"]
+    n_success = sum(1 for j in jobs if j.get("conclusion") == "success")
+    n_cancelled = sum(1 for j in jobs if j.get("conclusion") == "cancelled")
+
+    # Cleared on retry (failed/cancelled on attempt 1, passing now) = flakes.
+    recovered = []
+    if attempt >= 2:
+        prev = {prefix_of(j["name"]) for j in all_jobs(RUN_ID, attempt=1)
+                if j.get("conclusion") in ("failure", "cancelled")}
+        recovered = sorted(prev - {prefix_of(j["name"]) for j in failed})
+
+    # Survivors (failed after the retry) grouped per OSP — gather logs for AI.
+    survivors = OrderedDict()
+    for j in failed:
+        survivors.setdefault(prefix_of(j["name"]), []).append(j)
+    fails_data = []
+    for prefix, gjobs in survivors.items():
+        rep = gjobs[0]
+        fails_data.append({"name": prefix, "steps": failing_steps(rep),
+                           "log": scrub(step_body(fetch_log(rep["id"])))})
+
+    ai = ai_triage(fails_data)
+    headline = ai.get("headline", "") if ai else ""
+    verdicts = ai.get("jobs", {}) if ai else {}
+
+    reals, flakes = [], []
+    for fd in fails_data:
+        name = fd["name"]
+        if any(s in INFRA_STEPS for s in fd["steps"]):
+            flakes.append((name, f"infra: failing step "
+                                 f"'{next(s for s in fd['steps'] if s in INFRA_STEPS)}'"))
+            continue
+        v = verdicts.get(name, {})
+        verdict, note = v.get("verdict"), v.get("note", "")
+        if verdict == "flake":
+            flakes.append((name, "AI: " + (note or "infra flake")))
+        elif verdict == "real":
+            reals.append((name, "AI: " + (note or "real regression")))
+        elif ANTHROPIC_KEY:
+            reals.append((name, note or "failed twice — real"))
+        else:
+            reals.append((name, "failed twice — needs review (no AI key)"))
+
+    total = n_success + len(failed)
+    pct = round(100 * n_success / total) if total else 100
+    date_str = (run.get("created_at") or "")[:10] or datetime.date.today().isoformat()
+
+    if reals:
+        color, emoji, status = "danger", "\U0001F534", f"{len(reals)} REAL"
+    elif flakes or recovered:
+        color, emoji, status = "warning", "⚠️", "FLAKES ONLY"
+    else:
+        color, emoji, status = "good", "✅", "HEALTHY"
+
+    flaked_count = len(flakes) + len(recovered)
+    blocks = [
+        {"type": "header",
+         "text": {"type": "plain_text",
+                  "text": f"wolfProvider Nightly OSP {emoji}", "emoji": True}},
+        {"type": "section", "fields": [
+            {"type": "mrkdwn", "text": f"*Date:*\n{date_str}"},
+            {"type": "mrkdwn", "text": f"*Status:*\n{status}"},
+            {"type": "mrkdwn", "text": f"*Passed:*\n{n_success} / {total}  ({pct}%)"},
+            {"type": "mrkdwn", "text": f"*Failed:*\n{len(reals)} real, {flaked_count} flaked"},
+        ]},
+        section(f"*Breakdown:*   \U0001F7E2 {n_success} passed    "
+                f"\U0001F7E1 {flaked_count} flaked    "
+                f"\U0001F534 {len(reals)} real    "
+                f"⚪ {n_cancelled} cancelled"),
+    ]
+    if headline:
+        blocks.append(section(f"_{headline}_"))
+    if recovered:
+        blocks.append(section("*Recovered on retry:* "
+                              + ", ".join(f"`{p}`" for p in recovered)))
+
+    if reals or flakes:
+        blocks.append({"type": "divider"})
+        lines = []
+        if reals:
+            lines.append("*\U0001F534 Real failures — action needed:*")
+            lines += [f"`{p}` — {w}" for p, w in reals]
+        if flakes:
+            lines.append("*\U0001F7E1 Flakes — infra, auto-retried:*")
+            lines += [f"`{p}` — {w}" for p, w in flakes]
+        for chunk in chunk_lines(lines):
+            blocks.append(section(chunk))
+
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
+        "text": f"wolfSSL v5.9.1 (Wave 1) + v5.8.4 (Wave 2)  ·  "
+                f"attempt {attempt}  ·  <{run_url()}|View run>"}]})
+
+    fallback = f"wolfProvider Nightly OSP {status}: {n_success}/{total} passed"
+    post_slack(color, fallback, blocks)
+
+
+if __name__ == "__main__":
+    main()
