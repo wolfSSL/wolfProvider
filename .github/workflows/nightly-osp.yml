@@ -8,6 +8,12 @@ name: Nightly OSP Suite
 # outside the waves.
 
 on:
+  # TEMP(testing): run the full OSP suite on push to the test branch so
+  # Wave 1 (5.9.1) + Wave 2 (5.8.4) run in CI now instead of waiting for
+  # the nightly schedule. REVERT before merge - leave only schedule +
+  # workflow_dispatch.
+  push:
+    branches: [ ci-draft-pause ]
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
