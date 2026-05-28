@@ -31,7 +31,7 @@ REPO = os.environ["GH_REPO"]
 RUN_ID = os.environ["RUN_ID"]
 GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL", "")
-ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
 AUTO_RETRY = os.environ.get("AUTO_RETRY", "false").lower() == "true"
 DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true" or not SLACK_WEBHOOK

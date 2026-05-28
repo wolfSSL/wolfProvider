@@ -14,6 +14,11 @@ on:
   # workflow_dispatch.
   push:
     branches: [ ci-draft-pause ]
+    # TEMP(testing): report-only pushes must not re-trigger the 2-hour suite.
+    paths-ignore:
+      - '.github/workflows/osp-report.yml'
+      - '.github/workflows/nightly-osp.yml'
+      - 'scripts/osp-triage.py'
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
