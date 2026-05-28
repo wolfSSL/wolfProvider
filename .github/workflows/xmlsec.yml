@@ -16,6 +16,7 @@ jobs:
     uses: ./.github/workflows/_discover-versions.yml
 
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
