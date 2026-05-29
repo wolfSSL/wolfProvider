@@ -464,9 +464,9 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
         int ok = 1;
         int rc;
 
-        rc = wc_InitRsaKey(&rsa->key, NULL);
+        rc = wc_InitRsaKey_ex(&rsa->key, NULL, provCtx->devId);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRsaKey", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRsaKey_ex", rc);
             ok = 0;
         }
 
@@ -1533,7 +1533,7 @@ static wp_RsaGenCtx* wp_rsa_base_gen_init(WOLFPROV_CTX* provCtx,
         int ok = 1;
         int rc;
 
-        rc = wc_InitRng_ex(&ctx->rng, NULL, INVALID_DEVID);
+        rc = wc_InitRng_ex(&ctx->rng, NULL, provCtx->devId);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRng_ex", rc);
             ok = 0;
