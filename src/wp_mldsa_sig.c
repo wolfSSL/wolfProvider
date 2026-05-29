@@ -1,6 +1,6 @@
 /* wp_mldsa_sig.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -30,7 +30,7 @@
 
 #ifdef WP_HAVE_MLDSA
 
-#include <wolfssl/wolfcrypt/dilithium.h>
+#include <wolfssl/wolfcrypt/wc_mldsa.h>
 
 /**
  * ML-DSA signature context.
@@ -72,6 +72,8 @@ static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
 {
     int ok = 1;
     size_t needed;
+    size_t newCap;
+    size_t doubled;
     unsigned char* tmp;
 
     needed = ctx->mdLen + dataLen;
@@ -82,9 +84,9 @@ static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
         ok = 0;
     }
     if (ok && (needed > ctx->mdCap)) {
-        size_t newCap = ctx->mdCap == 0 ? 256 : ctx->mdCap;
+        newCap = ctx->mdCap == 0 ? 256 : ctx->mdCap;
         while (newCap < needed) {
-            size_t doubled = newCap * 2;
+            doubled = newCap * 2;
             if (doubled < newCap) {
                 ok = 0;
                 break;
@@ -92,11 +94,17 @@ static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
             newCap = doubled;
         }
         if (ok) {
-            tmp = (unsigned char*)OPENSSL_realloc(ctx->mdBuf, newCap);
+            /* Grow by alloc+copy+zero rather than realloc so we always wipe
+             * the previous block (message can be signer-confidential). */
+            tmp = (unsigned char*)OPENSSL_malloc(newCap);
             if (tmp == NULL) {
                 ok = 0;
             }
-            else {
+            if (ok) {
+                if (ctx->mdLen > 0) {
+                    XMEMCPY(tmp, ctx->mdBuf, ctx->mdLen);
+                }
+                OPENSSL_clear_free(ctx->mdBuf, ctx->mdCap);
                 ctx->mdBuf = tmp;
                 ctx->mdCap = newCap;
             }
@@ -116,6 +124,10 @@ static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
  */
 static void wp_mldsa_buf_reset(wp_MlDsaSigCtx* ctx)
 {
+    /* Wipe stale bytes; ctx reuse across operations must not leak prior msg. */
+    if ((ctx->mdBuf != NULL) && (ctx->mdLen > 0)) {
+        wc_ForceZero(ctx->mdBuf, ctx->mdLen);
+    }
     ctx->mdLen = 0;
 }
 
@@ -273,7 +285,7 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     if (*sigLen < sigSz) {
         ok = 0;
     }
-    /* wolfSSL's dilithium API takes a 32-bit message length. Reject >4 GiB
+    /* wolfSSL's ML-DSA API takes a 32-bit message length. Reject >4 GiB
      * messages explicitly rather than silently truncating. */
     if (ok && (msgLen > 0xFFFFFFFFU)) {
         ok = 0;
@@ -283,8 +295,9 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
         /* FIPS 204 sec 5.2 (Algorithm 22): pure ML-DSA prepends 0x00, ctxLen,
          * and ctx before the message. OpenSSL uses an empty context by
          * default; use the ctx variant with empty ctx to interop. */
-        rc = wc_dilithium_sign_ctx_msg(NULL, 0, msg, (word32)msgLen, sig,
-            &outLen, (MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), &ctx->rng);
+        rc = wc_MlDsaKey_SignCtx(
+            (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), NULL, 0, sig, &outLen,
+            msg, (word32)msgLen, &ctx->rng);
         if (rc != 0) {
             ok = 0;
         }
@@ -312,18 +325,20 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     int rc;
     int res = 0;
 
-    if ((ctx == NULL) || (ctx->mldsa == NULL)) {
+    if ((ctx == NULL) || (ctx->mldsa == NULL) || (sig == NULL) ||
+            (msg == NULL)) {
         return 0;
     }
-    /* wolfSSL's dilithium API takes 32-bit lengths. Reject oversize inputs
+    /* wolfSSL's ML-DSA API takes 32-bit lengths. Reject oversize inputs
      * explicitly rather than silently truncating. */
     if ((sigLen > 0xFFFFFFFFU) || (msgLen > 0xFFFFFFFFU)) {
         return 0;
     }
 
     /* Match the sign path: FIPS 204 pure ML-DSA with empty context. */
-    rc = wc_dilithium_verify_ctx_msg(sig, (word32)sigLen, NULL, 0, msg,
-        (word32)msgLen, &res, (MlDsaKey*)wp_mldsa_get_key(ctx->mldsa));
+    rc = wc_MlDsaKey_VerifyCtx(
+        (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), sig, (word32)sigLen,
+        NULL, 0, msg, (word32)msgLen, &res);
     if ((rc != 0) || (res != 1)) {
         ok = 0;
     }
@@ -412,14 +427,12 @@ static int wp_mldsa_digest_verify_final(wp_MlDsaSigCtx* ctx,
     return wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
 }
 
-/**
- * Get ctx params. None supported; checks ctx is non-NULL to match other
- * provider implementations.
- */
+/* No supported params; OSSL contract is unconditional success. */
 static int wp_mldsa_get_ctx_params(wp_MlDsaSigCtx* ctx, OSSL_PARAM* params)
 {
+    (void)ctx;
     (void)params;
-    return ctx != NULL;
+    return 1;
 }
 
 static const OSSL_PARAM* wp_mldsa_gettable_ctx_params(wp_MlDsaSigCtx* ctx,
@@ -433,15 +446,13 @@ static const OSSL_PARAM* wp_mldsa_gettable_ctx_params(wp_MlDsaSigCtx* ctx,
     return wp_mldsa_gettable;
 }
 
-/**
- * Set ctx params. None supported; checks ctx is non-NULL to match other
- * provider implementations.
- */
+/* No supported params; OSSL contract is unconditional success. */
 static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
     const OSSL_PARAM params[])
 {
+    (void)ctx;
     (void)params;
-    return ctx != NULL;
+    return 1;
 }
 
 static const OSSL_PARAM* wp_mldsa_settable_ctx_params(wp_MlDsaSigCtx* ctx,

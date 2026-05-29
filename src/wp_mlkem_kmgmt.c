@@ -1,6 +1,6 @@
 /* wp_mlkem_kmgmt.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -278,14 +278,15 @@ static wp_MlKem* wp_mlkem_dup(const wp_MlKem* src, int selection)
     word32 privLen;
     int rc;
     int ok = 1;
-    int dupPub = ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)
-                  && src != NULL && src->hasPub;
-    int dupPriv = ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
-                  && src != NULL && src->hasPriv;
+    int dupPub;
+    int dupPriv;
 
     if (!wolfssl_prov_is_running() || (src == NULL)) {
         return NULL;
     }
+    dupPub = ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && src->hasPub;
+    dupPriv = ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
+              && src->hasPriv;
 
     dst = wp_mlkem_new(src->provCtx, src->data);
     if (dst == NULL) {
@@ -502,6 +503,11 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
                 &privData, &privLen)) {
             ok = 0;
         }
+        /* FIPS 203 priv keys are fixed-size; equality check before word32 cast
+         * also catches truncation on 64-bit platforms. */
+        if (ok && (privData != NULL) && (privLen != mlkem->data->privKeySize)) {
+            ok = 0;
+        }
         if (ok && (privData != NULL)) {
             rc = wc_MlKemKey_DecodePrivateKey(&mlkem->key, privData,
                 (word32)privLen);
@@ -510,8 +516,8 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
             }
             if (ok) {
                 mlkem->hasPriv = 1;
-                /* Probe whether private-key import gave us the public part
-                 * (FIPS 203 private keys embed the public component). */
+                /* FIPS 203 private keys embed the public component; probe it
+                 * so we can consistency-check against any supplied pub. */
                 derivedPubLen = mlkem->data->pubKeySize;
                 derivedPub = (unsigned char*)OPENSSL_malloc(derivedPubLen);
                 if (derivedPub != NULL) {
@@ -528,14 +534,21 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
                 &pubData, &pubLen)) {
             ok = 0;
         }
-        /* Consistency check: if both priv and pub were supplied AND priv
-         * import gave us a derived pub, the supplied pub must match.
-         * Rejects attacker-supplied or corrupted mismatched keypairs. */
-        if (ok && (pubData != NULL) && (privData != NULL)
-                && (derivedPub != NULL) && mlkem->hasPub) {
-            if ((derivedPubLen != pubLen) ||
-                    (XMEMCMP(derivedPub, pubData, pubLen) != 0)) {
+        if (ok && (pubData != NULL) && (pubLen != mlkem->data->pubKeySize)) {
+            ok = 0;
+        }
+        /* Both supplied: if we derived a pub from priv, supplied pub must
+         * match. OOM during malloc is fatal (no fail-open under memory
+         * pressure). If wolfSSL didn't auto-derive, the check is skipped. */
+        if (ok && (pubData != NULL) && (privData != NULL)) {
+            if (derivedPub == NULL) {
                 ok = 0;
+            }
+            else if (mlkem->hasPub) {
+                if ((derivedPubLen != pubLen) ||
+                        (XMEMCMP(derivedPub, pubData, pubLen) != 0)) {
+                    ok = 0;
+                }
             }
         }
         if (ok && (pubData != NULL)) {
@@ -551,6 +564,11 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
     }
     if (ok && (privData == NULL) && (pubData == NULL)) {
         ok = 0;
+    }
+    if (!ok) {
+        /* Clear flags on failure so partial-init state is not advertised. */
+        mlkem->hasPriv = 0;
+        mlkem->hasPub = 0;
     }
     OPENSSL_free(derivedPub);
     return ok;
@@ -729,27 +747,25 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PUB_KEY);
         if (p != NULL) {
             word32 outLen = mlkem->data->pubKeySize;
-            if (p->data == NULL) {
+            if (!mlkem->hasPub) {
+                ok = 0;
+            }
+            else if (p->data == NULL) {
                 p->return_size = outLen;
             }
-            else if (mlkem->hasPub) {
-                if (p->data_size < outLen) {
+            else if (p->data_size < outLen) {
+                /* Buffer too small: report required size, let caller retry. */
+                p->return_size = outLen;
+            }
+            else {
+                rc = wc_MlKemKey_EncodePublicKey(&mlkem->key,
+                    (unsigned char*)p->data, outLen);
+                if (rc != 0) {
                     ok = 0;
                 }
                 else {
-                    rc = wc_MlKemKey_EncodePublicKey(&mlkem->key,
-                        (unsigned char*)p->data, outLen);
-                    if (rc != 0) {
-                        ok = 0;
-                    }
-                    else {
-                        p->return_size = outLen;
-                    }
+                    p->return_size = outLen;
                 }
-            }
-            else {
-                /* Buffer supplied but no public key available. */
-                p->return_size = 0;
             }
         }
     }
@@ -757,27 +773,24 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
         if (p != NULL) {
             word32 outLen = mlkem->data->privKeySize;
-            if (p->data == NULL) {
+            if (!mlkem->hasPriv) {
+                ok = 0;
+            }
+            else if (p->data == NULL) {
                 p->return_size = outLen;
             }
-            else if (mlkem->hasPriv) {
-                if (p->data_size < outLen) {
+            else if (p->data_size < outLen) {
+                p->return_size = outLen;
+            }
+            else {
+                rc = wc_MlKemKey_EncodePrivateKey(&mlkem->key,
+                    (unsigned char*)p->data, outLen);
+                if (rc != 0) {
                     ok = 0;
                 }
                 else {
-                    rc = wc_MlKemKey_EncodePrivateKey(&mlkem->key,
-                        (unsigned char*)p->data, outLen);
-                    if (rc != 0) {
-                        ok = 0;
-                    }
-                    else {
-                        p->return_size = outLen;
-                    }
+                    p->return_size = outLen;
                 }
-            }
-            else {
-                /* Buffer supplied but no private key available. */
-                p->return_size = 0;
             }
         }
     }

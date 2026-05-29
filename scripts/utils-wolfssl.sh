@@ -53,9 +53,11 @@ if [ "$WOLFPROV_SEED_SRC" = "1" ]; then
     WOLFSSL_FIPS_CONFIG_CFLAGS="${WOLFSSL_FIPS_CONFIG_CFLAGS} -DWC_RNG_SEED_CB"
 fi
 
-# Enable ML-KEM and ML-DSA in wolfSSL when --enable-pqc is requested
+# Enable ML-KEM and ML-DSA in wolfSSL when --enable-pqc is requested.
+# Use the canonical FIPS 203 / FIPS 204 flag names. Neither algorithm
+# requires --enable-experimental anymore.
 if [ "$WOLFPROV_PQC" = "1" ]; then
-    WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS} --enable-mlkem --enable-dilithium --enable-experimental"
+    WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS} --enable-mlkem --enable-mldsa"
 fi
 
 WOLFSSL_DEBUG_ASN_TEMPLATE=${DWOLFSSL_DEBUG_ASN_TEMPLATE:-0}

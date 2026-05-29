@@ -3,7 +3,7 @@ name: wolfSSL Versions (PQC)
 # Backward-compatibility matrix for ML-KEM and ML-DSA. Mirrors wolfTPM's
 # wolfssl-versions-pqc.yml pattern: a discover-versions job dynamically
 # resolves the latest -stable wolfSSL tag and decides if it is past the PQC
-# floor, then the build job runs three rows -- pre-PQC floor, dynamically
+# floor, then the build job runs three rows: pre-PQC floor, dynamically
 # resolved latest -stable, and master.
 #
 # PQC_FLOOR is v5.9.1-stable: the wc_MlDsaKey_* / wc_dilithium_sign_ctx_msg

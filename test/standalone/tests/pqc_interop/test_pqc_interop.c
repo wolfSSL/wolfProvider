@@ -1,6 +1,6 @@
 /* test_pqc_interop.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -23,7 +23,7 @@
  * Three independent code paths exercised against each other:
  *   1. wolfProvider (via EVP_PKEY API)
  *   2. OpenSSL default provider (native ML-KEM / ML-DSA in OpenSSL 3.5+)
- *   3. wolfSSL direct (wc_MlKemKey_* / wc_dilithium_* APIs, no provider)
+ *   3. wolfSSL direct (wc_MlKemKey_* / wc_MlDsaKey_* APIs, no provider)
  *
  * For each algorithm at each NIST level, every cross-pair is tested:
  *   wolfProv enc/sign    -> default     dec/verify
@@ -32,7 +32,7 @@
  *   wolfssl-dir enc/sign -> wolfProv    dec/verify
  *
  * Passing all three pairings proves the raw-key, ciphertext, and signature
- * byte encodings are standards-compliant end-to-end -- not just internally
+ * byte encodings are standards-compliant end-to-end, not just internally
  * round-trippable.
  *
  * Usage: test_pqc_interop [provider_path]
@@ -59,7 +59,7 @@
 #if defined(WP_HAVE_MLKEM) && defined(WP_HAVE_MLDSA)
 
 #include <wolfssl/wolfcrypt/wc_mlkem.h>
-#include <wolfssl/wolfcrypt/dilithium.h>
+#include <wolfssl/wolfcrypt/wc_mldsa.h>
 #include <wolfssl/wolfcrypt/random.h>
 
 #define WP_NAME "libwolfprov"
@@ -76,29 +76,38 @@ static WC_RNG g_rng;
 
 static int load_all(const char* wp_path)
 {
-    wp_ctx = OSSL_LIB_CTX_new();
-    if (wp_ctx == NULL) return 0;
+    int ok = 1;
 
+    wp_ctx = OSSL_LIB_CTX_new();
+    if (wp_ctx == NULL) {
+        return 0;
+    }
     OSSL_PROVIDER_set_default_search_path(wp_ctx, wp_path);
     wp_prov = OSSL_PROVIDER_load(wp_ctx, WP_NAME);
     if (wp_prov == NULL) {
         fprintf(stderr, "Failed to load wolfProvider\n");
         ERR_print_errors_fp(stderr);
-        return 0;
+        ok = 0;
     }
-    /* Sanity check: the global default provider should advertise ML-KEM-512
-     * when running against OpenSSL 3.5+. Fail fast with a clear message if
-     * not (e.g. when the wrong libcrypto is loaded at runtime). */
-    if (!OSSL_PROVIDER_available(NULL, "default")) {
+    /* The global default provider must advertise PQC for cross-validation. */
+    if (ok && !OSSL_PROVIDER_available(NULL, "default")) {
         fprintf(stderr, "OpenSSL default provider unavailable in global "
             "context\n");
-        return 0;
+        ok = 0;
     }
-    if (wc_InitRng(&g_rng) != 0) {
+    if (ok && wc_InitRng(&g_rng) != 0) {
         fprintf(stderr, "wc_InitRng failed\n");
-        return 0;
+        ok = 0;
     }
-    return 1;
+    if (!ok) {
+        if (wp_prov != NULL) {
+            OSSL_PROVIDER_unload(wp_prov);
+            wp_prov = NULL;
+        }
+        OSSL_LIB_CTX_free(wp_ctx);
+        wp_ctx = NULL;
+    }
+    return ok;
 }
 
 static void unload_all(void)
@@ -340,32 +349,32 @@ end:
     return ok;
 }
 
-/* wolfSSL-direct sign using wc_dilithium_sign_ctx_msg with empty context
+/* wolfSSL-direct sign using wc_MlDsaKey_SignCtx with empty context
  * (FIPS 204 pure ML-DSA). */
 static int wc_mldsa_sign_direct(const char* alg, const unsigned char* priv,
     size_t privLen, const unsigned char* msg, size_t msgLen,
     unsigned char** sig, size_t* sigLen)
 {
-    dilithium_key key;
+    wc_MlDsaKey key;
     int rc;
     word32 outLen;
     int sigSz;
     byte level = mldsa_name_to_level(alg);
 
-    if (wc_dilithium_init_ex(&key, NULL, INVALID_DEVID) != 0) return 0;
-    if (wc_dilithium_set_level(&key, level) != 0) {
-        wc_dilithium_free(&key); return 0;
+    if (wc_MlDsaKey_Init(&key, NULL, INVALID_DEVID) != 0) return 0;
+    if (wc_MlDsaKey_SetParams(&key, level) != 0) {
+        wc_MlDsaKey_Free(&key); return 0;
     }
-    rc = wc_dilithium_import_private(priv, (word32)privLen, &key);
-    if (rc != 0) { wc_dilithium_free(&key); return 0; }
-    sigSz = wc_dilithium_sig_size(&key);
-    if (sigSz <= 0) { wc_dilithium_free(&key); return 0; }
+    rc = wc_MlDsaKey_ImportPrivRaw(&key, priv, (word32)privLen);
+    if (rc != 0) { wc_MlDsaKey_Free(&key); return 0; }
+    sigSz = wc_MlDsaKey_SigSize(&key);
+    if (sigSz <= 0) { wc_MlDsaKey_Free(&key); return 0; }
     *sig = OPENSSL_malloc(sigSz);
-    if (*sig == NULL) { wc_dilithium_free(&key); return 0; }
+    if (*sig == NULL) { wc_MlDsaKey_Free(&key); return 0; }
     outLen = (word32)sigSz;
-    rc = wc_dilithium_sign_ctx_msg(NULL, 0, msg, (word32)msgLen, *sig, &outLen,
-        &key, &g_rng);
-    wc_dilithium_free(&key);
+    rc = wc_MlDsaKey_SignCtx(&key, NULL, 0, *sig, &outLen, msg, (word32)msgLen,
+        &g_rng);
+    wc_MlDsaKey_Free(&key);
     if (rc != 0) { OPENSSL_free(*sig); *sig = NULL; return 0; }
     *sigLen = outLen;
     return 1;
@@ -376,20 +385,20 @@ static int wc_mldsa_verify_direct(const char* alg, const unsigned char* pub,
     size_t pubLen, const unsigned char* msg, size_t msgLen,
     const unsigned char* sig, size_t sigLen)
 {
-    dilithium_key key;
+    wc_MlDsaKey key;
     int rc;
     int res = 0;
     byte level = mldsa_name_to_level(alg);
 
-    if (wc_dilithium_init_ex(&key, NULL, INVALID_DEVID) != 0) return 0;
-    if (wc_dilithium_set_level(&key, level) != 0) {
-        wc_dilithium_free(&key); return 0;
+    if (wc_MlDsaKey_Init(&key, NULL, INVALID_DEVID) != 0) return 0;
+    if (wc_MlDsaKey_SetParams(&key, level) != 0) {
+        wc_MlDsaKey_Free(&key); return 0;
     }
-    rc = wc_dilithium_import_public(pub, (word32)pubLen, &key);
-    if (rc != 0) { wc_dilithium_free(&key); return 0; }
-    rc = wc_dilithium_verify_ctx_msg(sig, (word32)sigLen, NULL, 0, msg,
-        (word32)msgLen, &res, &key);
-    wc_dilithium_free(&key);
+    rc = wc_MlDsaKey_ImportPubRaw(&key, pub, (word32)pubLen);
+    if (rc != 0) { wc_MlDsaKey_Free(&key); return 0; }
+    rc = wc_MlDsaKey_VerifyCtx(&key, sig, (word32)sigLen, NULL, 0, msg,
+        (word32)msgLen, &res);
+    wc_MlDsaKey_Free(&key);
     return rc == 0 && res == 1;
 }
 

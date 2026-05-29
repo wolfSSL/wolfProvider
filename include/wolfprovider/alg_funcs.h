@@ -251,7 +251,6 @@ typedef struct wp_MlDsa wp_MlDsa;
 int wp_mldsa_up_ref(wp_MlDsa* mldsa);
 void wp_mldsa_free(wp_MlDsa* mldsa);
 void* wp_mldsa_get_key(wp_MlDsa* mldsa);
-int wp_mldsa_get_level(const wp_MlDsa* mldsa);
 int wp_mldsa_get_sig_size(const wp_MlDsa* mldsa);
 
 /* Internal DH types and functions. */
