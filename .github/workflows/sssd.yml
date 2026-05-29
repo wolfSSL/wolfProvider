@@ -58,8 +58,7 @@ jobs:
       - name: Checkout OSP
         uses: actions/checkout@v4
         with:
-          repository: aidangarske/osp
-          ref: 5.9.1-wolfprov-patches
+          repository: wolfssl/osp
           path: osp
           fetch-depth: 1
 

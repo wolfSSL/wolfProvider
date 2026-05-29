@@ -1,9 +1,6 @@
 name: OSP Triage Report
 
 on:
-  # TEMP(testing): one-shot report against a finished run. REVERT before merge.
-  push:
-    branches: [ ci-draft-pause ]
   workflow_run:
     workflows: ["Nightly OSP Suite"]
     types: [completed]
@@ -28,7 +25,6 @@ jobs:
     # Skip untrusted fork-PR runs; only analyze canonical-repo runs.
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
       github.event.workflow_run.head_repository.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +34,7 @@ jobs:
       - name: Triage and report
         env:
           GH_REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event_name == 'push' && '26607404315' || github.event.workflow_run.id }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
