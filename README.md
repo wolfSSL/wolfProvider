@@ -77,8 +77,8 @@ Information on how to configure, build, and test wolfProvider can be found here:
 Requires wolfSSL master (post-v5.9.1-stable) and OpenSSL 3.5+ for native
 default-provider interop. Opt in with `./scripts/build-wolfprovider.sh --enable-pqc`.
 
-* ML-KEM (FIPS 203) — ML-KEM-512, ML-KEM-768, ML-KEM-1024 (key encapsulation)
-* ML-DSA (FIPS 204) — ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
+* ML-KEM (FIPS 203): ML-KEM-512, ML-KEM-768, ML-KEM-1024 (key encapsulation)
+* ML-DSA (FIPS 204): ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
 
 
 ## Support

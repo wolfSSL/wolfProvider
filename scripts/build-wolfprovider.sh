@@ -33,7 +33,7 @@ show_help() {
   echo "  --enable-seed-src          Enable SEED-SRC entropy source with /dev/urandom caching for fork-safe entropy."
   echo "                             Note: This also enables WC_RNG_SEED_CB in wolfSSL."
   echo "  --enable-pqc               Build wolfSSL with ML-KEM and ML-DSA post-quantum algorithms enabled."
-  echo "                             Adds --enable-mlkem --enable-dilithium --enable-experimental to wolfSSL configure."
+  echo "                             Adds --enable-mlkem --enable-mldsa to wolfSSL configure."
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"

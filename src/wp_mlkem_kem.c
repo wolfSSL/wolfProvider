@@ -1,6 +1,6 @@
 /* wp_mlkem_kem.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -193,7 +193,7 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         }
         return 1;
     }
-    if (secret == NULL) {
+    if ((secret == NULL) || (outLen == NULL) || (secretLen == NULL)) {
         return 0;
     }
 
@@ -251,6 +251,9 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         }
         return 1;
     }
+    if ((outLen == NULL) || (in == NULL)) {
+        return 0;
+    }
 
     if (ok && (*outLen < ssSize)) {
         ok = 0;
@@ -271,14 +274,12 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
     return ok;
 }
 
-/**
- * Get ctx params. None supported; checks ctx is non-NULL to match other
- * provider implementations.
- */
+/* No supported params; OSSL contract is unconditional success. */
 static int wp_mlkem_kem_get_ctx_params(wp_MlKemCtx* ctx, OSSL_PARAM* params)
 {
+    (void)ctx;
     (void)params;
-    return ctx != NULL;
+    return 1;
 }
 
 static const OSSL_PARAM* wp_mlkem_kem_gettable_ctx_params(wp_MlKemCtx* ctx,
@@ -292,15 +293,13 @@ static const OSSL_PARAM* wp_mlkem_kem_gettable_ctx_params(wp_MlKemCtx* ctx,
     return wp_mlkem_kem_gettable;
 }
 
-/**
- * Set ctx params. None supported; checks ctx is non-NULL to match other
- * provider implementations.
- */
+/* No supported params; OSSL contract is unconditional success. */
 static int wp_mlkem_kem_set_ctx_params(wp_MlKemCtx* ctx,
     const OSSL_PARAM params[])
 {
+    (void)ctx;
     (void)params;
-    return ctx != NULL;
+    return 1;
 }
 
 static const OSSL_PARAM* wp_mlkem_kem_settable_ctx_params(wp_MlKemCtx* ctx,

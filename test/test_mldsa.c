@@ -1,6 +1,6 @@
 /* test_mldsa.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -25,7 +25,7 @@
 
 #ifdef WP_HAVE_MLDSA
 
-#include <wolfssl/wolfcrypt/dilithium.h>
+#include <wolfssl/wolfcrypt/wc_mldsa.h>
 
 /* Per-level metadata. */
 typedef struct mldsa_test_level {
@@ -465,6 +465,375 @@ int test_mldsa_verify_wrong_key(void* data)
         OPENSSL_free(sig); sig = NULL;
         EVP_PKEY_free(keyA); keyA = NULL;
         EVP_PKEY_free(keyB); keyB = NULL;
+    }
+    return err;
+}
+
+/* Helper: digest_sign-only short message sign, returns sig (caller frees). */
+static int mldsa_dsign_short(EVP_PKEY* k, const unsigned char* msg,
+    size_t msgLen, unsigned char** sig, size_t* sigLen)
+{
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    int err = (mdctx == NULL);
+
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, k,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdctx, NULL, sigLen, msg, msgLen) != 1;
+    }
+    if (err == 0) {
+        *sig = (unsigned char*)OPENSSL_malloc(*sigLen);
+        err = (*sig == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdctx, *sig, sigLen, msg, msgLen) != 1;
+    }
+    EVP_MD_CTX_free(mdctx);
+    return err;
+}
+
+/* EVP_PKEY_dup roundtrip: dup pub matches; sign with dup, verify with orig. */
+int test_mldsa_dup(void* data)
+{
+    static const unsigned char msg[32] = "ML-DSA dup test message vector!";
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    EVP_PKEY* d = NULL;
+    unsigned char* pub1 = NULL;
+    unsigned char* pub2 = NULL;
+    size_t pub1Len = 0;
+    size_t pub2Len = 0;
+    unsigned char* sig = NULL;
+    size_t sigLen = 0;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        const mldsa_test_level* lvl = &mldsa_levels[i];
+        PRINT_MSG("Dup %s", lvl->name);
+
+        err = mldsa_keygen(lvl->name, &k);
+        if (err == 0) {
+            d = EVP_PKEY_dup(k);
+            err = (d == NULL);
+        }
+        if (err == 0) {
+            err = mldsa_get_pub(k, &pub1, &pub1Len);
+        }
+        if (err == 0) {
+            err = mldsa_get_pub(d, &pub2, &pub2Len);
+        }
+        if (err == 0) {
+            err = (pub1Len != pub2Len) || (memcmp(pub1, pub2, pub1Len) != 0);
+            if (err) PRINT_ERR_MSG("Dup pub byte mismatch");
+        }
+        if (err == 0) {
+            err = mldsa_dsign_short(d, msg, sizeof(msg), &sig, &sigLen);
+        }
+        if (err == 0) {
+            err = mldsa_verify_msg(k, msg, sizeof(msg), sig, sigLen) != 1;
+            if (err) PRINT_ERR_MSG("Verify-with-orig of dup-sig failed");
+        }
+
+        OPENSSL_free(pub1); pub1 = NULL; pub1Len = 0;
+        OPENSSL_free(pub2); pub2 = NULL; pub2Len = 0;
+        OPENSSL_free(sig); sig = NULL; sigLen = 0;
+        EVP_PKEY_free(d); d = NULL;
+        EVP_PKEY_free(k); k = NULL;
+    }
+    return err;
+}
+
+/* EVP_PKEY_eq for ML-DSA. */
+int test_mldsa_match(void* data)
+{
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k1 = NULL;
+    EVP_PKEY* k2 = NULL;
+    EVP_PKEY* k3 = NULL;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        PRINT_MSG("Match %s", mldsa_levels[i].name);
+
+        err = mldsa_keygen(mldsa_levels[i].name, &k1);
+        if (err == 0) {
+            err = mldsa_keygen(mldsa_levels[i].name, &k2);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_eq(k1, k1) != 1;
+            if (err) PRINT_ERR_MSG("Self-eq failed");
+        }
+        if (err == 0) {
+            err = EVP_PKEY_eq(k1, k2) == 1;
+            if (err) PRINT_ERR_MSG("Distinct keys reported equal");
+        }
+        if ((err == 0) && (i + 1 < MLDSA_LEVEL_COUNT)) {
+            err = mldsa_keygen(mldsa_levels[i + 1].name, &k3);
+            if (err == 0) {
+                err = EVP_PKEY_eq(k1, k3) == 1;
+                if (err) PRINT_ERR_MSG("Cross-level keys reported equal");
+            }
+            EVP_PKEY_free(k3); k3 = NULL;
+        }
+        EVP_PKEY_free(k1); k1 = NULL;
+        EVP_PKEY_free(k2); k2 = NULL;
+    }
+    return err;
+}
+
+/* EVP_MD_CTX_copy_ex on a partial digest_sign accumulator. Both ctxs must
+ * produce signatures that verify under the original key. */
+int test_mldsa_dupctx(void* data)
+{
+    static const unsigned char part1[16] = "mldsa-dupctx-pt1";
+    static const unsigned char part2[16] = "mldsa-dupctx-pt2";
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    EVP_MD_CTX* a = NULL;
+    EVP_MD_CTX* b = NULL;
+    unsigned char* sigA = NULL;
+    unsigned char* sigB = NULL;
+    size_t sigALen = 0;
+    size_t sigBLen = 0;
+    unsigned char msg[32];
+
+    (void)data;
+    XMEMCPY(msg, part1, 16);
+    XMEMCPY(msg + 16, part2, 16);
+
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        PRINT_MSG("Dupctx %s", mldsa_levels[i].name);
+
+        err = mldsa_keygen(mldsa_levels[i].name, &k);
+        if (err == 0) {
+            a = EVP_MD_CTX_new();
+            err = (a == NULL);
+        }
+        if (err == 0) {
+            err = EVP_DigestSignInit_ex(a, NULL, NULL, wpLibCtx, NULL, k,
+                NULL) != 1;
+        }
+        if (err == 0) {
+            err = EVP_DigestSignUpdate(a, part1, sizeof(part1)) != 1;
+        }
+        if (err == 0) {
+            b = EVP_MD_CTX_new();
+            err = (b == NULL);
+        }
+        if (err == 0) {
+            err = EVP_MD_CTX_copy_ex(b, a) != 1;
+        }
+        if (err == 0) {
+            err = EVP_DigestSignUpdate(a, part2, sizeof(part2)) != 1
+                || EVP_DigestSignUpdate(b, part2, sizeof(part2)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_DigestSignFinal(a, NULL, &sigALen) != 1
+                || EVP_DigestSignFinal(b, NULL, &sigBLen) != 1;
+        }
+        if (err == 0) {
+            sigA = (unsigned char*)OPENSSL_malloc(sigALen);
+            sigB = (unsigned char*)OPENSSL_malloc(sigBLen);
+            err = (sigA == NULL) || (sigB == NULL);
+        }
+        if (err == 0) {
+            err = EVP_DigestSignFinal(a, sigA, &sigALen) != 1
+                || EVP_DigestSignFinal(b, sigB, &sigBLen) != 1;
+        }
+        if (err == 0) {
+            err = mldsa_verify_msg(k, msg, sizeof(msg), sigA, sigALen) != 1
+                || mldsa_verify_msg(k, msg, sizeof(msg), sigB, sigBLen) != 1;
+            if (err) PRINT_ERR_MSG("Dupctx sig verify failed");
+        }
+
+        EVP_MD_CTX_free(a); a = NULL;
+        EVP_MD_CTX_free(b); b = NULL;
+        OPENSSL_free(sigA); sigA = NULL; sigALen = 0;
+        OPENSSL_free(sigB); sigB = NULL; sigBLen = 0;
+        EVP_PKEY_free(k); k = NULL;
+    }
+    return err;
+}
+
+/* One-shot EVP_PKEY_sign / EVP_PKEY_verify path (not digest_sign). */
+int test_mldsa_oneshot_sign_verify(void* data)
+{
+    static const unsigned char msg[16] = "mldsa-one-shot!!";
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    EVP_PKEY_CTX* sctx = NULL;
+    EVP_PKEY_CTX* vctx = NULL;
+    unsigned char* sig = NULL;
+    size_t sigLen = 0;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        PRINT_MSG("One-shot sign/verify %s", mldsa_levels[i].name);
+
+        err = mldsa_keygen(mldsa_levels[i].name, &k);
+        if (err == 0) {
+            sctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, k, NULL);
+            err = (sctx == NULL) || (EVP_PKEY_sign_init(sctx) != 1);
+        }
+        if (err == 0) {
+            sigLen = 0;
+            err = EVP_PKEY_sign(sctx, NULL, &sigLen, msg, sizeof(msg)) != 1;
+        }
+        if (err == 0) {
+            sig = (unsigned char*)OPENSSL_malloc(sigLen);
+            err = (sig == NULL);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_sign(sctx, sig, &sigLen, msg, sizeof(msg)) != 1;
+        }
+        if (err == 0) {
+            vctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, k, NULL);
+            err = (vctx == NULL) || (EVP_PKEY_verify_init(vctx) != 1);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_verify(vctx, sig, sigLen, msg, sizeof(msg)) != 1;
+        }
+
+        OPENSSL_free(sig); sig = NULL; sigLen = 0;
+        EVP_PKEY_CTX_free(sctx); sctx = NULL;
+        EVP_PKEY_CTX_free(vctx); vctx = NULL;
+        EVP_PKEY_free(k); k = NULL;
+    }
+    return err;
+}
+
+/* BITS / SECURITY_BITS / MAX_SIZE getters. */
+int test_mldsa_get_params(void* data)
+{
+    /* FIPS 204: ML-DSA-44 -> 128 sec bits, -65 -> 192, -87 -> 256 */
+    static const int secBits[] = { 128, 192, 256 };
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        const mldsa_test_level* lvl = &mldsa_levels[i];
+        PRINT_MSG("Params %s", lvl->name);
+
+        err = mldsa_keygen(lvl->name, &k);
+        if (err == 0) {
+            err = EVP_PKEY_get_bits(k) != (int)(lvl->pubKeySize * 8);
+            if (err) PRINT_ERR_MSG("Wrong BITS");
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_security_bits(k) != secBits[i];
+            if (err) PRINT_ERR_MSG("Wrong SECURITY_BITS");
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_size(k) != (int)lvl->sigSize;
+            if (err) PRINT_ERR_MSG("Wrong MAX_SIZE");
+        }
+        EVP_PKEY_free(k); k = NULL;
+    }
+    return err;
+}
+
+/* DigestSignInit with non-empty mdName must fail (ML-DSA is pure). */
+int test_mldsa_digest_sign_init_rejects_md(void* data)
+{
+    int err = 0;
+    EVP_PKEY* k = NULL;
+    EVP_MD_CTX* mdctx = NULL;
+    int rc;
+
+    (void)data;
+    PRINT_MSG("DigestSignInit rejects non-empty md");
+
+    err = mldsa_keygen("ML-DSA-44", &k);
+    if (err == 0) {
+        mdctx = EVP_MD_CTX_new();
+        err = (mdctx == NULL);
+    }
+    if (err == 0) {
+        /* Pass "SHA-256" as mdName; ML-DSA is pure-mode so this MUST fail. */
+        rc = EVP_DigestSignInit_ex(mdctx, NULL, "SHA-256", wpLibCtx, NULL, k,
+            NULL);
+        err = (rc == 1);
+        if (err) PRINT_ERR_MSG("DigestSignInit with mdName unexpectedly OK");
+    }
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(k);
+    return err;
+}
+
+/* Negative: import priv + mutated pub. Expect fromdata to FAIL. */
+int test_mldsa_import_mismatched_pubpriv(void* data)
+{
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    EVP_PKEY* k2 = NULL;
+    EVP_PKEY_CTX* ctx = NULL;
+    OSSL_PARAM* params = NULL;
+    OSSL_PARAM_BLD* bld;
+    unsigned char* pub = NULL;
+    unsigned char* priv = NULL;
+    size_t pubLen = 0;
+    size_t privLen = 0;
+    int rc;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        const mldsa_test_level* lvl = &mldsa_levels[i];
+        PRINT_MSG("Mismatched pub/priv %s", lvl->name);
+
+        err = mldsa_keygen(lvl->name, &k);
+        if (err == 0) {
+            err = mldsa_get_pub(k, &pub, &pubLen);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_octet_string_param(k, OSSL_PKEY_PARAM_PRIV_KEY,
+                NULL, 0, &privLen) != 1;
+        }
+        if (err == 0) {
+            priv = (unsigned char*)OPENSSL_malloc(privLen);
+            err = (priv == NULL) || EVP_PKEY_get_octet_string_param(k,
+                OSSL_PKEY_PARAM_PRIV_KEY, priv, privLen, &privLen) != 1;
+        }
+        if (err == 0) {
+            pub[0] ^= 0x01;
+        }
+        if (err == 0) {
+            ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, lvl->name, NULL);
+            err = (ctx == NULL) || (EVP_PKEY_fromdata_init(ctx) != 1);
+        }
+        if (err == 0) {
+            bld = OSSL_PARAM_BLD_new();
+            err = (bld == NULL)
+                || OSSL_PARAM_BLD_push_octet_string(bld,
+                    OSSL_PKEY_PARAM_PUB_KEY, pub, pubLen) != 1
+                || OSSL_PARAM_BLD_push_octet_string(bld,
+                    OSSL_PKEY_PARAM_PRIV_KEY, priv, privLen) != 1;
+            if (err == 0) {
+                params = OSSL_PARAM_BLD_to_param(bld);
+                err = (params == NULL);
+            }
+            OSSL_PARAM_BLD_free(bld);
+        }
+        if (err == 0) {
+            rc = EVP_PKEY_fromdata(ctx, &k2, EVP_PKEY_KEYPAIR, params);
+            err = (rc == 1);
+            if (err) PRINT_ERR_MSG("Mismatched import succeeded");
+        }
+
+        OPENSSL_free(pub); pub = NULL; pubLen = 0;
+        OPENSSL_clear_free(priv, privLen); priv = NULL; privLen = 0;
+        OSSL_PARAM_free(params); params = NULL;
+        EVP_PKEY_CTX_free(ctx); ctx = NULL;
+        EVP_PKEY_free(k); k = NULL;
+        EVP_PKEY_free(k2); k2 = NULL;
     }
     return err;
 }

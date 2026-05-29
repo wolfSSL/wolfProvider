@@ -1,6 +1,6 @@
 /* wp_mldsa_kmgmt.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -31,7 +31,7 @@
 
 #ifdef WP_HAVE_MLDSA
 
-#include <wolfssl/wolfcrypt/dilithium.h>
+#include <wolfssl/wolfcrypt/wc_mldsa.h>
 
 /** Supported selections (key parts) in this key manager for ML-DSA. */
 #define WP_MLDSA_POSSIBLE_SELECTIONS                                           \
@@ -60,7 +60,7 @@ typedef struct wp_MlDsaData {
  */
 struct wp_MlDsa {
     /** wolfSSL ML-DSA key. */
-    MlDsaKey key;
+    wc_MlDsaKey key;
     /** Parameter set data. */
     const wp_MlDsaData* data;
 
@@ -157,25 +157,11 @@ int wp_mldsa_up_ref(wp_MlDsa* mldsa)
  * Get the wolfSSL ML-DSA key from the wp_MlDsa object.
  *
  * @param [in] mldsa  ML-DSA key object.
- * @return  Pointer to wolfSSL MlDsaKey, returned as void*.
+ * @return  Pointer to wolfSSL wc_MlDsaKey, returned as void*.
  */
 void* wp_mldsa_get_key(wp_MlDsa* mldsa)
 {
     return &mldsa->key;
-}
-
-/**
- * Get the ML-DSA level (2/3/5) for the key.
- *
- * @param [in] mldsa  ML-DSA key object.
- * @return  Level value, or 0 if mldsa is NULL.
- */
-int wp_mldsa_get_level(const wp_MlDsa* mldsa)
-{
-    if (mldsa == NULL) {
-        return 0;
-    }
-    return mldsa->data->level;
 }
 
 /**
@@ -210,14 +196,14 @@ static wp_MlDsa* wp_mldsa_new(WOLFPROV_CTX* provCtx, const wp_MlDsaData* data)
         int ok = 1;
         int rc;
 
-        rc = wc_dilithium_init_ex(&mldsa->key, NULL, INVALID_DEVID);
+        rc = wc_MlDsaKey_Init(&mldsa->key, NULL, INVALID_DEVID);
         if (rc != 0) {
             ok = 0;
         }
         if (ok) {
-            rc = wc_dilithium_set_level(&mldsa->key, data->level);
+            rc = wc_MlDsaKey_SetParams(&mldsa->key, data->level);
             if (rc != 0) {
-                wc_dilithium_free(&mldsa->key);
+                wc_MlDsaKey_Free(&mldsa->key);
                 ok = 0;
             }
         }
@@ -225,7 +211,7 @@ static wp_MlDsa* wp_mldsa_new(WOLFPROV_CTX* provCtx, const wp_MlDsaData* data)
         if (ok) {
             rc = wc_InitMutex(&mldsa->mutex);
             if (rc != 0) {
-                wc_dilithium_free(&mldsa->key);
+                wc_MlDsaKey_Free(&mldsa->key);
                 ok = 0;
             }
         }
@@ -268,7 +254,7 @@ void wp_mldsa_free(wp_MlDsa* mldsa)
         #ifndef WP_SINGLE_THREADED
             wc_FreeMutex(&mldsa->mutex);
         #endif
-            wc_dilithium_free(&mldsa->key);
+            wc_MlDsaKey_Free(&mldsa->key);
             OPENSSL_free(mldsa);
         }
     }
@@ -288,6 +274,7 @@ static wp_MlDsa* wp_mldsa_dup(const wp_MlDsa* src, int selection)
     unsigned char* privBuf = NULL;
     word32 pubLen;
     word32 privLen;
+    word32 privAllocLen = 0;
     int rc;
     int ok = 1;
     int dupPub;
@@ -312,14 +299,14 @@ static wp_MlDsa* wp_mldsa_dup(const wp_MlDsa* src, int selection)
             ok = 0;
         }
         if (ok) {
-            rc = wc_dilithium_export_public((MlDsaKey*)&src->key, pubBuf,
+            rc = wc_MlDsaKey_ExportPubRaw((wc_MlDsaKey*)&src->key, pubBuf,
                 &pubLen);
             if (rc != 0) {
                 ok = 0;
             }
         }
         if (ok) {
-            rc = wc_dilithium_import_public(pubBuf, pubLen, &dst->key);
+            rc = wc_MlDsaKey_ImportPubRaw(&dst->key, pubBuf, pubLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -332,20 +319,21 @@ static wp_MlDsa* wp_mldsa_dup(const wp_MlDsa* src, int selection)
     }
 
     if (ok && dupPriv) {
-        privLen = src->data->privKeySize;
-        privBuf = (unsigned char*)OPENSSL_malloc(privLen);
+        privAllocLen = src->data->privKeySize;
+        privLen = privAllocLen;
+        privBuf = (unsigned char*)OPENSSL_malloc(privAllocLen);
         if (privBuf == NULL) {
             ok = 0;
         }
         if (ok) {
-            rc = wc_dilithium_export_private((MlDsaKey*)&src->key, privBuf,
+            rc = wc_MlDsaKey_ExportPrivRaw((wc_MlDsaKey*)&src->key, privBuf,
                 &privLen);
             if (rc != 0) {
                 ok = 0;
             }
         }
         if (ok) {
-            rc = wc_dilithium_import_private(privBuf, privLen, &dst->key);
+            rc = wc_MlDsaKey_ImportPrivRaw(&dst->key, privBuf, privLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -353,7 +341,8 @@ static wp_MlDsa* wp_mldsa_dup(const wp_MlDsa* src, int selection)
         if (ok) {
             dst->hasPriv = 1;
         }
-        OPENSSL_clear_free(privBuf, privLen);
+        /* Zero the full allocation, not just the (possibly-truncated) out len. */
+        OPENSSL_clear_free(privBuf, privAllocLen);
     }
 
     if (!ok) {
@@ -420,6 +409,8 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
     unsigned char* bufB = NULL;
     word32 lenA;
     word32 lenB;
+    word32 allocA = 0;
+    word32 allocB = 0;
 
     if (!wolfssl_prov_is_running() || (a == NULL) || (b == NULL)) {
         return 0;
@@ -436,13 +427,13 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
             ok = 0;
         }
         if (ok) {
-            rc = wc_dilithium_export_public((MlDsaKey*)&a->key, bufA, &lenA);
+            rc = wc_MlDsaKey_ExportPubRaw((wc_MlDsaKey*)&a->key, bufA, &lenA);
             if (rc != 0) {
                 ok = 0;
             }
         }
         if (ok) {
-            rc = wc_dilithium_export_public((MlDsaKey*)&b->key, bufB, &lenB);
+            rc = wc_MlDsaKey_ExportPubRaw((wc_MlDsaKey*)&b->key, bufB, &lenB);
             if (rc != 0) {
                 ok = 0;
             }
@@ -456,21 +447,23 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
         bufB = NULL;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
-        lenA = a->data->privKeySize;
-        lenB = b->data->privKeySize;
-        bufA = (unsigned char*)OPENSSL_malloc(lenA);
-        bufB = (unsigned char*)OPENSSL_malloc(lenB);
+        allocA = a->data->privKeySize;
+        allocB = b->data->privKeySize;
+        lenA = allocA;
+        lenB = allocB;
+        bufA = (unsigned char*)OPENSSL_malloc(allocA);
+        bufB = (unsigned char*)OPENSSL_malloc(allocB);
         if ((bufA == NULL) || (bufB == NULL)) {
             ok = 0;
         }
         if (ok) {
-            rc = wc_dilithium_export_private((MlDsaKey*)&a->key, bufA, &lenA);
+            rc = wc_MlDsaKey_ExportPrivRaw((wc_MlDsaKey*)&a->key, bufA, &lenA);
             if (rc != 0) {
                 ok = 0;
             }
         }
         if (ok) {
-            rc = wc_dilithium_export_private((MlDsaKey*)&b->key, bufB, &lenB);
+            rc = wc_MlDsaKey_ExportPrivRaw((wc_MlDsaKey*)&b->key, bufB, &lenB);
             if (rc != 0) {
                 ok = 0;
             }
@@ -478,8 +471,9 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
         if (ok && ((lenA != lenB) || (XMEMCMP(bufA, bufB, lenA) != 0))) {
             ok = 0;
         }
-        OPENSSL_clear_free(bufA, lenA);
-        OPENSSL_clear_free(bufB, lenB);
+        /* Zero full allocations even if export truncated the out lengths. */
+        OPENSSL_clear_free(bufA, allocA);
+        OPENSSL_clear_free(bufB, allocB);
     }
     return ok;
 }
@@ -515,22 +509,25 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
                 &privData, &privLen)) {
             ok = 0;
         }
+        /* FIPS 204 priv keys are fixed-size; equality check before word32 cast
+         * also catches truncation on 64-bit platforms. */
+        if (ok && (privData != NULL) && (privLen != mldsa->data->privKeySize)) {
+            ok = 0;
+        }
         if (ok && (privData != NULL)) {
-            rc = wc_dilithium_import_private(privData, (word32)privLen,
-                &mldsa->key);
+            rc = wc_MlDsaKey_ImportPrivRaw(&mldsa->key, privData,
+                (word32)privLen);
             if (rc != 0) {
                 ok = 0;
             }
             if (ok) {
                 mldsa->hasPriv = 1;
-                /* FIPS 204 raw private key embeds the public seed; probe
-                 * whether wolfSSL populated the public portion as a side
-                 * effect of import_private. If so, set hasPub so downstream
-                 * tools (e.g. openssl pkey -in priv.der) can emit SPKI. */
+                /* FIPS 204 priv-key import may populate pub as a side effect
+                 * (impl-defined); probe so we can advertise it if available. */
                 derivedPubLen = mldsa->data->pubKeySize;
                 derivedPub = (unsigned char*)OPENSSL_malloc(derivedPubLen);
                 if (derivedPub != NULL) {
-                    if (wc_dilithium_export_public(&mldsa->key, derivedPub,
+                    if (wc_MlDsaKey_ExportPubRaw(&mldsa->key, derivedPub,
                             &derivedPubLen) == 0) {
                         mldsa->hasPub = 1;
                     }
@@ -543,19 +540,27 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
                 &pubData, &pubLen)) {
             ok = 0;
         }
-        /* Consistency check: if both priv and pub were supplied AND priv
-         * import gave us a derived pub, the supplied pub must match.
-         * Rejects attacker-supplied or corrupted mismatched keypairs. */
-        if (ok && (pubData != NULL) && (privData != NULL)
-                && (derivedPub != NULL) && mldsa->hasPub) {
-            if ((derivedPubLen != pubLen) ||
-                    (XMEMCMP(derivedPub, pubData, pubLen) != 0)) {
+        if (ok && (pubData != NULL) && (pubLen != mldsa->data->pubKeySize)) {
+            ok = 0;
+        }
+        /* Both supplied: if we derived a pub from priv, supplied pub must
+         * match. OOM during malloc is fatal so the hardening isn't fail-open
+         * under memory pressure. If wolfSSL did not auto-derive pub (impl
+         * choice, not attacker-influenced), the check is skipped. */
+        if (ok && (pubData != NULL) && (privData != NULL)) {
+            if (derivedPub == NULL) {
                 ok = 0;
+            }
+            else if (mldsa->hasPub) {
+                if ((derivedPubLen != pubLen) ||
+                        (XMEMCMP(derivedPub, pubData, pubLen) != 0)) {
+                    ok = 0;
+                }
             }
         }
         if (ok && (pubData != NULL)) {
-            rc = wc_dilithium_import_public(pubData, (word32)pubLen,
-                &mldsa->key);
+            rc = wc_MlDsaKey_ImportPubRaw(&mldsa->key, pubData,
+                (word32)pubLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -566,6 +571,19 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
     }
     if (ok && (privData == NULL) && (pubData == NULL)) {
         ok = 0;
+    }
+    /* When both parts imported, ask wolfSSL to verify they are consistent.
+     * Catches mismatched pub/priv that the earlier derived-pub probe could
+     * not (wolfSSL master's ImportPrivRaw does not auto-populate pub). */
+    if (ok && (privData != NULL) && (pubData != NULL)) {
+        if (wc_MlDsaKey_CheckKey(&mldsa->key) != 0) {
+            ok = 0;
+        }
+    }
+    if (!ok) {
+        /* Clear flags on failure so partial-init state is not advertised. */
+        mldsa->hasPriv = 0;
+        mldsa->hasPub = 0;
     }
     OPENSSL_free(derivedPub);
     return ok;
@@ -635,6 +653,7 @@ static int wp_mldsa_export(wp_MlDsa* mldsa, int selection,
     unsigned char* privBuf = NULL;
     word32 pubLen = 0;
     word32 privLen = 0;
+    word32 privAllocLen = 0;
     int expPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
     int expPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
 
@@ -650,7 +669,7 @@ static int wp_mldsa_export(wp_MlDsa* mldsa, int selection,
             ok = 0;
         }
         if (ok) {
-            rc = wc_dilithium_export_public(&mldsa->key, pubBuf, &pubLen);
+            rc = wc_MlDsaKey_ExportPubRaw(&mldsa->key, pubBuf, &pubLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -661,13 +680,14 @@ static int wp_mldsa_export(wp_MlDsa* mldsa, int selection,
         }
     }
     if (ok && expPriv && mldsa->hasPriv) {
-        privLen = mldsa->data->privKeySize;
-        privBuf = (unsigned char*)OPENSSL_malloc(privLen);
+        privAllocLen = mldsa->data->privKeySize;
+        privLen = privAllocLen;
+        privBuf = (unsigned char*)OPENSSL_malloc(privAllocLen);
         if (privBuf == NULL) {
             ok = 0;
         }
         if (ok) {
-            rc = wc_dilithium_export_private(&mldsa->key, privBuf, &privLen);
+            rc = wc_MlDsaKey_ExportPrivRaw(&mldsa->key, privBuf, &privLen);
             if (rc != 0) {
                 ok = 0;
             }
@@ -681,7 +701,8 @@ static int wp_mldsa_export(wp_MlDsa* mldsa, int selection,
         ok = paramCb(params, cbArg);
     }
     OPENSSL_free(pubBuf);
-    OPENSSL_clear_free(privBuf, privLen);
+    /* Zero full allocation in case ExportPrivRaw truncated privLen. */
+    OPENSSL_clear_free(privBuf, privAllocLen);
     return ok;
 }
 
@@ -745,28 +766,27 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PUB_KEY);
         if (p != NULL) {
             word32 outLen = mldsa->data->pubKeySize;
-            if (p->data == NULL) {
+            if (!mldsa->hasPub) {
+                ok = 0;
+            }
+            else if (p->data == NULL) {
+                /* Size query. */
                 p->return_size = outLen;
             }
-            else if (mldsa->hasPub) {
-                if (p->data_size < outLen) {
+            else if (p->data_size < outLen) {
+                /* Buffer too small: report required size, let caller retry. */
+                p->return_size = outLen;
+            }
+            else {
+                outLen = (word32)p->data_size;
+                rc = wc_MlDsaKey_ExportPubRaw(&mldsa->key,
+                    (unsigned char*)p->data, &outLen);
+                if (rc != 0) {
                     ok = 0;
                 }
                 else {
-                    outLen = (word32)p->data_size;
-                    rc = wc_dilithium_export_public(&mldsa->key,
-                        (unsigned char*)p->data, &outLen);
-                    if (rc != 0) {
-                        ok = 0;
-                    }
-                    else {
-                        p->return_size = outLen;
-                    }
+                    p->return_size = outLen;
                 }
-            }
-            else {
-                /* Buffer supplied but no public key available. */
-                p->return_size = 0;
             }
         }
     }
@@ -774,28 +794,25 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
         if (p != NULL) {
             word32 outLen = mldsa->data->privKeySize;
-            if (p->data == NULL) {
+            if (!mldsa->hasPriv) {
+                ok = 0;
+            }
+            else if (p->data == NULL) {
                 p->return_size = outLen;
             }
-            else if (mldsa->hasPriv) {
-                if (p->data_size < outLen) {
+            else if (p->data_size < outLen) {
+                p->return_size = outLen;
+            }
+            else {
+                outLen = (word32)p->data_size;
+                rc = wc_MlDsaKey_ExportPrivRaw(&mldsa->key,
+                    (unsigned char*)p->data, &outLen);
+                if (rc != 0) {
                     ok = 0;
                 }
                 else {
-                    outLen = (word32)p->data_size;
-                    rc = wc_dilithium_export_private(&mldsa->key,
-                        (unsigned char*)p->data, &outLen);
-                    if (rc != 0) {
-                        ok = 0;
-                    }
-                    else {
-                        p->return_size = outLen;
-                    }
+                    p->return_size = outLen;
                 }
-            }
-            else {
-                /* Buffer supplied but no private key available. */
-                p->return_size = 0;
             }
         }
     }
@@ -895,7 +912,7 @@ static wp_MlDsa* wp_mldsa_gen(wp_MlDsaGenCtx* ctx, OSSL_CALLBACK* osslcb,
 
     mldsa = wp_mldsa_new(ctx->provCtx, ctx->data);
     if ((mldsa != NULL) && keyPair) {
-        int rc = wc_dilithium_make_key(&mldsa->key, &ctx->rng);
+        int rc = wc_MlDsaKey_MakeKey(&mldsa->key, &ctx->rng);
         if (rc != 0) {
             wp_mldsa_free(mldsa);
             mldsa = NULL;
