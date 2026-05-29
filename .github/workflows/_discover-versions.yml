@@ -137,7 +137,8 @@ jobs:
             echo "wolfssl_ref=$WOLFSSL_DEB_REF"
             echo "wolfssl_ref_array=[\"master\",\"$WOLFSSL_DEB_REF\"]"
             echo "wolfssl_latest_ref=$WOLFSSL_LATEST"
-            echo "wolfssl_latest_ref_array=[\"master\",\"$WOLFSSL_LATEST\"]"
+            # v5.8.4-stable: supported back-compat line, always in PR matrix.
+            echo "wolfssl_latest_ref_array=[\"master\",\"$WOLFSSL_LATEST\",\"v5.8.4-stable\"]"
             echo "openssl_ref=openssl-$OSSL"
             echo "openssl_ref_array=[\"openssl-$OSSL\"]"
             echo "openssl_latest_ref=$OSSL_LATEST"

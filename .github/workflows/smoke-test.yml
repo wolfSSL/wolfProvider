@@ -48,6 +48,8 @@ jobs:
             wolfssl_ref: master
           - name: stable/openssl-latest
             wolfssl_ref: ''  # filled in from needs.discover_versions
+          - name: 5.8.4/openssl-latest
+            wolfssl_ref: v5.8.4-stable
 
     steps:
       - name: Checkout wolfProvider
