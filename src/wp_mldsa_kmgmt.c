@@ -774,8 +774,10 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
                 p->return_size = outLen;
             }
             else if (p->data_size < outLen) {
-                /* Buffer too small: report required size, let caller retry. */
+                /* Buffer too small: report required size and fail so the
+                 * caller can retry; do not claim a completed export. */
                 p->return_size = outLen;
+                ok = 0;
             }
             else {
                 outLen = (word32)p->data_size;
@@ -802,6 +804,7 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
             }
             else if (p->data_size < outLen) {
                 p->return_size = outLen;
+                ok = 0;
             }
             else {
                 outLen = (word32)p->data_size;

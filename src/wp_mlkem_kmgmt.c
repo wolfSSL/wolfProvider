@@ -754,8 +754,10 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
                 p->return_size = outLen;
             }
             else if (p->data_size < outLen) {
-                /* Buffer too small: report required size, let caller retry. */
+                /* Buffer too small: report required size and fail so the
+                 * caller can retry; do not claim a completed export. */
                 p->return_size = outLen;
+                ok = 0;
             }
             else {
                 rc = wc_MlKemKey_EncodePublicKey(&mlkem->key,
@@ -781,6 +783,7 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
             }
             else if (p->data_size < outLen) {
                 p->return_size = outLen;
+                ok = 0;
             }
             else {
                 rc = wc_MlKemKey_EncodePrivateKey(&mlkem->key,
@@ -949,19 +952,24 @@ static void wp_mlkem_gen_cleanup(wp_MlKemGenCtx* ctx)
     }
 }
 
-/**
- * Return the algorithm name for OSSL_FUNC_KEYMGMT_QUERY_OPERATION_NAME.
- *
- * ML-KEM has no associated operation name lookup; return NULL so OpenSSL
- * falls back to the algorithm name from the dispatch table.
- *
- * @param [in] op  Operation type. Unused.
- * @return  NULL.
- */
-static const char* wp_mlkem_query_operation_name(int op)
+/* Map each ML-KEM key type to its KEM operation name so OpenSSL fetches the
+ * matching KEM implementation without relying on fallback lookup. */
+static const char* wp_mlkem512_query_operation_name(int op)
 {
     (void)op;
-    return NULL;
+    return WP_NAMES_ML_KEM_512;
+}
+
+static const char* wp_mlkem768_query_operation_name(int op)
+{
+    (void)op;
+    return WP_NAMES_ML_KEM_768;
+}
+
+static const char* wp_mlkem1024_query_operation_name(int op)
+{
+    (void)op;
+    return WP_NAMES_ML_KEM_1024;
 }
 
 /* Per-level new() and gen_init() trampolines. */
@@ -1036,7 +1044,7 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
     { OSSL_FUNC_KEYMGMT_EXPORT_TYPES,                                          \
         (DFUNC)wp_mlkem_export_types                           },              \
     { OSSL_FUNC_KEYMGMT_QUERY_OPERATION_NAME,                                  \
-        (DFUNC)wp_mlkem_query_operation_name                   },              \
+        (DFUNC)wp_##alg##_query_operation_name                 },              \
     { 0, NULL }                                                                \
 };
 

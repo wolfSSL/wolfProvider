@@ -224,15 +224,24 @@ static int wp_mldsa_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
 
     (void)params;
 
-    if ((ctx == NULL) || (mldsa == NULL)) {
+    if (ctx == NULL) {
         ok = 0;
     }
-    if (ok && !wp_mldsa_up_ref(mldsa)) {
+    /* NULL key means "reinit, reuse the key already on the context" -- only
+     * valid if the context actually has one. */
+    if (ok && (mldsa == NULL) && (ctx->mldsa == NULL)) {
         ok = 0;
+    }
+    if (ok && (mldsa != NULL)) {
+        if (!wp_mldsa_up_ref(mldsa)) {
+            ok = 0;
+        }
+        if (ok) {
+            wp_mldsa_free(ctx->mldsa);
+            ctx->mldsa = mldsa;
+        }
     }
     if (ok) {
-        wp_mldsa_free(ctx->mldsa);
-        ctx->mldsa = mldsa;
         wp_mldsa_buf_reset(ctx);
     }
     return ok;
@@ -269,11 +278,21 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     int ok = 1;
     int rc;
     word32 sigSz;
+    /* FIPS 204 permits an empty message; give wolfSSL a valid pointer so a
+     * NULL+0 message does not become a backend-dependent NULL deref. */
+    unsigned char dummy = 0;
+    const unsigned char* m = msg;
 
     (void)sigSize;
 
     if ((ctx == NULL) || (ctx->mldsa == NULL) || (sigLen == NULL)) {
         return 0;
+    }
+    if ((msg == NULL) && (msgLen != 0)) {
+        return 0;
+    }
+    if (m == NULL) {
+        m = &dummy;
     }
 
     sigSz = (word32)wp_mldsa_get_sig_size(ctx->mldsa);
@@ -297,7 +316,7 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
          * default; use the ctx variant with empty ctx to interop. */
         rc = wc_MlDsaKey_SignCtx(
             (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), NULL, 0, sig, &outLen,
-            msg, (word32)msgLen, &ctx->rng);
+            m, (word32)msgLen, &ctx->rng);
         if (rc != 0) {
             ok = 0;
         }
@@ -324,10 +343,18 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     int ok = 1;
     int rc;
     int res = 0;
+    /* FIPS 204 permits an empty message; give wolfSSL a valid pointer. */
+    unsigned char dummy = 0;
+    const unsigned char* m = msg;
 
-    if ((ctx == NULL) || (ctx->mldsa == NULL) || (sig == NULL) ||
-            (msg == NULL)) {
+    if ((ctx == NULL) || (ctx->mldsa == NULL) || (sig == NULL)) {
         return 0;
+    }
+    if ((msg == NULL) && (msgLen != 0)) {
+        return 0;
+    }
+    if (m == NULL) {
+        m = &dummy;
     }
     /* wolfSSL's ML-DSA API takes 32-bit lengths. Reject oversize inputs
      * explicitly rather than silently truncating. */
@@ -338,7 +365,7 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     /* Match the sign path: FIPS 204 pure ML-DSA with empty context. */
     rc = wc_MlDsaKey_VerifyCtx(
         (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), sig, (word32)sigLen,
-        NULL, 0, msg, (word32)msgLen, &res);
+        NULL, 0, m, (word32)msgLen, &res);
     if ((rc != 0) || (res != 1)) {
         ok = 0;
     }

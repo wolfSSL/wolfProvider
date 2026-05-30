@@ -40,6 +40,7 @@ install_wolfssl_from_git() {
     local debug_mode="$3"
     local reinstall_mode="$4"
     local no_install="$5"
+    local pqc_mode="$6"
     local main_branch="master"
 
     # If no working directory specified, create one using mktemp
@@ -173,6 +174,11 @@ AC_CONFIG_FILES([debian/rules],[chmod +x debian/rules])' configure.ac
         echo "Debug mode enabled"
     fi
 
+    if [ "$pqc_mode" = "true" ]; then
+        configure_opts="$configure_opts --enable-mlkem --enable-mldsa"
+        echo "PQC (ML-KEM/ML-DSA) enabled"
+    fi
+
     ./configure $configure_opts \
         CFLAGS="-DWOLFSSL_OLD_OID_SUM \
             -DWOLFSSL_PUBLIC_ASN \
@@ -220,6 +226,7 @@ main() {
     local debug_mode="false"
     local reinstall_mode="false"
     local no_install="false"
+    local pqc_mode="false"
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -233,6 +240,7 @@ main() {
                 echo "  -d, --debug          Enable debug build mode (adds --enable-debug)"
                 echo "  -r, --reinstall      Force reinstall even if packages are already installed"
                 echo "  -n, --no-install     Build only, do not install packages"
+                echo "  --enable-pqc         Enable ML-KEM and ML-DSA (FIPS 203/204)"
                 echo "  -h, --help           Show this help message"
                 echo ""
                 echo "Arguments:"
@@ -262,6 +270,10 @@ main() {
                 ;;
             -n|--no-install)
                 no_install="true"
+                shift
+                ;;
+            --enable-pqc)
+                pqc_mode="true"
                 shift
                 ;;
             -*)
@@ -300,7 +312,7 @@ main() {
         echo "Building wolfSSL master branch"
     fi
 
-    install_wolfssl_from_git "$work_dir" "$git_tag" "$debug_mode" "$reinstall_mode" "$no_install"
+    install_wolfssl_from_git "$work_dir" "$git_tag" "$debug_mode" "$reinstall_mode" "$no_install" "$pqc_mode"
 
     echo "WolfSSL installation completed successfully"
 }

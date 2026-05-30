@@ -504,6 +504,8 @@ int test_mldsa_oneshot_sign_verify(void *data);
 int test_mldsa_get_params(void *data);
 int test_mldsa_digest_sign_init_rejects_md(void *data);
 int test_mldsa_import_mismatched_pubpriv(void *data);
+int test_mldsa_empty_message(void *data);
+int test_mldsa_reinit_null_key(void *data);
 #endif
 
 #endif /* UNIT_H */
