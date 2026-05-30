@@ -838,4 +838,101 @@ int test_mldsa_import_mismatched_pubpriv(void* data)
     return err;
 }
 
+/* FIPS 204 permits an empty message: sign and verify zero-length input. */
+int test_mldsa_empty_message(void* data)
+{
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    EVP_MD_CTX* mdctx = NULL;
+    unsigned char* sig = NULL;
+    size_t sigLen = 0;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        PRINT_MSG("Empty message %s", mldsa_levels[i].name);
+
+        err = mldsa_keygen(mldsa_levels[i].name, &k);
+        if (err == 0) {
+            mdctx = EVP_MD_CTX_new();
+            err = (mdctx == NULL);
+        }
+        if (err == 0) {
+            err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, k,
+                NULL) != 1;
+        }
+        /* No update calls: message is the empty string. */
+        if (err == 0) {
+            err = EVP_DigestSign(mdctx, NULL, &sigLen, NULL, 0) != 1;
+        }
+        if (err == 0) {
+            sig = (unsigned char*)OPENSSL_malloc(sigLen);
+            err = (sig == NULL);
+        }
+        if (err == 0) {
+            err = EVP_DigestSign(mdctx, sig, &sigLen, NULL, 0) != 1;
+            if (err) PRINT_ERR_MSG("Empty-message sign failed");
+        }
+        if (err == 0) {
+            err = mldsa_verify_msg(k, NULL, 0, sig, sigLen) != 1;
+            if (err) PRINT_ERR_MSG("Empty-message verify failed");
+        }
+
+        OPENSSL_free(sig); sig = NULL; sigLen = 0;
+        EVP_MD_CTX_free(mdctx); mdctx = NULL;
+        EVP_PKEY_free(k); k = NULL;
+    }
+    return err;
+}
+
+/* Reinitialize a sign context with a NULL key: the key already on the
+ * context must be reused (OpenSSL reinit contract). */
+int test_mldsa_reinit_null_key(void* data)
+{
+    static const unsigned char msg[16] = "mldsa-reinit-msg";
+    int err = 0;
+    EVP_PKEY* k = NULL;
+    EVP_MD_CTX* mdctx = NULL;
+    unsigned char* sig = NULL;
+    size_t sigLen = 0;
+
+    (void)data;
+    PRINT_MSG("Reinit with NULL key reuses context key");
+
+    err = mldsa_keygen("ML-DSA-44", &k);
+    if (err == 0) {
+        mdctx = EVP_MD_CTX_new();
+        err = (mdctx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, k,
+            NULL) != 1;
+    }
+    /* Reinit with NULL pkey: reuse the key already attached. */
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, NULL,
+            NULL) != 1;
+        if (err) PRINT_ERR_MSG("Reinit with NULL key failed");
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdctx, NULL, &sigLen, msg, sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        sig = (unsigned char*)OPENSSL_malloc(sigLen);
+        err = (sig == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdctx, sig, &sigLen, msg, sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = mldsa_verify_msg(k, msg, sizeof(msg), sig, sigLen) != 1;
+        if (err) PRINT_ERR_MSG("Sign after NULL-key reinit did not verify");
+    }
+
+    OPENSSL_free(sig);
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(k);
+    return err;
+}
+
 #endif /* WP_HAVE_MLDSA */

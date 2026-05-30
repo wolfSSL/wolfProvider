@@ -216,6 +216,9 @@ if [ -n "$build_debian" ]; then
     if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
         OPENSSL_OPTS+=" --replace-default"
     fi
+    if [ "$WOLFPROV_PQC" = "1" ]; then
+        WOLFSSL_OPTS+=" --enable-pqc"
+    fi
 
     # wolfSSL and OpenSSL are independent and must be built first
     debian/install-wolfssl.sh $WOLFSSL_OPTS --no-install -r $DEB_OUTPUT_DIR

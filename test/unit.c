@@ -515,6 +515,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mldsa_get_params, NULL),
     TEST_DECL(test_mldsa_digest_sign_init_rejects_md, NULL),
     TEST_DECL(test_mldsa_import_mismatched_pubpriv, NULL),
+    TEST_DECL(test_mldsa_empty_message, NULL),
+    TEST_DECL(test_mldsa_reinit_null_key, NULL),
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
