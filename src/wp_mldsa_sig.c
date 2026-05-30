@@ -1,0 +1,535 @@
+/* wp_mldsa_sig.c
+ *
+ * Copyright (C) 2006-2026 wolfSSL Inc.
+ *
+ * This file is part of wolfProvider.
+ *
+ * wolfProvider is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfProvider is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <openssl/err.h>
+#include <openssl/proverr.h>
+#include <openssl/core_dispatch.h>
+#include <openssl/core_names.h>
+#include <openssl/params.h>
+#include <openssl/evp.h>
+
+#include <wolfprovider/settings.h>
+#include <wolfprovider/alg_funcs.h>
+
+#ifdef WP_HAVE_MLDSA
+
+#include <wolfssl/wolfcrypt/wc_mldsa.h>
+
+/**
+ * ML-DSA signature context.
+ *
+ * ML-DSA is a pure signature (no streamed digest); digest_sign_* accumulates
+ * the message in mdBuf and the one-shot signer is called in _final.
+ */
+typedef struct wp_MlDsaSigCtx {
+    /** Provider context. */
+    WOLFPROV_CTX* provCtx;
+    /** wolfProvider ML-DSA key (owned reference). */
+    wp_MlDsa* mldsa;
+    /** RNG for signing. */
+    WC_RNG rng;
+    /** Buffer accumulating message bytes from digest_sign_update. */
+    unsigned char* mdBuf;
+    /** Length of accumulated message in bytes. */
+    size_t mdLen;
+    /** Capacity of mdBuf in bytes. */
+    size_t mdCap;
+} wp_MlDsaSigCtx;
+
+
+/**
+ * Append data into the streaming message buffer.
+ *
+ * @param [in, out] ctx     Signature context.
+ * @param [in]      data    Data to append.
+ * @param [in]      dataLen Length of data in bytes.
+ * @return  1 on success, 0 on failure.
+ */
+/* Upper bound on the accumulated message buffer (64 MiB). ML-DSA messages
+ * are typically small (handshake transcripts, certificates); a cap prevents
+ * a hostile caller from driving OOM via unbounded digest_sign_update. */
+#define WP_MLDSA_BUF_MAX (64UL * 1024UL * 1024UL)
+
+static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
+    size_t dataLen)
+{
+    int ok = 1;
+    size_t needed;
+    size_t newCap;
+    size_t doubled;
+    unsigned char* tmp;
+
+    needed = ctx->mdLen + dataLen;
+    if (needed < ctx->mdLen) {
+        ok = 0;
+    }
+    if (ok && (needed > WP_MLDSA_BUF_MAX)) {
+        ok = 0;
+    }
+    if (ok && (needed > ctx->mdCap)) {
+        newCap = ctx->mdCap == 0 ? 256 : ctx->mdCap;
+        while (newCap < needed) {
+            doubled = newCap * 2;
+            if (doubled < newCap) {
+                ok = 0;
+                break;
+            }
+            newCap = doubled;
+        }
+        if (ok) {
+            /* Grow by alloc+copy+zero rather than realloc so we always wipe
+             * the previous block (message can be signer-confidential). */
+            tmp = (unsigned char*)OPENSSL_malloc(newCap);
+            if (tmp == NULL) {
+                ok = 0;
+            }
+            if (ok) {
+                if (ctx->mdLen > 0) {
+                    XMEMCPY(tmp, ctx->mdBuf, ctx->mdLen);
+                }
+                OPENSSL_clear_free(ctx->mdBuf, ctx->mdCap);
+                ctx->mdBuf = tmp;
+                ctx->mdCap = newCap;
+            }
+        }
+    }
+    if (ok && (dataLen > 0)) {
+        XMEMCPY(ctx->mdBuf + ctx->mdLen, data, dataLen);
+        ctx->mdLen += dataLen;
+    }
+    return ok;
+}
+
+/**
+ * Reset the streaming message buffer length to zero (keeps capacity).
+ *
+ * @param [in, out] ctx  Signature context.
+ */
+static void wp_mldsa_buf_reset(wp_MlDsaSigCtx* ctx)
+{
+    /* Wipe stale bytes; ctx reuse across operations must not leak prior msg. */
+    if ((ctx->mdBuf != NULL) && (ctx->mdLen > 0)) {
+        wc_ForceZero(ctx->mdBuf, ctx->mdLen);
+    }
+    ctx->mdLen = 0;
+}
+
+/**
+ * Create a new ML-DSA signature context object.
+ *
+ * @param [in] provCtx   Provider context.
+ * @param [in] propq     Property query string. Unused.
+ * @return  New signature context on success, NULL on failure.
+ */
+static wp_MlDsaSigCtx* wp_mldsa_newctx(WOLFPROV_CTX* provCtx, const char* propq)
+{
+    wp_MlDsaSigCtx* ctx = NULL;
+
+    (void)propq;
+
+    if (wolfssl_prov_is_running()) {
+        ctx = (wp_MlDsaSigCtx*)OPENSSL_zalloc(sizeof(*ctx));
+    }
+    if (ctx != NULL) {
+        int rc = wc_InitRng(&ctx->rng);
+        if (rc != 0) {
+            OPENSSL_free(ctx);
+            ctx = NULL;
+        }
+    }
+    if (ctx != NULL) {
+        ctx->provCtx = provCtx;
+    }
+    return ctx;
+}
+
+/**
+ * Free an ML-DSA signature context.
+ *
+ * @param [in, out] ctx  Signature context. May be NULL.
+ */
+static void wp_mldsa_freectx(wp_MlDsaSigCtx* ctx)
+{
+    if (ctx != NULL) {
+        wc_FreeRng(&ctx->rng);
+        wp_mldsa_free(ctx->mldsa);
+        OPENSSL_clear_free(ctx->mdBuf, ctx->mdCap);
+        OPENSSL_free(ctx);
+    }
+}
+
+/**
+ * Duplicate an ML-DSA signature context (key reference incremented).
+ *
+ * @param [in] srcCtx  Source signature context.
+ * @return  New context on success, NULL on failure.
+ */
+static wp_MlDsaSigCtx* wp_mldsa_dupctx(wp_MlDsaSigCtx* srcCtx)
+{
+    wp_MlDsaSigCtx* dstCtx = NULL;
+
+    if ((!wolfssl_prov_is_running()) || (srcCtx == NULL)) {
+        return NULL;
+    }
+
+    dstCtx = wp_mldsa_newctx(srcCtx->provCtx, NULL);
+    if (dstCtx == NULL) {
+        return NULL;
+    }
+    if (srcCtx->mldsa != NULL) {
+        if (!wp_mldsa_up_ref(srcCtx->mldsa)) {
+            wp_mldsa_freectx(dstCtx);
+            return NULL;
+        }
+        dstCtx->mldsa = srcCtx->mldsa;
+    }
+    if (srcCtx->mdLen > 0) {
+        if (!wp_mldsa_buf_append(dstCtx, srcCtx->mdBuf, srcCtx->mdLen)) {
+            wp_mldsa_freectx(dstCtx);
+            return NULL;
+        }
+    }
+    return dstCtx;
+}
+
+/**
+ * Common init: take a reference on the key, reset state.
+ *
+ * @param [in, out] ctx     Signature context.
+ * @param [in]      mldsa   ML-DSA key (reference taken).
+ * @param [in]      params  Parameters. Unused.
+ * @return  1 on success, 0 on failure.
+ */
+static int wp_mldsa_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
+    const OSSL_PARAM params[])
+{
+    int ok = 1;
+
+    (void)params;
+
+    if (ctx == NULL) {
+        ok = 0;
+    }
+    /* NULL key means "reinit, reuse the key already on the context" -- only
+     * valid if the context actually has one. */
+    if (ok && (mldsa == NULL) && (ctx->mldsa == NULL)) {
+        ok = 0;
+    }
+    if (ok && (mldsa != NULL)) {
+        if (!wp_mldsa_up_ref(mldsa)) {
+            ok = 0;
+        }
+        if (ok) {
+            wp_mldsa_free(ctx->mldsa);
+            ctx->mldsa = mldsa;
+        }
+    }
+    if (ok) {
+        wp_mldsa_buf_reset(ctx);
+    }
+    return ok;
+}
+
+static int wp_mldsa_sign_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
+    const OSSL_PARAM params[])
+{
+    return wp_mldsa_init(ctx, mldsa, params);
+}
+
+static int wp_mldsa_verify_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
+    const OSSL_PARAM params[])
+{
+    return wp_mldsa_init(ctx, mldsa, params);
+}
+
+/**
+ * One-shot sign of a message.
+ *
+ * If sig is NULL, just report the signature size in sigLen.
+ *
+ * @param [in]      ctx       Signature context.
+ * @param [out]     sig       Signature buffer.
+ * @param [in, out] sigLen    On in, buffer size; on out, signature length.
+ * @param [in]      sigSize   Allocated size of sig (unused).
+ * @param [in]      msg       Message to sign.
+ * @param [in]      msgLen    Message length.
+ * @return  1 on success, 0 on failure.
+ */
+static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize, const unsigned char* msg, size_t msgLen)
+{
+    int ok = 1;
+    int rc;
+    word32 sigSz;
+    /* FIPS 204 permits an empty message; give wolfSSL a valid pointer so a
+     * NULL+0 message does not become a backend-dependent NULL deref. */
+    unsigned char dummy = 0;
+    const unsigned char* m = msg;
+
+    (void)sigSize;
+
+    if ((ctx == NULL) || (ctx->mldsa == NULL) || (sigLen == NULL)) {
+        return 0;
+    }
+    if ((msg == NULL) && (msgLen != 0)) {
+        return 0;
+    }
+    if (m == NULL) {
+        m = &dummy;
+    }
+
+    sigSz = (word32)wp_mldsa_get_sig_size(ctx->mldsa);
+
+    if (sig == NULL) {
+        *sigLen = sigSz;
+        return 1;
+    }
+    if (*sigLen < sigSz) {
+        ok = 0;
+    }
+    /* wolfSSL's ML-DSA API takes a 32-bit message length. Reject >4 GiB
+     * messages explicitly rather than silently truncating. */
+    if (ok && (msgLen > 0xFFFFFFFFU)) {
+        ok = 0;
+    }
+    if (ok) {
+        word32 outLen = sigSz;
+        /* FIPS 204 sec 5.2 (Algorithm 22): pure ML-DSA prepends 0x00, ctxLen,
+         * and ctx before the message. OpenSSL uses an empty context by
+         * default; use the ctx variant with empty ctx to interop. */
+        rc = wc_MlDsaKey_SignCtx(
+            (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), NULL, 0, sig, &outLen,
+            m, (word32)msgLen, &ctx->rng);
+        if (rc != 0) {
+            ok = 0;
+        }
+        if (ok) {
+            *sigLen = outLen;
+        }
+    }
+    return ok;
+}
+
+/**
+ * One-shot verify of a signature on a message.
+ *
+ * @param [in] ctx     Signature context.
+ * @param [in] sig     Signature.
+ * @param [in] sigLen  Signature length.
+ * @param [in] msg     Message.
+ * @param [in] msgLen  Message length.
+ * @return  1 if signature valid, 0 otherwise.
+ */
+static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
+    size_t sigLen, const unsigned char* msg, size_t msgLen)
+{
+    int ok = 1;
+    int rc;
+    int res = 0;
+    /* FIPS 204 permits an empty message; give wolfSSL a valid pointer. */
+    unsigned char dummy = 0;
+    const unsigned char* m = msg;
+
+    if ((ctx == NULL) || (ctx->mldsa == NULL) || (sig == NULL)) {
+        return 0;
+    }
+    if ((msg == NULL) && (msgLen != 0)) {
+        return 0;
+    }
+    if (m == NULL) {
+        m = &dummy;
+    }
+    /* wolfSSL's ML-DSA API takes 32-bit lengths. Reject oversize inputs
+     * explicitly rather than silently truncating. */
+    if ((sigLen > 0xFFFFFFFFU) || (msgLen > 0xFFFFFFFFU)) {
+        return 0;
+    }
+
+    /* Match the sign path: FIPS 204 pure ML-DSA with empty context. */
+    rc = wc_MlDsaKey_VerifyCtx(
+        (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), sig, (word32)sigLen,
+        NULL, 0, m, (word32)msgLen, &res);
+    if ((rc != 0) || (res != 1)) {
+        ok = 0;
+    }
+    return ok;
+}
+
+/**
+ * Digest-sign init: ML-DSA is pure (no pre-hash), so the buffer captures the
+ * message and the one-shot signer is invoked at _final time.
+ *
+ * @param [in, out] ctx     Signature context.
+ * @param [in]      mdName  Message digest name (must be NULL or empty).
+ * @param [in]      mldsa   ML-DSA key (reference taken).
+ * @param [in]      params  Parameters. Unused.
+ * @return  1 on success, 0 on failure.
+ */
+static int wp_mldsa_digest_sign_init(wp_MlDsaSigCtx* ctx, const char* mdName,
+    wp_MlDsa* mldsa, const OSSL_PARAM params[])
+{
+    if ((mdName != NULL) && (mdName[0] != '\0')) {
+        return 0;
+    }
+    return wp_mldsa_init(ctx, mldsa, params);
+}
+
+static int wp_mldsa_digest_verify_init(wp_MlDsaSigCtx* ctx, const char* mdName,
+    wp_MlDsa* mldsa, const OSSL_PARAM params[])
+{
+    if ((mdName != NULL) && (mdName[0] != '\0')) {
+        return 0;
+    }
+    return wp_mldsa_init(ctx, mldsa, params);
+}
+
+/**
+ * Append data to the accumulated message buffer.
+ *
+ * @param [in, out] ctx      Signature context.
+ * @param [in]      data     Data to append.
+ * @param [in]      dataLen  Length of data.
+ * @return  1 on success, 0 on failure.
+ */
+static int wp_mldsa_digest_signverify_update(wp_MlDsaSigCtx* ctx,
+    const unsigned char* data, size_t dataLen)
+{
+    if ((ctx == NULL) || (ctx->mldsa == NULL)) {
+        return 0;
+    }
+    return wp_mldsa_buf_append(ctx, data, dataLen);
+}
+
+/**
+ * Finalize a digest-style sign: produce signature over the buffered message.
+ *
+ * If sig is NULL, just report the signature size.
+ *
+ * @param [in]      ctx      Signature context.
+ * @param [out]     sig      Signature buffer.
+ * @param [in, out] sigLen   On in, buffer size; on out, signature length.
+ * @param [in]      sigSize  Allocated size of sig (unused).
+ * @return  1 on success, 0 on failure.
+ */
+static int wp_mldsa_digest_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize)
+{
+    if (ctx == NULL) {
+        return 0;
+    }
+    return wp_mldsa_sign(ctx, sig, sigLen, sigSize, ctx->mdBuf, ctx->mdLen);
+}
+
+/**
+ * Finalize a digest-style verify on the buffered message.
+ *
+ * @param [in] ctx     Signature context.
+ * @param [in] sig     Signature.
+ * @param [in] sigLen  Signature length.
+ * @return  1 if valid, 0 otherwise.
+ */
+static int wp_mldsa_digest_verify_final(wp_MlDsaSigCtx* ctx,
+    const unsigned char* sig, size_t sigLen)
+{
+    if (ctx == NULL) {
+        return 0;
+    }
+    return wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
+}
+
+/* No supported params; OSSL contract is unconditional success. */
+static int wp_mldsa_get_ctx_params(wp_MlDsaSigCtx* ctx, OSSL_PARAM* params)
+{
+    (void)ctx;
+    (void)params;
+    return 1;
+}
+
+static const OSSL_PARAM* wp_mldsa_gettable_ctx_params(wp_MlDsaSigCtx* ctx,
+    WOLFPROV_CTX* provCtx)
+{
+    static const OSSL_PARAM wp_mldsa_gettable[] = {
+        OSSL_PARAM_END
+    };
+    (void)ctx;
+    (void)provCtx;
+    return wp_mldsa_gettable;
+}
+
+/* No supported params; OSSL contract is unconditional success. */
+static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
+    const OSSL_PARAM params[])
+{
+    (void)ctx;
+    (void)params;
+    return 1;
+}
+
+static const OSSL_PARAM* wp_mldsa_settable_ctx_params(wp_MlDsaSigCtx* ctx,
+    WOLFPROV_CTX* provCtx)
+{
+    static const OSSL_PARAM wp_mldsa_settable[] = {
+        OSSL_PARAM_END
+    };
+    (void)ctx;
+    (void)provCtx;
+    return wp_mldsa_settable;
+}
+
+/** Dispatch table for ML-DSA signatures (shared across all three levels). */
+const OSSL_DISPATCH wp_mldsa_signature_functions[] = {
+    { OSSL_FUNC_SIGNATURE_NEWCTX,
+        (DFUNC)wp_mldsa_newctx                                },
+    { OSSL_FUNC_SIGNATURE_FREECTX,
+        (DFUNC)wp_mldsa_freectx                               },
+    { OSSL_FUNC_SIGNATURE_DUPCTX,
+        (DFUNC)wp_mldsa_dupctx                                },
+    { OSSL_FUNC_SIGNATURE_SIGN_INIT,
+        (DFUNC)wp_mldsa_sign_init                             },
+    { OSSL_FUNC_SIGNATURE_SIGN,
+        (DFUNC)wp_mldsa_sign                                  },
+    { OSSL_FUNC_SIGNATURE_VERIFY_INIT,
+        (DFUNC)wp_mldsa_verify_init                           },
+    { OSSL_FUNC_SIGNATURE_VERIFY,
+        (DFUNC)wp_mldsa_verify                                },
+    { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_INIT,
+        (DFUNC)wp_mldsa_digest_sign_init                      },
+    { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_UPDATE,
+        (DFUNC)wp_mldsa_digest_signverify_update              },
+    { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_FINAL,
+        (DFUNC)wp_mldsa_digest_sign_final                     },
+    { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_INIT,
+        (DFUNC)wp_mldsa_digest_verify_init                    },
+    { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_UPDATE,
+        (DFUNC)wp_mldsa_digest_signverify_update              },
+    { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_FINAL,
+        (DFUNC)wp_mldsa_digest_verify_final                   },
+    { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,
+        (DFUNC)wp_mldsa_get_ctx_params                        },
+    { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,
+        (DFUNC)wp_mldsa_gettable_ctx_params                   },
+    { OSSL_FUNC_SIGNATURE_SET_CTX_PARAMS,
+        (DFUNC)wp_mldsa_set_ctx_params                        },
+    { OSSL_FUNC_SIGNATURE_SETTABLE_CTX_PARAMS,
+        (DFUNC)wp_mldsa_settable_ctx_params                   },
+    { 0, NULL }
+};
+
+#endif /* WP_HAVE_MLDSA */

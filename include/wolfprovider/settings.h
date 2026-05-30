@@ -169,6 +169,42 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
+/* PQC: gate on both the wolfSSL feature macro AND header availability. The
+ * canonical post-rename names (WOLFSSL_HAVE_MLKEM / WOLFSSL_HAVE_MLDSA and
+ * wc_mlkem.h / wc_mldsa.h) are required. Older wolfSSL releases that only
+ * exposed the pre-standardization names (HAVE_DILITHIUM, dilithium.h) are
+ * intentionally treated as PQC-absent here so that wolfProvider only ever
+ * builds against the canonical FIPS 203 / FIPS 204 surface. */
+#ifdef WOLFSSL_HAVE_MLKEM
+    #if defined(__has_include)
+        #if __has_include(<wolfssl/wolfcrypt/wc_mlkem.h>)
+            #define WP_HAVE_MLKEM
+            #define WP_HAVE_ML_KEM_512
+            #define WP_HAVE_ML_KEM_768
+            #define WP_HAVE_ML_KEM_1024
+        #endif
+    #else
+        #define WP_HAVE_MLKEM
+        #define WP_HAVE_ML_KEM_512
+        #define WP_HAVE_ML_KEM_768
+        #define WP_HAVE_ML_KEM_1024
+    #endif
+#endif
+#ifdef WOLFSSL_HAVE_MLDSA
+    #if defined(__has_include)
+        #if __has_include(<wolfssl/wolfcrypt/wc_mldsa.h>)
+            #define WP_HAVE_MLDSA
+            #define WP_HAVE_ML_DSA_44
+            #define WP_HAVE_ML_DSA_65
+            #define WP_HAVE_ML_DSA_87
+        #endif
+    #else
+        #define WP_HAVE_MLDSA
+        #define WP_HAVE_ML_DSA_44
+        #define WP_HAVE_ML_DSA_65
+        #define WP_HAVE_ML_DSA_87
+    #endif
+#endif
 #if !defined(NO_AES_CBC) && (defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC))
     #define WP_HAVE_KBKDF
 #endif
