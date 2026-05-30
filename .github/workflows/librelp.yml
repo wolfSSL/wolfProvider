@@ -1,19 +1,22 @@
 name: librelp Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,43 +24,38 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   test_librelp:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     # Run inside Debian Bookworm to match packaging environment
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         # Dont test osp master since it might be unstable
         librelp_ref: [ 'v1.12.0' ]
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
       OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
       WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
     steps:
-      - name: Install dependencies
-        run: |
-          apt-get update
-          apt-get install -y git build-essential autoconf automake \
-            libtool pkg-config libgnutls28-dev net-tools iproute2 python3 \
-            valgrind libtool-bin
-
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -111,7 +109,7 @@ jobs:
       - name: Run librelp tests
         working-directory: librelp
         run: |
-          ${{ matrix.force_fail }} make check 2>&1 | tee librelp-test.log
+          export ${{ matrix.force_fail }}
+          make check 2>&1 | tee librelp-test.log
           TEST_RESULT=$(grep -q "# FAIL:  0" librelp-test.log && echo "0" || echo "1")
-          echo "TEST_RESULT = $TEST_RESULT"
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} librelp

@@ -16,12 +16,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         # core build toolchain
         build-essential gcc g++ make m4 gettext \
+        gcc-11 g++-11 gcc-12 g++-12 \
         autoconf automake autoconf-archive autopoint autotools-dev \
         libtool libtool-bin pkg-config pkgconf \
         cmake meson ninja-build bison flex gperf gengetopt help2man \
         clang clang-tools cppcheck libc++-dev \
+        clang-13 clang-15 \
         # vcs, transport, compression, scripting
-        git git-all curl wget ca-certificates patch xxd dpkg-dev \
+        git git-all curl wget ca-certificates patch xxd dpkg-dev jq \
         gawk perl python3 python3-pip python3-venv python3-wheel \
         python3-setuptools python3-yaml python3-jinja2 python3-six \
         python3-pytest python3-dnspython python3-hypothesis \
@@ -81,6 +83,7 @@ RUN apt-get update \
         check apache2-dev acl attr fakeroot \
         asciidoctor docbook-xsl pandoc xsltproc man2html \
         memcached vsftpd pps-tools tshark \
+        opam \
     && rm -rf /var/lib/apt/lists/*
 
 # Perl modules used by app test suites. Baked in so transient CPAN

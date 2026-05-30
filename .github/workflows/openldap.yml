@@ -1,19 +1,22 @@
 name: OpenLDAP Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,29 +24,30 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   test_openldap:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         openldap_ref: [ 'OPENLDAP_REL_ENG_2_6_7' ]
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -85,14 +89,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install dependencies
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y git sudo build-essential autoconf automake \
-            libtool pkg-config libjansson-dev check ca-certificates dpkg-dev \
-            groff libsasl2-dev
-
       - name: Checkout openldap
         uses: actions/checkout@v4
         with:
@@ -109,7 +105,8 @@ jobs:
       - run: |
           cd openldap
           # Apply the wolfProvider patch
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/openldap/openldap-${{ matrix.openldap_ref }}-debian-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp openldap ${{ matrix.openldap_ref }}-debian ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
+          patch -p1 < "$PATCH"
 
       - name: Build and test OpenLDAP with wolfProvider
         working-directory: openldap

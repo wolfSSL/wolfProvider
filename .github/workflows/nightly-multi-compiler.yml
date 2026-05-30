@@ -1,0 +1,160 @@
+name: Nightly Multi-Compiler Tests
+
+# Runs the FULL multi-compiler matrix (gcc-9..14, clang-12..15) on
+# Ubuntu runners. PR-time multi-compiler.yml is restricted to the
+# compilers that ship in the test-deps container (Debian Bookworm:
+# gcc-11, gcc-12, clang-13..15) to avoid the apt-get hangs that were
+# cancelling PR jobs after 20 minutes. This nightly job restores
+# coverage of the dropped compilers (gcc-9, gcc-10, gcc-13, gcc-14,
+# clang-12) plus everything in between.
+
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wolfprovider:
+    name: Nightly build ${{ matrix.CC }} on ${{ matrix.OS }}, wolfssl ${{ matrix.wolfssl_ref }}, OpenSSL ${{ matrix.openssl_ref }}
+    runs-on: ${{ matrix.OS }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - CC: gcc-9
+            CXX: g++-9
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-10
+            CXX: g++-10
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-10
+            CXX: g++-10
+            OS: ubuntu-22.04
+            wolfssl_ref: v5.8.0-stable
+            openssl_ref: master
+          - CC: gcc-11
+            CXX: g++-11
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-12
+            CXX: g++-12
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-13
+            CXX: g++-13
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: gcc-14
+            CXX: g++-14
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: clang-12
+            CXX: clang++-12
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: clang-13
+            CXX: clang++-13
+            OS: ubuntu-22.04
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: clang-14
+            CXX: clang++-14
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          - CC: clang-15
+            CXX: clang++-15
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
+          # v5.8.4-stable representative coverage (back-compat for the
+          # 5.8 line). Two compilers - one gcc, one clang - so we don't
+          # double the 11-compiler matrix.
+          - CC: gcc-12
+            CXX: g++-12
+            OS: ubuntu-latest
+            wolfssl_ref: v5.8.4-stable
+            openssl_ref: master
+          - CC: clang-14
+            CXX: clang++-14
+            OS: ubuntu-latest
+            wolfssl_ref: v5.8.4-stable
+            openssl_ref: master
+    steps:
+      - name: Verify or install compiler
+        run: |
+          # Most matrix compilers are pre-installed on the GitHub-hosted
+          # Ubuntu runners. Only apt-install if the binary isn't already
+          # on PATH - skips the slow `apt-get update` whenever possible.
+          if ! command -v ${{ matrix.CC }} >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }}
+          fi
+          ${{ matrix.CC }} --version
+
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Get OpenSSL commit hash
+        id: openssl-ref
+        run: |
+          sha=$(./scripts/resolve-ref.sh "${{ matrix.openssl_ref }}" "openssl/openssl")
+          echo "ref=$sha" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get WolfSSL commit hash
+        id: wolfssl-ref
+        run: |
+          sha=$(./scripts/resolve-ref.sh "${{ matrix.wolfssl_ref }}" "wolfssl/wolfssl")
+          echo "ref=$sha" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checking OpenSSL in cache
+        uses: actions/cache@v4
+        id: openssl-cache
+        with:
+          path: openssl-install
+          key: openssl-depends-${{ matrix.CC }}-${{ steps.openssl-ref.outputs.ref }}
+          lookup-only: false
+
+      - name: Checking WolfSSL in cache
+        uses: actions/cache@v4
+        id: wolfssl-cache
+        with:
+          path: wolfssl-install
+          key: wolfssl-depends-${{ matrix.CC }}-${{ steps.wolfssl-ref.outputs.ref }}
+          lookup-only: false
+
+      - name: Build wolfProvider
+        env:
+          CC: ${{ matrix.CC }}
+          CXX: ${{ matrix.CXX }}
+        run: |
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ]; then
+            cat test-suite.log
+          fi
+          if [ -f config.log ]; then
+            cat config.log
+          fi

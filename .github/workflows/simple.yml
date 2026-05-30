@@ -6,6 +6,18 @@ on:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'AUTHORS'
+      - 'COPYING'
+      - 'README*'
+      - 'CHANGELOG*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,24 +25,27 @@ concurrency:
 # END OF COMMON SECTION
 
 jobs:
+  discover_versions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_discover-versions.yml
+
   simple_test:
+    needs: discover_versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Simple Test
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 
-          'master', 
-          'v5.8.4-stable']
-        # Test against the newest of each minor version
-        openssl_ref: [
-          'openssl-3.5.4',
-          'openssl-3.4.2',
-          'openssl-3.3.4',
-          'openssl-3.2.5',
-          'openssl-3.1.8',
-          'openssl-3.0.17']
-        debug: ['', '--debug']
+        # 2 wolfssl (master + latest-stable, resolved at run time) x
+        # 2 openssl (latest upstream release + oldest 3.0.x LTS)
+        # x 2 replace-default = 8 jobs.
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+        openssl_ref:
+          - ${{ needs.discover_versions.outputs.openssl_latest_ref }}
+          - openssl-3.0.17
+        debug: ['']
         replace_default: [
           '',
           '--replace-default --enable-replace-default-testing']
@@ -43,7 +58,9 @@ jobs:
 
       - name: Build and test wolfProvider
         run: |
-             OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh ${{ matrix.debug }} ${{ matrix.replace_default }}
+             OPENSSL_TAG=${{ matrix.openssl_ref }} \
+             WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
+               ./scripts/build-wolfprovider.sh ${{ matrix.debug }} ${{ matrix.replace_default }}
 
       - name: Print errors
         if: ${{ failure() }}
