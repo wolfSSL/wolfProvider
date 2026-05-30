@@ -43,14 +43,20 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
     if [ "$TEST_SUITE" = "curl" ]; then
         # Under WOLFPROV_FORCE_FAIL=1, wolfProvider deliberately errors on
         # every call, so the curl test-suite is expected to fail somewhere.
-        # We just need a non-zero exit code; the exact list of failing test
-        # numbers will drift across curl versions / suite updates and is not
-        # worth pinning. If make test-ci returned non-zero, treat as pass.
-        if [ "$TEST_RESULT" -ne 0 ]; then
+        # We don't pin the exact test numbers (they drift across curl
+        # versions), but we DO require curl-test.log to exist with at
+        # least one TESTFAIL line - otherwise a build/network/infra
+        # failure that never actually ran curl would silently pass.
+        if [ "$TEST_RESULT" -ne 0 ] \
+            && [ -f "curl-test.log" ] \
+            && grep -q '^TESTFAIL:' curl-test.log; then
             echo "PASS: curl tests failed (exit $TEST_RESULT) as expected under WOLFPROV_FORCE_FAIL=1"
             exit 0
-        else
+        elif [ "$TEST_RESULT" -eq 0 ]; then
             echo "FAIL: curl tests unexpectedly succeeded under WOLFPROV_FORCE_FAIL=1"
+            exit 1
+        else
+            echo "FAIL: curl exited $TEST_RESULT but curl-test.log missing/has no TESTFAIL - looks like infra failure, not a real force-fail run"
             exit 1
         fi
     # ----- OPENVPN -----

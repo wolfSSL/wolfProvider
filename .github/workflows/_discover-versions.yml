@@ -54,7 +54,9 @@ jobs:
         run: |
           set -euo pipefail
           ORAS_VERSION="1.2.2"
+          ORAS_CHECKSUM="bff970346470e5ef888e9f2c0bf7f8ee47283f5a45207d6e7a037da1fb0eae0d"
           curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          echo "${ORAS_CHECKSUM}  oras_${ORAS_VERSION}_linux_amd64.tar.gz" | sha256sum -c -
           tar xzf "oras_${ORAS_VERSION}_linux_amd64.tar.gz" oras
           sudo mv oras /usr/local/bin/oras
           rm -f "oras_${ORAS_VERSION}_linux_amd64.tar.gz"

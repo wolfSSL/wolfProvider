@@ -24,6 +24,10 @@ concurrency:
   cancel-in-progress: true
 # END OF COMMON SECTION
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   discover_versions:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
