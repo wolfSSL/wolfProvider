@@ -10,6 +10,8 @@ on:
         type: string
         default: ""
   workflow_dispatch: {}
+  pull_request:
+    branches: [ '*' ]
 
 jobs:
   discover_versions:
@@ -112,12 +114,14 @@ jobs:
       - name: Checkout hostap
         run: |
           test -d hostap || git clone https://w1.fi/hostap.git
-          cd hostap/tests/hwsim/vm && git checkout inside.sh 2>/dev/null || true
+          cd hostap && git checkout ${{ matrix.hostap_ref }}
+          cd tests/hwsim/vm && git checkout inside.sh 2>/dev/null || true
 
       - name: Checkout OSP
         uses: actions/checkout@v4
         with:
-          repository: wolfssl/osp
+          repository: aidangarske/osp
+          ref: 5.9.1-wolfprov-patches
           path: osp
           fetch-depth: 1
 
@@ -206,9 +210,7 @@ jobs:
           ldd wpa_supplicant/wpa_supplicant | grep ssl
 
       - name: Run focused tests
-        id: testing
         working-directory: hostap/tests/hwsim/
-        continue-on-error: true
         run: |
           set +e
 
