@@ -85,6 +85,9 @@ typedef struct wp_MlKem wp_MlKem;
 /**
  * ML-KEM key generation context.
  */
+/* FIPS 203 keygen seed (d || z), in bytes. */
+#define WP_MLKEM_SEED_SZ 64
+
 typedef struct wp_MlKemGenCtx {
     /** wolfSSL random number generator. */
     WC_RNG rng;
@@ -94,6 +97,10 @@ typedef struct wp_MlKemGenCtx {
     WOLFPROV_CTX* provCtx;
     /** Parts of key to generate. */
     int selection;
+    /** Deterministic keygen seed (d || z); empty = use RNG. */
+    unsigned char seed[WP_MLKEM_SEED_SZ];
+    /** Length of seed (0 = not set). */
+    size_t seedLen;
 } wp_MlKemGenCtx;
 
 
@@ -138,6 +145,8 @@ int wp_mlkem_up_ref(wp_MlKem* mlkem)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_up_ref");
+
     rc = wc_LockMutex(&mlkem->mutex);
     if (rc < 0) {
         ok = 0;
@@ -146,9 +155,12 @@ int wp_mlkem_up_ref(wp_MlKem* mlkem)
         mlkem->refCnt++;
         wc_UnLockMutex(&mlkem->mutex);
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_up_ref");
     mlkem->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -266,7 +278,7 @@ void wp_mlkem_free(wp_MlKem* mlkem)
  * Duplicate ML-KEM key object.
  *
  * @param [in] src        Source ML-KEM key object.
- * @param [in] selection  Parts of key to include. Unused; always full dup.
+ * @param [in] selection  Parts of key (public/private) to duplicate.
  * @return  New ML-KEM key object on success, NULL on failure.
  */
 static wp_MlKem* wp_mlkem_dup(const wp_MlKem* src, int selection)
@@ -377,6 +389,8 @@ static int wp_mlkem_has(const wp_MlKem* mlkem, int selection)
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_has");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -389,6 +403,7 @@ static int wp_mlkem_has(const wp_MlKem* mlkem, int selection)
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         ok &= mlkem->hasPriv;
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -409,10 +424,14 @@ static int wp_mlkem_match(const wp_MlKem* a, const wp_MlKem* b, int selection)
     word32 lenB;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_match");
+
     if (!wolfssl_prov_is_running() || (a == NULL) || (b == NULL)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
     if (a->data->type != b->data->type) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
     if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
@@ -469,6 +488,7 @@ static int wp_mlkem_match(const wp_MlKem* a, const wp_MlKem* b, int selection)
         OPENSSL_clear_free(bufA, lenA);
         OPENSSL_clear_free(bufB, lenB);
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -491,6 +511,8 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
     size_t pubLen = 0;
     unsigned char* derivedPub = NULL;
     word32 derivedPubLen = 0;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_import");
 
     if (!wolfssl_prov_is_running() || (mlkem == NULL)) {
         ok = 0;
@@ -571,6 +593,7 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
         mlkem->hasPub = 0;
     }
     OPENSSL_free(derivedPub);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -641,6 +664,8 @@ static int wp_mlkem_export(wp_MlKem* mlkem, int selection,
     int expPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
     int expPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_export");
+
     if (!wolfssl_prov_is_running() || (mlkem == NULL)) {
         ok = 0;
     }
@@ -685,6 +710,7 @@ static int wp_mlkem_export(wp_MlKem* mlkem, int selection,
     }
     OPENSSL_free(pubBuf);
     OPENSSL_clear_free(privBuf, privLen);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -699,6 +725,7 @@ static const OSSL_PARAM* wp_mlkem_gettable_params(WOLFPROV_CTX* provCtx)
     static const OSSL_PARAM wp_mlkem_supported_gettable_params[] = {
         OSSL_PARAM_int(OSSL_PKEY_PARAM_BITS, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_CATEGORY, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
@@ -721,7 +748,10 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
     int rc;
     OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_get_params");
+
     if (mlkem == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
 
@@ -734,6 +764,22 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
         if ((p != NULL) &&
                 !OSSL_PARAM_set_int(p, mlkem->data->securityBits)) {
             ok = 0;
+        }
+    }
+    if (ok) {
+        /* NIST security category: ML-KEM-512=1, 768=3, 1024=5. */
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_CATEGORY);
+        if (p != NULL) {
+            int cat = 5;
+            if (mlkem->data->securityBits == 128) {
+                cat = 1;
+            }
+            else if (mlkem->data->securityBits == 192) {
+                cat = 3;
+            }
+            if (!OSSL_PARAM_set_int(p, cat)) {
+                ok = 0;
+            }
         }
     }
     if (ok) {
@@ -797,6 +843,7 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
             }
         }
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -824,8 +871,10 @@ static const OSSL_PARAM* wp_mlkem_settable_params(WOLFPROV_CTX* provCtx)
  */
 static int wp_mlkem_set_params(wp_MlKem* mlkem, const OSSL_PARAM params[])
 {
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_set_params");
     (void)mlkem;
     (void)params;
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -893,7 +942,15 @@ static wp_MlKem* wp_mlkem_gen(wp_MlKemGenCtx* ctx, OSSL_CALLBACK* osslcb,
 
     mlkem = wp_mlkem_new(ctx->provCtx, ctx->data);
     if ((mlkem != NULL) && keyPair) {
-        int rc = wc_MlKemKey_MakeKey(&mlkem->key, &ctx->rng);
+        int rc;
+        /* Deterministic keygen from a supplied seed (d || z), else RNG. */
+        if (ctx->seedLen == WP_MLKEM_SEED_SZ) {
+            rc = wc_MlKemKey_MakeKeyWithRandom(&mlkem->key, ctx->seed,
+                (int)ctx->seedLen);
+        }
+        else {
+            rc = wc_MlKemKey_MakeKey(&mlkem->key, &ctx->rng);
+        }
         if (rc != 0) {
             wp_mlkem_free(mlkem);
             mlkem = NULL;
@@ -907,17 +964,38 @@ static wp_MlKem* wp_mlkem_gen(wp_MlKemGenCtx* ctx, OSSL_CALLBACK* osslcb,
 }
 
 /**
- * Set parameters into ML-KEM generation context. None supported.
+ * Set parameters into ML-KEM generation context.
  *
- * @param [in] ctx     Generation context. Unused.
- * @param [in] params  Array of parameters. Unused.
- * @return  1 always.
+ * @param [in] ctx     Generation context.
+ * @param [in] params  Array of parameters (ML-KEM keygen seed).
+ * @return  1 on success, 0 on failure.
  */
 static int wp_mlkem_gen_set_params(wp_MlKemGenCtx* ctx,
     const OSSL_PARAM params[])
 {
-    (void)ctx;
-    (void)params;
+    const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_gen_set_params");
+
+    if (ctx == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
+    }
+    if (params == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+        return 1;
+    }
+    p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_ML_KEM_SEED);
+    if (p != NULL) {
+        void* vp = ctx->seed;
+        ctx->seedLen = 0;
+        if (!OSSL_PARAM_get_octet_string(p, &vp, sizeof(ctx->seed),
+                &ctx->seedLen)) {
+            WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+            return 0;
+        }
+    }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -932,6 +1010,7 @@ static const OSSL_PARAM* wp_mlkem_gen_settable_params(wp_MlKemGenCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
     static OSSL_PARAM wp_mlkem_gen_settable[] = {
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ML_KEM_SEED, NULL, 0),
         OSSL_PARAM_END
     };
     (void)ctx;

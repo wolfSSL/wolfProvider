@@ -187,6 +187,7 @@
 #define WP_LOG_COMP_QUERY      0x8000000   /* wolfprov_query operations */
 #define WP_LOG_COMP_TLS1_PRF   0x10000000  /* TLS1 PRF operations */
 #define WP_LOG_COMP_SSHKDF     0x20000000  /* SSHKDF operations */
+#define WP_LOG_COMP_PQC        0x40000000  /* post-quantum: ML-KEM, ML-DSA */
 
 /* log all components */
 #define WP_LOG_COMP_ALL ( \
@@ -219,7 +220,8 @@
     WP_LOG_COMP_X448       | \
     WP_LOG_COMP_QUERY      | \
     WP_LOG_COMP_TLS1_PRF  | \
-    WP_LOG_COMP_SSHKDF )
+    WP_LOG_COMP_SSHKDF     | \
+    WP_LOG_COMP_PQC )
 
 /* default components logged */
 #define WP_LOG_COMP_DEFAULT WP_LOG_COMP_ALL

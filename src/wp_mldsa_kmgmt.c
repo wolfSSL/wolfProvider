@@ -85,6 +85,9 @@ typedef struct wp_MlDsa wp_MlDsa;
 /**
  * ML-DSA key generation context.
  */
+/* FIPS 204 keygen seed (xi), in bytes. */
+#define WP_MLDSA_SEED_SZ 32
+
 typedef struct wp_MlDsaGenCtx {
     /** wolfSSL random number generator. */
     WC_RNG rng;
@@ -94,6 +97,10 @@ typedef struct wp_MlDsaGenCtx {
     WOLFPROV_CTX* provCtx;
     /** Parts of key to generate. */
     int selection;
+    /** Deterministic keygen seed (xi); empty = use RNG. */
+    unsigned char seed[WP_MLDSA_SEED_SZ];
+    /** Length of seed (0 = not set). */
+    size_t seedLen;
 } wp_MlDsaGenCtx;
 
 
@@ -138,6 +145,8 @@ int wp_mldsa_up_ref(wp_MlDsa* mldsa)
     int ok = 1;
     int rc;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_up_ref");
+
     rc = wc_LockMutex(&mldsa->mutex);
     if (rc < 0) {
         ok = 0;
@@ -146,9 +155,12 @@ int wp_mldsa_up_ref(wp_MlDsa* mldsa)
         mldsa->refCnt++;
         wc_UnLockMutex(&mldsa->mutex);
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 #else
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_up_ref");
     mldsa->refCnt++;
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 #endif
 }
@@ -172,9 +184,12 @@ void* wp_mldsa_get_key(wp_MlDsa* mldsa)
  */
 int wp_mldsa_get_sig_size(const wp_MlDsa* mldsa)
 {
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_get_sig_size");
     if (mldsa == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), (int)mldsa->data->sigSize);
     return (int)mldsa->data->sigSize;
 }
 
@@ -264,7 +279,7 @@ void wp_mldsa_free(wp_MlDsa* mldsa)
  * Duplicate ML-DSA key object via raw export/import.
  *
  * @param [in] src        Source ML-DSA key object.
- * @param [in] selection  Parts of key to include. Unused; always full dup.
+ * @param [in] selection  Parts of key (public/private) to duplicate.
  * @return  New ML-DSA key object on success, NULL on failure.
  */
 static wp_MlDsa* wp_mldsa_dup(const wp_MlDsa* src, int selection)
@@ -378,6 +393,8 @@ static int wp_mldsa_has(const wp_MlDsa* mldsa, int selection)
 {
     int ok = 1;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_has");
+
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
@@ -390,6 +407,7 @@ static int wp_mldsa_has(const wp_MlDsa* mldsa, int selection)
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         ok &= mldsa->hasPriv;
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -412,10 +430,14 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
     word32 allocA = 0;
     word32 allocB = 0;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_match");
+
     if (!wolfssl_prov_is_running() || (a == NULL) || (b == NULL)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
     if (a->data->level != b->data->level) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
     if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
@@ -475,6 +497,7 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
         OPENSSL_clear_free(bufA, allocA);
         OPENSSL_clear_free(bufB, allocB);
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -497,6 +520,8 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
     size_t pubLen = 0;
     unsigned char* derivedPub = NULL;
     word32 derivedPubLen = 0;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_import");
 
     if (!wolfssl_prov_is_running() || (mldsa == NULL)) {
         ok = 0;
@@ -572,20 +597,23 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
     if (ok && (privData == NULL) && (pubData == NULL)) {
         ok = 0;
     }
-    /* When both parts imported, ask wolfSSL to verify they are consistent.
-     * Catches mismatched pub/priv that the earlier derived-pub probe could
-     * not (wolfSSL master's ImportPrivRaw does not auto-populate pub). */
-    if (ok && (privData != NULL) && (pubData != NULL)) {
+#ifdef WOLFSSL_MLDSA_CHECK_KEY
+    /* Validate the imported private key when the public component is
+     * available: catches mismatched pub/priv and out-of-range s1/s2
+     * coefficients that ImportPrivRaw alone accepts. */
+    if (ok && (privData != NULL) && mldsa->hasPub) {
         if (wc_MlDsaKey_CheckKey(&mldsa->key) != 0) {
             ok = 0;
         }
     }
+#endif
     if (!ok) {
         /* Clear flags on failure so partial-init state is not advertised. */
         mldsa->hasPriv = 0;
         mldsa->hasPub = 0;
     }
     OPENSSL_free(derivedPub);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -657,6 +685,8 @@ static int wp_mldsa_export(wp_MlDsa* mldsa, int selection,
     int expPub = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
     int expPriv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_export");
+
     if (!wolfssl_prov_is_running() || (mldsa == NULL)) {
         ok = 0;
     }
@@ -703,6 +733,7 @@ static int wp_mldsa_export(wp_MlDsa* mldsa, int selection,
     OPENSSL_free(pubBuf);
     /* Zero full allocation in case ExportPrivRaw truncated privLen. */
     OPENSSL_clear_free(privBuf, privAllocLen);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -717,6 +748,7 @@ static const OSSL_PARAM* wp_mldsa_gettable_params(WOLFPROV_CTX* provCtx)
     static const OSSL_PARAM wp_mldsa_supported_gettable_params[] = {
         OSSL_PARAM_int(OSSL_PKEY_PARAM_BITS, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_CATEGORY, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
@@ -739,7 +771,10 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
     int rc;
     OSSL_PARAM* p;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_get_params");
+
     if (mldsa == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
 
@@ -752,6 +787,13 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_BITS);
         if ((p != NULL) &&
                 !OSSL_PARAM_set_int(p, mldsa->data->securityBits)) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        /* NIST security category equals the ML-DSA level (2, 3 or 5). */
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_CATEGORY);
+        if ((p != NULL) && !OSSL_PARAM_set_int(p, (int)mldsa->data->level)) {
             ok = 0;
         }
     }
@@ -819,6 +861,7 @@ static int wp_mldsa_get_params(wp_MlDsa* mldsa, OSSL_PARAM params[])
             }
         }
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -846,8 +889,10 @@ static const OSSL_PARAM* wp_mldsa_settable_params(WOLFPROV_CTX* provCtx)
  */
 static int wp_mldsa_set_params(wp_MlDsa* mldsa, const OSSL_PARAM params[])
 {
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_set_params");
     (void)mldsa;
     (void)params;
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -915,7 +960,14 @@ static wp_MlDsa* wp_mldsa_gen(wp_MlDsaGenCtx* ctx, OSSL_CALLBACK* osslcb,
 
     mldsa = wp_mldsa_new(ctx->provCtx, ctx->data);
     if ((mldsa != NULL) && keyPair) {
-        int rc = wc_MlDsaKey_MakeKey(&mldsa->key, &ctx->rng);
+        int rc;
+        /* Deterministic keygen from a supplied seed (xi), else RNG. */
+        if (ctx->seedLen == WP_MLDSA_SEED_SZ) {
+            rc = wc_MlDsaKey_MakeKeyFromSeed(&mldsa->key, ctx->seed);
+        }
+        else {
+            rc = wc_MlDsaKey_MakeKey(&mldsa->key, &ctx->rng);
+        }
         if (rc != 0) {
             wp_mldsa_free(mldsa);
             mldsa = NULL;
@@ -929,17 +981,38 @@ static wp_MlDsa* wp_mldsa_gen(wp_MlDsaGenCtx* ctx, OSSL_CALLBACK* osslcb,
 }
 
 /**
- * Set parameters into ML-DSA generation context. None supported.
+ * Set parameters into ML-DSA generation context.
  *
- * @param [in] ctx     Generation context. Unused.
- * @param [in] params  Array of parameters. Unused.
- * @return  1 always.
+ * @param [in] ctx     Generation context.
+ * @param [in] params  Array of parameters (ML-DSA keygen seed).
+ * @return  1 on success, 0 on failure.
  */
 static int wp_mldsa_gen_set_params(wp_MlDsaGenCtx* ctx,
     const OSSL_PARAM params[])
 {
-    (void)ctx;
-    (void)params;
+    const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_gen_set_params");
+
+    if (ctx == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
+    }
+    if (params == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+        return 1;
+    }
+    p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_ML_DSA_SEED);
+    if (p != NULL) {
+        void* vp = ctx->seed;
+        ctx->seedLen = 0;
+        if (!OSSL_PARAM_get_octet_string(p, &vp, sizeof(ctx->seed),
+                &ctx->seedLen)) {
+            WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+            return 0;
+        }
+    }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -954,6 +1027,7 @@ static const OSSL_PARAM* wp_mldsa_gen_settable_params(wp_MlDsaGenCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
     static OSSL_PARAM wp_mldsa_gen_settable[] = {
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ML_DSA_SEED, NULL, 0),
         OSSL_PARAM_END
     };
     (void)ctx;

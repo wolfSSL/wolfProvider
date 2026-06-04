@@ -1,0 +1,162 @@
+name: wolfSSL PQC KAT (OpenSSL vectors)
+
+# Runs OpenSSL's own ML-KEM (FIPS 203) and ML-DSA (FIPS 204) EVP KAT vectors
+# (NIST ACVP + Wycheproof, 2602 sub-tests) through wolfProvider using
+# OpenSSL's own evp_test harness, unmodified. Closely mirrors the version
+# matrix of wolfssl-versions-pqc.yml: a discover job resolves the latest
+# wolfSSL -stable tag and the latest OpenSSL release, then the test job runs
+# the full KAT under four configurations per PQC-eligible wolfSSL version:
+#   replace-default            (wolfProvider is the compile-time default)
+#   non-replace                (wolfProvider loaded via provider.conf)
+# each in normal mode (every file must pass) and force-fail anti-test mode
+# (every file must fail, proving wolfProvider truly served the crypto). The
+# force_fail axis lives in the matrix; the test step reports a raw result and
+# check-workflow-result.sh inverts the expectation, matching the OSP workflows.
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# TODO(revert before merge): the malformed-key vectors in OpenSSL's PQC KAT
+# set only pass with the wolfcrypt FIPS 203/204 decode-validation fix, which
+# currently lives on aidangarske/wolfssl branch pqc-decode-validation. The PQC
+# rows therefore build wolfSSL from that fork/branch (matrix wolfssl-git).
+# Once the fix merges to wolfSSL master, point the PQC rows back at the
+# upstream repo and the dynamic latest-stable / master refs (see discover job).
+
+jobs:
+  discover-versions:
+    name: Resolve wolfSSL/OpenSSL matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      openssl-tag: ${{ steps.set-matrix.outputs.openssl-tag }}
+    steps:
+      - name: Resolve latest wolfSSL -stable and latest OpenSSL release
+        id: set-matrix
+        run: |
+          set -euo pipefail
+          LATEST=$(git ls-remote --tags --refs \
+              https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
+              | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+          if [ -z "${LATEST:-}" ]; then
+            echo "::error::Could not resolve latest wolfSSL -stable tag"
+            exit 1
+          fi
+          # Latest stable OpenSSL release (exclude pre-releases). The PQC KAT
+          # vectors require OpenSSL 3.5+ (first release with native ML-KEM /
+          # ML-DSA and the 30-test_evp_data PQC files).
+          OSSL=$(git ls-remote --tags --refs \
+              https://github.com/openssl/openssl.git 'openssl-3.*' \
+              | awk -F/ '{print $NF}' | grep -E '^openssl-3\.[0-9.]+$' \
+              | sort -V | tail -n 1)
+          if [ -z "${OSSL:-}" ]; then
+            echo "::error::Could not resolve latest OpenSSL release tag"
+            exit 1
+          fi
+          echo "Latest stable wolfSSL: $LATEST"
+          echo "Latest OpenSSL: $OSSL"
+          echo "openssl-tag=$OSSL" >> "$GITHUB_OUTPUT"
+          PQC_FLOOR="v5.9.1-stable"
+          if [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$LATEST" \
+                  | sort -V | tail -n1)" != "$PQC_FLOOR" ]; then
+            LATEST_PQC=true
+          else
+            LATEST_PQC=false
+          fi
+          # Each PQC version expands to replace-default x non-replace, each in
+          # normal and force-fail anti-test mode (the matrix owns the force-fail
+          # axis; the test step hands its raw result to check-workflow-result.sh
+          # which inverts the expectation). The pre-PQC row builds only.
+          #
+          # TODO(revert before merge): the PQC rows build the fork branch
+          # pqc-decode-validation. Restore upstream and the latest-stable /
+          # master refs once the wolfcrypt fix is on wolfSSL master.
+          UPSTREAM="https://github.com/wolfSSL/wolfssl.git"
+          FORK="https://github.com/aidangarske/wolfssl.git"
+          MATRIX=$(jq -nc \
+              --arg latest "$LATEST" \
+              --arg upstream "$UPSTREAM" \
+              --arg fork "$FORK" \
+              --argjson latest_pqc "$LATEST_PQC" '
+            def rows($git; $ref; $pqc; $label):
+              if $pqc then
+                [ {"replace":true,"ff":"WOLFPROV_FORCE_FAIL=1",
+                   "sfx":" [replace-default] [force-fail]"},
+                  {"replace":true,"ff":"","sfx":" [replace-default]"},
+                  {"replace":false,"ff":"WOLFPROV_FORCE_FAIL=1",
+                   "sfx":" [non-replace] [force-fail]"},
+                  {"replace":false,"ff":"","sfx":" [non-replace]"} ]
+                | map({"name":($label+.sfx),"wolfssl-git":$git,
+                       "wolfssl-ref":$ref,"pqc":true,"replace":.replace,
+                       "force_fail":.ff})
+              else
+                [ {"name":($label+" [build-only]"),"wolfssl-git":$git,
+                   "wolfssl-ref":$ref,"pqc":false,"replace":false,
+                   "force_fail":""} ]
+              end;
+            { include:
+                ( rows($upstream; "v5.8.0-stable"; false; "pre-PQC v5.8.0-stable")
+                + rows($fork; "pqc-decode-validation"; $latest_pqc;
+                       ("latest stable " + $latest))
+                + rows($fork; "pqc-decode-validation"; true; "master") )
+            }')
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  pqc-kat:
+    name: ${{ matrix.name }}
+    needs: discover-versions
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover-versions.outputs.matrix) }}
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build wolfProvider (PQC=${{ matrix.pqc }}, replace=${{ matrix.replace }})
+        run: |
+          ARGS="--enable-pqc"
+          if [ "${{ matrix.replace }}" = "true" ]; then
+            ARGS="$ARGS --replace-default"
+          fi
+          if [ "${{ matrix.pqc }}" != "true" ]; then
+            ARGS=""
+          fi
+          WOLFSSL_GIT=${{ matrix.wolfssl-git }} \
+          OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
+          WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
+            ./scripts/build-wolfprovider.sh $ARGS
+
+      # Runs all 2602 OpenSSL ML-KEM/ML-DSA vectors. In normal mode every file
+      # must pass and the full count must run; in force-fail mode the run fails
+      # and check-workflow-result.sh inverts that to a pass, proving wolfProvider
+      # genuinely served the crypto with no silent OpenSSL fallback.
+      - name: PQC KAT (all 2602 OpenSSL vectors)
+        if: matrix.pqc == true
+        shell: bash
+        run: |
+          set +e
+          export ${{ matrix.force_fail }}
+          WOLFPROV_CLEAN=0 \
+          WOLFPROV_REPLACE_DEFAULT=${{ matrix.replace && '1' || '0' }} \
+          WOLFSSL_GIT=${{ matrix.wolfssl-git }} \
+          OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
+          WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
+            ./scripts/test-pqc-kat.sh
+          TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
+            $TEST_RESULT "${{ matrix.force_fail }}" pqc-kat

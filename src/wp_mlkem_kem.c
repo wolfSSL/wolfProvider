@@ -35,6 +35,9 @@
 /**
  * ML-KEM KEM context.
  */
+/* FIPS 203 encapsulation entropy (m), in bytes. */
+#define WP_MLKEM_IKME_SZ 32
+
 typedef struct wp_MlKemCtx {
     /** Provider context. */
     WOLFPROV_CTX* provCtx;
@@ -42,6 +45,10 @@ typedef struct wp_MlKemCtx {
     wp_MlKem* mlkem;
     /** RNG for encapsulate. */
     WC_RNG rng;
+    /** Test-only encapsulation entropy (ikme); empty = use RNG. */
+    unsigned char ikme[WP_MLKEM_IKME_SZ];
+    /** Length of ikme (0 = not set). */
+    size_t ikmeLen;
 } wp_MlKemCtx;
 
 
@@ -118,35 +125,54 @@ static wp_MlKemCtx* wp_mlkem_kem_dupctx(wp_MlKemCtx* srcCtx)
  *
  * @param [in, out] ctx     KEM context.
  * @param [in]      mlkem   ML-KEM key (reference taken).
- * @param [in]      params  Parameters. Unused.
+ * @param [in]      params  Init-time parameters (e.g. encap ikme entropy).
  * @return  1 on success, 0 on failure.
  */
+static int wp_mlkem_kem_set_ctx_params(wp_MlKemCtx* ctx,
+    const OSSL_PARAM params[]);
+
 static int wp_mlkem_kem_init(wp_MlKemCtx* ctx, wp_MlKem* mlkem,
     const OSSL_PARAM params[])
 {
-    (void)params;
+    int ok;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_kem_init");
     if ((ctx == NULL) || (mlkem == NULL)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
     if (!wp_mlkem_up_ref(mlkem)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
     wp_mlkem_free(ctx->mlkem);
     ctx->mlkem = mlkem;
-    return 1;
+    /* Apply any init-time params (e.g. the ikme encap entropy). */
+    ok = wp_mlkem_kem_set_ctx_params(ctx, params);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 static int wp_mlkem_kem_encapsulate_init(wp_MlKemCtx* ctx, wp_MlKem* mlkem,
     const OSSL_PARAM params[])
 {
-    return wp_mlkem_kem_init(ctx, mlkem, params);
+    int ok;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_kem_encapsulate_init");
+    ok = wp_mlkem_kem_init(ctx, mlkem, params);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 static int wp_mlkem_kem_decapsulate_init(wp_MlKemCtx* ctx, wp_MlKem* mlkem,
     const OSSL_PARAM params[])
 {
-    return wp_mlkem_kem_init(ctx, mlkem, params);
+    int ok;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_kem_decapsulate_init");
+    ok = wp_mlkem_kem_init(ctx, mlkem, params);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**
@@ -169,7 +195,10 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
     word32 ctSize;
     word32 ssSize;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_kem_encapsulate");
+
     if ((ctx == NULL) || (ctx->mlkem == NULL)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
 
@@ -186,10 +215,12 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         if (secretLen != NULL) {
             *secretLen = ssSize;
         }
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
         return 1;
     }
     if ((out == NULL) || (secret == NULL) || (outLen == NULL) ||
             (secretLen == NULL)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
 
@@ -200,8 +231,16 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         ok = 0;
     }
     if (ok) {
-        int rc = wc_MlKemKey_Encapsulate(
-            (MlKemKey*)wp_mlkem_get_key(ctx->mlkem), out, secret, &ctx->rng);
+        int rc;
+        MlKemKey* key = (MlKemKey*)wp_mlkem_get_key(ctx->mlkem);
+        /* Deterministic encap from supplied entropy (ikme), else RNG. */
+        if (ctx->ikmeLen == WP_MLKEM_IKME_SZ) {
+            rc = wc_MlKemKey_EncapsulateWithRandom(key, out, secret, ctx->ikme,
+                (int)ctx->ikmeLen);
+        }
+        else {
+            rc = wc_MlKemKey_Encapsulate(key, out, secret, &ctx->rng);
+        }
         if (rc != 0) {
             ok = 0;
         }
@@ -210,6 +249,7 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         *outLen = ctSize;
         *secretLen = ssSize;
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
@@ -233,7 +273,10 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
     word32 ssSize;
     word32 ctSize;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_kem_decapsulate");
+
     if ((ctx == NULL) || (ctx->mlkem == NULL)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
 
@@ -245,9 +288,11 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         if (outLen != NULL) {
             *outLen = ssSize;
         }
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
         return 1;
     }
     if ((outLen == NULL) || (in == NULL)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
 
@@ -267,14 +312,17 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
     if (ok) {
         *outLen = ssSize;
     }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
 /* No supported params; OSSL contract is unconditional success. */
 static int wp_mlkem_kem_get_ctx_params(wp_MlKemCtx* ctx, OSSL_PARAM* params)
 {
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_kem_get_ctx_params");
     (void)ctx;
     (void)params;
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -289,12 +337,33 @@ static const OSSL_PARAM* wp_mlkem_kem_gettable_ctx_params(wp_MlKemCtx* ctx,
     return wp_mlkem_kem_gettable;
 }
 
-/* No supported params; OSSL contract is unconditional success. */
+/* Honor the test-only encapsulation entropy (ikme) used by ACVP KATs. */
 static int wp_mlkem_kem_set_ctx_params(wp_MlKemCtx* ctx,
     const OSSL_PARAM params[])
 {
-    (void)ctx;
-    (void)params;
+    const OSSL_PARAM* p;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_kem_set_ctx_params");
+
+    if (ctx == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
+    }
+    if (params == NULL) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
+        return 1;
+    }
+    p = OSSL_PARAM_locate_const(params, OSSL_KEM_PARAM_IKME);
+    if (p != NULL) {
+        void* vp = ctx->ikme;
+        ctx->ikmeLen = 0;
+        if (!OSSL_PARAM_get_octet_string(p, &vp, sizeof(ctx->ikme),
+                &ctx->ikmeLen)) {
+            WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+            return 0;
+        }
+    }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
 
@@ -302,6 +371,7 @@ static const OSSL_PARAM* wp_mlkem_kem_settable_ctx_params(wp_MlKemCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
     static const OSSL_PARAM wp_mlkem_kem_settable[] = {
+        OSSL_PARAM_octet_string(OSSL_KEM_PARAM_IKME, NULL, 0),
         OSSL_PARAM_END
     };
     (void)ctx;
