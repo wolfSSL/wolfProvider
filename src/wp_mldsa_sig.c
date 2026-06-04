@@ -220,31 +220,25 @@ static wp_MlDsaSigCtx* wp_mldsa_dupctx(wp_MlDsaSigCtx* srcCtx)
 static int wp_mldsa_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
     const OSSL_PARAM params[])
 {
-    int ok = 1;
-
     (void)params;
 
     if (ctx == NULL) {
-        ok = 0;
+        return 0;
     }
     /* NULL key means "reinit, reuse the key already on the context" -- only
      * valid if the context actually has one. */
-    if (ok && (mldsa == NULL) && (ctx->mldsa == NULL)) {
-        ok = 0;
+    if ((mldsa == NULL) && (ctx->mldsa == NULL)) {
+        return 0;
     }
-    if (ok && (mldsa != NULL)) {
+    if (mldsa != NULL) {
         if (!wp_mldsa_up_ref(mldsa)) {
-            ok = 0;
+            return 0;
         }
-        if (ok) {
-            wp_mldsa_free(ctx->mldsa);
-            ctx->mldsa = mldsa;
-        }
+        wp_mldsa_free(ctx->mldsa);
+        ctx->mldsa = mldsa;
     }
-    if (ok) {
-        wp_mldsa_buf_reset(ctx);
-    }
-    return ok;
+    wp_mldsa_buf_reset(ctx);
+    return 1;
 }
 
 static int wp_mldsa_sign_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,

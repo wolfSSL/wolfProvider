@@ -183,7 +183,7 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
-/* PQC: gate on both the wolfSSL feature macro AND header availability. The
+/* Gate on both the wolfSSL feature macro AND header availability. The
  * canonical post-rename names (WOLFSSL_HAVE_MLKEM / WOLFSSL_HAVE_MLDSA and
  * wc_mlkem.h / wc_mldsa.h) are required. Older wolfSSL releases that only
  * exposed the pre-standardization names (HAVE_DILITHIUM, dilithium.h) are

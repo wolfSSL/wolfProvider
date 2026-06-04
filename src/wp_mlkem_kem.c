@@ -124,21 +124,17 @@ static wp_MlKemCtx* wp_mlkem_kem_dupctx(wp_MlKemCtx* srcCtx)
 static int wp_mlkem_kem_init(wp_MlKemCtx* ctx, wp_MlKem* mlkem,
     const OSSL_PARAM params[])
 {
-    int ok = 1;
-
     (void)params;
 
     if ((ctx == NULL) || (mlkem == NULL)) {
-        ok = 0;
+        return 0;
     }
-    if (ok && !wp_mlkem_up_ref(mlkem)) {
-        ok = 0;
+    if (!wp_mlkem_up_ref(mlkem)) {
+        return 0;
     }
-    if (ok) {
-        wp_mlkem_free(ctx->mlkem);
-        ctx->mlkem = mlkem;
-    }
-    return ok;
+    wp_mlkem_free(ctx->mlkem);
+    ctx->mlkem = mlkem;
+    return 1;
 }
 
 static int wp_mlkem_kem_encapsulate_init(wp_MlKemCtx* ctx, wp_MlKem* mlkem,

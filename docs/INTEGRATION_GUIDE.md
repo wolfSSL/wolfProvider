@@ -83,7 +83,7 @@ sudo make install
 | `--enable-pwdbased` | PKCS#12 support |
 | `--enable-hmac-copy` | Faster repeated HMAC with same key (wolfSSL 5.7.8+) |
 | `--enable-sp=yes,asm --enable-sp-math-all` | SP Integer maths |
-| `--enable-mlkem --enable-mldsa` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL post-v5.9.1-stable). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. Neither algorithm requires `--enable-experimental`. |
+| `--enable-mlkem --enable-mldsa` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL post-v5.9.1-stable). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
 
 **Optional CPPFLAGS:**
 
@@ -175,7 +175,7 @@ ML-DSA uses pure mode with an empty context string (FIPS 204 sec 5.2, Algorithm 
 ./scripts/build-wolfprovider.sh --enable-pqc
 ```
 
-This adds `--enable-mlkem --enable-mldsa` to the wolfSSL configure step (neither flag requires `--enable-experimental`). wolfProvider auto-detects the resulting `WOLFSSL_HAVE_MLKEM` / `WOLFSSL_HAVE_MLDSA` macros via `include/wolfprovider/settings.h` (gated on `__has_include` of `<wolfssl/wolfcrypt/wc_mlkem.h>` / `<wolfssl/wolfcrypt/wc_mldsa.h>`) and registers the six PQC algorithms.
+This adds `--enable-mlkem --enable-mldsa` to the wolfSSL configure step. wolfProvider auto-detects the resulting `WOLFSSL_HAVE_MLKEM` / `WOLFSSL_HAVE_MLDSA` macros via `include/wolfprovider/settings.h` (gated on `__has_include` of `<wolfssl/wolfcrypt/wc_mlkem.h>` / `<wolfssl/wolfcrypt/wc_mldsa.h>`) and registers the six PQC algorithms.
 
 ### Usage Example
 
