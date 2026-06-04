@@ -258,8 +258,6 @@ for review).
 ```
 .github/
 ├── README.md                  this file
-├── actions/
-│   └── wait-for-smoke/        composite action: poll smoke-test status before running heavier jobs
 ├── scripts/
 │   ├── check-workflow-result.sh   XOR force-fail vs normal expected result
 │   ├── install-packages.sh        common deb install + apt-mark hold pattern
