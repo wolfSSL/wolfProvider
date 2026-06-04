@@ -999,12 +999,38 @@ static int wp_rsa_get_params_pss(wp_RsaPssParams* pss,  OSSL_PARAM params[])
             ok = 0;
         }
     }
-    /* MGF is default so don't set. */
-    if (ok && (pss->mgf != WP_RSA_PSS_MGF_DEF)) {
+    /* Always export MGF1 digest when requested. Translate wolfSSL-style
+     * digest names to OpenSSL-style names for interoperability. */
+    if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_RSA_MGF1_DIGEST);
-        if ((p != NULL) && wp_digest_to_ossl_digest(pss->hashType, &osslDigest)
-                && !OSSL_PARAM_set_utf8_string(p, osslDigest)) {
-            ok = 0;
+        if (p != NULL) {
+            const char* mgfName = NULL;
+            /* Convert mgf type to OpenSSL name via wp_digest_to_ossl_digest. */
+            if (pss->mgf != WP_RSA_PSS_MGF_DEF) {
+                enum wc_HashType mgfHash = WC_HASH_TYPE_NONE;
+                switch (pss->mgf) {
+                    case WC_MGF1SHA256: mgfHash = WC_HASH_TYPE_SHA256; break;
+                    case WC_MGF1SHA384: mgfHash = WC_HASH_TYPE_SHA384; break;
+                    case WC_MGF1SHA512: mgfHash = WC_HASH_TYPE_SHA512; break;
+                    default: break;
+                }
+                if (mgfHash != WC_HASH_TYPE_NONE) {
+                    if (!wp_digest_to_ossl_digest(mgfHash, &mgfName)) {
+                        ok = 0;
+                    }
+                }
+            }
+            /* Fall back to signing digest if MGF1 not explicitly set. */
+            if (ok && mgfName == NULL) {
+                if (!wp_digest_to_ossl_digest(pss->hashType, &mgfName)) {
+                    ok = 0;
+                }
+            }
+            if (ok && mgfName != NULL) {
+                if (!OSSL_PARAM_set_utf8_string(p, mgfName)) {
+                    ok = 0;
+                }
+            }
         }
     }
     if (ok) {
@@ -1608,6 +1634,7 @@ static wp_Rsa* wp_rsa_gen(wp_RsaGenCtx* ctx, OSSL_CALLBACK* cb, void* cbArg)
                     rsa->hasPub    = 1;
                     rsa->hasPriv   = 1;
                     rsa->pssParams = ctx->pssParams;
+                    rsa->pssDefSet = ctx->pssDefSet;
                     break;
                 }
             }
