@@ -1,0 +1,147 @@
+name: Nginx PQC Tests
+
+# Builds nginx against wolfProvider (--enable-pqc, --replace-default) and runs
+# the post-quantum TLS path under nginx's own Test::Nginx harness: an ML-DSA
+# (FIPS 204) certificate chain for authentication and ML-KEM / hybrid groups
+# (FIPS 203) for key exchange, the open-quantum-safe oqs-demos nginx scenario.
+#
+# This intentionally differs from the classic nginx.yml in two ways:
+#   - nginx.yml installs debian-packaged OpenSSL (3.0.x), which has no ML-KEM /
+#     ML-DSA. PQC needs OpenSSL 3.6+, so the stack is built from source here,
+#     matching wolfssl-versions-pqc.yml / wolfssl-pqc-kat.yml.
+#   - Only the PQC path is exercised (pqc_tls.t); the rest of nginx-tests is
+#     out of scope for this workflow.
+#
+# Versioning mirrors the other PQC workflows: wolfSSL latest -stable (PQC floor
+# is v5.9.2-stable) and master, against the latest OpenSSL 3.x release. The
+# external OSP sources (nginx, nginx-tests) are pinned to fixed refs -- upstream
+# master is unstable and would make the test non-reproducible.
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned external OSP sources (never track upstream master).
+  NGINX_REF: release-1.28.0
+  NGINX_TESTS_REF: e0f3be50f7e701c4028acb9ed35004adc2b1db27
+
+jobs:
+  discover-versions:
+    name: Resolve wolfSSL/OpenSSL versions
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      openssl-tag: ${{ steps.set-matrix.outputs.openssl-tag }}
+    steps:
+      - name: Resolve latest -stable wolfSSL tag and latest OpenSSL release
+        id: set-matrix
+        run: |
+          set -euo pipefail
+          LATEST=$(git ls-remote --tags --refs \
+              https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
+              | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+          if [ -z "${LATEST:-}" ]; then
+            echo "::error::Could not resolve latest wolfSSL -stable tag"
+            exit 1
+          fi
+          # PQC needs OpenSSL 3.6+, so always build against the latest release.
+          OSSL=$(git ls-remote --tags --refs \
+              https://github.com/openssl/openssl.git 'openssl-3.*' \
+              | awk -F/ '{print $NF}' | grep -E '^openssl-3\.[0-9.]+$' \
+              | sort -V | tail -n 1)
+          if [ -z "${OSSL:-}" ]; then
+            echo "::error::Could not resolve latest OpenSSL release tag"
+            exit 1
+          fi
+          echo "Latest stable wolfSSL: $LATEST"
+          echo "Latest OpenSSL: $OSSL"
+          echo "openssl-tag=$OSSL" >> "$GITHUB_OUTPUT"
+          # Only PQC-eligible wolfSSL: the latest -stable (>= v5.9.2-stable) and
+          # master, each in normal and force-fail anti-test mode. The matrix
+          # owns the force-fail axis; the test step hands its raw result to
+          # check-workflow-result.sh which inverts the expectation.
+          MATRIX=$(jq -nc --arg latest "$LATEST" '{
+            include: [
+              {"name":("latest stable (" + $latest + ")"),
+               "wolfssl-ref":$latest,"force_fail":""},
+              {"name":("latest stable (" + $latest + ") [force-fail]"),
+               "wolfssl-ref":$latest,"force_fail":"WOLFPROV_FORCE_FAIL=1"},
+              {"name":"master","wolfssl-ref":"master","force_fail":""},
+              {"name":"master [force-fail]",
+               "wolfssl-ref":"master","force_fail":"WOLFPROV_FORCE_FAIL=1"}
+            ]
+          }')
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  nginx-pqc:
+    name: ${{ matrix.name }}
+    needs: discover-versions
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover-versions.outputs.matrix) }}
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build wolfProvider (PQC, replace-default)
+        run: |
+          OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
+          WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
+            ./scripts/build-wolfprovider.sh --enable-pqc --replace-default
+
+      - name: Install nginx build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpcre3-dev zlib1g-dev \
+            libtest-harness-perl libio-socket-ssl-perl libnet-ssleay-perl
+
+      - name: Build nginx (${{ env.NGINX_REF }}) against wolfProvider OpenSSL
+        run: |
+          O="$GITHUB_WORKSPACE/openssl-install"
+          git clone --depth 1 --branch "$NGINX_REF" \
+            https://github.com/nginx/nginx.git nginx
+          cd nginx
+          ./auto/configure --with-http_ssl_module \
+            --with-cc-opt="-I$O/include" \
+            --with-ld-opt="-L$O/lib -L$O/lib64 -Wl,-rpath,$O/lib -Wl,-rpath,$O/lib64"
+          make -j"$(nproc)"
+
+      - name: Checkout nginx-tests (pinned ${{ env.NGINX_TESTS_REF }})
+        run: |
+          git clone https://github.com/nginx/nginx-tests.git nginx-tests
+          git -C nginx-tests checkout "$NGINX_TESTS_REF"
+
+      # Runs only the PQC path: ML-DSA cert auth + ML-KEM / hybrid key exchange.
+      # In normal mode every quantum-safe group must negotiate with an ML-DSA
+      # verified chain; in force-fail mode wolfProvider fails every operation so
+      # the handshakes break and check-workflow-result.sh inverts that to a
+      # pass, proving wolfProvider genuinely served the PQC crypto.
+      - name: Run nginx PQC test
+        shell: bash
+        run: |
+          set +e
+          source scripts/env-setup
+          # Use the wolfProvider-backed OpenSSL for the test client (s_client).
+          export PATH="$(dirname "$OPENSSL_BIN"):$PATH"
+          cp .github/nginx/pqc_tls.t nginx-tests/
+          cd nginx-tests
+          export ${{ matrix.force_fail }}
+          TEST_NGINX_BINARY="$GITHUB_WORKSPACE/nginx/objs/nginx" \
+            prove -v pqc_tls.t 2>&1 | tee nginx-pqc.log
+          TEST_RESULT=${PIPESTATUS[0]}
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
+            $TEST_RESULT "${{ matrix.force_fail }}" nginx-pqc
