@@ -314,6 +314,11 @@ static int wp_mlx_kem_encapsulate(wp_MlxCtx* ctx, unsigned char* out,
         *outLen = ctSize;
         *secretLen = ssSize;
     }
+    else {
+        /* Scrub any component shared secret already written to the caller's
+         * buffer when a later component fails. */
+        wc_ForceZero(secret, ssSize);
+    }
     return ok;
 }
 
@@ -454,6 +459,11 @@ static int wp_mlx_kem_decapsulate(wp_MlxCtx* ctx, unsigned char* out,
     }
     if (ok) {
         *outLen = ssSize;
+    }
+    else {
+        /* Scrub any component shared secret already written to the caller's
+         * buffer when a later component fails. */
+        wc_ForceZero(out, ssSize);
     }
     return ok;
 }

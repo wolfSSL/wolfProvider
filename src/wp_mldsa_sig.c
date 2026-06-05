@@ -337,7 +337,8 @@ static int wp_mldsa_fill_rnd(wp_MlDsaSigCtx* ctx, unsigned char* rnd)
     else {
         rc = wc_RNG_GenerateBlock(&ctx->rng, rnd, WP_MLDSA_RND_SZ);
     }
-    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), rc);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        rc == 0);
     return rc;
 }
 
@@ -771,6 +772,12 @@ static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
             ctx->testEntropyLen = 0;
             if (!OSSL_PARAM_get_octet_string(p, &vp, sizeof(ctx->testEntropy),
                     &ctx->testEntropyLen)) {
+                ok = 0;
+            }
+            /* A short randomizer would be silently ignored; require the exact
+             * FIPS 204 size. */
+            else if (ctx->testEntropyLen != WP_MLDSA_RND_SZ) {
+                ctx->testEntropyLen = 0;
                 ok = 0;
             }
         }

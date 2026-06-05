@@ -363,6 +363,13 @@ static int wp_mlkem_kem_set_ctx_params(wp_MlKemCtx* ctx,
             WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
             return 0;
         }
+        /* A short IKME would silently revert encapsulation from deterministic
+         * to RNG; require the exact FIPS 203 size. */
+        if (ctx->ikmeLen != WP_MLKEM_IKME_SZ) {
+            ctx->ikmeLen = 0;
+            WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+            return 0;
+        }
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;

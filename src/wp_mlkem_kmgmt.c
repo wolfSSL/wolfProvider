@@ -945,12 +945,13 @@ static int wp_mlkem_set_params(wp_MlKem* mlkem, const OSSL_PARAM params[])
  * @param [in] data       Parameter set data.
  * @return  New ML-KEM generation context on success, NULL on failure.
  */
+static int wp_mlkem_gen_set_params(wp_MlKemGenCtx* ctx,
+    const OSSL_PARAM params[]);
+
 static wp_MlKemGenCtx* wp_mlkem_gen_init_base(WOLFPROV_CTX* provCtx,
     int selection, const OSSL_PARAM params[], const wp_MlKemData* data)
 {
     wp_MlKemGenCtx* ctx = NULL;
-
-    (void)params;
 
     if (wolfssl_prov_is_running() &&
             ((selection & WP_MLKEM_POSSIBLE_SELECTIONS) != 0)) {
@@ -968,9 +969,16 @@ static wp_MlKemGenCtx* wp_mlkem_gen_init_base(WOLFPROV_CTX* provCtx,
             ctx->provCtx   = provCtx;
             ctx->data      = data;
             ctx->selection = selection;
+            /* Apply init-time params (e.g. the deterministic keygen seed) so
+             * the seed and its length validation are honored at init, not
+             * only via a later gen_set_params call. */
+            if (!wp_mlkem_gen_set_params(ctx, params)) {
+                ok = 0;
+            }
         }
         if (!ok) {
-            OPENSSL_free(ctx);
+            wc_FreeRng(&ctx->rng);
+            OPENSSL_clear_free(ctx, sizeof(*ctx));
             ctx = NULL;
         }
     }
