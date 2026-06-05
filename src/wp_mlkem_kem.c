@@ -118,6 +118,10 @@ static wp_MlKemCtx* wp_mlkem_kem_dupctx(wp_MlKemCtx* srcCtx)
         }
         dstCtx->mlkem = srcCtx->mlkem;
     }
+    /* Carry over deterministic encapsulation entropy so a duplicated context
+     * keeps reproducible (KAT/ACVP) behavior. */
+    XMEMCPY(dstCtx->ikme, srcCtx->ikme, sizeof(dstCtx->ikme));
+    dstCtx->ikmeLen = srcCtx->ikmeLen;
     return dstCtx;
 }
 

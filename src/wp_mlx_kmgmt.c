@@ -50,7 +50,7 @@
  *
  * Matches OpenSSL's hybrid_vtable so the concatenated key_share interoperates.
  */
-const wp_MlxData mlxX25519Mlkem768Data = {
+static const wp_MlxData mlxX25519Mlkem768Data = {
     WP_MLX_CLASSICAL_X25519,
     0,
     WC_ML_KEM_768,
@@ -65,7 +65,7 @@ const wp_MlxData mlxX25519Mlkem768Data = {
     "X25519MLKEM768"
 };
 
-const wp_MlxData mlxSecP256r1Mlkem768Data = {
+static const wp_MlxData mlxSecP256r1Mlkem768Data = {
     WP_MLX_CLASSICAL_ECC,
     ECC_SECP256R1,
     WC_ML_KEM_768,
@@ -80,7 +80,7 @@ const wp_MlxData mlxSecP256r1Mlkem768Data = {
     "SecP256r1MLKEM768"
 };
 
-const wp_MlxData mlxSecP384r1Mlkem1024Data = {
+static const wp_MlxData mlxSecP384r1Mlkem1024Data = {
     WP_MLX_CLASSICAL_ECC,
     ECC_SECP384R1,
     WC_ML_KEM_1024,

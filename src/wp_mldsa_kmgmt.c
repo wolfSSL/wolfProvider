@@ -1405,8 +1405,11 @@ static int wp_mldsa_decode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         mldsa->hasPub = 1;
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
-        mldsa->hasPub = 1;
         mldsa->hasPriv = 1;
+        /* Advertise the public only if the decoded private actually carried or
+         * derived it; a private-only PKCS8 (expanded key, no seed/public) does
+         * not, and must not claim a public it cannot export. */
+        mldsa->hasPub = mldsa->key.pubKeySet ? 1 : 0;
     }
 
     OPENSSL_clear_free(data, len);
