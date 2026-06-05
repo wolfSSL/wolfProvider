@@ -1,14 +1,13 @@
 name: PR OSP (label-selected)
 
-# Run any nightly OSP / sweep job on a PR by adding a label. Toggle a
-# single job with `ci:<name>` (e.g. ci:hostap), or every job with
-# `ci:all`. Fires only on label change (not on push) so unlabeled PRs
-# show zero rows; re-toggle the label or hit Re-run to re-run after a
-# push. workflow_dispatch `jobs` input is the off-PR equivalent.
+# Run any nightly OSP / sweep job on a PR by adding a label. Add
+# `ci:<name>` (e.g. ci:hostap) to run that job on the PR, or `ci:all`
+# for the whole set. Fires on label add; re-add a label to re-run after
+# a push. workflow_dispatch `jobs` input is the off-PR equivalent.
 
 on:
   pull_request:
-    types: [labeled, unlabeled]
+    types: [labeled]
   workflow_dispatch:
     inputs:
       jobs:
@@ -22,8 +21,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: pr-osp-select-${{ github.ref }}
-  cancel-in-progress: true
+  group: pr-osp-select-${{ github.ref }}-${{ github.event.label.name }}
+  cancel-in-progress: false
 
 jobs:
   select:
