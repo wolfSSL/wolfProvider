@@ -27,6 +27,7 @@
 #include <openssl/params.h>
 #include <openssl/prov_ssl.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/wp_logging.h>
 #include "wolfprovider/internal.h"
 
@@ -39,6 +40,7 @@ typedef struct wp_tls_group_consts {
     int maxTls;            /** Maximum TLS version (or 0 for all). */
     int minDtls;           /** Minimum DTLS version, -1 not supported. */
     int maxDtls;           /** Maximum DTLS version (or 0 for all). */
+    int isKem;             /** 1 when the group is a KEM (e.g. ML-KEM). */
 } wp_tls_group_consts;
 
 #define WP_TLS_12_DOWN      TLS1_VERSION  , TLS1_2_VERSION
@@ -51,21 +53,28 @@ typedef struct wp_tls_group_consts {
 
 /** List of group constants. */
 static const wp_tls_group_consts wp_group_const_list[35] = {
-    { WOLFSSL_ECC_SECP192R1      ,  80, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_SECP224R1      , 112, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_SECP256R1      , 128, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_SECP384R1      , 192, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_SECP521R1      , 256, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_BRAINPOOLP256R1, 128, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_BRAINPOOLP384R1, 192, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_BRAINPOOLP512R1, 256, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_X25519         , 128, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_X448           , 224, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_FFDHE_2048         , 112, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_3072         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_4096         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_6144         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_8192         , 192, WP_TLS_13_UP  , WP_DTLS_NONE    },
+    { WOLFSSL_ECC_SECP192R1      ,  80, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_SECP224R1      , 112, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_SECP256R1      , 128, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_SECP384R1      , 192, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_SECP521R1      , 256, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_BRAINPOOLP256R1, 128, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_BRAINPOOLP384R1, 192, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_BRAINPOOLP512R1, 256, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_X25519         , 128, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_X448           , 224, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_FFDHE_2048         , 112, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_3072         , 128, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_4096         , 128, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_6144         , 128, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_8192         , 192, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+#ifdef WP_HAVE_MLKEM
+    /* Pure ML-KEM (FIPS 203) groups, by IANA codepoint (512/513/514).
+     * TLS 1.3 only and flagged as KEMs. */
+    { 512                        , 128, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 513                        , 192, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 514                        , 256, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+#endif
 };
 
 /** Parameters for a group. Index references constant list. */
@@ -89,12 +98,19 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
             (int *)&wp_group_const_list[idx].minDtls),                         \
         OSSL_PARAM_int(OSSL_CAPABILITY_TLS_GROUP_MAX_DTLS,                     \
             (int *)&wp_group_const_list[idx].maxDtls),                         \
+        OSSL_PARAM_int(OSSL_CAPABILITY_TLS_GROUP_IS_KEM,                       \
+            (int *)&wp_group_const_list[idx].isKem),                           \
         OSSL_PARAM_END                                                         \
     }
 
 /** Parameters for an EC group. Index references constant list. */
 #define WP_TLS_GROUP_ENTRY_EC(tlsName, internalName, idx)                      \
     WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "EC", 3)
+
+/** Parameters for a pure ML-KEM group. The alg name matches the keymgmt/KEM
+ * wolfProvider registers (ML-KEM-512/768/1024). */
+#define WP_TLS_GROUP_ENTRY_MLKEM(tlsName, idx, alg)                            \
+    WP_TLS_GROUP_ENTRY(tlsName, alg, idx, alg, sizeof(alg))
 
 /** Parameters for an X25519 group. Index references constant list. */
 #define WP_TLS_GROUP_ENTRY_X25519(tlsName, internalName, idx)                  \
@@ -109,7 +125,7 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
     WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "DH", 3)
 
 /** List of parameters for TLS groups. */
-static const OSSL_PARAM wp_param_group_list[][10] = {
+static const OSSL_PARAM wp_param_group_list[][11] = {
     WP_TLS_GROUP_ENTRY_EC(    "secp192r1"      , "prime192v1"     , 0 ),
     WP_TLS_GROUP_ENTRY_EC(    "P-192"          , "prime192v1"     , 0 ),
     WP_TLS_GROUP_ENTRY_EC(    "secp224r1"      , "secp224r1"      , 1 ),
@@ -132,6 +148,11 @@ static const OSSL_PARAM wp_param_group_list[][10] = {
     WP_TLS_GROUP_ENTRY_DH(    "ffdhe4096"      , "ffdhe4096"      , 12),
     WP_TLS_GROUP_ENTRY_DH(    "ffdhe6144"      , "ffdhe6144"      , 13),
     WP_TLS_GROUP_ENTRY_DH(    "ffdhe8192"      , "ffdhe8192"      , 14),
+#ifdef WP_HAVE_MLKEM
+    WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM512"       , 15, "ML-KEM-512" ),
+    WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM768"       , 16, "ML-KEM-768" ),
+    WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM1024"      , 17, "ML-KEM-1024"),
+#endif
 };
 
 /** Count of supported TLS groups. */

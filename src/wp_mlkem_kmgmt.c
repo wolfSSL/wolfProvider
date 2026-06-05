@@ -727,6 +727,7 @@ static const OSSL_PARAM* wp_mlkem_gettable_params(WOLFPROV_CTX* provCtx)
         OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_CATEGORY, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
         OSSL_PARAM_END
@@ -818,6 +819,34 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
         }
     }
     if (ok) {
+        /* Encoded public key (used by TLS key_share) is the raw ML-KEM
+         * encapsulation key, identical to the public key. */
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY);
+        if (p != NULL) {
+            word32 outLen = mlkem->data->pubKeySize;
+            if (!mlkem->hasPub) {
+                ok = 0;
+            }
+            else if (p->data == NULL) {
+                p->return_size = outLen;
+            }
+            else if (p->data_size < outLen) {
+                p->return_size = outLen;
+                ok = 0;
+            }
+            else {
+                rc = wc_MlKemKey_EncodePublicKey(&mlkem->key,
+                    (unsigned char*)p->data, outLen);
+                if (rc != 0) {
+                    ok = 0;
+                }
+                else {
+                    p->return_size = outLen;
+                }
+            }
+        }
+    }
+    if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
         if (p != NULL) {
             word32 outLen = mlkem->data->privKeySize;
@@ -856,6 +885,7 @@ static int wp_mlkem_get_params(wp_MlKem* mlkem, OSSL_PARAM params[])
 static const OSSL_PARAM* wp_mlkem_settable_params(WOLFPROV_CTX* provCtx)
 {
     static const OSSL_PARAM wp_mlkem_supported_settable_params[] = {
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0),
         OSSL_PARAM_END
     };
     (void)provCtx;
@@ -863,19 +893,43 @@ static const OSSL_PARAM* wp_mlkem_settable_params(WOLFPROV_CTX* provCtx)
 }
 
 /**
- * Set ML-KEM key parameters. None supported.
+ * Set ML-KEM key parameters. Supports the encoded public key so the TLS layer
+ * can import a peer's ML-KEM encapsulation key from a key_share.
  *
- * @param [in] mlkem   ML-KEM key object. Unused.
- * @param [in] params  Array of parameters. Unused.
- * @return  1 always.
+ * @param [in] mlkem   ML-KEM key object.
+ * @param [in] params  Array of parameters.
+ * @return  1 on success, 0 on failure.
  */
 static int wp_mlkem_set_params(wp_MlKem* mlkem, const OSSL_PARAM params[])
 {
+    int ok = 1;
+    unsigned char* data = NULL;
+    size_t len = 0;
+
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mlkem_set_params");
-    (void)mlkem;
-    (void)params;
-    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
+
+    if (mlkem == NULL) {
+        ok = 0;
+    }
+    if (ok && !wp_params_get_octet_string_ptr(params,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, &data, &len)) {
+        ok = 0;
+    }
+    if (ok && (data != NULL)) {
+        if (len != mlkem->data->pubKeySize) {
+            ok = 0;
+        }
+        else if (wc_MlKemKey_DecodePublicKey(&mlkem->key, data,
+                (word32)len) != 0) {
+            ok = 0;
+        }
+        else {
+            mlkem->hasPub = 1;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /*
