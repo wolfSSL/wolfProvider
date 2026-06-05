@@ -62,6 +62,7 @@
 #include <openssl/params.h>
 #include <openssl/ssl.h>
 #include <openssl/pem.h>
+#include <openssl/x509.h>
 
 #include <wolfprovider/settings.h>
 
@@ -88,6 +89,16 @@ static WC_RNG g_rng;
  * test. */
 static X509* g_cert;
 static EVP_PKEY* g_key;
+/* ML-DSA certificate + key on each context, for the TLS authentication test:
+ * proves ML-DSA is registered as a TLS signature algorithm so an ML-DSA
+ * certificate can sign (server) and verify (client) a TLS 1.3 handshake. */
+static X509* g_wp_mldsa_cert;
+static EVP_PKEY* g_wp_mldsa_key;
+static X509* g_oss_mldsa_cert;
+static EVP_PKEY* g_oss_mldsa_key;
+
+static int make_mldsa_cert(OSSL_LIB_CTX* lib, X509** certOut,
+    EVP_PKEY** keyOut);
 
 #ifndef CERTS_DIR
 #define CERTS_DIR "certs"
@@ -135,6 +146,14 @@ static int load_all(const char* wp_path)
             ok = 0;
         }
     }
+    if (ok && !make_mldsa_cert(wp_ctx, &g_wp_mldsa_cert, &g_wp_mldsa_key)) {
+        fprintf(stderr, "Failed to build wolfProvider ML-DSA certificate\n");
+        ok = 0;
+    }
+    if (ok && !make_mldsa_cert(oss_ctx, &g_oss_mldsa_cert, &g_oss_mldsa_key)) {
+        fprintf(stderr, "Failed to build default-provider ML-DSA certificate\n");
+        ok = 0;
+    }
     if (!ok) {
         if (wp_prov != NULL) {
             OSSL_PROVIDER_unload(wp_prov);
@@ -149,6 +168,10 @@ static int load_all(const char* wp_path)
 static void unload_all(void)
 {
     wc_FreeRng(&g_rng);
+    if (g_wp_mldsa_key) EVP_PKEY_free(g_wp_mldsa_key);
+    if (g_wp_mldsa_cert) X509_free(g_wp_mldsa_cert);
+    if (g_oss_mldsa_key) EVP_PKEY_free(g_oss_mldsa_key);
+    if (g_oss_mldsa_cert) X509_free(g_oss_mldsa_cert);
     if (g_key) EVP_PKEY_free(g_key);
     if (g_cert) X509_free(g_cert);
     if (wp_prov) OSSL_PROVIDER_unload(wp_prov);
@@ -670,9 +693,70 @@ static int tls_drive_handshake(SSL* client, SSL* server)
     return ok;
 }
 
-/* One TLS 1.3 handshake for a group. wpServer != 0 puts wolfProvider on the
- * server side and the default provider on the client; 0 swaps them. */
-static int test_tls_group(const char* group, int wpServer)
+/* Build a self-signed ML-DSA-65 certificate on the given library context. The
+ * X509 signature drives the provider's ML-DSA signing AlgorithmIdentifier. */
+static int make_mldsa_cert(OSSL_LIB_CTX* lib, X509** certOut, EVP_PKEY** keyOut)
+{
+    int ok = 0;
+    EVP_PKEY* key = NULL;
+    EVP_PKEY_CTX* g = NULL;
+    X509* cert = NULL;
+    X509_NAME* name = NULL;
+    EVP_MD_CTX* mctx = NULL;
+
+    g = EVP_PKEY_CTX_new_from_name(lib, "ML-DSA-65", NULL);
+    if ((g == NULL) || (EVP_PKEY_keygen_init(g) != 1) ||
+            (EVP_PKEY_keygen(g, &key) != 1)) {
+        goto end;
+    }
+    cert = X509_new();
+    if (cert == NULL) {
+        goto end;
+    }
+    if ((X509_set_version(cert, X509_VERSION_3) != 1) ||
+            !ASN1_INTEGER_set(X509_get_serialNumber(cert), 1) ||
+            (X509_gmtime_adj(X509_getm_notBefore(cert), 0) == NULL) ||
+            (X509_gmtime_adj(X509_getm_notAfter(cert), 3600) == NULL) ||
+            (X509_set_pubkey(cert, key) != 1)) {
+        goto end;
+    }
+    name = X509_get_subject_name(cert);
+    if ((X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+            (const unsigned char*)"mldsa-tls", -1, -1, 0) != 1) ||
+            (X509_set_issuer_name(cert, name) != 1)) {
+        goto end;
+    }
+    mctx = EVP_MD_CTX_new();
+    if ((mctx == NULL) ||
+            (EVP_DigestSignInit_ex(mctx, NULL, NULL, lib, NULL, key,
+                NULL) != 1) ||
+            (X509_sign_ctx(cert, mctx) <= 0)) {
+        goto end;
+    }
+    ok = 1;
+
+end:
+    if (!ok) {
+        ERR_print_errors_fp(stderr);
+    }
+    EVP_MD_CTX_free(mctx);
+    EVP_PKEY_CTX_free(g);
+    if (ok) {
+        *certOut = cert;
+        *keyOut = key;
+    }
+    else {
+        X509_free(cert);
+        EVP_PKEY_free(key);
+    }
+    return ok;
+}
+
+/* One TLS 1.3 handshake for a group with the given certificate. wpServer != 0
+ * puts wolfProvider on the server side and the default provider on the client;
+ * 0 swaps them. certName labels the output. */
+static int test_tls_group(const char* group, int wpServer, X509* cert,
+    EVP_PKEY* key, const char* certName)
 {
     int ok = 0;
     OSSL_LIB_CTX* serverLib = wpServer ? wp_ctx : oss_ctx;
@@ -690,10 +774,10 @@ static int test_tls_group(const char* group, int wpServer)
     if ((sctx == NULL) || (cctx == NULL)) {
         goto end;
     }
-    if (SSL_CTX_use_certificate(sctx, g_cert) != 1) {
+    if (SSL_CTX_use_certificate(sctx, cert) != 1) {
         goto end;
     }
-    if (SSL_CTX_use_PrivateKey(sctx, g_key) != 1) {
+    if (SSL_CTX_use_PrivateKey(sctx, key) != 1) {
         goto end;
     }
     SSL_CTX_set_verify(cctx, SSL_VERIFY_NONE, NULL);
@@ -731,9 +815,9 @@ end:
     if (!ok) {
         ERR_print_errors_fp(stderr);
     }
-    printf("  %-20s %-9s server -> %-9s client : %s\n", group,
-        wpServer ? "wolfProv" : "default", wpServer ? "default" : "wolfProv",
-        ok ? "PASS" : "FAIL");
+    printf("  %-20s [%-6s cert] %-9s server -> %-9s client : %s\n", group,
+        certName, wpServer ? "wolfProv" : "default",
+        wpServer ? "default" : "wolfProv", ok ? "PASS" : "FAIL");
     if (server != NULL) SSL_free(server);
     if (client != NULL) SSL_free(client);
     if (sctx != NULL) SSL_CTX_free(sctx);
@@ -787,8 +871,20 @@ int main(int argc, char* argv[])
     printf("\nTLS 1.3 group interop (handshake over BIO pair):\n");
     printf("  (wolfProvider) <-> (OpenSSL default), both directions\n");
     for (i = 0; i < sizeof(groups) / sizeof(groups[0]); i++) {
-        if (!test_tls_group(groups[i], 1)) fail++;
-        if (!test_tls_group(groups[i], 0)) fail++;
+        if (!test_tls_group(groups[i], 1, g_cert, g_key, "RSA")) fail++;
+        if (!test_tls_group(groups[i], 0, g_cert, g_key, "RSA")) fail++;
+    }
+
+    printf("\nTLS 1.3 ML-DSA certificate authentication (TLS signature alg):\n");
+    printf("  ML-DSA cert signs (server) and verifies (client) per group\n");
+    for (i = 0; i < sizeof(groups) / sizeof(groups[0]); i++) {
+        /* wolfProvider server signs CertificateVerify with its ML-DSA cert;
+         * default client verifies. Then default server signs; wolfProvider
+         * client verifies. Both require ML-DSA as a registered TLS sigalg. */
+        if (!test_tls_group(groups[i], 1, g_wp_mldsa_cert, g_wp_mldsa_key,
+                "ML-DSA")) fail++;
+        if (!test_tls_group(groups[i], 0, g_oss_mldsa_cert, g_oss_mldsa_key,
+                "ML-DSA")) fail++;
     }
 
     unload_all();
