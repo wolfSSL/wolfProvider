@@ -36,6 +36,12 @@
  * byte encodings are standards-compliant end-to-end, not just internally
  * round-trippable.
  *
+ * A final stage drives a real TLS 1.3 handshake over an in-memory BIO pair
+ * with wolfProvider on one peer and the OpenSSL default provider on the other,
+ * in both directions, for every PQC key-exchange group (pure ML-KEM and the
+ * hybrids X25519MLKEM768 / SecP256r1MLKEM768 / SecP384r1MLKEM1024). This
+ * proves the negotiated key-share bytes interoperate on the wire.
+ *
  * Usage: test_pqc_interop [provider_path]
  *   provider_path defaults to ".libs" (relative to current dir).
  *   Set WOLFPROV_PATH env var to override.
@@ -54,6 +60,8 @@
 #include <openssl/provider.h>
 #include <openssl/core_names.h>
 #include <openssl/params.h>
+#include <openssl/ssl.h>
+#include <openssl/pem.h>
 
 #include <wolfprovider/settings.h>
 
@@ -74,6 +82,16 @@ static OSSL_LIB_CTX* wp_ctx;
 #define oss_ctx ((OSSL_LIB_CTX*)NULL)
 static OSSL_PROVIDER* wp_prov;
 static WC_RNG g_rng;
+/* Server identity for the TLS-handshake group interop. Loaded once on the
+ * default library context (which always has PEM decoders); the key's own
+ * context signs CertificateVerify, independent of the group provider under
+ * test. */
+static X509* g_cert;
+static EVP_PKEY* g_key;
+
+#ifndef CERTS_DIR
+#define CERTS_DIR "certs"
+#endif
 
 static int load_all(const char* wp_path)
 {
@@ -100,6 +118,23 @@ static int load_all(const char* wp_path)
         fprintf(stderr, "wc_InitRng failed\n");
         ok = 0;
     }
+    if (ok) {
+        BIO* bio = BIO_new_file(CERTS_DIR "/server-cert.pem", "r");
+        if (bio != NULL) {
+            g_cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+            BIO_free(bio);
+        }
+        bio = BIO_new_file(CERTS_DIR "/server-key.pem", "r");
+        if (bio != NULL) {
+            g_key = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+            BIO_free(bio);
+        }
+        if ((g_cert == NULL) || (g_key == NULL)) {
+            fprintf(stderr, "Failed to load TLS server cert/key from %s\n",
+                CERTS_DIR);
+            ok = 0;
+        }
+    }
     if (!ok) {
         if (wp_prov != NULL) {
             OSSL_PROVIDER_unload(wp_prov);
@@ -114,6 +149,8 @@ static int load_all(const char* wp_path)
 static void unload_all(void)
 {
     wc_FreeRng(&g_rng);
+    if (g_key) EVP_PKEY_free(g_key);
+    if (g_cert) X509_free(g_cert);
     if (wp_prov) OSSL_PROVIDER_unload(wp_prov);
     if (wp_ctx) OSSL_LIB_CTX_free(wp_ctx);
 }
@@ -581,9 +618,136 @@ end:
 }
 
 
+/*
+ * TLS 1.3 group interop - drives a real handshake over an in-memory BIO pair
+ * with one peer on wolfProvider's library context and the other on OpenSSL's
+ * default context, proving the key-exchange byte format (ML-KEM ciphertext /
+ * shared secret, and the classical share for hybrids) interoperates both ways.
+ */
+
+/* Run the handshake to completion over a BIO pair. Returns 1 on success. */
+static int tls_drive_handshake(SSL* client, SSL* server)
+{
+    int ok = 0;
+    int i;
+    int cdone = 0;
+    int sdone = 0;
+    int rc;
+    int err;
+
+    for (i = 0; i < 64; i++) {
+        if (!cdone) {
+            rc = SSL_do_handshake(client);
+            if (rc == 1) {
+                cdone = 1;
+            }
+            else {
+                err = SSL_get_error(client, rc);
+                if ((err != SSL_ERROR_WANT_READ) &&
+                        (err != SSL_ERROR_WANT_WRITE)) {
+                    break;
+                }
+            }
+        }
+        if (!sdone) {
+            rc = SSL_do_handshake(server);
+            if (rc == 1) {
+                sdone = 1;
+            }
+            else {
+                err = SSL_get_error(server, rc);
+                if ((err != SSL_ERROR_WANT_READ) &&
+                        (err != SSL_ERROR_WANT_WRITE)) {
+                    break;
+                }
+            }
+        }
+        if (cdone && sdone) {
+            ok = 1;
+            break;
+        }
+    }
+    return ok;
+}
+
+/* One TLS 1.3 handshake for a group. wpServer != 0 puts wolfProvider on the
+ * server side and the default provider on the client; 0 swaps them. */
+static int test_tls_group(const char* group, int wpServer)
+{
+    int ok = 0;
+    OSSL_LIB_CTX* serverLib = wpServer ? wp_ctx : oss_ctx;
+    OSSL_LIB_CTX* clientLib = wpServer ? oss_ctx : wp_ctx;
+    SSL_CTX* sctx = NULL;
+    SSL_CTX* cctx = NULL;
+    SSL* server = NULL;
+    SSL* client = NULL;
+    BIO* sbio = NULL;
+    BIO* cbio = NULL;
+    const char* neg = NULL;
+
+    sctx = SSL_CTX_new_ex(serverLib, NULL, TLS_server_method());
+    cctx = SSL_CTX_new_ex(clientLib, NULL, TLS_client_method());
+    if ((sctx == NULL) || (cctx == NULL)) {
+        goto end;
+    }
+    if (SSL_CTX_use_certificate(sctx, g_cert) != 1) {
+        goto end;
+    }
+    if (SSL_CTX_use_PrivateKey(sctx, g_key) != 1) {
+        goto end;
+    }
+    SSL_CTX_set_verify(cctx, SSL_VERIFY_NONE, NULL);
+    if ((SSL_CTX_set_min_proto_version(sctx, TLS1_3_VERSION) != 1) ||
+            (SSL_CTX_set_max_proto_version(sctx, TLS1_3_VERSION) != 1) ||
+            (SSL_CTX_set_min_proto_version(cctx, TLS1_3_VERSION) != 1) ||
+            (SSL_CTX_set_max_proto_version(cctx, TLS1_3_VERSION) != 1)) {
+        goto end;
+    }
+    if ((SSL_CTX_set1_groups_list(sctx, group) != 1) ||
+            (SSL_CTX_set1_groups_list(cctx, group) != 1)) {
+        goto end;
+    }
+
+    server = SSL_new(sctx);
+    client = SSL_new(cctx);
+    if ((server == NULL) || (client == NULL)) {
+        goto end;
+    }
+    if (BIO_new_bio_pair(&cbio, 0, &sbio, 0) != 1) {
+        goto end;
+    }
+    SSL_set_bio(client, cbio, cbio);
+    SSL_set_bio(server, sbio, sbio);
+    SSL_set_connect_state(client);
+    SSL_set_accept_state(server);
+
+    if (!tls_drive_handshake(client, server)) {
+        goto end;
+    }
+    neg = SSL_get0_group_name(client);
+    ok = (neg != NULL) && (OPENSSL_strcasecmp(neg, group) == 0);
+
+end:
+    if (!ok) {
+        ERR_print_errors_fp(stderr);
+    }
+    printf("  %-20s %-9s server -> %-9s client : %s\n", group,
+        wpServer ? "wolfProv" : "default", wpServer ? "default" : "wolfProv",
+        ok ? "PASS" : "FAIL");
+    if (server != NULL) SSL_free(server);
+    if (client != NULL) SSL_free(client);
+    if (sctx != NULL) SSL_CTX_free(sctx);
+    if (cctx != NULL) SSL_CTX_free(cctx);
+    return ok;
+}
+
 int main(int argc, char* argv[])
 {
     int fail = 0;
+    const char* groups[] = {
+        "MLKEM512", "MLKEM768", "MLKEM1024",
+        "X25519MLKEM768", "SecP256r1MLKEM768", "SecP384r1MLKEM1024"
+    };
     const char* mlkem[] = { "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024" };
     const char* mldsa[] = { "ML-DSA-44", "ML-DSA-65", "ML-DSA-87" };
     const char* wp_path = ".libs";
@@ -618,6 +782,13 @@ int main(int argc, char* argv[])
         if (!test_mldsa_pair_to_wp(mldsa[i], "default")) fail++;
         if (!test_mldsa_pair_wp_to(mldsa[i], "direct"))  fail++;
         if (!test_mldsa_pair_to_wp(mldsa[i], "direct"))  fail++;
+    }
+
+    printf("\nTLS 1.3 group interop (handshake over BIO pair):\n");
+    printf("  (wolfProvider) <-> (OpenSSL default), both directions\n");
+    for (i = 0; i < sizeof(groups) / sizeof(groups[0]); i++) {
+        if (!test_tls_group(groups[i], 1)) fail++;
+        if (!test_tls_group(groups[i], 0)) fail++;
     }
 
     unload_all();
