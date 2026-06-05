@@ -1,21 +1,15 @@
 name: Nginx PQC Tests
 
-# Builds nginx against wolfProvider (--enable-pqc, --replace-default) and runs
-# the post-quantum TLS path under nginx's own Test::Nginx harness: an ML-DSA
-# (FIPS 204) certificate chain for authentication and ML-KEM / hybrid groups
-# (FIPS 203) for key exchange, the open-quantum-safe oqs-demos nginx scenario.
+# Runs the open-quantum-safe oqs-demos nginx demo with wolfProvider swapped in
+# for liboqs + oqs-provider (.github/nginx/Dockerfile), then runs oqs-demos'
+# own connection test (.github/nginx/test.sh): connect once per quantum-safe
+# group and assert ML-DSA (FIPS 204) certificate authentication plus an
+# ML-KEM / hybrid (FIPS 203) key exchange.
 #
-# This intentionally differs from the classic nginx.yml in two ways:
-#   - nginx.yml installs debian-packaged OpenSSL (3.0.x), which has no ML-KEM /
-#     ML-DSA. PQC needs OpenSSL 3.6+, so the stack is built from source here,
-#     matching wolfssl-versions-pqc.yml / wolfssl-pqc-kat.yml.
-#   - Only the PQC path is exercised (pqc_tls.t); the rest of nginx-tests is
-#     out of scope for this workflow.
-#
-# Versioning mirrors the other PQC workflows: wolfSSL latest -stable (PQC floor
-# is v5.9.2-stable) and master, against the latest OpenSSL 3.x release. The
-# external OSP sources (nginx, nginx-tests) are pinned to fixed refs -- upstream
-# master is unstable and would make the test non-reproducible.
+# Only the PQC path is exercised. Versioning matches the other PQC workflows:
+# wolfSSL latest -stable (PQC floor v5.9.2-stable) and master, against the
+# latest OpenSSL 3.x release. The OSP source (nginx) is pinned to a fixed
+# release in the Dockerfile -- upstream master is unstable and non-reproducible.
 
 on:
   push:
@@ -29,11 +23,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  # Pinned external OSP sources (never track upstream master).
-  NGINX_REF: release-1.28.0
-  NGINX_TESTS_REF: e0f3be50f7e701c4028acb9ed35004adc2b1db27
 
 jobs:
   discover-versions:
@@ -87,7 +76,7 @@ jobs:
     name: ${{ matrix.name }}
     needs: discover-versions
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover-versions.outputs.matrix) }}
@@ -97,51 +86,26 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Build wolfProvider (PQC, replace-default)
+      # Build the oqs-demos nginx image with wolfProvider in place of
+      # oqs-provider. nginx is pinned to release-1.28.0 in the Dockerfile.
+      - name: Build quantum-safe nginx image
         run: |
-          OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
-          WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
-            ./scripts/build-wolfprovider.sh --enable-pqc --replace-default
+          docker build \
+            --build-arg WOLFSSL_REF=${{ matrix.wolfssl-ref }} \
+            --build-arg OPENSSL_REF=${{ needs.discover-versions.outputs.openssl-tag }} \
+            -f .github/nginx/Dockerfile -t wolfprov-nginx .
 
-      - name: Install nginx build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libpcre3-dev zlib1g-dev \
-            libtest-harness-perl libio-socket-ssl-perl libnet-ssleay-perl
-
-      - name: Build nginx (${{ env.NGINX_REF }}) against wolfProvider OpenSSL
-        run: |
-          O="$GITHUB_WORKSPACE/openssl-install"
-          git clone --depth 1 --branch "$NGINX_REF" \
-            https://github.com/nginx/nginx.git nginx
-          cd nginx
-          ./auto/configure --with-http_ssl_module \
-            --with-cc-opt="-I$O/include" \
-            --with-ld-opt="-L$O/lib -L$O/lib64 -Wl,-rpath,$O/lib -Wl,-rpath,$O/lib64"
-          make -j"$(nproc)"
-
-      - name: Checkout nginx-tests (pinned ${{ env.NGINX_TESTS_REF }})
-        run: |
-          git clone https://github.com/nginx/nginx-tests.git nginx-tests
-          git -C nginx-tests checkout "$NGINX_TESTS_REF"
-
-      # Runs only the PQC path: ML-DSA cert auth + ML-KEM / hybrid key exchange.
-      # In normal mode every quantum-safe group must negotiate with an ML-DSA
-      # verified chain; in force-fail mode wolfProvider fails every operation so
-      # the handshakes break and check-workflow-result.sh inverts that to a
-      # pass, proving wolfProvider genuinely served the PQC crypto.
-      - name: Run nginx PQC test
+      # Run oqs-demos' connection test against the running server. In normal
+      # mode every quantum-safe group must negotiate with an ML-DSA verified
+      # chain; in force-fail mode wolfProvider fails every operation so the
+      # handshakes break and check-workflow-result.sh inverts that to a pass,
+      # proving wolfProvider genuinely served the PQC crypto.
+      - name: Run oqs-demos nginx PQC connection test
         shell: bash
         run: |
           set +e
-          source scripts/env-setup
-          # Use the wolfProvider-backed OpenSSL for the test client (s_client).
-          export PATH="$(dirname "$OPENSSL_BIN"):$PATH"
-          cp .github/nginx/pqc_tls.t nginx-tests/
-          cd nginx-tests
-          export ${{ matrix.force_fail }}
-          TEST_NGINX_BINARY="$GITHUB_WORKSPACE/nginx/objs/nginx" \
-            prove -v pqc_tls.t 2>&1 | tee nginx-pqc.log
+          docker run --rm -e ${{ matrix.force_fail || 'WOLFPROV_NOOP=1' }} \
+            wolfprov-nginx /opt/nginx/test.sh 2>&1 | tee nginx-pqc.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
             $TEST_RESULT "${{ matrix.force_fail }}" nginx-pqc

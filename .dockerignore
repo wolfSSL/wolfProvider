@@ -1,0 +1,9 @@
+# Build artifacts from build-wolfprovider.sh are re-created inside the image;
+# never ship them in the Docker build context (used by .github/nginx/Dockerfile).
+openssl-source
+openssl-install
+wolfssl-source
+wolfssl-install
+wolfprov-install
+**/*.bak
+.git
