@@ -97,6 +97,13 @@ static int wp_mldsa_buf_append(wp_MlDsaSigCtx* ctx, const unsigned char* data,
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_buf_append");
 
+    /* A NULL buffer with a non-zero length is a caller error; reject it before
+     * the copy rather than dereferencing NULL. (NULL + 0 is a valid no-op.) */
+    if ((data == NULL) && (dataLen != 0)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
+    }
+
     needed = ctx->mdLen + dataLen;
     if (needed < ctx->mdLen) {
         ok = 0;
