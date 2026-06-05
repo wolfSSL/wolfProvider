@@ -470,6 +470,12 @@ extern const OSSL_DISPATCH wp_x448_spki_decoder_functions[];
 extern const OSSL_DISPATCH wp_x448_pki_decoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_spki_decoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_pki_decoder_functions[];
 extern const OSSL_DISPATCH wp_pem_to_der_decoder_functions[];
 extern const OSSL_DISPATCH wp_epki_to_pki_decoder_functions[];
 /* Encode implementations. */
@@ -529,6 +535,24 @@ extern const OSSL_DISPATCH wp_ed448_pki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_pki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_epki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_epki_pem_encoder_functions[];
 
 /* Storage implementations. */
 extern const OSSL_DISPATCH wp_file_store_functions[];

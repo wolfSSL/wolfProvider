@@ -1146,4 +1146,621 @@ IMPLEMENT_MLDSA_KEYMGMT_DISPATCH(mldsa44)
 IMPLEMENT_MLDSA_KEYMGMT_DISPATCH(mldsa65)
 IMPLEMENT_MLDSA_KEYMGMT_DISPATCH(mldsa87)
 
+/*
+ * ML-DSA encoder/decoder
+ */
+
+/* Extra slack added to the queried DER length before allocating. */
+#define WP_MLDSA_DER_SLACK 32
+
+/** Type for function that decodes a key into a wolfSSL key. */
+typedef int (*WP_MLDSA_DECODE)(const byte* input, word32* inOutIdx, void* key,
+    word32 inSz);
+/** Type for function that encodes a key from a wolfSSL key. */
+typedef int (*WP_MLDSA_ENCODE)(void* key, byte* output, word32 inLen);
+
+/** Function to create an ML-DSA key object preset to a level. */
+typedef wp_MlDsa* (*WP_MLDSA_NEW)(WOLFPROV_CTX* provCtx);
+
+/**
+ * Encode/decode ML-DSA public/private key.
+ */
+typedef struct wp_MlDsaEncDecCtx {
+    /** wolfSSL function to decode ML-DSA key from DER. */
+    WP_MLDSA_DECODE decode;
+    /** wolfSSL function to encode ML-DSA key to DER. */
+    WP_MLDSA_ENCODE encode;
+    /** Function to create the level-specific ML-DSA key object. */
+    WP_MLDSA_NEW newKey;
+
+    /** Provider context - used when creating ML-DSA key. */
+    WOLFPROV_CTX* provCtx;
+    /** Parts of key to export. */
+    int selection;
+
+    /** Data type name passed to the data callback. */
+    const char* dataType;
+    /** Supported format. */
+    int format;
+    /** Data format. */
+    int encoding;
+
+    /** Cipher to use when encoding EncryptedPrivateKeyInfo. */
+    int cipher;
+    /** Name of cipher to use when encoding EncryptedPrivateKeyInfo. */
+    const char* cipherName;
+} wp_MlDsaEncDecCtx;
+
+/**
+ * Create a new ML-DSA encoder/decoder context.
+ *
+ * @param [in] provCtx   Provider context.
+ * @param [in] newKey    Function to create level-specific ML-DSA key.
+ * @param [in] dataType  Data type name passed to data callback.
+ * @param [in] format    Supported key format.
+ * @param [in] encoding  Data format.
+ * @param [in] decode    Function to decode DER data to a key.
+ * @param [in] encode    Function to encode key to DER data.
+ * @return  New ML-DSA encoder/decoder context object on success.
+ * @return  NULL on failure.
+ */
+static wp_MlDsaEncDecCtx* wp_mldsa_enc_dec_new(WOLFPROV_CTX* provCtx,
+    WP_MLDSA_NEW newKey, const char* dataType, int format, int encoding,
+    WP_MLDSA_DECODE decode, WP_MLDSA_ENCODE encode)
+{
+    wp_MlDsaEncDecCtx* ctx = NULL;
+
+    if (wolfssl_prov_is_running()) {
+        ctx = (wp_MlDsaEncDecCtx*)OPENSSL_zalloc(sizeof(wp_MlDsaEncDecCtx));
+    }
+    if (ctx != NULL) {
+        ctx->decode   = decode;
+        ctx->encode   = encode;
+        ctx->newKey   = newKey;
+        ctx->provCtx  = provCtx;
+        ctx->dataType = dataType;
+        ctx->format   = format;
+        ctx->encoding = encoding;
+    }
+    return ctx;
+}
+
+/**
+ * Dispose of ML-DSA encoder/decoder context object.
+ *
+ * @param [in, out] ctx  ML-DSA encoder/decoder context object.
+ */
+static void wp_mldsa_enc_dec_free(wp_MlDsaEncDecCtx* ctx)
+{
+    OPENSSL_free(ctx);
+}
+
+/**
+ * Return the settable parameters for the ML-DSA encoder/decoder context.
+ *
+ * @param [in] provCtx  Provider context. Unused.
+ * @return  Array of parameters with data type.
+ */
+static const OSSL_PARAM* wp_mldsa_enc_dec_settable_ctx_params(
+    WOLFPROV_CTX* provCtx)
+{
+    static const OSSL_PARAM wp_mldsa_enc_dec_supported_settables[] = {
+        OSSL_PARAM_utf8_string(OSSL_ENCODER_PARAM_CIPHER, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_ENCODER_PARAM_PROPERTIES, NULL, 0),
+        OSSL_PARAM_END,
+    };
+
+    (void)provCtx;
+    return wp_mldsa_enc_dec_supported_settables;
+}
+
+/**
+ * Set the ML-DSA encoder/decoder context parameters.
+ *
+ * @param [in, out] ctx     ML-DSA encoder/decoder context object.
+ * @param [in]      params  Array of parameters.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_mldsa_enc_dec_set_ctx_params(wp_MlDsaEncDecCtx* ctx,
+    const OSSL_PARAM params[])
+{
+    int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_enc_dec_set_ctx_params");
+
+    if (!wp_cipher_from_params(params, &ctx->cipher, &ctx->cipherName)) {
+        ok = 0;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Construct parameters from ML-DSA key and pass off to callback.
+ *
+ * @param [in] mldsa      ML-DSA key object.
+ * @param [in] dataType   Data type name passed to the callback.
+ * @param [in] dataCb     Callback to pass ML-DSA key in parameters to.
+ * @param [in] dataCbArg  Argument to pass to callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_mldsa_dec_send_params(wp_MlDsa* mldsa, const char* dataType,
+    OSSL_CALLBACK* dataCb, void* dataCbArg)
+{
+    int ok = 1;
+    OSSL_PARAM params[4];
+    int object_type = OSSL_OBJECT_PKEY;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_dec_send_params");
+
+    params[0] = OSSL_PARAM_construct_int(OSSL_OBJECT_PARAM_TYPE, &object_type);
+    params[1] = OSSL_PARAM_construct_utf8_string(OSSL_OBJECT_PARAM_DATA_TYPE,
+        (char*)dataType, 0);
+    /* The address of the key object becomes the octet string pointer. */
+    params[2] = OSSL_PARAM_construct_octet_string(OSSL_OBJECT_PARAM_REFERENCE,
+        &mldsa, sizeof(mldsa));
+    params[3] = OSSL_PARAM_construct_end();
+
+    /* Callback to do something with ML-DSA key object. */
+    if (!dataCb(params, dataCbArg)) {
+        ok = 0;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Decode the data in the core BIO.
+ *
+ * The level of the key is preset on the created key object so decode only
+ * succeeds when the DER's algorithm OID matches this decoder's level.
+ *
+ * @param [in, out] ctx        ML-DSA encoder/decoder context object.
+ * @param [in, out] cBio       Core BIO to read data from.
+ * @param [in]      selection  Parts of key to export.
+ * @param [in]      dataCb     Callback to pass ML-DSA key in parameters to.
+ * @param [in]      dataCbArg  Argument to pass to callback.
+ * @param [in]      pwCb       Password callback.
+ * @param [in]      pwCbArg    Argument to pass to password callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_mldsa_decode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
+    int selection, OSSL_CALLBACK* dataCb, void* dataCbArg,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    int ok = 1;
+    int decoded = 1;
+    int rc;
+    unsigned char* data = NULL;
+    word32 len = 0;
+    word32 idx = 0;
+    wp_MlDsa* mldsa = NULL;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_decode");
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+
+    (void)pwCb;
+    (void)pwCbArg;
+
+    if (ok) {
+        ctx->selection = selection;
+        mldsa = ctx->newKey(ctx->provCtx);
+        if (mldsa == NULL) {
+            ok = 0;
+        }
+    }
+
+    if (ok) {
+        ok = wp_read_der_bio(ctx->provCtx, cBio, &data, &len);
+    }
+    if (ok) {
+        rc = ctx->decode(data, &idx, (void*)&mldsa->key, len);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "decode", rc);
+            ok = 0;
+            decoded = 0;
+        }
+    }
+    if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
+        mldsa->hasPub = 1;
+    }
+    if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
+        mldsa->hasPub = 1;
+        mldsa->hasPriv = 1;
+    }
+
+    OPENSSL_clear_free(data, len);
+
+    if (ok && (!wp_mldsa_dec_send_params(mldsa, ctx->dataType, dataCb,
+            dataCbArg))) {
+        ok = 0;
+    }
+
+    if (!ok) {
+        wp_mldsa_free(mldsa);
+        if (!decoded) {
+            ok = 1;
+        }
+    }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Encode the ML-DSA key.
+ *
+ * ML-DSA keys are large so the DER buffer is sized from a query-length call
+ * (output == NULL) and then allocated, rather than using a fixed buffer.
+ *
+ * @param [in]      ctx        ML-DSA encoder/decoder context object.
+ * @param [in, out] cBio       Core BIO to write data to.
+ * @param [in]      mldsa      ML-DSA key object.
+ * @param [in]      params     Key parameters. Unused.
+ * @param [in]      selection  Parts of key to encode. Unused.
+ * @param [in]      pwCb       Password callback.
+ * @param [in]      pwCbArg    Argument to pass to password callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
+    const wp_MlDsa* mldsa, const OSSL_PARAM* params, int selection,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    int ok = 1;
+    int rc;
+    BIO* out = wp_corebio_get_bio(ctx->provCtx, cBio);
+    unsigned char* keyData = NULL;
+    size_t keyLen = 0;
+    unsigned char* derData = NULL;
+    word32 derAllocLen = 0;
+    size_t derLen = 0;
+    unsigned char* pemData = NULL;
+    size_t pemLen = 0;
+    int pemType = (ctx->format == WP_ENC_FORMAT_SPKI) ? PUBLICKEY_TYPE :
+                                                        PKCS8_PRIVATEKEY_TYPE;
+    int private = (ctx->format == WP_ENC_FORMAT_PKI) ||
+                  (ctx->format == WP_ENC_FORMAT_EPKI);
+    byte* cipherInfo = NULL;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_encode");
+
+    (void)params;
+    (void)selection;
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+    if (ok && (out == NULL)) {
+        ok = 0;
+    }
+
+    if (ok) {
+        rc = ctx->encode((void*)&mldsa->key, NULL, 0);
+        if (rc <= 0) {
+            ok = 0;
+        }
+        else {
+            derAllocLen = (word32)rc;
+            /* EPKI encrypts in place: round up to the AES block size so the
+             * buffer has room for the padded ciphertext. */
+            if (ctx->format == WP_ENC_FORMAT_EPKI) {
+                derAllocLen = ((derAllocLen + 15) / 16) * 16;
+            }
+            else {
+                derAllocLen += WP_MLDSA_DER_SLACK;
+            }
+        }
+    }
+    if (ok) {
+        derData = (unsigned char*)OPENSSL_malloc(derAllocLen);
+        if (derData == NULL) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        rc = ctx->encode((void*)&mldsa->key, derData, derAllocLen);
+        if (rc <= 0) {
+            ok = 0;
+        }
+        else {
+            derLen = (size_t)rc;
+        }
+    }
+    if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
+        size_t encLen = derAllocLen;
+        if (!wp_encrypt_key(ctx->provCtx, ctx->cipherName, derData, &encLen,
+                (word32)derLen, pwCb, pwCbArg, &cipherInfo)) {
+            ok = 0;
+        }
+        else {
+            derLen = encLen;
+        }
+    }
+
+    if (ok && (ctx->encoding == WP_FORMAT_DER)) {
+        keyData = derData;
+        keyLen = derLen;
+    }
+    else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
+        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo,
+            pemType);
+        if (rc <= 0) {
+            ok = 0;
+        }
+        if (ok) {
+            pemLen = (size_t)rc;
+            pemData = (unsigned char*)OPENSSL_malloc(pemLen);
+            if (pemData == NULL) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            rc = wc_DerToPemEx(derData, (word32)derLen, pemData, (word32)pemLen,
+                cipherInfo, pemType);
+            if (rc <= 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            keyLen = pemLen = (size_t)rc;
+            keyData = pemData;
+        }
+    }
+    if (ok) {
+        rc = BIO_write(out, keyData, (int)keyLen);
+        if (rc <= 0) {
+            ok = 0;
+        }
+    }
+
+    if (private) {
+        if (derData != NULL) {
+            OPENSSL_clear_free(derData, derAllocLen);
+        }
+        OPENSSL_clear_free(pemData, pemLen);
+    }
+    else {
+        OPENSSL_free(derData);
+        OPENSSL_free(pemData);
+    }
+    OPENSSL_free(cipherInfo);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Export the ML-DSA key object.
+ *
+ * @param [in] ctx          ML-DSA encoder/decoder context object.
+ * @param [in] mldsa        ML-DSA key object.
+ * @param [in] size         Size of key object.
+ * @param [in] exportCb     Callback to export key.
+ * @param [in] exportCbArg  Argument to pass to callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_mldsa_export_object(wp_MlDsaEncDecCtx* ctx, wp_MlDsa* mldsa,
+    size_t size, OSSL_CALLBACK* exportCb, void* exportCbArg)
+{
+    (void)size;
+    return wp_mldsa_export(mldsa, ctx->selection, exportCb, exportCbArg);
+}
+
+/**
+ * Return whether the SPKI decoder/encoder handles this part of the key.
+ *
+ * @param [in] provCtx    Provider context. Unused.
+ * @param [in] selection  Parts of key to handle.
+ * @return  1 when supported.
+ * @return  0 when not supported.
+ */
+static int wp_mldsa_spki_does_selection(WOLFPROV_CTX* provCtx, int selection)
+{
+    int ok;
+
+    WOLFPROV_ENTER_SILENT(WP_LOG_COMP_PQC, WOLFPROV_FUNC_NAME);
+
+    (void)provCtx;
+
+    if (selection == 0) {
+        ok = 1;
+    }
+    else {
+        ok = (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
+    }
+
+    WOLFPROV_LEAVE_SILENT(WP_LOG_COMP_PQC,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Return whether the PKI decoder/encoder handles this part of the key.
+ *
+ * @param [in] provCtx    Provider context. Unused.
+ * @param [in] selection  Parts of key to handle.
+ * @return  1 when supported.
+ * @return  0 when not supported.
+ */
+static int wp_mldsa_pki_does_selection(WOLFPROV_CTX* provCtx, int selection)
+{
+    int ok;
+
+    WOLFPROV_ENTER_SILENT(WP_LOG_COMP_PQC, WOLFPROV_FUNC_NAME);
+
+    (void)provCtx;
+
+    if (selection == 0) {
+        ok = 1;
+    }
+    else {
+        ok = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
+    }
+
+    WOLFPROV_LEAVE_SILENT(WP_LOG_COMP_PQC,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Decode a public ML-DSA key from SPKI DER.
+ *
+ * @param [in]      input     Buffer holding SPKI DER data.
+ * @param [in, out] inOutIdx  On in, index into buffer. On out, index after.
+ * @param [in, out] key       ML-DSA key object.
+ * @param [in]      inSz      Length of buffer in bytes.
+ * @return  0 on success, negative on error.
+ */
+static int wp_mldsa_pub_decode(const byte* input, word32* inOutIdx, void* key,
+    word32 inSz)
+{
+    return wc_MlDsaKey_PublicKeyDecode((wc_MlDsaKey*)key, input, inSz, inOutIdx);
+}
+
+/**
+ * Decode a private ML-DSA key from PKCS8 PrivateKeyInfo DER.
+ *
+ * @param [in]      input     Buffer holding PKCS8 DER data.
+ * @param [in, out] inOutIdx  On in, index into buffer. On out, index after.
+ * @param [in, out] key       ML-DSA key object.
+ * @param [in]      inSz      Length of buffer in bytes.
+ * @return  0 on success, negative on error.
+ */
+static int wp_mldsa_priv_decode(const byte* input, word32* inOutIdx, void* key,
+    word32 inSz)
+{
+    return wc_MlDsaKey_PrivateKeyDecode((wc_MlDsaKey*)key, input, inSz,
+        inOutIdx);
+}
+
+/**
+ * Encode the public part of an ML-DSA key as SubjectPublicKeyInfo DER.
+ *
+ * Pass NULL for output to query the required length.
+ *
+ * @param [in]  key     ML-DSA key object.
+ * @param [out] output  Buffer to put encoded data in.
+ * @param [in]  inLen   Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success, negative on error.
+ */
+static int wp_mldsa_pub_encode(void* key, byte* output, word32 inLen)
+{
+    return wc_MlDsaKey_PublicKeyToDer((wc_MlDsaKey*)key, output, inLen, 1);
+}
+
+/**
+ * Encode the private part of an ML-DSA key as PKCS8 PrivateKeyInfo DER.
+ *
+ * Pass NULL for output to query the required length.
+ *
+ * @param [in]  key     ML-DSA key object.
+ * @param [out] output  Buffer to put encoded data in.
+ * @param [in]  inLen   Size of buffer in bytes.
+ * @return  Size of encoded data in bytes on success, negative on error.
+ */
+static int wp_mldsa_priv_encode(void* key, byte* output, word32 inLen)
+{
+    int ret;
+
+    /* Prefer the form that carries the public key so a reloaded key can be
+     * used to build a certificate; fall back to the private-only encoding when
+     * the public part is not available. */
+    ret = wc_MlDsaKey_KeyToDer((wc_MlDsaKey*)key, output, inLen);
+    if (ret <= 0) {
+        ret = wc_MlDsaKey_PrivateKeyToDer((wc_MlDsaKey*)key, output, inLen);
+    }
+    return ret;
+}
+
+/*
+ * Per-level encoder/decoder context constructors and dispatch tables.
+ */
+
+#define IMPLEMENT_MLDSA_DECODER(alg, dataType)                                 \
+static wp_MlDsaEncDecCtx* wp_##alg##_spki_dec_new(WOLFPROV_CTX* provCtx)        \
+{                                                                              \
+    return wp_mldsa_enc_dec_new(provCtx, wp_##alg##_new, dataType,             \
+        WP_ENC_FORMAT_SPKI, 0, wp_mldsa_pub_decode, NULL);                     \
+}                                                                              \
+const OSSL_DISPATCH wp_##alg##_spki_decoder_functions[] = {                    \
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_##alg##_spki_dec_new       },\
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_mldsa_enc_dec_free         },\
+    { OSSL_FUNC_DECODER_DOES_SELECTION,                                        \
+                                        (DFUNC)wp_mldsa_spki_does_selection  },\
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_mldsa_decode               },\
+    { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_mldsa_export_object        },\
+    { 0, NULL }                                                               \
+};                                                                            \
+static wp_MlDsaEncDecCtx* wp_##alg##_pki_dec_new(WOLFPROV_CTX* provCtx)         \
+{                                                                              \
+    return wp_mldsa_enc_dec_new(provCtx, wp_##alg##_new, dataType,             \
+        WP_ENC_FORMAT_PKI, 0, wp_mldsa_priv_decode, NULL);                     \
+}                                                                              \
+const OSSL_DISPATCH wp_##alg##_pki_decoder_functions[] = {                     \
+    { OSSL_FUNC_DECODER_NEWCTX,         (DFUNC)wp_##alg##_pki_dec_new        },\
+    { OSSL_FUNC_DECODER_FREECTX,        (DFUNC)wp_mldsa_enc_dec_free         },\
+    { OSSL_FUNC_DECODER_DOES_SELECTION,                                        \
+                                        (DFUNC)wp_mldsa_pki_does_selection   },\
+    { OSSL_FUNC_DECODER_DECODE,         (DFUNC)wp_mldsa_decode               },\
+    { OSSL_FUNC_DECODER_EXPORT_OBJECT,  (DFUNC)wp_mldsa_export_object        },\
+    { 0, NULL }                                                               \
+};
+
+#define IMPLEMENT_MLDSA_ENCODER_TABLE(alg, fmt, enc, dsel)                     \
+static wp_MlDsaEncDecCtx* wp_##alg##_##fmt##_##enc##_enc_new(                   \
+    WOLFPROV_CTX* provCtx)                                                     \
+{                                                                              \
+    return wp_mldsa_enc_dec_new(provCtx, wp_##alg##_new, NULL,                 \
+        WP_ENC_FORMAT_##fmt##_VAL, WP_FORMAT_##enc##_VAL, NULL,                \
+        WP_ENC_##fmt##_ENCODE);                                               \
+}                                                                              \
+const OSSL_DISPATCH wp_##alg##_##fmt##_##enc##_encoder_functions[] = {          \
+    { OSSL_FUNC_ENCODER_NEWCTX,                                                \
+        (DFUNC)wp_##alg##_##fmt##_##enc##_enc_new                  },          \
+    { OSSL_FUNC_ENCODER_FREECTX,        (DFUNC)wp_mldsa_enc_dec_free         },\
+    { OSSL_FUNC_ENCODER_SETTABLE_CTX_PARAMS,                                   \
+                                (DFUNC)wp_mldsa_enc_dec_settable_ctx_params  },\
+    { OSSL_FUNC_ENCODER_SET_CTX_PARAMS,                                        \
+                                (DFUNC)wp_mldsa_enc_dec_set_ctx_params       },\
+    { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)dsel                        },  \
+    { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_mldsa_encode               },\
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_mldsa_import               },\
+    { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_mldsa_free                 },\
+    { 0, NULL }                                                               \
+};
+
+/* Format/encoding value and encode-function selectors for the table macro. */
+#define WP_ENC_FORMAT_spki_VAL      WP_ENC_FORMAT_SPKI
+#define WP_ENC_FORMAT_pki_VAL       WP_ENC_FORMAT_PKI
+#define WP_ENC_FORMAT_epki_VAL      WP_ENC_FORMAT_EPKI
+#define WP_FORMAT_der_VAL           WP_FORMAT_DER
+#define WP_FORMAT_pem_VAL           WP_FORMAT_PEM
+#define WP_ENC_spki_ENCODE          wp_mldsa_pub_encode
+#define WP_ENC_pki_ENCODE           wp_mldsa_priv_encode
+#define WP_ENC_epki_ENCODE          wp_mldsa_priv_encode
+
+#define IMPLEMENT_MLDSA_ENCODERS(alg)                                          \
+    IMPLEMENT_MLDSA_ENCODER_TABLE(alg, spki, der, wp_mldsa_spki_does_selection)\
+    IMPLEMENT_MLDSA_ENCODER_TABLE(alg, spki, pem, wp_mldsa_spki_does_selection)\
+    IMPLEMENT_MLDSA_ENCODER_TABLE(alg, pki, der, wp_mldsa_pki_does_selection)  \
+    IMPLEMENT_MLDSA_ENCODER_TABLE(alg, pki, pem, wp_mldsa_pki_does_selection)  \
+    IMPLEMENT_MLDSA_ENCODER_TABLE(alg, epki, der, wp_mldsa_pki_does_selection) \
+    IMPLEMENT_MLDSA_ENCODER_TABLE(alg, epki, pem, wp_mldsa_pki_does_selection)
+
+IMPLEMENT_MLDSA_DECODER(mldsa44, "ML-DSA-44")
+IMPLEMENT_MLDSA_DECODER(mldsa65, "ML-DSA-65")
+IMPLEMENT_MLDSA_DECODER(mldsa87, "ML-DSA-87")
+
+IMPLEMENT_MLDSA_ENCODERS(mldsa44)
+IMPLEMENT_MLDSA_ENCODERS(mldsa65)
+IMPLEMENT_MLDSA_ENCODERS(mldsa87)
+
 #endif /* WP_HAVE_MLDSA */
