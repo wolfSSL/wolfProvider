@@ -124,6 +124,97 @@ static int test_kbkdf_feedback_compare(OSSL_LIB_CTX* osslCtx, OSSL_LIB_CTX* wpCt
     return err;
 }
 
+static int test_kbkdf_counter_explicit_ex(OSSL_LIB_CTX* libctx,
+    const unsigned char* key, size_t keyLen, unsigned char* out, size_t outLen)
+{
+    int err = 0;
+    EVP_KDF *kdf = NULL;
+    EVP_KDF_CTX *kctx = NULL;
+    OSSL_PARAM params[7], *p = params;
+    unsigned char label[] = {
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18
+    };
+    unsigned char context[] = {
+        0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28
+    };
+    char counter[] = "COUNTER";
+    char cmac[] = "CMAC";
+    char cipher[13];
+
+    if (keyLen == 16) {
+        XSTRNCPY(cipher, "AES-128-CBC", sizeof(cipher));
+    }
+    else if (keyLen == 32) {
+        XSTRNCPY(cipher, "AES-256-CBC", sizeof(cipher));
+    }
+    else {
+        PRINT_MSG("Invalid key length");
+        return 1;
+    }
+
+    kdf = EVP_KDF_fetch(libctx, "KBKDF", NULL);
+    if (!kdf) {
+        PRINT_MSG("Failed to fetch KBKDF");
+        err = 1;
+        goto done;
+    }
+
+    kctx = EVP_KDF_CTX_new(kdf);
+    if (!kctx) {
+        PRINT_MSG("Failed to create KBKDF context");
+        err = 1;
+        goto done;
+    }
+
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_MODE,
+                                           counter, 0);
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_MAC,
+                                           cmac, 0);
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_CIPHER,
+                                           cipher, 0);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+                                            (void*)key, keyLen);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
+                                            label, sizeof(label));
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
+                                            context, sizeof(context));
+    *p = OSSL_PARAM_construct_end();
+
+    if (EVP_KDF_derive(kctx, out, outLen, params) <= 0) {
+        PRINT_MSG("KBKDF derive with explicit COUNTER mode failed");
+        err = 1;
+        goto done;
+    }
+
+done:
+    EVP_KDF_free(kdf);
+    EVP_KDF_CTX_free(kctx);
+    return err;
+}
+
+static int test_kbkdf_counter_explicit_compare(OSSL_LIB_CTX* osslCtx,
+    OSSL_LIB_CTX* wpCtx, const unsigned char* key, size_t keyLen)
+{
+    int err = 0;
+    unsigned char osslOut[32];
+    unsigned char wpOut[32];
+
+    PRINT_MSG("Test KBKDF with explicit COUNTER mode string");
+
+    err = test_kbkdf_counter_explicit_ex(osslCtx, key, keyLen, osslOut, keyLen);
+    if (err == 0) {
+        err = test_kbkdf_counter_explicit_ex(wpCtx, key, keyLen, wpOut, keyLen);
+        if (err == 0) {
+            if (XMEMCMP(osslOut, wpOut, keyLen) != 0) {
+                PRINT_MSG("KBKDF derived keys do not match!");
+                err = 1;
+            }
+        }
+    }
+
+    return err;
+}
+
 static int test_kbkdf_hmac_ex(OSSL_LIB_CTX* libctx, const unsigned char* key,
     size_t keyLen, const char* digest, unsigned char* out, size_t outLen)
 {
@@ -242,6 +333,46 @@ static int test_kbkdf_feedback(void)
             err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256), "SHA384");
         }
     }
+    /* SHA3-224 (144 byte HMAC block) and SHA3-256 (136 byte block) both
+     * exceed the legacy 128-byte localKey buffer in wp_kbkdf_init_hmac;
+     * exercising them here guards against the stack overflow regressing. */
+    if (err == 0) {
+        err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key128, sizeof(key128), "SHA3-224");
+        if (err == 0) {
+            err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256), "SHA3-224");
+        }
+    }
+    if (err == 0) {
+        err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key128, sizeof(key128), "SHA3-256");
+        if (err == 0) {
+            err = test_kbkdf_hmac_compare(osslLibCtx, wpLibCtx, key256, sizeof(key256), "SHA3-256");
+        }
+    }
+
+    return err;
+}
+
+static int test_kbkdf_counter(void)
+{
+    int err;
+    unsigned char key128[] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+    };
+    unsigned char key256[] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
+    };
+
+    PRINT_MSG("\nTesting KBKDF with explicit COUNTER mode:");
+    err = test_kbkdf_counter_explicit_compare(osslLibCtx, wpLibCtx, key128,
+        sizeof(key128));
+    if (err == 0) {
+        err = test_kbkdf_counter_explicit_compare(osslLibCtx, wpLibCtx, key256,
+            sizeof(key256));
+    }
 
     return err;
 }
@@ -252,6 +383,9 @@ int test_kbkdf(void *data)
     (void)data;
 
     err = test_kbkdf_feedback();
+    if (err == 0) {
+        err = test_kbkdf_counter();
+    }
 
     return err;
 }
