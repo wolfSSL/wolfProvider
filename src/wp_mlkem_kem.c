@@ -88,7 +88,8 @@ static void wp_mlkem_kem_freectx(wp_MlKemCtx* ctx)
     if (ctx != NULL) {
         wc_FreeRng(&ctx->rng);
         wp_mlkem_free(ctx->mlkem);
-        OPENSSL_free(ctx);
+        /* ctx embeds the encapsulation entropy (FIPS 203 ikme); cleanse. */
+        OPENSSL_clear_free(ctx, sizeof(*ctx));
     }
 }
 

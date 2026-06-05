@@ -619,7 +619,11 @@ static int wp_mlx_match(const wp_Mlx* a, const wp_Mlx* b, int selection)
     if (a->data != b->data) {
         return 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+    /* Compare the public components for either a public- or private-key
+     * selection: the public uniquely identifies the key, so this avoids a
+     * fail-open where a private-only match would return equal without
+     * comparing anything. */
+    if ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0) {
         lenA = a->data->mlkemPubSize + a->data->classicalPubSize;
         bufA = (unsigned char*)OPENSSL_malloc(lenA);
         bufB = (unsigned char*)OPENSSL_malloc(lenA);

@@ -193,7 +193,8 @@ static void wp_mldsa_freectx(wp_MlDsaSigCtx* ctx)
         wc_FreeRng(&ctx->rng);
         wp_mldsa_free(ctx->mldsa);
         OPENSSL_clear_free(ctx->mdBuf, ctx->mdCap);
-        OPENSSL_free(ctx);
+        /* ctx embeds the signing-randomizer override (testEntropy); cleanse. */
+        OPENSSL_clear_free(ctx, sizeof(*ctx));
     }
 }
 
@@ -250,7 +251,6 @@ static int wp_mldsa_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
     const OSSL_PARAM params[])
 {
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_init");
-    (void)params;
 
     if (ctx == NULL) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
@@ -274,6 +274,13 @@ static int wp_mldsa_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
     /* Match OpenSSL: re-init clears external-mu but persists the context
      * string, deterministic flag and test-entropy until explicitly changed. */
     ctx->mu = 0;
+    /* Apply the FIPS 204 signature params (context string, mu, message
+     * encoding, deterministic, test-entropy) so every init path -- not just
+     * the OpenSSL 3.5+ message API -- honors them. NULL params is a no-op. */
+    if (!wp_mldsa_set_ctx_params(ctx, params)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
@@ -403,6 +410,8 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
         if (ok) {
             *sigLen = outLen;
         }
+        /* The per-signature randomizer is sensitive; wipe it. */
+        wc_ForceZero(rnd, sizeof(rnd));
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -579,8 +588,8 @@ static int wp_mldsa_digest_verify_final(wp_MlDsaSigCtx* ctx,
 }
 
 /* OpenSSL 3.5+ ML-DSA signature message API. The init carries the FIPS 204
- * signature params (context, deterministic, mu, test-entropy); update/final
- * reuse the digest-sign message accumulation. */
+ * signature params (context, deterministic, mu, test-entropy); wp_mldsa_init
+ * applies them. update/final reuse the digest-sign message accumulation. */
 static int wp_mldsa_message_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
     const OSSL_PARAM params[])
 {
@@ -589,9 +598,6 @@ static int wp_mldsa_message_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_message_init");
 
     ok = wp_mldsa_init(ctx, mldsa, params);
-    if (ok) {
-        ok = wp_mldsa_set_ctx_params(ctx, params);
-    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

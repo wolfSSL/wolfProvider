@@ -1027,6 +1027,13 @@ static int wp_mldsa_gen_set_params(wp_MlDsaGenCtx* ctx,
             WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
             return 0;
         }
+        /* A seed shorter than the required size would silently fall back to
+         * RNG keygen, breaking the caller's reproducibility contract. Reject
+         * any length other than the exact FIPS 204 seed size. */
+        if (ctx->seedLen != WP_MLDSA_SEED_SZ) {
+            WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+            return 0;
+        }
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
@@ -1060,7 +1067,8 @@ static void wp_mldsa_gen_cleanup(wp_MlDsaGenCtx* ctx)
 {
     if (ctx != NULL) {
         wc_FreeRng(&ctx->rng);
-        OPENSSL_free(ctx);
+        /* ctx holds the deterministic keygen seed (FIPS 204 xi); cleanse it. */
+        OPENSSL_clear_free(ctx, sizeof(*ctx));
     }
 }
 
