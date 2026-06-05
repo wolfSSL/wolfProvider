@@ -19,7 +19,7 @@ sleep 2
 
 fail=0
 for g in ${GROUPS}; do
-    out=$( (printf 'GET / HTTP/1.0\r\nHost: localhost\r\n\r\n'; sleep 0.5) \
+    out=$( (printf 'GET / HTTP/1.0\r\nHost: localhost\r\n\r\n'; sleep 1) \
         | "${O}/bin/openssl" s_client -connect "localhost:${PORT}" \
             -groups "${g}" -CAfile "${CA}" -servername localhost 2>&1)
 
