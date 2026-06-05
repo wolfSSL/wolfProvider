@@ -135,6 +135,26 @@ jobs:
             *) false ;;
           esac || { echo "ERROR: PQC test families do not match expect=${{ matrix.expect }}"; exit 1; }
 
+      # Run the ML-KEM / ML-DSA / hybrid unit tests: keygen, sign/verify,
+      # encap/decap, PEM encoder/decoder round-trip, X.509 signing, and the
+      # hybrid-group KEM. Selected by index from --list so it tracks however
+      # many PQC tests are registered. LD_LIBRARY_PATH carries libwolfprov's
+      # deps; the provider module itself is found via the default .libs dir.
+      - name: Run PQC unit tests
+        if: matrix.expect != 'none'
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx' \
+              | grep -oE '^[0-9]+')
+          if [ -z "$idxs" ]; then
+            echo "::error::No PQC unit tests found"
+            exit 1
+          fi
+          for i in $idxs; do
+            echo "== PQC unit test $i =="
+            ./test/unit.test "$i" || exit 1
+          done
+
       # Three-way interop: wolfProvider <-> OpenSSL default <-> wolfSSL direct.
       # Only runs on PQC-enabled rows; the latest OpenSSL (3.6+, the PQC floor)
       # has native ML-KEM/ML-DSA in the default provider, so this proves

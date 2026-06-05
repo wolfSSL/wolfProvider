@@ -777,4 +777,106 @@ int test_mlkem_import_mismatched_pubpriv(void* data)
     return err;
 }
 
+/* Hybrid (ML-KEM + classical) groups exercised as a KEM end to end. */
+static const char* const mlx_names[] = {
+    "X25519MLKEM768",
+    "SecP256r1MLKEM768",
+    "SecP384r1MLKEM1024",
+};
+#define MLX_NAME_COUNT (sizeof(mlx_names) / sizeof(mlx_names[0]))
+
+/* Generate a hybrid key pair via wolfProvider. */
+static int wp_test_mlx_keygen(const char* name, EVP_PKEY** pkey)
+{
+    int err = 0;
+    EVP_PKEY_CTX* ctx = NULL;
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, name, NULL);
+    err = (ctx == NULL);
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(ctx, pkey) != 1;
+    }
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/* Encapsulate / decapsulate round trip for the hybrid groups. */
+int test_mlx_encap_decap(void* data)
+{
+    int err = 0;
+    size_t i;
+    EVP_PKEY* pkey = NULL;
+    EVP_PKEY_CTX* ectx = NULL;
+    EVP_PKEY_CTX* dctx = NULL;
+    unsigned char* ct = NULL;
+    unsigned char* ss1 = NULL;
+    unsigned char* ss2 = NULL;
+    size_t ctLen = 0;
+    size_t ss1Len = 0;
+    size_t ss2Len = 0;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < MLX_NAME_COUNT); i++) {
+        const char* name = mlx_names[i];
+        PRINT_MSG("Encap/Decap %s", name);
+
+        err = wp_test_mlx_keygen(name, &pkey);
+
+        if (err == 0) {
+            ectx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
+            err = (ectx == NULL);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_encapsulate_init(ectx, NULL) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_encapsulate(ectx, NULL, &ctLen, NULL, &ss1Len) != 1;
+        }
+        if (err == 0) {
+            err = (ctLen == 0) || (ss1Len == 0);
+        }
+        if (err == 0) {
+            ct = (unsigned char*)OPENSSL_malloc(ctLen);
+            ss1 = (unsigned char*)OPENSSL_malloc(ss1Len);
+            ss2 = (unsigned char*)OPENSSL_malloc(ss1Len);
+            err = (ct == NULL) || (ss1 == NULL) || (ss2 == NULL);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_encapsulate(ectx, ct, &ctLen, ss1, &ss1Len) != 1;
+        }
+
+        if (err == 0) {
+            dctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
+            err = (dctx == NULL);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_decapsulate_init(dctx, NULL) != 1;
+        }
+        if (err == 0) {
+            ss2Len = ss1Len;
+            err = EVP_PKEY_decapsulate(dctx, ss2, &ss2Len, ct, ctLen) != 1;
+        }
+        if (err == 0) {
+            err = (ss1Len != ss2Len) || (memcmp(ss1, ss2, ss1Len) != 0);
+            if (err) {
+                PRINT_ERR_MSG("Shared secrets do not match");
+            }
+        }
+
+        OPENSSL_free(ct); ct = NULL;
+        OPENSSL_free(ss1); ss1 = NULL;
+        OPENSSL_free(ss2); ss2 = NULL;
+        EVP_PKEY_CTX_free(ectx); ectx = NULL;
+        EVP_PKEY_CTX_free(dctx); dctx = NULL;
+        EVP_PKEY_free(pkey); pkey = NULL;
+        ctLen = 0; ss1Len = 0; ss2Len = 0;
+    }
+
+    return err;
+}
+
 #endif /* WP_HAVE_MLKEM */

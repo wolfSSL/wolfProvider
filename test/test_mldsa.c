@@ -22,6 +22,9 @@
 
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
+#include <openssl/encoder.h>
+#include <openssl/decoder.h>
+#include <openssl/x509.h>
 
 #ifdef WP_HAVE_MLDSA
 
@@ -932,6 +935,190 @@ int test_mldsa_reinit_null_key(void* data)
     OPENSSL_free(sig);
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(k);
+    return err;
+}
+
+/* Encode a key to PEM in wpLibCtx for the given selection/structure, then
+ * decode it back via the wolfProvider decoder. The decoded key signs a
+ * message that the original public key must verify. */
+int test_mldsa_encode_decode(void* data)
+{
+    static const unsigned char msg[24] = "mldsa-encode-decode-msg!";
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    EVP_PKEY* privDec = NULL;
+    EVP_PKEY* pubDec = NULL;
+    OSSL_ENCODER_CTX* ectx = NULL;
+    OSSL_DECODER_CTX* dctx = NULL;
+    unsigned char* privPem = NULL;
+    unsigned char* pubPem = NULL;
+    const unsigned char* p = NULL;
+    size_t privPemLen = 0;
+    size_t pubPemLen = 0;
+    unsigned char* sig = NULL;
+    size_t sigLen = 0;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        const mldsa_test_level* lvl = &mldsa_levels[i];
+        PRINT_MSG("Encode/decode %s", lvl->name);
+
+        err = mldsa_keygen(lvl->name, &k);
+
+        /* Private-key PEM (PrivateKeyInfo) round-trip. */
+        if (err == 0) {
+            ectx = OSSL_ENCODER_CTX_new_for_pkey(k,
+                EVP_PKEY_KEYPAIR, "PEM", "PrivateKeyInfo", NULL);
+            err = (ectx == NULL);
+        }
+        if (err == 0) {
+            err = OSSL_ENCODER_to_data(ectx, &privPem, &privPemLen) != 1;
+            if (err) PRINT_ERR_MSG("Private PEM encode failed");
+        }
+        if (err == 0) {
+            p = privPem;
+            dctx = OSSL_DECODER_CTX_new_for_pkey(&privDec, "PEM", NULL,
+                lvl->name, EVP_PKEY_KEYPAIR, wpLibCtx, NULL);
+            err = (dctx == NULL);
+        }
+        if (err == 0) {
+            err = OSSL_DECODER_from_data(dctx, &p, &privPemLen) != 1;
+            if (err) PRINT_ERR_MSG("Private PEM decode failed");
+        }
+        if (err == 0) {
+            err = (privDec == NULL);
+        }
+        if (err == 0) {
+            err = mldsa_dsign_short(privDec, msg, sizeof(msg), &sig, &sigLen);
+            if (err) PRINT_ERR_MSG("Sign with decoded private key failed");
+        }
+        if (err == 0) {
+            err = mldsa_verify_msg(k, msg, sizeof(msg), sig, sigLen) != 1;
+            if (err) PRINT_ERR_MSG("Decoded private key sig did not verify");
+        }
+        OSSL_ENCODER_CTX_free(ectx); ectx = NULL;
+        OSSL_DECODER_CTX_free(dctx); dctx = NULL;
+        OPENSSL_free(privPem); privPem = NULL; privPemLen = 0;
+        OPENSSL_free(sig); sig = NULL; sigLen = 0;
+
+        /* Public-key PEM (SubjectPublicKeyInfo) round-trip. */
+        if (err == 0) {
+            ectx = OSSL_ENCODER_CTX_new_for_pkey(k,
+                OSSL_KEYMGMT_SELECT_PUBLIC_KEY, "PEM", "SubjectPublicKeyInfo",
+                NULL);
+            err = (ectx == NULL);
+        }
+        if (err == 0) {
+            err = OSSL_ENCODER_to_data(ectx, &pubPem, &pubPemLen) != 1;
+            if (err) PRINT_ERR_MSG("Public PEM encode failed");
+        }
+        if (err == 0) {
+            p = pubPem;
+            dctx = OSSL_DECODER_CTX_new_for_pkey(&pubDec, "PEM", NULL,
+                lvl->name, OSSL_KEYMGMT_SELECT_PUBLIC_KEY, wpLibCtx, NULL);
+            err = (dctx == NULL);
+        }
+        if (err == 0) {
+            err = OSSL_DECODER_from_data(dctx, &p, &pubPemLen) != 1;
+            if (err) PRINT_ERR_MSG("Public PEM decode failed");
+        }
+        if (err == 0) {
+            err = (pubDec == NULL);
+        }
+        /* Sign with the original private key, verify with the decoded pub. */
+        if (err == 0) {
+            err = mldsa_dsign_short(k, msg, sizeof(msg), &sig, &sigLen);
+        }
+        if (err == 0) {
+            err = mldsa_verify_msg(pubDec, msg, sizeof(msg), sig, sigLen) != 1;
+            if (err) PRINT_ERR_MSG("Decoded public key did not verify sig");
+        }
+
+        OSSL_ENCODER_CTX_free(ectx); ectx = NULL;
+        OSSL_DECODER_CTX_free(dctx); dctx = NULL;
+        OPENSSL_free(pubPem); pubPem = NULL; pubPemLen = 0;
+        OPENSSL_free(sig); sig = NULL; sigLen = 0;
+        EVP_PKEY_free(privDec); privDec = NULL;
+        EVP_PKEY_free(pubDec); pubDec = NULL;
+        EVP_PKEY_free(k); k = NULL;
+    }
+    return err;
+}
+
+/* Build a minimal self-signed X509 with an ML-DSA key, sign it via the
+ * provider (driving the signature AlgorithmIdentifier), and verify it. */
+int test_mldsa_x509_sign_verify(void* data)
+{
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    X509* cert = NULL;
+    EVP_MD_CTX* mdctx = NULL;
+    X509_NAME* name = NULL;
+    ASN1_INTEGER* serial = NULL;
+    int rc;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        const mldsa_test_level* lvl = &mldsa_levels[i];
+        PRINT_MSG("X509 sign/verify %s", lvl->name);
+
+        err = mldsa_keygen(lvl->name, &k);
+        if (err == 0) {
+            cert = X509_new();
+            err = (cert == NULL);
+        }
+        if (err == 0) {
+            err = X509_set_version(cert, 2) != 1;
+        }
+        if (err == 0) {
+            serial = ASN1_INTEGER_new();
+            err = (serial == NULL) || (ASN1_INTEGER_set(serial, 1) != 1)
+                || (X509_set_serialNumber(cert, serial) != 1);
+        }
+        if (err == 0) {
+            err = (X509_gmtime_adj(X509_getm_notBefore(cert), 0) == NULL);
+        }
+        if (err == 0) {
+            err = (X509_gmtime_adj(X509_getm_notAfter(cert),
+                60L * 60L * 24L) == NULL);
+        }
+        if (err == 0) {
+            err = X509_set_pubkey(cert, k) != 1;
+        }
+        if (err == 0) {
+            name = X509_get_subject_name(cert);
+            err = (name == NULL) || (X509_NAME_add_entry_by_txt(name, "CN",
+                MBSTRING_ASC, (const unsigned char*)"mldsa-test", -1, -1, 0)
+                != 1);
+        }
+        if (err == 0) {
+            err = X509_set_issuer_name(cert, name) != 1;
+        }
+        if (err == 0) {
+            mdctx = EVP_MD_CTX_new();
+            err = (mdctx == NULL);
+        }
+        if (err == 0) {
+            err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, k,
+                NULL) != 1;
+        }
+        if (err == 0) {
+            rc = X509_sign_ctx(cert, mdctx);
+            err = (rc <= 0);
+            if (err) PRINT_ERR_MSG("X509_sign_ctx failed");
+        }
+        if (err == 0) {
+            err = X509_verify(cert, k) != 1;
+            if (err) PRINT_ERR_MSG("X509_verify failed");
+        }
+
+        ASN1_INTEGER_free(serial); serial = NULL;
+        EVP_MD_CTX_free(mdctx); mdctx = NULL;
+        X509_free(cert); cert = NULL;
+        EVP_PKEY_free(k); k = NULL;
+    }
     return err;
 }
 

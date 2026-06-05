@@ -497,6 +497,7 @@ int test_mlkem_match(void *data);
 int test_mlkem_decap_size_query(void *data);
 int test_mlkem_get_params(void *data);
 int test_mlkem_import_mismatched_pubpriv(void *data);
+int test_mlx_encap_decap(void *data);
 #endif
 
 #ifdef WP_HAVE_MLDSA
@@ -515,6 +516,8 @@ int test_mldsa_digest_sign_init_rejects_md(void *data);
 int test_mldsa_import_mismatched_pubpriv(void *data);
 int test_mldsa_empty_message(void *data);
 int test_mldsa_reinit_null_key(void *data);
+int test_mldsa_encode_decode(void *data);
+int test_mldsa_x509_sign_verify(void *data);
 #endif
 
 #endif /* UNIT_H */

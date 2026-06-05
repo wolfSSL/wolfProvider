@@ -499,6 +499,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mlkem_decap_size_query, NULL),
     TEST_DECL(test_mlkem_get_params, NULL),
     TEST_DECL(test_mlkem_import_mismatched_pubpriv, NULL),
+    TEST_DECL(test_mlx_encap_decap, NULL),
 #endif
 
 #ifdef WP_HAVE_MLDSA
@@ -517,6 +518,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mldsa_import_mismatched_pubpriv, NULL),
     TEST_DECL(test_mldsa_empty_message, NULL),
     TEST_DECL(test_mldsa_reinit_null_key, NULL),
+    TEST_DECL(test_mldsa_encode_decode, NULL),
+    TEST_DECL(test_mldsa_x509_sign_verify, NULL),
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
