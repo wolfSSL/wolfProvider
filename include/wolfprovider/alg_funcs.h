@@ -181,9 +181,9 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_SECP384R1MLKEM1024 "SecP384r1MLKEM1024"
 
 /* ML-DSA names (NIST FIPS 204). */
-#define WP_NAMES_ML_DSA_44      "ML-DSA-44"
-#define WP_NAMES_ML_DSA_65      "ML-DSA-65"
-#define WP_NAMES_ML_DSA_87      "ML-DSA-87"
+#define WP_NAMES_ML_DSA_44      "ML-DSA-44:MLDSA44:2.16.840.1.101.3.4.3.17:id-ml-dsa-44"
+#define WP_NAMES_ML_DSA_65      "ML-DSA-65:MLDSA65:2.16.840.1.101.3.4.3.18:id-ml-dsa-65"
+#define WP_NAMES_ML_DSA_87      "ML-DSA-87:MLDSA87:2.16.840.1.101.3.4.3.19:id-ml-dsa-87"
 
 /* DRBG names. */
 #define WP_NAMES_SEED_SRC       "SEED-SRC"
