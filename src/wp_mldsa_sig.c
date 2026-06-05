@@ -355,8 +355,6 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_sign");
 
-    (void)sigSize;
-
     if ((ctx == NULL) || (ctx->mldsa == NULL) || (sigLen == NULL)) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
@@ -376,7 +374,12 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
         return 1;
     }
-    if (*sigLen < sigSz) {
+    /* sigSize is the authoritative buffer capacity; fall back to *sigLen only
+     * when the dispatcher passes SIZE_MAX (matching wp_ecx_sig). */
+    if (sigSize == (size_t)-1) {
+        sigSize = *sigLen;
+    }
+    if (sigSize < sigSz) {
         ok = 0;
     }
     /* wolfSSL's ML-DSA API takes a 32-bit message length. Reject >4 GiB

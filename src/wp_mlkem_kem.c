@@ -250,6 +250,10 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         *outLen = ctSize;
         *secretLen = ssSize;
     }
+    else if (secret != NULL) {
+        /* Scrub any shared secret wolfSSL may have written before failing. */
+        wc_ForceZero(secret, ssSize);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -312,6 +316,10 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
     }
     if (ok) {
         *outLen = ssSize;
+    }
+    else {
+        /* Scrub any shared secret wolfSSL may have written before failing. */
+        wc_ForceZero(out, ssSize);
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;

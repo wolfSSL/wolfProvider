@@ -699,6 +699,13 @@ static int wp_mlx_load_keys(wp_Mlx* mlx, const unsigned char* pub,
                 rc = wc_ecc_import_private_key_ex(priv + classicalOff,
                     mlx->data->classicalPrivSize, NULL, 0, &mlx->classical.ecc,
                     mlx->data->curveId);
+                if (rc == 0) {
+                    /* A private-only ECC import leaves the key without a
+                     * public point; derive it so the hybrid public can be
+                     * exported (curve25519 derives its public lazily on
+                     * export, so it needs no equivalent step). */
+                    rc = wc_ecc_make_pub(&mlx->classical.ecc, NULL);
+                }
             }
             if (rc != 0) {
                 ok = 0;
