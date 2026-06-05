@@ -54,9 +54,12 @@ if [ "$WOLFPROV_SEED_SRC" = "1" ]; then
 fi
 
 # Enable ML-KEM and ML-DSA in wolfSSL when --enable-pqc is requested.
-# Use the canonical FIPS 203 / FIPS 204 flag names.
-if [ "$WOLFPROV_PQC" = "1" ]; then
-    WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS} --enable-mlkem --enable-mldsa"
+# Use the canonical FIPS 203 / FIPS 204 flag names, per requested algorithm.
+if [ "$WOLFPROV_MLKEM" = "1" ]; then
+    WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS} --enable-mlkem"
+fi
+if [ "$WOLFPROV_MLDSA" = "1" ]; then
+    WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS} --enable-mldsa"
 fi
 
 WOLFSSL_DEBUG_ASN_TEMPLATE=${DWOLFSSL_DEBUG_ASN_TEMPLATE:-0}

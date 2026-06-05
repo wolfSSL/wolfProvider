@@ -27,6 +27,7 @@
 #endif
 #include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/settings.h>
+#include <openssl/opensslv.h>
 
 /* wc_RNG_DRBG_Reseed is only reliably exported in non-FIPS >= 5.7.2 and FIPS
  * v6+. FIPS v5.x bundles are inconsistent (some keep it WOLFSSL_LOCAL), so use
@@ -183,41 +184,64 @@
 #ifdef HAVE_ED448
      #define WP_HAVE_ED448
 #endif
-/* Gate on both the wolfSSL feature macro AND header availability. The
- * canonical post-rename names (WOLFSSL_HAVE_MLKEM / WOLFSSL_HAVE_MLDSA and
- * wc_mlkem.h / wc_mldsa.h) are required. Older wolfSSL releases that only
- * exposed the pre-standardization names (HAVE_DILITHIUM, dilithium.h) are
- * intentionally treated as PQC-absent here so that wolfProvider only ever
- * builds against the canonical FIPS 203 / FIPS 204 surface. */
-#ifdef WOLFSSL_HAVE_MLKEM
-    #if defined(__has_include)
-        #if __has_include(<wolfssl/wolfcrypt/wc_mlkem.h>)
-            #define WP_HAVE_MLKEM
-            #define WP_HAVE_ML_KEM_512
-            #define WP_HAVE_ML_KEM_768
-            #define WP_HAVE_ML_KEM_1024
-        #endif
-    #else
-        #define WP_HAVE_MLKEM
-        #define WP_HAVE_ML_KEM_512
-        #define WP_HAVE_ML_KEM_768
-        #define WP_HAVE_ML_KEM_1024
+/* PQC is opt-in and per-algorithm: ML-KEM is compiled only when
+ * build-wolfprovider.sh --enable-mlkem / --enable-pqc defines
+ * WOLFPROV_HAVE_MLKEM, and ML-DSA only when --enable-mldsa / --enable-pqc
+ * defines WOLFPROV_HAVE_MLDSA. Without those flags no PQC code is built
+ * regardless of what the linked wolfSSL enables. Each also requires the
+ * canonical wolfSSL header (wc_mlkem.h / wc_mldsa.h; older wolfSSL exposing
+ * only dilithium.h is treated as PQC-absent) and OpenSSL >= 3.6: OpenSSL 3.5
+ * has the algorithms but not the seed, ikme, security-category and FIPS 204
+ * signature message params wolfProvider uses, which arrived in 3.6. To support
+ * OpenSSL 3.5 later, add param-name fallbacks and lower this floor. The build
+ * script enforces these version floors so a wrong version is an explicit error
+ * rather than a silent no-op. */
+#if !defined(__has_include)
+    #define WP_MLKEM_HEADER
+    #define WP_MLDSA_HEADER
+#else
+    #if __has_include(<wolfssl/wolfcrypt/wc_mlkem.h>)
+        #define WP_MLKEM_HEADER
+    #endif
+    #if __has_include(<wolfssl/wolfcrypt/wc_mldsa.h>)
+        #define WP_MLDSA_HEADER
     #endif
 #endif
-#ifdef WOLFSSL_HAVE_MLDSA
-    #if defined(__has_include)
-        #if __has_include(<wolfssl/wolfcrypt/wc_mldsa.h>)
-            #define WP_HAVE_MLDSA
-            #define WP_HAVE_ML_DSA_44
-            #define WP_HAVE_ML_DSA_65
-            #define WP_HAVE_ML_DSA_87
-        #endif
-    #else
-        #define WP_HAVE_MLDSA
-        #define WP_HAVE_ML_DSA_44
-        #define WP_HAVE_ML_DSA_65
-        #define WP_HAVE_ML_DSA_87
-    #endif
+/* wolfSSL must be master or v5.9.2-stable+: a release newer than v5.9.1, or a
+ * dev build carrying wc_mldsa.h. wc_mldsa.h is the deliberate post-v5.9.1
+ * marker for BOTH algorithms because the PQC seed/message API and that header
+ * shipped together after v5.9.1; master still reports the v5.9.1 version hex,
+ * so the hex check alone cannot tell them apart. wc_mlkem.h is NOT used here:
+ * it already exists in v5.9.1, so it cannot mark "newer than v5.9.1". An
+ * ML-KEM-only build against a wolfSSL stripped of wc_mldsa.h fails closed with
+ * the #error below, which is the safe outcome. */
+#if (LIBWOLFSSL_VERSION_HEX > 0x05009001L) || defined(WP_MLDSA_HEADER)
+    #define WP_WOLFSSL_PQC_CAPABLE
+#endif
+#if defined(WOLFPROV_HAVE_MLKEM) && defined(WOLFSSL_HAVE_MLKEM) && \
+    defined(WP_MLKEM_HEADER) && defined(WP_WOLFSSL_PQC_CAPABLE) && \
+    (OPENSSL_VERSION_NUMBER >= 0x30600000L)
+    #define WP_HAVE_MLKEM
+    #define WP_HAVE_ML_KEM_512
+    #define WP_HAVE_ML_KEM_768
+    #define WP_HAVE_ML_KEM_1024
+#endif
+#if defined(WOLFPROV_HAVE_MLDSA) && defined(WOLFSSL_HAVE_MLDSA) && \
+    defined(WP_MLDSA_HEADER) && defined(WP_WOLFSSL_PQC_CAPABLE) && \
+    (OPENSSL_VERSION_NUMBER >= 0x30600000L)
+    #define WP_HAVE_MLDSA
+    #define WP_HAVE_ML_DSA_44
+    #define WP_HAVE_ML_DSA_65
+    #define WP_HAVE_ML_DSA_87
+#endif
+/* Fail loudly if PQC was requested but the prerequisites are missing, so a
+ * direct ./configure (bypassing the build script's version gate) does not
+ * silently produce a non-PQC build. */
+#if defined(WOLFPROV_HAVE_MLKEM) && !defined(WP_HAVE_MLKEM)
+    #error "ML-KEM requested but unavailable: needs OpenSSL >= 3.6 and wolfSSL master or v5.9.2-stable+ with ML-KEM."
+#endif
+#if defined(WOLFPROV_HAVE_MLDSA) && !defined(WP_HAVE_MLDSA)
+    #error "ML-DSA requested but unavailable: needs OpenSSL >= 3.6 and wolfSSL master or v5.9.2-stable+ with ML-DSA."
 #endif
 #if !defined(NO_AES_CBC) && (defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC))
     #define WP_HAVE_KBKDF

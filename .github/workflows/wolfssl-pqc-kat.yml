@@ -89,7 +89,7 @@ jobs:
               --arg upstream "$UPSTREAM" \
               --arg fork "$FORK" \
               --argjson latest_pqc "$LATEST_PQC" '
-            def rows($git; $ref; $pqc; $label):
+            def rows($git; $ref; $pqc; $lbl):
               if $pqc then
                 [ {"replace":true,"ff":"WOLFPROV_FORCE_FAIL=1",
                    "sfx":" [replace-default] [force-fail]"},
@@ -97,11 +97,11 @@ jobs:
                   {"replace":false,"ff":"WOLFPROV_FORCE_FAIL=1",
                    "sfx":" [non-replace] [force-fail]"},
                   {"replace":false,"ff":"","sfx":" [non-replace]"} ]
-                | map({"name":($label+.sfx),"wolfssl-git":$git,
+                | map({"name":($lbl+.sfx),"wolfssl-git":$git,
                        "wolfssl-ref":$ref,"pqc":true,"replace":.replace,
                        "force_fail":.ff})
               else
-                [ {"name":($label+" [build-only]"),"wolfssl-git":$git,
+                [ {"name":($lbl+" [build-only]"),"wolfssl-git":$git,
                    "wolfssl-ref":$ref,"pqc":false,"replace":false,
                    "force_fail":""} ]
               end;
@@ -150,13 +150,10 @@ jobs:
         shell: bash
         run: |
           set +e
+          # The build step already built the provider with --enable-pqc; the KAT
+          # only runs against it (no rebuild). Force-fail is a runtime env var.
           export ${{ matrix.force_fail }}
-          WOLFPROV_CLEAN=0 \
-          WOLFPROV_REPLACE_DEFAULT=${{ matrix.replace && '1' || '0' }} \
-          WOLFSSL_GIT=${{ matrix.wolfssl-git }} \
-          OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
-          WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
-            ./scripts/test-pqc-kat.sh
+          ./scripts/test-pqc-kat.sh
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
             $TEST_RESULT "${{ matrix.force_fail }}" pqc-kat

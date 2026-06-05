@@ -32,8 +32,9 @@ show_help() {
   echo "  --debug-silent             Debug logging compiled in but silent by default. Use WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS env vars to enable at runtime. Requires --debug."
   echo "  --enable-seed-src          Enable SEED-SRC entropy source with /dev/urandom caching for fork-safe entropy."
   echo "                             Note: This also enables WC_RNG_SEED_CB in wolfSSL."
-  echo "  --enable-pqc               Build wolfSSL with ML-KEM and ML-DSA post-quantum algorithms enabled."
-  echo "                             Adds --enable-mlkem --enable-mldsa to wolfSSL configure."
+  echo "  --enable-pqc               Enable both ML-KEM and ML-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)."
+  echo "  --enable-mlkem             Enable ML-KEM only."
+  echo "  --enable-mldsa             Enable ML-DSA only."
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -53,7 +54,9 @@ show_help() {
   echo "  WOLFPROV_FIPS_BASELINE     If set to 1, applies FIPS baseline patch to OpenSSL (mutually exclusive with WOLFPROV_REPLACE_DEFAULT)"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
   echo "  WOLFPROV_SEED_SRC          If set to 1, enables SEED-SRC with /dev/urandom caching (also enables WC_RNG_SEED_CB in wolfSSL)"
-  echo "  WOLFPROV_PQC               If set to 1, enables ML-KEM and ML-DSA post-quantum algorithms in wolfSSL"
+  echo "  WOLFPROV_PQC               If set to 1, enables both ML-KEM and ML-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)"
+  echo "  WOLFPROV_MLKEM             If set to 1, enables ML-KEM only"
+  echo "  WOLFPROV_MLDSA             If set to 1, enables ML-DSA only"
   echo ""
 }
 
@@ -150,7 +153,14 @@ for arg in "$@"; do
             WOLFPROV_SEED_SRC=1
             ;;
         --enable-pqc)
-            WOLFPROV_PQC=1
+            WOLFPROV_MLKEM=1
+            WOLFPROV_MLDSA=1
+            ;;
+        --enable-mlkem)
+            WOLFPROV_MLKEM=1
+            ;;
+        --enable-mldsa)
+            WOLFPROV_MLDSA=1
             ;;
         *)
             args_wrong+="$arg, "
@@ -195,6 +205,29 @@ if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && [ "$WOLFPROV_FIPS_BASELINE" = "1" ];
     exit 1
 fi
 
+# Normalize the PQC flags before any build path reads them. WOLFPROV_PQC is the
+# legacy "both algorithms" switch (also a documented env var); WOLFPROV_MLKEM /
+# WOLFPROV_MLDSA are the per-algorithm switches. Keep them consistent in both
+# directions so either form works.
+if [ "$WOLFPROV_PQC" = "1" ]; then
+    WOLFPROV_MLKEM=1
+    WOLFPROV_MLDSA=1
+fi
+if [ "$WOLFPROV_MLKEM" = "1" ] || [ "$WOLFPROV_MLDSA" = "1" ]; then
+    WOLFPROV_PQC=1
+fi
+
+# The Debian package path builds against the distribution OpenSSL (bookworm
+# ships 3.0.x), which has no ML-KEM/ML-DSA and is far below the 3.6 PQC floor,
+# so a PQC package cannot compile. Reject it up front rather than producing a
+# broken build. Once Debian ships OpenSSL 3.6+, PQC support here is a small
+# addition: forward the per-algorithm flags through install-wolfprov.sh and
+# debian/rules (mirroring the --debug/--fips flags).
+if [ -n "$build_debian" ] && [ "$WOLFPROV_PQC" = "1" ]; then
+    echo "ERROR: PQC (--enable-pqc/--enable-mlkem/--enable-mldsa) is not supported with --debian; the distro OpenSSL is older than the required 3.6+."
+    exit 1
+fi
+
 if [ -n "$build_debian" ]; then
     set -e
 
@@ -216,9 +249,7 @@ if [ -n "$build_debian" ]; then
     if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
         OPENSSL_OPTS+=" --replace-default"
     fi
-    if [ "$WOLFPROV_PQC" = "1" ]; then
-        WOLFSSL_OPTS+=" --enable-pqc"
-    fi
+    # PQC is rejected above for the Debian path (distro OpenSSL is < 3.6).
 
     # wolfSSL and OpenSSL are independent and must be built first
     debian/install-wolfssl.sh $WOLFSSL_OPTS --no-install -r $DEB_OUTPUT_DIR
@@ -262,11 +293,57 @@ if [ -n "$args" ]; then
     echo ""
 fi
 
+# PQC needs newer wolfSSL/OpenSSL than the repo defaults, so when PQC is
+# requested and the user has not pinned a version, default to PQC-capable ones
+# (the version gate below still enforces the floors for explicit pins).
+if [ "$WOLFPROV_PQC" = "1" ]; then
+    if [ -z "$WOLFSSL_TAG" ]; then
+        WOLFSSL_TAG=master
+        echo "PQC: defaulting WOLFSSL_TAG=master"
+    fi
+    if [ -z "$OPENSSL_TAG" ]; then
+        OPENSSL_TAG=openssl-3.6.0
+        echo "PQC: defaulting OPENSSL_TAG=openssl-3.6.0"
+    fi
+fi
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 LOG_FILE=${SCRIPT_DIR}/build-release.log
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
 
 echo "Using openssl: $OPENSSL_TAG, wolfssl: $WOLFSSL_TAG"
+
+# ML-KEM / ML-DSA need the wolfSSL FIPS 203/204 seed and message APIs that land
+# after v5.9.1-stable, and the matching OpenSSL provider params that arrive in
+# 3.6. Refuse PQC on older releases so the failure is an explicit message, not
+# an opaque missing-symbol build error. master and non -stable wolfSSL refs
+# (branches/commits) are assumed new enough.
+# 'sort -V' is GNU-only; on a host without it skip the gate (a compile-time
+# guard in settings.h still rejects too-old versions) rather than misfiring.
+if [ "$WOLFPROV_PQC" = "1" ] && ! printf '1\n2\n' | sort -V >/dev/null 2>&1; then
+    echo "WARNING: 'sort -V' unavailable; skipping PQC version check (compile-time guard still applies)."
+elif [ "$WOLFPROV_PQC" = "1" ]; then
+    PQC_MIN_WOLFSSL="v5.9.2-stable"
+    case "$WOLFSSL_TAG" in
+        v*-stable)
+            if [ "$(printf '%s\n%s\n' "$PQC_MIN_WOLFSSL" "$WOLFSSL_TAG" \
+                    | sort -V | head -n1)" != "$PQC_MIN_WOLFSSL" ]; then
+                echo "ERROR: ML-KEM/ML-DSA require wolfSSL master or ${PQC_MIN_WOLFSSL} or higher (got ${WOLFSSL_TAG})."
+                exit 1
+            fi
+            ;;
+    esac
+    PQC_MIN_OPENSSL="openssl-3.6.0"
+    case "$OPENSSL_TAG" in
+        openssl-3.*)
+            if [ "$(printf '%s\n%s\n' "$PQC_MIN_OPENSSL" "$OPENSSL_TAG" \
+                    | sort -V | head -n1)" != "$PQC_MIN_OPENSSL" ]; then
+                echo "ERROR: ML-KEM/ML-DSA require ${PQC_MIN_OPENSSL} or higher (got ${OPENSSL_TAG})."
+                exit 1
+            fi
+            ;;
+    esac
+fi
 
 init_wolfprov
 

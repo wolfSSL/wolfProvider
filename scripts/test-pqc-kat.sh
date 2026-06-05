@@ -25,8 +25,9 @@
 # The script reports a raw result: exit 0 only when every vector file passes
 # and all 2602 sub-tests ran. The caller owns force-fail interpretation: under
 # WOLFPROV_FORCE_FAIL=1 every operation fails, so this exits non-zero, and the
-# CI job inverts that via check-workflow-result.sh. Build mode (replace-default
-# or not) is selected by WOLFPROV_REPLACE_DEFAULT, honored by init_wolfprov.
+# CI job inverts that via check-workflow-result.sh. wolfProvider (replace-default
+# or not) must already be built by a prior build-wolfprovider.sh step; this
+# script does not build it, only runs the KAT against it.
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
@@ -109,7 +110,9 @@ if [ -z "${NUMCPU}" ]; then
     fi
 fi
 
-init_wolfprov
+# wolfProvider must already be built (e.g. build-wolfprovider.sh --enable-pqc).
+# This script only runs the KAT against that build; it does not rebuild, so it
+# cannot drop the opt-in PQC flags. WOLFPROV_FORCE_FAIL is honored at runtime.
 set_lib_env
 build_evp_test || exit 1
 run_pqc_kat

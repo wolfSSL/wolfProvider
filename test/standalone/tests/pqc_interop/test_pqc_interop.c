@@ -22,7 +22,8 @@
  *
  * Three independent code paths exercised against each other:
  *   1. wolfProvider (via EVP_PKEY API)
- *   2. OpenSSL default provider (native ML-KEM / ML-DSA in OpenSSL 3.5+)
+ *   2. OpenSSL default provider (native ML-KEM / ML-DSA; wolfProvider PQC
+ *      requires OpenSSL 3.6+, so this runs against the latest OpenSSL release)
  *   3. wolfSSL direct (wc_MlKemKey_* / wc_MlDsaKey_* APIs, no provider)
  *
  * For each algorithm at each NIST level, every cross-pair is tested:
