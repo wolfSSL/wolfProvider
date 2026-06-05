@@ -74,6 +74,10 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
     { 512                        , 128, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
     { 513                        , 192, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
     { 514                        , 256, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    /* Hybrid PQC groups, by IANA codepoint. TLS 1.3 only, flagged as KEMs. */
+    { 4588                       , 192, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 4587                       , 192, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 4589                       , 256, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
 #endif
 };
 
@@ -111,6 +115,11 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
  * wolfProvider registers (ML-KEM-512/768/1024). */
 #define WP_TLS_GROUP_ENTRY_MLKEM(tlsName, idx, alg)                            \
     WP_TLS_GROUP_ENTRY(tlsName, alg, idx, alg, sizeof(alg))
+
+/** Parameters for a hybrid ML-KEM group. The alg name matches the keymgmt/KEM
+ * wolfProvider registers (X25519MLKEM768, etc.). */
+#define WP_TLS_GROUP_ENTRY_MLX(name, idx)                                      \
+    WP_TLS_GROUP_ENTRY(name, name, idx, name, sizeof(name))
 
 /** Parameters for an X25519 group. Index references constant list. */
 #define WP_TLS_GROUP_ENTRY_X25519(tlsName, internalName, idx)                  \
@@ -152,6 +161,9 @@ static const OSSL_PARAM wp_param_group_list[][11] = {
     WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM512"       , 15, "ML-KEM-512" ),
     WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM768"       , 16, "ML-KEM-768" ),
     WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM1024"      , 17, "ML-KEM-1024"),
+    WP_TLS_GROUP_ENTRY_MLX(   "X25519MLKEM768"    , 18 ),
+    WP_TLS_GROUP_ENTRY_MLX(   "SecP256r1MLKEM768" , 19 ),
+    WP_TLS_GROUP_ENTRY_MLX(   "SecP384r1MLKEM1024", 20 ),
 #endif
 };
 

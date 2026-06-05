@@ -670,6 +670,12 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
       wp_mlkem768_keymgmt_functions, "" },
     { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
       wp_mlkem1024_keymgmt_functions, "" },
+    { WP_NAMES_X25519MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_x25519_keymgmt_functions, "" },
+    { WP_NAMES_SECP256R1MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_p256_keymgmt_functions, "" },
+    { WP_NAMES_SECP384R1MLKEM1024, WOLFPROV_PROPERTIES,
+      wp_mlx_p384_keymgmt_functions, "" },
 #endif
 #ifdef WP_HAVE_MLDSA
     { WP_NAMES_ML_DSA_44, WOLFPROV_PROPERTIES,
@@ -774,6 +780,12 @@ static const OSSL_ALGORITHM wolfprov_asym_kem[] = {
       wp_mlkem_asym_kem_functions, "" },
     { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
       wp_mlkem_asym_kem_functions, "" },
+    { WP_NAMES_X25519MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_asym_kem_functions, "" },
+    { WP_NAMES_SECP256R1MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_asym_kem_functions, "" },
+    { WP_NAMES_SECP384R1MLKEM1024, WOLFPROV_PROPERTIES,
+      wp_mlx_asym_kem_functions, "" },
 #endif
     { NULL, NULL, NULL, NULL }
 };
