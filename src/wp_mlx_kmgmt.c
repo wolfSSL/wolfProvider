@@ -665,6 +665,50 @@ static int wp_mlx_match(const wp_Mlx* a, const wp_Mlx* b, int selection)
 }
 
 /**
+ * Verify a supplied concatenated public key matches the public derived from
+ * the imported private key (both ML-KEM and classical components).
+ *
+ * @param [in] mlx  Hybrid key object (private already imported).
+ * @param [in] pub  Concatenated public key in slot order.
+ * @return  1 on match, 0 on mismatch or error.
+ */
+static int wp_mlx_verify_pub(wp_Mlx* mlx, const unsigned char* pub)
+{
+    int ok = 1;
+    int rc;
+    int slot = mlx->data->mlkemSlot;
+    size_t mlkemOff = (size_t)slot * mlx->data->classicalPubSize;
+    size_t classicalOff = (size_t)(1 - slot) * mlx->data->mlkemPubSize;
+    unsigned char* buf = NULL;
+    word32 len;
+
+    buf = (unsigned char*)OPENSSL_malloc((size_t)mlx->data->mlkemPubSize +
+        mlx->data->classicalPubSize);
+    if (buf == NULL) {
+        ok = 0;
+    }
+    if (ok) {
+        rc = wc_MlKemKey_EncodePublicKey(&mlx->mlkem, buf,
+            mlx->data->mlkemPubSize);
+        if ((rc != 0) || (XMEMCMP(buf, pub + mlkemOff,
+                mlx->data->mlkemPubSize) != 0)) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        len = mlx->data->classicalPubSize;
+        rc = wp_mlx_classical_export_pub(mlx, buf, &len);
+        if ((rc != 0) || (len != mlx->data->classicalPubSize) ||
+                (XMEMCMP(buf, pub + classicalOff,
+                    mlx->data->classicalPubSize) != 0)) {
+            ok = 0;
+        }
+    }
+    OPENSSL_free(buf);
+    return ok;
+}
+
+/**
  * Import hybrid key material from the concatenated (slot-order) encoding.
  *
  * @param [in, out] mlx  Hybrid key object.
@@ -710,6 +754,11 @@ static int wp_mlx_load_keys(wp_Mlx* mlx, const unsigned char* pub,
             if (rc != 0) {
                 ok = 0;
             }
+        }
+        if (ok && (pub != NULL) && !wp_mlx_verify_pub(mlx, pub)) {
+            /* Both halves supplied: reject a public that does not match the
+             * public derived from the imported private key. */
+            ok = 0;
         }
         if (ok) {
             mlx->hasPriv = 1;

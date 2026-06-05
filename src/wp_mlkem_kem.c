@@ -225,11 +225,16 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         return 0;
     }
 
-    if (ok && (*outLen < ctSize)) {
-        ok = 0;
+    /* Reject undersized buffers before the backend runs. Returning here (not
+     * falling through to the failure scrub) keeps any later wc_ForceZero in
+     * bounds, since the buffer is then proven at least ssSize. */
+    if (*outLen < ctSize) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
     }
-    if (ok && (*secretLen < ssSize)) {
-        ok = 0;
+    if (*secretLen < ssSize) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
     }
     if (ok) {
         int rc;
@@ -250,8 +255,8 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         *outLen = ctSize;
         *secretLen = ssSize;
     }
-    else if (secret != NULL) {
-        /* Scrub any shared secret wolfSSL may have written before failing. */
+    else {
+        /* Backend failed with a buffer proven >= ssSize; scrub stays in bounds. */
         wc_ForceZero(secret, ssSize);
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -301,8 +306,11 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         return 0;
     }
 
-    if (ok && (*outLen < ssSize)) {
-        ok = 0;
+    /* Reject an undersized output buffer before the backend runs, so the
+     * later failure scrub of ssSize bytes is proven in bounds. */
+    if (*outLen < ssSize) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
     }
     if (ok && (inLen != ctSize)) {
         ok = 0;
@@ -318,7 +326,7 @@ static int wp_mlkem_kem_decapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         *outLen = ssSize;
     }
     else {
-        /* Scrub any shared secret wolfSSL may have written before failing. */
+        /* Output buffer proven >= ssSize above; scrub stays in bounds. */
         wc_ForceZero(out, ssSize);
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
