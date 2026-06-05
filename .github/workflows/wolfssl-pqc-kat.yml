@@ -136,6 +136,11 @@ jobs:
           if [ "${{ matrix.pqc }}" != "true" ]; then
             ARGS=""
           fi
+          # The KAT runs OpenSSL's evp_test; replace-default builds omit it
+          # ('no-tests') unless we ask for it here.
+          if [ "${{ matrix.pqc }}" = "true" ]; then
+            ARGS="$ARGS --enable-openssl-test"
+          fi
           WOLFSSL_GIT=${{ matrix.wolfssl-git }} \
           OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
           WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \

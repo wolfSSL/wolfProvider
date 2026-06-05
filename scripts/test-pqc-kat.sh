@@ -39,19 +39,16 @@ VECTOR_DIR=${OPENSSL_SOURCE_DIR}/test/recipes/30-test_evp_data
 EVP_TEST=${OPENSSL_TEST}/evp_test
 EXPECTED_TESTS=2602
 
-build_evp_test() {
+require_evp_test() {
     if [ -x "${EVP_TEST}" ]; then
         return 0
     fi
-    # 'no-tests' only drops test programs from the default build; the Makefile
-    # still has the rule, so this one target builds with no reconfigure and
-    # the replace-default patch (in the source files) stays intact.
-    printf "Building evp_test ...\n"
-    (cd ${OPENSSL_SOURCE_DIR} && make -j${NUMCPU:-4} test/evp_test >/dev/null 2>&1)
-    if [ ! -x "${EVP_TEST}" ]; then
-        printf "ERROR: failed to build evp_test\n"
-        return 1
-    fi
+    # evp_test must come from the OpenSSL build. A replace-default build omits
+    # OpenSSL's test suite ('no-tests') unless --enable-openssl-test was passed;
+    # non-replace builds include it by default.
+    printf "ERROR: evp_test not found at %s\n" "${EVP_TEST}"
+    printf "       Build with: build-wolfprovider.sh --enable-pqc --enable-openssl-test\n"
+    return 1
 }
 
 # Make the runtime linker find libwolfprov, mirroring scripts/env-setup.
@@ -114,6 +111,6 @@ fi
 # This script only runs the KAT against that build; it does not rebuild, so it
 # cannot drop the opt-in PQC flags. WOLFPROV_FORCE_FAIL is honored at runtime.
 set_lib_env
-build_evp_test || exit 1
+require_evp_test || exit 1
 run_pqc_kat
 exit $?

@@ -35,6 +35,7 @@ show_help() {
   echo "  --enable-pqc               Enable both ML-KEM and ML-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)."
   echo "  --enable-mlkem             Enable ML-KEM only."
   echo "  --enable-mldsa             Enable ML-DSA only."
+  echo "  --enable-openssl-test      Build OpenSSL with its test suite (e.g. evp_test). For CI that runs OpenSSL's own tests."
   echo ""
   echo "Environment Variables:"
   echo "  OPENSSL_TAG                OpenSSL tag to use (e.g., openssl-3.5.0)"
@@ -161,6 +162,9 @@ for arg in "$@"; do
             ;;
         --enable-mldsa)
             WOLFPROV_MLDSA=1
+            ;;
+        --enable-openssl-test)
+            WOLFPROV_OPENSSL_TEST=1
             ;;
         *)
             args_wrong+="$arg, "
