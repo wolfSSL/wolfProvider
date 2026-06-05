@@ -177,6 +177,22 @@ void* wp_mldsa_get_key(wp_MlDsa* mldsa)
 }
 
 /**
+ * Get the ML-DSA parameter level (WC_ML_DSA_44/65/87) for the key.
+ *
+ * @param [in] mldsa  ML-DSA key object.
+ * @return  Level value, or 0 when not available.
+ */
+int wp_mldsa_get_level(wp_MlDsa* mldsa)
+{
+    int level = 0;
+
+    if ((mldsa != NULL) && (mldsa->data != NULL)) {
+        level = mldsa->data->level;
+    }
+    return level;
+}
+
+/**
  * Get the maximum signature size for the key.
  *
  * @param [in] mldsa  ML-DSA key object.

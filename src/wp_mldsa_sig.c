@@ -626,20 +626,79 @@ static int wp_mldsa_verify_message_final(wp_MlDsaSigCtx* ctx,
     return ok;
 }
 
-/* No supported params; OSSL contract is unconditional success. */
+/* DER AlgorithmIdentifier (SEQUENCE { OID }) for each ML-DSA level. ML-DSA
+ * signature algorithms carry no parameters, so the encoding is a fixed
+ * 13-byte sequence differing only in the final OID arc (17/18/19). */
+static const byte wp_mldsa44_aid[] = {
+    0x30, 0x0b, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03,
+    0x11
+};
+static const byte wp_mldsa65_aid[] = {
+    0x30, 0x0b, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03,
+    0x12
+};
+static const byte wp_mldsa87_aid[] = {
+    0x30, 0x0b, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03,
+    0x13
+};
+
+/* Set the X.509 signature AlgorithmIdentifier for the key's ML-DSA level. */
+static int wp_mldsa_get_alg_id(wp_MlDsaSigCtx* ctx, OSSL_PARAM* p)
+{
+    int ok = 1;
+    int level = wp_mldsa_get_level(ctx->mldsa);
+    const byte* aid = NULL;
+    size_t aidLen = 0;
+
+    if (level == WC_ML_DSA_44) {
+        aid = wp_mldsa44_aid;
+        aidLen = sizeof(wp_mldsa44_aid);
+    }
+    else if (level == WC_ML_DSA_65) {
+        aid = wp_mldsa65_aid;
+        aidLen = sizeof(wp_mldsa65_aid);
+    }
+    else if (level == WC_ML_DSA_87) {
+        aid = wp_mldsa87_aid;
+        aidLen = sizeof(wp_mldsa87_aid);
+    }
+    else {
+        ok = 0;
+    }
+    if (ok && !OSSL_PARAM_set_octet_string(p, aid, aidLen)) {
+        ok = 0;
+    }
+    return ok;
+}
+
+/* Provides the X.509 signature AlgorithmIdentifier so certificate and other
+ * structure signing (ASN1_item_sign_ctx) can build the signatureAlgorithm. */
 static int wp_mldsa_get_ctx_params(wp_MlDsaSigCtx* ctx, OSSL_PARAM* params)
 {
+    int ok = 1;
+    OSSL_PARAM* p;
+
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_get_ctx_params");
-    (void)ctx;
-    (void)params;
-    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-    return 1;
+
+    if (ctx == NULL) {
+        ok = 0;
+    }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
+        if (p != NULL) {
+            ok = wp_mldsa_get_alg_id(ctx, p);
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 static const OSSL_PARAM* wp_mldsa_gettable_ctx_params(wp_MlDsaSigCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
     static const OSSL_PARAM wp_mldsa_gettable[] = {
+        OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_ALGORITHM_ID, NULL, 0),
         OSSL_PARAM_END
     };
     (void)ctx;
