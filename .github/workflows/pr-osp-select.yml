@@ -2,13 +2,13 @@ name: PR OSP (label-selected)
 
 # Run any nightly OSP / sweep job on a PR by adding a label. Toggle a
 # single job with `ci:<name>` (e.g. ci:hostap), or every job with
-# `ci:all`. Remove the label to stop running it. Nothing runs without a
-# label, so a normal PR is unaffected. workflow_dispatch `jobs` input is
-# the off-PR equivalent (space list, or "all").
+# `ci:all`. Fires only on label change (not on push) so unlabeled PRs
+# show zero rows; re-toggle the label or hit Re-run to re-run after a
+# push. workflow_dispatch `jobs` input is the off-PR equivalent.
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [labeled, unlabeled]
   workflow_dispatch:
     inputs:
       jobs:

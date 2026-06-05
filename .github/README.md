@@ -75,11 +75,13 @@ per-app workflows stay untouched.
 `<name>` is the job key in the table below (the workflow base name, e.g.
 `hostap`, `openssl-version`, `multi-compiler` → `nightly-multi-compiler.yml`).
 
-Add a label and the suite re-runs automatically (the workflow triggers
-on `labeled`/`unlabeled` as well as push). Remove the label to stop
-running it on the next push. Each unselected job shows as *skipped* in
-the checks list, so the toggles are visible at a glance. When you're
-done validating, drop the labels — nothing to revert in the tree.
+The dispatcher fires **only on label change** (`labeled`/`unlabeled`),
+not on push — so an unlabeled PR shows zero `PR OSP` rows. Add a label
+and the selected job starts; the unselected jobs show as *skipped*
+(neutral, non-blocking, collapsed under "skipped checks"). After
+pushing a fix while a label is on, re-run by toggling the label off and
+on again (or hit "Re-run" on the run). When you're done validating,
+drop the labels — nothing to revert in the tree.
 
 Off-PR equivalent (runs against a branch, no labels):
 
