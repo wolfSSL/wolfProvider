@@ -1,7 +1,7 @@
 # wolfProvider CI
 
 This directory holds the GitHub Actions configuration for wolfProvider —
-54 workflows organized into three tiers: per-PR checks (fast feedback),
+55 workflows organized into three tiers: per-PR checks (fast feedback),
 a nightly OSP suite (heavy integration), and reusable building blocks
 that the other two compose.
 
@@ -58,6 +58,39 @@ Running the full set on every PR push would burn ~60–90 min of CI per
 push and dominate the merge queue. Nightly is the right cadence for
 catching regressions in third-party integration that wouldn't show up
 in our unit tests.
+
+### Running a nightly job on a PR (label toggles)
+
+`pr-osp-select.yml` lets you pull any nightly job into a PR on demand —
+to fix or validate it before it has to wait for the next nightly. You
+toggle jobs with **labels**, not code edits; `nightly-osp.yml` and the
+per-app workflows stay untouched.
+
+| Label | Effect |
+|-------|--------|
+| `ci:<name>` | Run that one job (e.g. `ci:hostap`, `ci:curl`, `ci:static-analysis`). Add several to run several. |
+| `ci:all` | Run the whole fan-out (all 43 jobs). |
+| (no label) | Nothing runs — a normal PR is unaffected. |
+
+`<name>` is the job key in the table below (the workflow base name, e.g.
+`hostap`, `openssl-version`, `multi-compiler` → `nightly-multi-compiler.yml`).
+
+Add a label and the suite re-runs automatically (the workflow triggers
+on `labeled`/`unlabeled` as well as push). Remove the label to stop
+running it on the next push. Each unselected job shows as *skipped* in
+the checks list, so the toggles are visible at a glance. When you're
+done validating, drop the labels — nothing to revert in the tree.
+
+Off-PR equivalent (runs against a branch, no labels):
+
+```bash
+gh workflow run pr-osp-select.yml --ref <branch> -f jobs="hostap curl"
+gh workflow run pr-osp-select.yml --ref <branch> -f jobs="all"
+```
+
+> Adding a brand-new OSP workflow? Append a matching label block to
+> `pr-osp-select.yml` (same `needs: select` + `if:` pattern) so it's
+> reachable via `ci:<name>`.
 
 ### What runs in the nightly fan-out
 
@@ -267,5 +300,5 @@ for review).
 │   ├── docker/                    Dockerfiles used by ad-hoc jobs
 │   ├── qtbase/                    qt5network5 helpers
 │   └── x11vnc/                    x11vnc helpers
-└── workflows/                 54 workflow YAMLs (see tables above)
+└── workflows/                 55 workflow YAMLs (see tables above)
 ```
