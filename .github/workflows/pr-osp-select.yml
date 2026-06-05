@@ -2,9 +2,10 @@ name: PR OSP (label-selected)
 
 # Run any nightly OSP / sweep job on a PR by adding a label. Add
 # `ci:<name>` (e.g. ci:hostap) to run that job, or `ci:all` for the
-# whole set. Each label add runs only that job, so adding several at
-# once gives one clean run per job with no duplication. Re-add a label
-# to re-run after a push. workflow_dispatch `jobs` input is the off-PR
+# whole set. Add several at once and they all run in ONE workflow run:
+# the burst of label events collapses (cancel-in-progress) to a single
+# run whose select reads every current ci:* label. Re-add a label to
+# re-run after a push. workflow_dispatch `jobs` input is the off-PR
 # equivalent (space list, or "all").
 
 on:
@@ -23,8 +24,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: pr-osp-select-${{ github.ref }}-${{ github.event.label.name }}
-  cancel-in-progress: false
+  group: pr-osp-select-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   select:
@@ -34,13 +35,15 @@ jobs:
     steps:
       - id: p
         env:
-          LABEL: ${{ github.event.label.name }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
           DISPATCH: ${{ github.event.inputs.jobs }}
         run: |
           sel=""
-          case "$LABEL" in
-            ci:*) sel="${LABEL#ci:}" ;;
-          esac
+          for l in $LABELS; do
+            case "$l" in
+              ci:*) sel="$sel ${l#ci:}" ;;
+            esac
+          done
           [ -n "$DISPATCH" ] && sel="$sel $DISPATCH"
           echo "run= $sel " >> "$GITHUB_OUTPUT"
 
