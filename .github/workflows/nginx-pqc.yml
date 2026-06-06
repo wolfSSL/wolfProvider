@@ -55,20 +55,37 @@ jobs:
           echo "Latest stable wolfSSL: $LATEST"
           echo "Latest OpenSSL: $OSSL"
           echo "openssl-tag=$OSSL" >> "$GITHUB_OUTPUT"
-          # Only PQC-eligible wolfSSL: the latest -stable (>= v5.9.2-stable) and
-          # master, each in normal and force-fail anti-test mode. The matrix
-          # owns the force-fail axis; the test step hands its raw result to
-          # check-workflow-result.sh which inverts the expectation.
-          MATRIX=$(jq -nc --arg latest "$LATEST" '{
-            include: [
-              {"name":("latest stable (" + $latest + ")"),
-               "wolfssl-ref":$latest,"force_fail":""},
-              {"name":("latest stable (" + $latest + ") [force-fail]"),
-               "wolfssl-ref":$latest,"force_fail":"WOLFPROV_FORCE_FAIL=1"},
-              {"name":"master","wolfssl-ref":"master","force_fail":""},
-              {"name":"master [force-fail]",
-               "wolfssl-ref":"master","force_fail":"WOLFPROV_FORCE_FAIL=1"}
-            ]
+          # PQC needs the wc_MlDsaKey_* seed/message API that lands after
+          # v5.9.1-stable, so the floor is v5.9.2-stable. master is always
+          # eligible; the latest -stable row is only added once it is past the
+          # floor (i.e. v5.9.2-stable+ is released). Until then only master
+          # runs -- a pre-floor -stable would just fail the --enable-pqc gate.
+          PQC_FLOOR="v5.9.1-stable"
+          if [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$LATEST" \
+                  | sort -V | tail -n1)" != "$PQC_FLOOR" ]; then
+            LATEST_PQC_ELIGIBLE=true
+          else
+            LATEST_PQC_ELIGIBLE=false
+          fi
+          echo "latest-stable PQC eligible: $LATEST_PQC_ELIGIBLE"
+          # Each eligible wolfSSL ref runs in normal and force-fail anti-test
+          # mode. The matrix owns the force-fail axis; the test step hands its
+          # raw result to check-workflow-result.sh which inverts the
+          # expectation.
+          MATRIX=$(jq -nc --arg latest "$LATEST" \
+              --argjson latest_pqc "$LATEST_PQC_ELIGIBLE" '{
+            include: (
+              [ {"name":"master","wolfssl-ref":"master","force_fail":""},
+                {"name":"master [force-fail]","wolfssl-ref":"master",
+                 "force_fail":"WOLFPROV_FORCE_FAIL=1"} ]
+              + (if $latest_pqc then
+                  [ {"name":("latest stable (" + $latest + ")"),
+                     "wolfssl-ref":$latest,"force_fail":""},
+                    {"name":("latest stable (" + $latest + ") [force-fail]"),
+                     "wolfssl-ref":$latest,
+                     "force_fail":"WOLFPROV_FORCE_FAIL=1"} ]
+                 else [] end)
+            )
           }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 

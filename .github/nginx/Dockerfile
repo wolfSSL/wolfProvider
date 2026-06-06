@@ -39,9 +39,11 @@ RUN OPENSSL_TAG=${OPENSSL_REF} WOLFSSL_TAG=${WOLFSSL_REF} \
 
 ENV WOLFPROV_ROOT=/opt/wolfProvider
 ENV O=/opt/wolfProvider/openssl-install
-ENV LD_LIBRARY_PATH=/opt/wolfProvider/wolfprov-install/lib:/opt/wolfProvider/wolfssl-install/lib:/opt/wolfProvider/openssl-install/lib:/opt/wolfProvider/openssl-install/lib64
 
-# Build nginx against the wolfProvider-backed OpenSSL.
+# Build nginx against the wolfProvider-backed OpenSSL. The download and build
+# run BEFORE LD_LIBRARY_PATH points at the wolfProvider OpenSSL: otherwise
+# wget's own HTTPS to nginx.org would route through wolfProvider and fail
+# certificate verification. nginx finds the libs at runtime via -rpath.
 WORKDIR /opt/wolfProvider
 RUN wget -q "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" \
     && tar -zxf "nginx-${NGINX_VERSION}.tar.gz" && rm "nginx-${NGINX_VERSION}.tar.gz"
@@ -50,6 +52,10 @@ RUN ./configure --prefix=/opt/nginx --with-http_ssl_module \
         --with-cc-opt="-I${O}/include" \
         --with-ld-opt="-L${O}/lib -L${O}/lib64 -Wl,-rpath,${O}/lib -Wl,-rpath,${O}/lib64 -Wl,-rpath,/opt/wolfProvider/wolfprov-install/lib -Wl,-rpath,/opt/wolfProvider/wolfssl-install/lib" \
     && make -j"$(nproc)" && make install
+
+# From here on the wolfProvider-backed OpenSSL is the default for cert
+# generation and the runtime server.
+ENV LD_LIBRARY_PATH=/opt/wolfProvider/wolfprov-install/lib:/opt/wolfProvider/wolfssl-install/lib:/opt/wolfProvider/openssl-install/lib:/opt/wolfProvider/openssl-install/lib64
 
 # Generate the ML-DSA CA + server certificate through wolfProvider (the oqs-demos
 # SIG_ALG=mldsa65 arrangement) and lay down the PQC nginx config + test page.
