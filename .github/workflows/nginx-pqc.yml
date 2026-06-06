@@ -6,10 +6,12 @@ name: Nginx PQC Tests
 # group and assert ML-DSA (FIPS 204) certificate authentication plus an
 # ML-KEM / hybrid (FIPS 203) key exchange.
 #
-# Only the PQC path is exercised. Versioning matches the other PQC workflows:
-# wolfSSL latest -stable (PQC floor v5.9.2-stable) and master, against the
-# latest OpenSSL 3.x release. The OSP source (nginx) is pinned to a fixed
-# release in the Dockerfile -- upstream master is unstable and non-reproducible.
+# Only the PQC path is exercised. Each wolfSSL ref runs in 4 modes:
+# replace-default and non-replace (wolfProvider loaded via provider.conf), each
+# in normal and force-fail. Versioning matches the other PQC workflows: wolfSSL
+# latest -stable (PQC floor v5.9.2-stable) and master, against the latest
+# OpenSSL 3.x release. The OSP source (nginx) is pinned to a fixed release in
+# the Dockerfile -- upstream master is unstable and non-reproducible.
 
 on:
   push:
@@ -68,25 +70,28 @@ jobs:
             LATEST_PQC_ELIGIBLE=false
           fi
           echo "latest-stable PQC eligible: $LATEST_PQC_ELIGIBLE"
-          # Each eligible wolfSSL ref runs in normal and force-fail anti-test
-          # mode. The matrix owns the force-fail axis; the test step hands its
-          # raw result to check-workflow-result.sh which inverts the
-          # expectation.
+          # Each eligible wolfSSL ref expands to 4 rows: replace-default and
+          # non-replace, each in normal and force-fail anti-test mode. The
+          # matrix owns the replace-default and force-fail axes; the test step
+          # hands its raw result to check-workflow-result.sh which inverts the
+          # force-fail expectation.
           MATRIX=$(jq -nc --arg latest "$LATEST" \
-              --argjson latest_pqc "$LATEST_PQC_ELIGIBLE" '{
-            include: (
-              [ {"name":"master","wolfssl-ref":"master","force_fail":""},
-                {"name":"master [force-fail]","wolfssl-ref":"master",
-                 "force_fail":"WOLFPROV_FORCE_FAIL=1"} ]
-              + (if $latest_pqc then
-                  [ {"name":("latest stable (" + $latest + ")"),
-                     "wolfssl-ref":$latest,"force_fail":""},
-                    {"name":("latest stable (" + $latest + ") [force-fail]"),
-                     "wolfssl-ref":$latest,
-                     "force_fail":"WOLFPROV_FORCE_FAIL=1"} ]
-                 else [] end)
-            )
-          }')
+              --argjson latest_pqc "$LATEST_PQC_ELIGIBLE" '
+            def rows($ref; $lbl):
+              [ {"replace":true,  "ff":"WOLFPROV_FORCE_FAIL=1",
+                 "sfx":" [replace-default] [force-fail]"},
+                {"replace":true,  "ff":"", "sfx":" [replace-default]"},
+                {"replace":false, "ff":"WOLFPROV_FORCE_FAIL=1",
+                 "sfx":" [non-replace] [force-fail]"},
+                {"replace":false, "ff":"", "sfx":" [non-replace]"} ]
+              | map({"name":($lbl+.sfx), "wolfssl-ref":$ref,
+                     "replace":.replace, "force_fail":.ff});
+            { include: (
+                rows("master"; "master")
+                + (if $latest_pqc
+                   then rows($latest; ("latest stable (" + $latest + ")"))
+                   else [] end)
+            ) }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
   nginx-pqc:
@@ -110,6 +115,8 @@ jobs:
           docker build \
             --build-arg WOLFSSL_REF=${{ matrix.wolfssl-ref }} \
             --build-arg OPENSSL_REF=${{ needs.discover-versions.outputs.openssl-tag }} \
+            --build-arg REPLACE_DEFAULT_FLAG=${{ matrix.replace && '--replace-default' || '' }} \
+            --build-arg WP_OPENSSL_CONF=${{ matrix.replace && '/opt/wolfProvider/openssl-install/ssl/openssl.cnf' || '/opt/wolfProvider/provider.conf' }} \
             -f .github/nginx/Dockerfile -t wolfprov-nginx .
 
       # Run oqs-demos' connection test against the running server. In normal
