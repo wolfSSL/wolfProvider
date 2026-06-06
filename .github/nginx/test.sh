@@ -10,15 +10,22 @@
 O=/opt/wolfProvider/openssl-install
 CA=/opt/nginx/cacert/CA.crt
 PORT=4433
-GROUPS="X25519MLKEM768 SecP256r1MLKEM768 SecP384r1MLKEM1024 MLKEM512 MLKEM768 MLKEM1024"
+# NB: not "GROUPS" -- that is a bash special array (the user's group IDs).
+KEX_GROUPS="X25519MLKEM768 SecP256r1MLKEM768 SecP384r1MLKEM1024 MLKEM512 MLKEM768 MLKEM1024"
 
 export LD_LIBRARY_PATH="/opt/wolfProvider/wolfprov-install/lib:/opt/wolfProvider/wolfssl-install/lib:${O}/lib:${O}/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+echo "Quantum-safe groups under test: ${KEX_GROUPS}"
 /opt/nginx/sbin/nginx -c /opt/nginx/conf/nginx.conf
 sleep 2
+if ! "${O}/bin/openssl" s_client -connect "localhost:${PORT}" </dev/null \
+        >/dev/null 2>&1; then
+    echo "WARNING: nginx did not answer on ${PORT}; recent error log:"
+    tail -n 5 /opt/nginx/logs/error.log 2>/dev/null
+fi
 
 fail=0
-for g in ${GROUPS}; do
+for g in ${KEX_GROUPS}; do
     out=$( (printf 'GET / HTTP/1.0\r\nHost: localhost\r\n\r\n'; sleep 1) \
         | "${O}/bin/openssl" s_client -connect "localhost:${PORT}" \
             -groups "${g}" -CAfile "${CA}" -servername localhost 2>&1)
