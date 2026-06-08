@@ -1,8 +1,10 @@
 dist_noinst_SCRIPTS += scripts/build-wolfprovider.sh
-dist_noinst_SCRIPTS += scripts/test-openssl.sh
-dist_noinst_SCRIPTS += scripts/test-wp-cs.sh
+dist_noinst_SCRIPTS += scripts/env-setup
+dist_noinst_SCRIPTS += scripts/patch-libcrypto-exports.sh
+dist_noinst_SCRIPTS += scripts/patch-openssl-fips.sh
+dist_noinst_SCRIPTS += scripts/resolve-ref.sh
 dist_noinst_SCRIPTS += scripts/utils-openssl.sh
 dist_noinst_SCRIPTS += scripts/utils-wolfssl.sh
 dist_noinst_SCRIPTS += scripts/utils-wolfprovider.sh
 dist_noinst_SCRIPTS += scripts/utils-general.sh
-dist_noinst_SCRIPTS += scripts/env-setup
+dist_noinst_SCRIPTS += scripts/verify-install.sh

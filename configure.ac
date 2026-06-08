@@ -5,7 +5,7 @@
 
 AC_COPYRIGHT([Copyright (C) 2024 wolfSSL Inc.])
 AC_PREREQ([2.69])
-AC_INIT([wolfprov], [1.1.1])
+AC_INIT([wolfprov], [1.2.0])
 AC_CONFIG_AUX_DIR([build-aux])
 
 AC_CONFIG_HEADERS([include/config.h])
@@ -226,4 +226,3 @@ echo "   * Dynamic provider:           $ENABLED_DYNAMIC_PROVIDER"
 echo "   * Replace default:            $ENABLED_REPLACE_DEFAULT"
 echo ""
 echo "---"
-

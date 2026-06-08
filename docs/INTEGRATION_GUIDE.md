@@ -206,12 +206,6 @@ This should list wolfProvider among the available providers.
 make test
 ```
 
-### Run Command Line Tests
-
-```bash
-./scripts/run-tests.sh
-```
-
 If any tests fail, enable debug logging (see the [Debugging](#debugging) section) and review the output for details.
 
 ---
