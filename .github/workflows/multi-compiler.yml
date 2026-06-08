@@ -6,6 +6,18 @@ on:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'AUTHORS'
+      - 'COPYING'
+      - 'README*'
+      - 'CHANGELOG*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,74 +26,52 @@ concurrency:
 
 jobs:
   build_wolfprovider:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Build with compiler ${{ matrix.CC }}, wolfssl ${{ matrix.wolfssl_ref }}, OpenSSL ${{ matrix.openssl_ref }}
-    runs-on: ${{ matrix.OS }}
+    runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      # PR-time matrix is intentionally narrow: only compilers that ship
+      # in Debian Bookworm (the test-deps image base). Dropped vs the
+      # prior matrix: gcc-9, gcc-10, gcc-13, gcc-14, clang-12. Full
+      # cross-compiler coverage (including those) runs in the nightly
+      # multi-compiler job called from nightly-osp.yml.
       matrix:
         include:
-          - CC: gcc-9
-            CXX: g++-9
-            OS: ubuntu-latest
-            wolfssl_ref: master
-            openssl_ref: master
-          - CC: gcc-10
-            CXX: g++-10
-            OS: ubuntu-latest
-            wolfssl_ref: master
-            openssl_ref: master
-          - CC: gcc-10
-            CXX: g++-10
-            OS: ubuntu-latest
-            wolfssl_ref: v5.8.0-stable
-            openssl_ref: master
           - CC: gcc-11
             CXX: g++-11
-            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
           - CC: gcc-12
             CXX: g++-12
-            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
-          - CC: gcc-13
-            CXX: g++-13
-            OS: ubuntu-latest
-            wolfssl_ref: master
+          - CC: gcc-12
+            CXX: g++-12
+            wolfssl_ref: v5.8.0-stable
             openssl_ref: master
-          - CC: gcc-14
-            CXX: g++-14
-            OS: ubuntu-latest
-            wolfssl_ref: master
-            openssl_ref: master
-          - CC: clang-12
-            CXX: clang++-12
-            OS: ubuntu-22.04
-            wolfssl_ref: master
+          - CC: gcc-12
+            CXX: g++-12
+            wolfssl_ref: v5.8.4-stable
             openssl_ref: master
           - CC: clang-13
             CXX: clang++-13
-            OS: ubuntu-22.04
             wolfssl_ref: master
             openssl_ref: master
           - CC: clang-14
             CXX: clang++-14
-            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
           - CC: clang-15
             CXX: clang++-15
-            OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }} automake libtool
-
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
         with:
@@ -135,9 +125,9 @@ jobs:
       - name: Print errors
         if: ${{ failure() }}
         run: |
-          if [ -f test-suite.log ]; then
-            cat test-suite.log
-          fi
-          if [ -f config.log ]; then
-            cat config.log
-          fi
+          for f in scripts/build-release.log scripts/build-debug.log test-suite.log config.log; do
+            if [ -f "$f" ]; then
+              echo "=== $f (last 200 lines) ==="
+              tail -200 "$f"
+            fi
+          done

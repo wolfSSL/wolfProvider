@@ -1,0 +1,221 @@
+name: PR OSP (label-selected)
+
+# Run any nightly OSP / sweep job on a PR by adding a label. Add
+# `ci:<name>` (e.g. ci:hostap) to run that job, or `ci:all` for the
+# whole set. Add several at once and they all run in ONE workflow run:
+# the burst of label events collapses (cancel-in-progress) to a single
+# run whose select reads every current ci:* label. Re-add a label to
+# re-run after a push. workflow_dispatch `jobs` input is the off-PR
+# equivalent (space list, or "all").
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "space-separated job names, or 'all'"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+concurrency:
+  group: pr-osp-select-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.p.outputs.run }}
+    steps:
+      - id: p
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+          DISPATCH: ${{ github.event.inputs.jobs }}
+        run: |
+          sel=""
+          for l in $LABELS; do
+            case "$l" in
+              ci:*) sel="$sel ${l#ci:}" ;;
+            esac
+          done
+          [ -n "$DISPATCH" ] && sel="$sel $DISPATCH"
+          echo "run= $sel " >> "$GITHUB_OUTPUT"
+
+  bind9:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' bind9 ')
+    uses: ./.github/workflows/bind9.yml
+  cjose:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' cjose ')
+    uses: ./.github/workflows/cjose.yml
+  curl:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' curl ')
+    uses: ./.github/workflows/curl.yml
+  debian-package:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' debian-package ')
+    uses: ./.github/workflows/debian-package.yml
+  git-ssh-dr:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' git-ssh-dr ')
+    uses: ./.github/workflows/git-ssh-dr.yml
+  grpc:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' grpc ')
+    uses: ./.github/workflows/grpc.yml
+  hostap:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' hostap ')
+    uses: ./.github/workflows/hostap.yml
+  iperf:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' iperf ')
+    uses: ./.github/workflows/iperf.yml
+  krb5:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' krb5 ')
+    uses: ./.github/workflows/krb5.yml
+  libcryptsetup:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libcryptsetup ')
+    uses: ./.github/workflows/libcryptsetup.yml
+  libeac3:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libeac3 ')
+    uses: ./.github/workflows/libeac3.yml
+  libfido2:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libfido2 ')
+    uses: ./.github/workflows/libfido2.yml
+  libhashkit2:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libhashkit2 ')
+    uses: ./.github/workflows/libhashkit2.yml
+  libnice:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libnice ')
+    uses: ./.github/workflows/libnice.yml
+  liboauth2:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' liboauth2 ')
+    uses: ./.github/workflows/liboauth2.yml
+  librelp:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' librelp ')
+    uses: ./.github/workflows/librelp.yml
+  libssh2:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libssh2 ')
+    uses: ./.github/workflows/libssh2.yml
+  libtss2:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libtss2 ')
+    uses: ./.github/workflows/libtss2.yml
+  libwebsockets:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libwebsockets ')
+    uses: ./.github/workflows/libwebsockets.yml
+  net-snmp:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' net-snmp ')
+    uses: ./.github/workflows/net-snmp.yml
+  nginx:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' nginx ')
+    uses: ./.github/workflows/nginx.yml
+  openldap:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' openldap ')
+    uses: ./.github/workflows/openldap.yml
+  opensc:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' opensc ')
+    uses: ./.github/workflows/opensc.yml
+  openssh:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' openssh ')
+    uses: ./.github/workflows/openssh.yml
+  openssl-version:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' openssl-version ')
+    uses: ./.github/workflows/openssl-version.yml
+  openvpn:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' openvpn ')
+    uses: ./.github/workflows/openvpn.yml
+  pam-pkcs11:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' pam-pkcs11 ')
+    uses: ./.github/workflows/pam-pkcs11.yml
+  ppp:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' ppp ')
+    uses: ./.github/workflows/ppp.yml
+  python3-ntp:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' python3-ntp ')
+    uses: ./.github/workflows/python3-ntp.yml
+  qt5network5:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' qt5network5 ')
+    uses: ./.github/workflows/qt5network5.yml
+  rsync:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' rsync ')
+    uses: ./.github/workflows/rsync.yml
+  socat:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' socat ')
+    uses: ./.github/workflows/socat.yml
+  sscep:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' sscep ')
+    uses: ./.github/workflows/sscep.yml
+  sssd:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' sssd ')
+    uses: ./.github/workflows/sssd.yml
+  static-analysis:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' static-analysis ')
+    uses: ./.github/workflows/static-analysis.yml
+  stunnel:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' stunnel ')
+    uses: ./.github/workflows/stunnel.yml
+  systemd:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' systemd ')
+    uses: ./.github/workflows/systemd.yml
+  tcpdump:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' tcpdump ')
+    uses: ./.github/workflows/tcpdump.yml
+  tnftp:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' tnftp ')
+    uses: ./.github/workflows/tnftp.yml
+  tpm2-tools:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' tpm2-tools ')
+    uses: ./.github/workflows/tpm2-tools.yml
+  x11vnc:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' x11vnc ')
+    uses: ./.github/workflows/x11vnc.yml
+  xmlsec:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' xmlsec ')
+    uses: ./.github/workflows/xmlsec.yml
+  multi-compiler:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' multi-compiler ')
+    uses: ./.github/workflows/nightly-multi-compiler.yml

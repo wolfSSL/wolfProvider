@@ -1,19 +1,22 @@
 name: systemd Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: ['master', 'main', 'release/**']
-  pull_request:
-    branches: ['*']
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,19 +24,20 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   test_systemd:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 60
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
     env:
       DEBIAN_FRONTEND: noninteractive
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -43,10 +47,10 @@ jobs:
       fail-fast: false
       matrix:
         systemd_ref: [ 'v254' ]
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
     steps:
       - name: Checkout wolfProvider
@@ -84,19 +88,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install dependencies
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y build-essential meson ninja-build \
-            libmount-dev gperf python3-pytest python3-jinja2 python3-pip \
-            libuv1-dev libnghttp2-dev libcap-dev uuid-dev libdevmapper-dev \
-            libpopt-dev libjson-c-dev libargon2-dev libblkid-dev asciidoctor \
-            pkgconf zlib1g-dev libgcrypt20-dev libgpg-error-dev libgnutls28-dev \
-            libp11-kit-dev libfido2-dev libtss2-dev libdw-dev libbz2-dev \
-            liblzma-dev liblz4-dev libzstd-dev libxkbcommon-dev libglib2.0-dev \
-            libdbus-1-dev python3-setuptools python3-wheel git
-
       - name: Checkout systemd
         uses: actions/checkout@v4
         with:
@@ -116,13 +107,13 @@ jobs:
         shell: bash
         run: |
           set +e
+          export ${{ matrix.force_fail }}
           # The following test cases link directly to libcrypto.
           TEST_CASES="fuzz-dns-packet fuzz-etc-hosts fuzz-resource-record \
                       resolvectl systemd-resolved test-cryptolib \
                       test-dns-packet test-dnssec test-resolve-tables \
                       test-resolved-etc-hosts test-resolved-packet \
                       test-resolved-stream"
-          export ${{ matrix.force_fail }}
           meson test -C build $TEST_CASES
           TEST_RESULT=$?
           if [ $TEST_RESULT -ne 0 ]; then

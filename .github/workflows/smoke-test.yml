@@ -1,0 +1,73 @@
+name: Smoke Test
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'AUTHORS'
+      - 'COPYING'
+      - 'README*'
+      - 'CHANGELOG*'
+
+concurrency:
+  group: smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# _discover-versions.yml (the reusable workflow we call below) declares
+# permissions: { contents: read, packages: read } for its `oras login
+# ghcr.io` step. Workflow-level permissions clamp every job including
+# reusable workflows, so we must grant packages:read here or the
+# discover_versions job startup_failures before any container spawns.
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
+  smoke:
+    needs: discover_versions
+    name: Smoke build (${{ matrix.name }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: master/openssl-latest
+            wolfssl_ref: master
+          - name: stable/openssl-latest
+            wolfssl_ref: ''  # filled in from needs.discover_versions
+          - name: 5.8.4/openssl-latest
+            wolfssl_ref: v5.8.4-stable
+
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build and test wolfProvider
+        run: |
+          # Resolve "stable" matrix row to the discovered latest tag.
+          WOLFSSL_TAG="${{ matrix.wolfssl_ref || needs.discover_versions.outputs.wolfssl_latest_ref }}"
+          OPENSSL_TAG=${{ needs.discover_versions.outputs.openssl_latest_ref }} \
+          WOLFSSL_TAG="$WOLFSSL_TAG" \
+            ./scripts/build-wolfprovider.sh
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f test-suite.log ] ; then
+            cat test-suite.log
+          fi

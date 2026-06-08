@@ -651,25 +651,26 @@ static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_set_ctx_params");
 
     while ((params != NULL) && (params->key != NULL)) {
-        if (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TAG,
-                 sizeof(OSSL_CIPHER_PARAM_AEAD_TAG)) == 0) {
+        /* params->key is a NUL-terminated provider parameter name. Use
+         * XSTRCMP so we never read past the end of the caller's key when
+         * it is shorter than the target constant (e.g. "tlsivinv" vs
+         * "tlsivfixed"). */
+        if (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TAG) == 0) {
             ok = wp_aead_set_param_tag(ctx, params);
         }
-        else if (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_IVLEN,
-                 sizeof(OSSL_CIPHER_PARAM_AEAD_IVLEN)) == 0) {
+        else if (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_IVLEN) == 0) {
             ok = wp_aead_set_param_iv_len(ctx, params);
         }
-        else if (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD,
-                 sizeof(OSSL_CIPHER_PARAM_AEAD_TLS1_AAD)) == 0) {
+        else if (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD) == 0) {
             ok = wp_aead_set_param_tls1_aad(ctx, params);
         }
-        else if (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED,
-                 sizeof(OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED)) == 0) {
+        else if (XSTRCMP(params->key,
+                         OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED) == 0) {
             ok = wp_aead_set_param_tls1_iv_fixed(ctx, params);
         }
         else if (ok && (ctx->mode == EVP_CIPH_GCM_MODE) &&
-                 (XMEMCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV,
-                  sizeof(OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV)) == 0)) {
+                 XSTRCMP(params->key,
+                         OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV) == 0) {
             ok = wp_aead_set_param_tls1_iv_rand(ctx, params);
         }
 

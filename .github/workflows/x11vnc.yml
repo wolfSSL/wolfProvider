@@ -1,19 +1,22 @@
 name: x11vnc Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,27 +24,29 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
       
   test_x11vnc:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
-    timeout-minutes: 10
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         x11vnc_ref: [ '0.9.17' ]
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -84,23 +89,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install x11vnc dependencies
-        run: |
-          apt-get update
-
-          # common build dependencies
-          apt-get install -y build-essential autoconf automake libtool \
-              pkg-config gcc make ca-certificates
-
-          # x11vnc dependencies
-          apt-get install -y libc6-dev libjpeg-dev x11proto-core-dev \
-              libxss-dev zlib1g-dev libavahi-client-dev libvncserver-dev \
-              libx11-dev libxdamage-dev libxext-dev libxfixes-dev libxi-dev \
-              libxinerama-dev libxrandr-dev libxtst-dev
-
-          # packages for testing script
-          apt-get install -y xvfb tigervnc-viewer psmisc expect curl
-
       - name: Download x11vnc
         uses: actions/checkout@v4
         with:
@@ -116,7 +104,8 @@ jobs:
           fetch-depth: 1
       - run: |
           cd x11vnc
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/x11vnc/x11vnc-${{ matrix.x11vnc_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp x11vnc ${{ matrix.x11vnc_ref }} ${{ matrix.wolfssl_ref }} ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }})
+          patch -p1 < "$PATCH"
 
       - name: Build x11vnc
         working-directory: x11vnc
@@ -136,12 +125,15 @@ jobs:
           if ! $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh $X11VNC_TEST_LOG; then
             X11VNC_TEST_STATUS=1
           fi
-          
+
           if $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $X11VNC_TEST_STATUS "$WOLFPROV_FORCE_FAIL_STR" x11vnc; then
             X11VNC_TEST_STATUS=0
           else
             X11VNC_TEST_STATUS=1
           fi
+
+          # Surface the most recent log via the existing follow-up step
+          export X11VNC_TEST_LOG=/tmp/x11vnc-test.log
 
       - name: Show x11vnc test log on failure
         run: |

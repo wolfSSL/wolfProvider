@@ -1,19 +1,22 @@
 name: pam-pkcs11 Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
 
 jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
   build_wolfprovider:
+    needs: discover_versions
     uses: ./.github/workflows/build-wolfprovider.yml
     with:
       wolfssl_ref: ${{ matrix.wolfssl_ref }}
@@ -21,28 +24,30 @@ jobs:
       fips_ref: ${{ matrix.fips_ref }}
       replace_default: ${{ matrix.replace_default }}
     strategy:
+      fail-fast: false
       matrix:
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
 
   test_pam_pkcs11:
     runs-on: ubuntu-22.04
-    needs: build_wolfprovider
+    needs: [build_wolfprovider, discover_versions]
     container:
-      image: debian:bookworm
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
         DEBIAN_FRONTEND: noninteractive
     # This should be a safe limit for the tests to run.
-    timeout-minutes: 20
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         pam_pkcs11_ref: [ 'pam_pkcs11-0.6.12' ]
-        wolfssl_ref: [ 'v5.8.4-stable' ]
-        openssl_ref: [ 'openssl-3.5.4' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
-        force_fail: [ 'WOLFPROV_FORCE_FAIL=1', '' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         replace_default: [ true ]
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -54,12 +59,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install git and basic dependencies
-        run: |
-          apt-get update
-          apt-get install -y git
-
-      # Avoid "detected dubious ownership" warning
       - name: Ensure the working directory safe
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -93,11 +92,6 @@ jobs:
           $GITHUB_WORKSPACE/scripts/verify-install.sh \
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
-
-      - name: Install test dependencies
-        run: |
-          apt-get update
-          apt-get install -y pkg-config build-essential autoconf automake libtool
 
       - name: Run pam_pkcs11 tests
         shell: bash

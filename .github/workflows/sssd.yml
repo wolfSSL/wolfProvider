@@ -1,21 +1,20 @@
 name: SSSD Tests
 
-# START OF COMMON SECTION
-on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
 
 jobs:
   test_sssd:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     container:
       image: quay.io/sssd/ci-client-devel:ubuntu-latest
       env:
@@ -24,7 +23,8 @@ jobs:
       fail-fast: false
       matrix:
         sssd_ref: [ '2.9.1' ]
-        wolfssl_ref: [ 'master', 'v5.8.0-stable' ]
+        # Caller-passed refs (e.g. nightly-osp 5.8.4 wave) override the default.
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson('["master","v5.8.0-stable"]') }}
         openssl_ref: [ 'openssl-3.5.0' ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
         exclude:
@@ -71,7 +71,8 @@ jobs:
           git checkout ${{ matrix.sssd_ref }}
 
           # Apply patch for testing
-          patch -p1 < $GITHUB_WORKSPACE/osp/wolfProvider/sssd/sssd-${{ matrix.sssd_ref }}-wolfprov.patch
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh $GITHUB_WORKSPACE/osp sssd ${{ matrix.sssd_ref }} ${{ matrix.wolfssl_ref }})
+          patch -p1 < "$PATCH"
 
           # Configure and build SSSD with wolfProvider
           autoreconf -ivf
