@@ -49,6 +49,7 @@ Information on how to configure, build, and test wolfProvider can be found here:
 * TLS1 PRF
 * KBKDF
 * KRB5 KDF
+* SSHKDF
 
 ### Random
 * CTR-DRBG

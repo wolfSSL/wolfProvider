@@ -1,3 +1,40 @@
+# wolfProvider version 1.2.0 (June 08, 2026)
+
+Release 1.2.0 has been developed according to wolfSSL's development and QA
+process and successfully passed the quality criteria.
+
+PR stands for Pull Request, and PR <NUMBER> references a GitHub pull request
+number where the code change was added.
+
+## New Feature Additions
+* Add SSHKDF implementation (PR 382)
+* Add proper TLS MAC handling (PR 360)
+
+## Enhancements and Optimizations
+* Add FIPS integration and general integration guides to distribution packages
+* Add OpenSSL FIPS baseline patches, replace-default patch assets, and provider configs to distribution packages
+* Add helper scripts for FIPS patching, replace-default test exports, reference resolution, and install verification to distribution packages
+* Improve replace-default provider behavior for re-entrant use
+* Improve ECC signing and verification digest size checks
+* Add KBKDF and KRB5 KDF validation and hardening improvements (PR 376, PR 380, PR 395)
+* Improve Debian package builds for seed-src, debug, and local source handling (PR 383, PR 384)
+* Migrate CI package artifact storage to GHCR ORAS with integrity checks (PR 362)
+* Improve OSP CI dispatch and test dependency publishing workflows (PR 400, PR 401, PR 402, PR 403)
+
+## Bug Fixes
+* Fix DRBG size cast issue (PR 386)
+* Fix constant-time compare and TLS padding handling with negative tests (PR 385)
+* Fix missing AES initialization in KRB5 KDF (PR 378)
+* Fix PSS defaults pointer dereference
+* Fix UKM memory leak in DH/ECDH free paths
+* Fix AEAD random IV handling
+* Fix aarch64 compile issue (PR 373)
+* Fix DH/ECDH string length checks and related robustness issues
+* Fix ECX get_params handling to restore unclamped private key bytes (PR 389)
+* Fix seed-src clear_seed state handling (PR 389)
+* Fix HMAC, CMAC, RSA, TLS, and KDF bounds, cleanup, and return-code checks (PR 377, PR 387, PR 389)
+* Fix SSSD CI issue (PR 393)
+
 # wolfProvider version 1.1.1 (February 09, 2026)
 
 Release 1.1.1 has been developed according to wolfSSL's development and QA
