@@ -23,6 +23,7 @@ import datetime
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from collections import OrderedDict
@@ -70,33 +71,61 @@ SCRUB = [
 ]
 
 
+RETRY_CODES = {429, 500, 502, 503, 504}
+
+
 def gh(path, method="GET", data=None):
     url = path if path.startswith("http") else GH_API + path
-    req = urllib.request.Request(url, method=method)
-    req.add_header("Authorization", f"Bearer {GH_TOKEN}")
-    req.add_header("Accept", "application/vnd.github+json")
-    req.add_header("X-GitHub-Api-Version", "2022-11-28")
-    if data is not None:
-        req.data = json.dumps(data).encode()
-        req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=60) as r:
-        body = r.read()
-    return json.loads(body) if body else {}
+    last = None
+    for attempt in range(5):
+        req = urllib.request.Request(url, method=method)
+        req.add_header("Authorization", f"Bearer {GH_TOKEN}")
+        req.add_header("Accept", "application/vnd.github+json")
+        req.add_header("X-GitHub-Api-Version", "2022-11-28")
+        if data is not None:
+            req.data = json.dumps(data).encode()
+            req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                body = r.read()
+            return json.loads(body) if body else {}
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in RETRY_CODES or attempt == 4:
+                raise
+        except urllib.error.URLError as e:
+            last = e
+            if attempt == 4:
+                raise
+        time.sleep(2 ** attempt)
+    raise last
+
+
+# GitHub's jobs endpoint 502s on per_page=100 for large runs (400+ jobs);
+# 50 is reliable. Keep in sync with the page-exhaustion check below.
+JOBS_PER_PAGE = 50
+
+
+_JOBS_CACHE = {}
 
 
 def all_jobs(run_id, attempt=None):
+    key = (str(run_id), attempt)
+    if key in _JOBS_CACHE:
+        return _JOBS_CACHE[key]
     jobs = []
     base = f"/repos/{REPO}/actions/runs/{run_id}"
     if attempt:
         base += f"/attempts/{attempt}"
     page = 1
     while True:
-        d = gh(f"{base}/jobs?per_page=100&page={page}")
+        d = gh(f"{base}/jobs?per_page={JOBS_PER_PAGE}&page={page}")
         batch = d.get("jobs", [])
         jobs += batch
-        if len(batch) < 100:
+        if len(batch) < JOBS_PER_PAGE:
             break
         page += 1
+    _JOBS_CACHE[key] = jobs
     return jobs
 
 
@@ -215,10 +244,17 @@ def post_slack(color, fallback, blocks):
         print(render_text(blocks))
         return
     data = json.dumps(payload).encode()
-    req = urllib.request.Request(SLACK_WEBHOOK, data=data, method="POST")
-    req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        r.read()
+    for attempt in range(4):
+        req = urllib.request.Request(SLACK_WEBHOOK, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                r.read()
+            return
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            if attempt == 3:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def render_text(blocks):
@@ -316,17 +352,14 @@ def main():
     run = gh(f"/repos/{REPO}/actions/runs/{RUN_ID}")
     attempt = int(FORCE_ATTEMPT) if FORCE_ATTEMPT else run.get("run_attempt", 1)
 
-    # Phase 1 — retry everything that did not pass, exactly once.
+    # Phase 1 — silently retry everything that did not pass, exactly once.
+    # No interim Slack post; the attempt-2 report is the only message.
     if AUTO_RETRY and not FORCE_ATTEMPT and attempt == 1:
         nonpass = [j for j in all_jobs(RUN_ID)
                    if j.get("conclusion") in ("failure", "cancelled")]
         if nonpass:
             gh(f"/repos/{REPO}/actions/runs/{RUN_ID}/rerun-failed-jobs",
                method="POST")
-            note = (f"*wolfProvider Nightly OSP* — {len(nonpass)} job(s) didn't "
-                    f"pass on attempt 1; retrying once before triage. "
-                    f"<{run_url()}|View run>")
-            post_slack("warning", note, [section(note)])
             return
 
     jobs = merged_jobs(attempt)
