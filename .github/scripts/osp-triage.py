@@ -74,10 +74,15 @@ SCRUB = [
 RETRY_CODES = {429, 500, 502, 503, 504}
 
 
-def gh(path, method="GET", data=None):
+def backoff_delay(err, attempt):
+    ra = err.headers.get("Retry-After", "") if hasattr(err, "headers") else ""
+    return int(ra) if ra.isdigit() else 2 ** attempt
+
+
+def gh(path, method="GET", data=None, retry=True):
     url = path if path.startswith("http") else GH_API + path
-    last = None
-    for attempt in range(5):
+    attempts = 5 if retry else 1
+    for attempt in range(attempts):
         req = urllib.request.Request(url, method=method)
         req.add_header("Authorization", f"Bearer {GH_TOKEN}")
         req.add_header("Accept", "application/vnd.github+json")
@@ -90,15 +95,14 @@ def gh(path, method="GET", data=None):
                 body = r.read()
             return json.loads(body) if body else {}
         except urllib.error.HTTPError as e:
-            last = e
-            if e.code not in RETRY_CODES or attempt == 4:
+            if e.code not in RETRY_CODES or attempt == attempts - 1:
                 raise
-        except urllib.error.URLError as e:
-            last = e
-            if attempt == 4:
+            delay = backoff_delay(e, attempt)
+        except urllib.error.URLError:
+            if attempt == attempts - 1:
                 raise
-        time.sleep(2 ** attempt)
-    raise last
+            delay = 2 ** attempt
+        time.sleep(delay)
 
 
 # GitHub's jobs endpoint 502s on per_page=100 for large runs (400+ jobs);
@@ -251,10 +255,15 @@ def post_slack(color, fallback, blocks):
             with urllib.request.urlopen(req, timeout=30) as r:
                 r.read()
             return
-        except (urllib.error.HTTPError, urllib.error.URLError):
+        except urllib.error.HTTPError as e:
+            if e.code not in RETRY_CODES or attempt == 3:
+                raise
+            delay = backoff_delay(e, attempt)
+        except urllib.error.URLError:
             if attempt == 3:
                 raise
-            time.sleep(2 ** attempt)
+            delay = 2 ** attempt
+        time.sleep(delay)
 
 
 def render_text(blocks):
@@ -359,7 +368,7 @@ def main():
                    if j.get("conclusion") in ("failure", "cancelled")]
         if nonpass:
             gh(f"/repos/{REPO}/actions/runs/{RUN_ID}/rerun-failed-jobs",
-               method="POST")
+               method="POST", retry=False)
             return
 
     jobs = merged_jobs(attempt)
