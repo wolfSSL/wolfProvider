@@ -1280,8 +1280,10 @@ static size_t wp_dh_export_group_alloc_size(wp_Dh* dh)
     name = wp_dh_get_group_name(dh);
     if (name == NULL) {
         sz  = mp_unsigned_bin_size(&dh->key.p) +
-              mp_unsigned_bin_size(&dh->key.g) +
-              mp_unsigned_bin_size(&dh->key.q);
+              mp_unsigned_bin_size(&dh->key.g);
+        if (!mp_iszero(&dh->key.q)) {
+            sz += mp_unsigned_bin_size(&dh->key.q);
+        }
     }
 
     return sz;
@@ -1323,7 +1325,9 @@ static int wp_dh_export_group(wp_Dh* dh, OSSL_PARAM params[], int* pIdx,
                 &dh->key.g, data, idx))) {
             ok = 0;
         }
-        if (ok && (!wp_param_set_mp(&params[i++], OSSL_PKEY_PARAM_FFC_Q,
+        /* PKCS#3 DH keys carry no q; exporting q=0 fails peer subgroup checks */
+        if (ok && (!mp_iszero(&dh->key.q)) &&
+                (!wp_param_set_mp(&params[i++], OSSL_PKEY_PARAM_FFC_Q,
                 &dh->key.q, data, idx))) {
             ok = 0;
         }
