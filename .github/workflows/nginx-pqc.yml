@@ -14,17 +14,14 @@ name: Nginx PQC Tests
 # the Dockerfile -- upstream master is unstable and non-reproducible.
 
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = master + latest -stable (pre-PQC-floor refs are dropped)"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
 
 jobs:
   discover-versions:
@@ -34,8 +31,10 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       openssl-tag: ${{ steps.set-matrix.outputs.openssl-tag }}
     steps:
-      - name: Resolve latest -stable wolfSSL tag and latest OpenSSL release
+      - name: Resolve wolfSSL refs and latest OpenSSL release
         id: set-matrix
+        env:
+          INPUT_REFS: ${{ inputs.wolfssl_refs_json }}
         run: |
           set -euo pipefail
           LATEST=$(git ls-remote --tags --refs \
@@ -57,26 +56,43 @@ jobs:
           echo "Latest stable wolfSSL: $LATEST"
           echo "Latest OpenSSL: $OSSL"
           echo "openssl-tag=$OSSL" >> "$GITHUB_OUTPUT"
+          # Caller can override the ref set (e.g. nightly Wave 2); default is
+          # master + latest -stable.
+          if [ -n "${INPUT_REFS:-}" ]; then
+            REFS=$(printf '%s' "$INPUT_REFS" | jq -r '.[]')
+          else
+            REFS=$(printf '%s\n%s\n' "master" "$LATEST")
+          fi
           # PQC needs the wc_MlDsaKey_* seed/message API that lands after
           # v5.9.1-stable, so the floor is v5.9.2-stable. master is always
-          # eligible; the latest -stable row is only added once it is past the
-          # floor (i.e. v5.9.2-stable+ is released). Until then only master
-          # runs -- a pre-floor -stable would just fail the --enable-pqc gate.
+          # eligible; a -stable ref only runs once it is past the floor. A
+          # pre-floor ref (e.g. v5.8.4-stable from Wave 2) is dropped -- it
+          # would just fail the --enable-pqc gate.
           PQC_FLOOR="v5.9.1-stable"
-          if [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$LATEST" \
-                  | sort -V | tail -n1)" != "$PQC_FLOOR" ]; then
-            LATEST_PQC_ELIGIBLE=true
+          ELIGIBLE=()
+          for ref in $REFS; do
+            if [ "$ref" = "master" ]; then
+              ELIGIBLE+=("$ref")
+            elif [ "$ref" != "$PQC_FLOOR" ] && \
+                 [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$ref" \
+                      | sort -V | tail -n1)" = "$ref" ]; then
+              ELIGIBLE+=("$ref")
+            else
+              echo "::notice::Skipping pre-PQC-floor wolfSSL ref $ref (floor past $PQC_FLOOR)"
+            fi
+          done
+          if [ ${#ELIGIBLE[@]} -eq 0 ]; then
+            REFS_JSON='[]'
           else
-            LATEST_PQC_ELIGIBLE=false
+            REFS_JSON=$(printf '%s\n' "${ELIGIBLE[@]}" | jq -R . | jq -sc .)
           fi
-          echo "latest-stable PQC eligible: $LATEST_PQC_ELIGIBLE"
+          echo "Eligible wolfSSL refs: $REFS_JSON"
           # Each eligible wolfSSL ref expands to 4 rows: replace-default and
           # non-replace, each in normal and force-fail anti-test mode. The
           # matrix owns the replace-default and force-fail axes; the test step
           # hands its raw result to check-workflow-result.sh which inverts the
           # force-fail expectation.
-          MATRIX=$(jq -nc --arg latest "$LATEST" \
-              --argjson latest_pqc "$LATEST_PQC_ELIGIBLE" '
+          MATRIX=$(jq -nc --argjson refs "$REFS_JSON" '
             def rows($ref; $lbl):
               [ {"replace":true,  "ff":"WOLFPROV_FORCE_FAIL=1",
                  "sfx":" [replace-default] [force-fail]"},
@@ -86,12 +102,10 @@ jobs:
                 {"replace":false, "ff":"", "sfx":" [non-replace]"} ]
               | map({"name":($lbl+.sfx), "wolfssl-ref":$ref,
                      "replace":.replace, "force_fail":.ff});
-            { include: (
-                rows("master"; "master")
-                + (if $latest_pqc
-                   then rows($latest; ("latest stable (" + $latest + ")"))
-                   else [] end)
-            ) }')
+            { include: ( $refs
+                | map(rows(.; (if . == "master" then "master"
+                               else "stable (" + . + ")" end)))
+                | add // [] ) }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
   nginx-pqc:

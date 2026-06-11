@@ -6,6 +6,8 @@ name: Nightly OSP Suite
 # with if: always() so a single Wave 1 failure doesn't skip the
 # older-line coverage. multi-compiler and static-analysis run once
 # outside the waves.
+# nginx-pqc is Wave 1 only: PQC has a v5.9.2-stable floor, so the
+# v5.8.4-stable Wave 2 line has no eligible ref to run.
 
 on:
   schedule:
@@ -49,6 +51,7 @@ jobs:
   libwebsockets-591:   { uses: ./.github/workflows/libwebsockets.yml,   }
   net-snmp-591:        { uses: ./.github/workflows/net-snmp.yml,        }
   nginx-591:           { uses: ./.github/workflows/nginx.yml,           }
+  nginx-pqc-591:       { uses: ./.github/workflows/nginx-pqc.yml,       }
   openldap-591:        { uses: ./.github/workflows/openldap.yml,        }
   opensc-591:          { uses: ./.github/workflows/opensc.yml,          }
   openssh-591:         { uses: ./.github/workflows/openssh.yml,         }
@@ -94,6 +97,7 @@ jobs:
       - libwebsockets-591
       - net-snmp-591
       - nginx-591
+      - nginx-pqc-591
       - openldap-591
       - opensc-591
       - openssh-591
