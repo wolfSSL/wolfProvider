@@ -534,8 +534,6 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
     unsigned char* pubData = NULL;
     size_t privLen = 0;
     size_t pubLen = 0;
-    unsigned char* derivedPub = NULL;
-    word32 derivedPubLen = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_import");
 
@@ -562,17 +560,11 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
                 ok = 0;
             }
             if (ok) {
+                /* A FIPS 204 raw private key does not yield the public key:
+                 * wc_MlDsaKey_ExportPubRaw fails unless a public was imported
+                 * (wc_mldsa.c). The public comes only from an explicit import
+                 * below, so advertise private only here. */
                 mldsa->hasPriv = 1;
-                /* FIPS 204 priv-key import may populate pub as a side effect
-                 * (impl-defined); probe so we can advertise it if available. */
-                derivedPubLen = mldsa->data->pubKeySize;
-                derivedPub = (unsigned char*)OPENSSL_malloc(derivedPubLen);
-                if (derivedPub != NULL) {
-                    if (wc_MlDsaKey_ExportPubRaw(&mldsa->key, derivedPub,
-                            &derivedPubLen) == 0) {
-                        mldsa->hasPub = 1;
-                    }
-                }
             }
         }
     }
@@ -583,21 +575,6 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
         }
         if (ok && (pubData != NULL) && (pubLen != mldsa->data->pubKeySize)) {
             ok = 0;
-        }
-        /* Both supplied: if we derived a pub from priv, supplied pub must
-         * match. OOM during malloc is fatal so the hardening isn't fail-open
-         * under memory pressure. If wolfSSL did not auto-derive pub (impl
-         * choice, not attacker-influenced), the check is skipped. */
-        if (ok && (pubData != NULL) && (privData != NULL)) {
-            if (derivedPub == NULL) {
-                ok = 0;
-            }
-            else if (mldsa->hasPub) {
-                if ((derivedPubLen != pubLen) ||
-                        (XMEMCMP(derivedPub, pubData, pubLen) != 0)) {
-                    ok = 0;
-                }
-            }
         }
         if (ok && (pubData != NULL)) {
             rc = wc_MlDsaKey_ImportPubRaw(&mldsa->key, pubData,
@@ -628,7 +605,6 @@ static int wp_mldsa_import(wp_MlDsa* mldsa, int selection,
         mldsa->hasPriv = 0;
         mldsa->hasPub = 0;
     }
-    OPENSSL_free(derivedPub);
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
