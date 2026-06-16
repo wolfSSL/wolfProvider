@@ -539,6 +539,10 @@ static int wp_mldsa_hash_allowed(enum wc_HashType hashType)
     if ((hashType == WC_HASH_TYPE_SHA256) ||
             (hashType == WC_HASH_TYPE_SHA384) ||
             (hashType == WC_HASH_TYPE_SHA512) ||
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+            (hashType == WC_HASH_TYPE_SHA512_256) ||
+#endif
             (hashType == WC_HASH_TYPE_SHA3_256) ||
             (hashType == WC_HASH_TYPE_SHA3_384) ||
             (hashType == WC_HASH_TYPE_SHA3_512)) {
@@ -583,6 +587,9 @@ static int wp_mldsa_sign_prehash(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     int digestLen;
     unsigned char digest[WC_MAX_DIGEST_SIZE];
 
+    if ((ctx->mldsa == NULL) || (sigLen == NULL)) {
+        return 0;
+    }
     sigSz = (word32)wp_mldsa_get_sig_size(ctx->mldsa);
     if (sig == NULL) {
         *sigLen = sigSz;
