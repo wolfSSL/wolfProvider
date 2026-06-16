@@ -191,6 +191,9 @@ static wp_MlDsaSigCtx* wp_mldsa_newctx(WOLFPROV_CTX* provCtx, const char* propq)
     }
     if (ctx != NULL) {
         ctx->provCtx = provCtx;
+        /* WC_HASH_TYPE_NONE is not guaranteed to be 0 (e.g. some FIPS enum
+         * layouts), so set pure mode explicitly rather than relying on zalloc. */
+        ctx->hashType = WC_HASH_TYPE_NONE;
     }
     return ctx;
 }
