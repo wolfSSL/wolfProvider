@@ -434,35 +434,10 @@ static int wp_mlkem_match(const wp_MlKem* a, const wp_MlKem* b, int selection)
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
-        lenA = a->data->pubKeySize;
-        lenB = b->data->pubKeySize;
-        bufA = (unsigned char*)OPENSSL_malloc(lenA);
-        bufB = (unsigned char*)OPENSSL_malloc(lenB);
-        if ((bufA == NULL) || (bufB == NULL)) {
-            ok = 0;
-        }
-        if (ok) {
-            rc = wc_MlKemKey_EncodePublicKey((MlKemKey*)&a->key, bufA, lenA);
-            if (rc != 0) {
-                ok = 0;
-            }
-        }
-        if (ok) {
-            rc = wc_MlKemKey_EncodePublicKey((MlKemKey*)&b->key, bufB, lenB);
-            if (rc != 0) {
-                ok = 0;
-            }
-        }
-        if (ok && ((lenA != lenB) || (XMEMCMP(bufA, bufB, lenA) != 0))) {
-            ok = 0;
-        }
-        OPENSSL_free(bufA);
-        OPENSSL_free(bufB);
-        bufA = NULL;
-        bufB = NULL;
-    }
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+    /* The encoded ML-KEM private key embeds the public key, so comparing
+     * private keys also covers the public. Only fall back to a public-only
+     * compare when the private key is not part of the selection. */
+    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         lenA = a->data->privKeySize;
         lenB = b->data->privKeySize;
         bufA = (unsigned char*)OPENSSL_malloc(lenA);
@@ -487,6 +462,32 @@ static int wp_mlkem_match(const wp_MlKem* a, const wp_MlKem* b, int selection)
         }
         OPENSSL_clear_free(bufA, lenA);
         OPENSSL_clear_free(bufB, lenB);
+    }
+    else if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+        lenA = a->data->pubKeySize;
+        lenB = b->data->pubKeySize;
+        bufA = (unsigned char*)OPENSSL_malloc(lenA);
+        bufB = (unsigned char*)OPENSSL_malloc(lenB);
+        if ((bufA == NULL) || (bufB == NULL)) {
+            ok = 0;
+        }
+        if (ok) {
+            rc = wc_MlKemKey_EncodePublicKey((MlKemKey*)&a->key, bufA, lenA);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            rc = wc_MlKemKey_EncodePublicKey((MlKemKey*)&b->key, bufB, lenB);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok && ((lenA != lenB) || (XMEMCMP(bufA, bufB, lenA) != 0))) {
+            ok = 0;
+        }
+        OPENSSL_free(bufA);
+        OPENSSL_free(bufB);
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -537,17 +538,10 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
                 ok = 0;
             }
             if (ok) {
+                /* FIPS 203 private keys embed the public component; decoding
+                 * the private sets the public too. */
                 mlkem->hasPriv = 1;
-                /* FIPS 203 private keys embed the public component; probe it
-                 * so we can consistency-check against any supplied pub. */
-                derivedPubLen = mlkem->data->pubKeySize;
-                derivedPub = (unsigned char*)OPENSSL_malloc(derivedPubLen);
-                if (derivedPub != NULL) {
-                    if (wc_MlKemKey_EncodePublicKey(&mlkem->key, derivedPub,
-                            derivedPubLen) == 0) {
-                        mlkem->hasPub = 1;
-                    }
-                }
+                mlkem->hasPub = 1;
             }
         }
     }
@@ -559,18 +553,22 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
         if (ok && (pubData != NULL) && (pubLen != mlkem->data->pubKeySize)) {
             ok = 0;
         }
-        /* Both supplied: if we derived a pub from priv, supplied pub must
-         * match. OOM during malloc is fatal (no fail-open under memory
-         * pressure). If wolfSSL didn't auto-derive, the check is skipped. */
+        /* Both supplied: the public embedded in the decoded private must match
+         * the supplied public. OOM during malloc is fatal (no fail-open under
+         * memory pressure). */
         if (ok && (pubData != NULL) && (privData != NULL)) {
+            derivedPubLen = mlkem->data->pubKeySize;
+            derivedPub = (unsigned char*)OPENSSL_malloc(derivedPubLen);
             if (derivedPub == NULL) {
                 ok = 0;
             }
-            else if (mlkem->hasPub) {
-                if ((derivedPubLen != pubLen) ||
-                        (XMEMCMP(derivedPub, pubData, pubLen) != 0)) {
-                    ok = 0;
-                }
+            if (ok && (wc_MlKemKey_EncodePublicKey(&mlkem->key, derivedPub,
+                    derivedPubLen) != 0)) {
+                ok = 0;
+            }
+            if (ok && ((derivedPubLen != pubLen) ||
+                    (XMEMCMP(derivedPub, pubData, pubLen) != 0))) {
+                ok = 0;
             }
         }
         if (ok && (pubData != NULL)) {
