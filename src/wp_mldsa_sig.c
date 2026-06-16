@@ -526,6 +526,24 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     return ok;
 }
 
+/* Digests permitted for FIPS 204 HashML-DSA. Restricting to the SHA2/SHA3
+ * families keeps the generic name mapper from admitting legacy/undersized
+ * digests (MD5, SHA-1, SHA-512/224) as a HashML-DSA pre-hash. */
+static int wp_mldsa_hash_allowed(enum wc_HashType hashType)
+{
+    int allowed = 0;
+
+    if ((hashType == WC_HASH_TYPE_SHA256) ||
+            (hashType == WC_HASH_TYPE_SHA384) ||
+            (hashType == WC_HASH_TYPE_SHA512) ||
+            (hashType == WC_HASH_TYPE_SHA3_256) ||
+            (hashType == WC_HASH_TYPE_SHA3_384) ||
+            (hashType == WC_HASH_TYPE_SHA3_512)) {
+        allowed = 1;
+    }
+    return allowed;
+}
+
 /* Select a pre-hash (HashML-DSA) digest from the supplied name and start the
  * digest object that the update path feeds. Leaves the context in pure mode
  * (hashType WC_HASH_TYPE_NONE) when no digest name is given. */
@@ -536,7 +554,8 @@ static int wp_mldsa_setup_prehash(wp_MlDsaSigCtx* ctx, const char* mdName)
     OSSL_LIB_CTX* libCtx = (ctx->provCtx != NULL) ? ctx->provCtx->libCtx : NULL;
 
     ctx->hashType = wp_name_to_wc_hash_type(libCtx, mdName, NULL);
-    if (ctx->hashType == WC_HASH_TYPE_NONE) {
+    if (!wp_mldsa_hash_allowed(ctx->hashType)) {
+        ctx->hashType = WC_HASH_TYPE_NONE;
         ok = 0;
     }
     if (ok) {
@@ -665,7 +684,13 @@ static int wp_mldsa_digest_sign_init(wp_MlDsaSigCtx* ctx, const char* mdName,
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_digest_sign_init");
     ok = wp_mldsa_init(ctx, mldsa, params);
     if (ok && (mdName != NULL) && (mdName[0] != '\0')) {
-        ok = wp_mldsa_setup_prehash(ctx, mdName);
+        /* External-mu and pre-hash (HashML-DSA) are mutually exclusive. */
+        if (ctx->mu) {
+            ok = 0;
+        }
+        else {
+            ok = wp_mldsa_setup_prehash(ctx, mdName);
+        }
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -679,7 +704,13 @@ static int wp_mldsa_digest_verify_init(wp_MlDsaSigCtx* ctx, const char* mdName,
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_digest_verify_init");
     ok = wp_mldsa_init(ctx, mldsa, params);
     if (ok && (mdName != NULL) && (mdName[0] != '\0')) {
-        ok = wp_mldsa_setup_prehash(ctx, mdName);
+        /* External-mu and pre-hash (HashML-DSA) are mutually exclusive. */
+        if (ctx->mu) {
+            ok = 0;
+        }
+        else {
+            ok = wp_mldsa_setup_prehash(ctx, mdName);
+        }
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -945,6 +976,10 @@ static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
     if (ok) {
         p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_MU);
         if ((p != NULL) && !OSSL_PARAM_get_uint(p, &ctx->mu)) {
+            ok = 0;
+        }
+        /* External-mu and pre-hash (HashML-DSA) are mutually exclusive. */
+        if (ok && ctx->mu && (ctx->hashType != WC_HASH_TYPE_NONE)) {
             ok = 0;
         }
     }

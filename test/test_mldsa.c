@@ -789,6 +789,19 @@ int test_mldsa_digest_sign_prehash(void* data)
         if (err) PRINT_ERR_MSG("EVP_DigestVerify (pre-hash) failed");
     }
     EVP_MD_CTX_free(mdctx);
+    mdctx = NULL;
+    /* A weak/legacy digest is not allowed for HashML-DSA. */
+    if (err == 0) {
+        mdctx = EVP_MD_CTX_new();
+        err = (mdctx == NULL);
+    }
+    if (err == 0) {
+        rc = EVP_DigestSignInit_ex(mdctx, NULL, "SHA-1", wpLibCtx, NULL, k,
+            NULL);
+        err = (rc == 1);
+        if (err) PRINT_ERR_MSG("DigestSignInit accepted SHA-1 for ML-DSA");
+    }
+    EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(k);
     return err;
 }
