@@ -396,24 +396,40 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     }
     if (ok) {
         word32 outLen = sigSz;
-        unsigned char rnd[WP_MLDSA_RND_SZ];
         wc_MlDsaKey* key = (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa);
+        unsigned char rnd[WP_MLDSA_RND_SZ];
+        /* Supply a caller-controlled randomizer only when it is fixed (test
+         * entropy or deterministic); otherwise let wolfSSL hedge it from its
+         * own RNG rather than generating one here. */
+        int useSeed = (ctx->testEntropyLen == WP_MLDSA_RND_SZ) ||
+            ctx->deterministic;
 
-        if (wp_mldsa_fill_rnd(ctx, rnd) != 0) {
-            ok = 0;
+        if (useSeed || ctx->mu) {
+            if (wp_mldsa_fill_rnd(ctx, rnd) != 0) {
+                ok = 0;
+            }
         }
         if (ok && ctx->mu) {
-            /* External-mu mode: the message is the 64-byte mu. */
+            /* External-mu mode: only a seeded signer exists; the message is
+             * the 64-byte mu. */
             rc = wc_MlDsaKey_SignMuWithSeed(key, sig, &outLen, m,
                 (word32)msgLen, rnd);
             if (rc != 0) {
                 ok = 0;
             }
         }
-        else if (ok) {
-            /* FIPS 204 sec 5.2 pure ML-DSA with the supplied context. */
+        else if (ok && useSeed) {
+            /* FIPS 204 sec 5.2 pure ML-DSA, fixed randomizer. */
             rc = wc_MlDsaKey_SignCtxWithSeed(key, ctx->context,
                 (byte)ctx->contextLen, sig, &outLen, m, (word32)msgLen, rnd);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        else if (ok) {
+            /* FIPS 204 sec 5.2 pure ML-DSA; wolfSSL generates the randomizer. */
+            rc = wc_MlDsaKey_SignCtx(key, ctx->context, (byte)ctx->contextLen,
+                sig, &outLen, m, (word32)msgLen, &ctx->rng);
             if (rc != 0) {
                 ok = 0;
             }
