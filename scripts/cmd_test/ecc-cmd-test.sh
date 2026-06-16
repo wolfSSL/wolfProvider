@@ -40,6 +40,8 @@ echo "This is test data for ECC signing and verification." > ecc_outputs/test_da
 CURVES=("prime256v1" "secp384r1" "secp521r1")
 PROVIDER_NAMES=("libwolfprov" "default")
 
+WOLFPROV_FORCE_FAIL=${WOLFPROV_FORCE_FAIL:-0}
+
 # Function to validate key
 validate_key() {
     local curve=$1
