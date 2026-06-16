@@ -255,16 +255,19 @@ static wp_MlDsaSigCtx* wp_mldsa_dupctx(wp_MlDsaSigCtx* srcCtx)
     dstCtx->testEntropyLen = srcCtx->testEntropyLen;
     dstCtx->deterministic = srcCtx->deterministic;
     dstCtx->mu = srcCtx->mu;
-    /* Carry the in-progress pre-hash digest so the dup signs identically. */
-    dstCtx->hashType = srcCtx->hashType;
-    if ((srcCtx->hashType != WC_HASH_TYPE_NONE) &&
-            (!wp_hash_copy(&srcCtx->hashObj, &dstCtx->hashObj
+    /* Carry the in-progress pre-hash digest so the dup signs identically.
+     * Set hashType only after a successful copy: otherwise a failed copy would
+     * leave freectx cleaning up an uninitialized hashObj. */
+    if (srcCtx->hashType != WC_HASH_TYPE_NONE) {
+        if (!wp_hash_copy(&srcCtx->hashObj, &dstCtx->hashObj
 #if LIBWOLFSSL_VERSION_HEX < 0x05007004
                 , srcCtx->hashType
 #endif
-                ))) {
-        wp_mldsa_freectx(dstCtx);
-        return NULL;
+                )) {
+            wp_mldsa_freectx(dstCtx);
+            return NULL;
+        }
+        dstCtx->hashType = srcCtx->hashType;
     }
     return dstCtx;
 }
@@ -653,7 +656,7 @@ static int wp_mldsa_verify_prehash(wp_MlDsaSigCtx* ctx,
     int digestLen;
     unsigned char digest[WC_MAX_DIGEST_SIZE];
 
-    if (sigLen > 0xFFFFFFFFU) {
+    if ((ctx->mldsa == NULL) || (sig == NULL) || (sigLen > 0xFFFFFFFFU)) {
         return 0;
     }
     digestLen = wc_HashGetDigestSize(ctx->hashType);
