@@ -27,10 +27,12 @@
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+#include <wolfprovider/internal.h>
 
 #ifdef WP_HAVE_MLDSA
 
 #include <wolfssl/wolfcrypt/wc_mldsa.h>
+#include <wolfssl/wolfcrypt/hash.h>
 
 /**
  * ML-DSA signature context.
@@ -67,6 +69,10 @@ typedef struct wp_MlDsaSigCtx {
     unsigned int deterministic;
     /** External-mu mode: the message IS the 64-byte mu. */
     unsigned int mu;
+    /** Pre-hash (HashML-DSA) digest type, or WC_HASH_TYPE_NONE for pure. */
+    enum wc_HashType hashType;
+    /** Digest object updated with the message bytes in pre-hash mode. */
+    wc_HashAlg hashObj;
 } wp_MlDsaSigCtx;
 
 static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
@@ -198,6 +204,9 @@ static void wp_mldsa_freectx(wp_MlDsaSigCtx* ctx)
 {
     if (ctx != NULL) {
         wc_FreeRng(&ctx->rng);
+        if (ctx->hashType != WC_HASH_TYPE_NONE) {
+            wc_HashFree(&ctx->hashObj, ctx->hashType);
+        }
         wp_mldsa_free(ctx->mldsa);
         OPENSSL_clear_free(ctx->mdBuf, ctx->mdCap);
         /* ctx embeds the signing-randomizer override (testEntropy); cleanse. */
@@ -243,6 +252,17 @@ static wp_MlDsaSigCtx* wp_mldsa_dupctx(wp_MlDsaSigCtx* srcCtx)
     dstCtx->testEntropyLen = srcCtx->testEntropyLen;
     dstCtx->deterministic = srcCtx->deterministic;
     dstCtx->mu = srcCtx->mu;
+    /* Carry the in-progress pre-hash digest so the dup signs identically. */
+    dstCtx->hashType = srcCtx->hashType;
+    if ((srcCtx->hashType != WC_HASH_TYPE_NONE) &&
+            (!wp_hash_copy(&srcCtx->hashObj, &dstCtx->hashObj
+#if LIBWOLFSSL_VERSION_HEX < 0x05007004
+                , srcCtx->hashType
+#endif
+                ))) {
+        wp_mldsa_freectx(dstCtx);
+        return NULL;
+    }
     return dstCtx;
 }
 
@@ -278,6 +298,10 @@ static int wp_mldsa_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
         ctx->mldsa = mldsa;
     }
     wp_mldsa_buf_reset(ctx);
+    if (ctx->hashType != WC_HASH_TYPE_NONE) {
+        wc_HashFree(&ctx->hashObj, ctx->hashType);
+        ctx->hashType = WC_HASH_TYPE_NONE;
+    }
     /* Match OpenSSL: re-init clears external-mu but persists the context
      * string, deterministic flag and test-entropy until explicitly changed. */
     ctx->mu = 0;
@@ -502,12 +526,133 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     return ok;
 }
 
+/* Select a pre-hash (HashML-DSA) digest from the supplied name and start the
+ * digest object that the update path feeds. Leaves the context in pure mode
+ * (hashType WC_HASH_TYPE_NONE) when no digest name is given. */
+static int wp_mldsa_setup_prehash(wp_MlDsaSigCtx* ctx, const char* mdName)
+{
+    int ok = 1;
+    int rc;
+    OSSL_LIB_CTX* libCtx = (ctx->provCtx != NULL) ? ctx->provCtx->libCtx : NULL;
+
+    ctx->hashType = wp_name_to_wc_hash_type(libCtx, mdName, NULL);
+    if (ctx->hashType == WC_HASH_TYPE_NONE) {
+        ok = 0;
+    }
+    if (ok) {
+        rc = wc_HashInit_ex(&ctx->hashObj, ctx->hashType, NULL, INVALID_DEVID);
+        if (rc != 0) {
+            ctx->hashType = WC_HASH_TYPE_NONE;
+            ok = 0;
+        }
+    }
+    return ok;
+}
+
+/* FIPS 204 sec 5.4.1 HashML-DSA: sign the pre-hash digest with the supplied
+ * context. wolfSSL generates the randomizer unless one is fixed (test entropy
+ * or deterministic), in which case the seeded API is used. */
+static int wp_mldsa_sign_prehash(wp_MlDsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize)
+{
+    int ok = 1;
+    int rc;
+    word32 sigSz;
+    int digestLen;
+    unsigned char digest[WC_MAX_DIGEST_SIZE];
+
+    sigSz = (word32)wp_mldsa_get_sig_size(ctx->mldsa);
+    if (sig == NULL) {
+        *sigLen = sigSz;
+        return 1;
+    }
+    if (sigSize == (size_t)-1) {
+        sigSize = *sigLen;
+    }
+    if (sigSize < sigSz) {
+        ok = 0;
+    }
+    digestLen = wc_HashGetDigestSize(ctx->hashType);
+    if (ok && (digestLen <= 0)) {
+        ok = 0;
+    }
+    if (ok && (wc_HashFinal(&ctx->hashObj, ctx->hashType, digest) != 0)) {
+        ok = 0;
+    }
+    if (ok) {
+        word32 outLen = sigSz;
+        wc_MlDsaKey* key = (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa);
+        unsigned char rnd[WP_MLDSA_RND_SZ];
+        int useSeed = (ctx->testEntropyLen == WP_MLDSA_RND_SZ) ||
+            ctx->deterministic;
+
+        if (useSeed) {
+            if (wp_mldsa_fill_rnd(ctx, rnd) != 0) {
+                ok = 0;
+            }
+            if (ok) {
+                rc = wc_MlDsaKey_SignCtxHashWithSeed(key, ctx->context,
+                    (byte)ctx->contextLen, sig, &outLen, digest,
+                    (word32)digestLen, (int)ctx->hashType, rnd);
+                if (rc != 0) {
+                    ok = 0;
+                }
+            }
+        }
+        else {
+            rc = wc_MlDsaKey_SignCtxHash(key, ctx->context,
+                (byte)ctx->contextLen, sig, &outLen, digest,
+                (word32)digestLen, (int)ctx->hashType, &ctx->rng);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            *sigLen = outLen;
+        }
+        wc_ForceZero(rnd, sizeof(rnd));
+    }
+    return ok;
+}
+
+/* FIPS 204 sec 5.4.1 HashML-DSA verify of a pre-hash digest. */
+static int wp_mldsa_verify_prehash(wp_MlDsaSigCtx* ctx,
+    const unsigned char* sig, size_t sigLen)
+{
+    int ok = 1;
+    int res = 0;
+    int digestLen;
+    unsigned char digest[WC_MAX_DIGEST_SIZE];
+
+    if (sigLen > 0xFFFFFFFFU) {
+        return 0;
+    }
+    digestLen = wc_HashGetDigestSize(ctx->hashType);
+    if (digestLen <= 0) {
+        ok = 0;
+    }
+    if (ok && (wc_HashFinal(&ctx->hashObj, ctx->hashType, digest) != 0)) {
+        ok = 0;
+    }
+    if (ok) {
+        int rc = wc_MlDsaKey_VerifyCtxHash(
+            (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), sig, (word32)sigLen,
+            ctx->context, (byte)ctx->contextLen, digest, (word32)digestLen,
+            (int)ctx->hashType, &res);
+        if ((rc != 0) || (res != 1)) {
+            ok = 0;
+        }
+    }
+    return ok;
+}
+
 /**
- * Digest-sign init: ML-DSA is pure (no pre-hash), so the buffer captures the
- * message and the one-shot signer is invoked at _final time.
+ * Digest-sign init. With no digest name ML-DSA is pure: the buffer captures
+ * the message and the one-shot signer runs at _final. With a digest name the
+ * pre-hash (HashML-DSA) path streams the message into a digest object.
  *
  * @param [in, out] ctx     Signature context.
- * @param [in]      mdName  Message digest name (must be NULL or empty).
+ * @param [in]      mdName  Message digest name, or NULL/empty for pure ML-DSA.
  * @param [in]      mldsa   ML-DSA key (reference taken).
  * @param [in]      params  Parameters. Unused.
  * @return  1 on success, 0 on failure.
@@ -518,11 +663,10 @@ static int wp_mldsa_digest_sign_init(wp_MlDsaSigCtx* ctx, const char* mdName,
     int ok;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_digest_sign_init");
-    if ((mdName != NULL) && (mdName[0] != '\0')) {
-        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
-        return 0;
-    }
     ok = wp_mldsa_init(ctx, mldsa, params);
+    if (ok && (mdName != NULL) && (mdName[0] != '\0')) {
+        ok = wp_mldsa_setup_prehash(ctx, mdName);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -533,17 +677,17 @@ static int wp_mldsa_digest_verify_init(wp_MlDsaSigCtx* ctx, const char* mdName,
     int ok;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_digest_verify_init");
-    if ((mdName != NULL) && (mdName[0] != '\0')) {
-        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
-        return 0;
-    }
     ok = wp_mldsa_init(ctx, mldsa, params);
+    if (ok && (mdName != NULL) && (mdName[0] != '\0')) {
+        ok = wp_mldsa_setup_prehash(ctx, mdName);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
 /**
- * Append data to the accumulated message buffer.
+ * Update the in-progress signature. Pre-hash mode feeds the digest object;
+ * pure mode accumulates the raw message.
  *
  * @param [in, out] ctx      Signature context.
  * @param [in]      data     Data to append.
@@ -560,20 +704,34 @@ static int wp_mldsa_digest_signverify_update(wp_MlDsaSigCtx* ctx,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    ok = wp_mldsa_buf_append(ctx, data, dataLen);
+    if ((data == NULL) && (dataLen != 0)) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
+    }
+    if (ctx->hashType != WC_HASH_TYPE_NONE) {
+        if (dataLen > 0xFFFFFFFFU) {
+            ok = 0;
+        }
+        else {
+            ok = (wc_HashUpdate(&ctx->hashObj, ctx->hashType, data,
+                (word32)dataLen) == 0);
+        }
+    }
+    else {
+        ok = wp_mldsa_buf_append(ctx, data, dataLen);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
 /**
- * Finalize a digest-style sign: produce signature over the buffered message.
- *
- * If sig is NULL, just report the signature size.
+ * Finalize a digest-style sign. If sig is NULL, just report the signature
+ * size.
  *
  * @param [in]      ctx      Signature context.
  * @param [out]     sig      Signature buffer.
  * @param [in, out] sigLen   On in, buffer size; on out, signature length.
- * @param [in]      sigSize  Allocated size of sig (unused).
+ * @param [in]      sigSize  Allocated size of sig.
  * @return  1 on success, 0 on failure.
  */
 static int wp_mldsa_digest_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
@@ -586,13 +744,18 @@ static int wp_mldsa_digest_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    ok = wp_mldsa_sign(ctx, sig, sigLen, sigSize, ctx->mdBuf, ctx->mdLen);
+    if (ctx->hashType != WC_HASH_TYPE_NONE) {
+        ok = wp_mldsa_sign_prehash(ctx, sig, sigLen, sigSize);
+    }
+    else {
+        ok = wp_mldsa_sign(ctx, sig, sigLen, sigSize, ctx->mdBuf, ctx->mdLen);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
 /**
- * Finalize a digest-style verify on the buffered message.
+ * Finalize a digest-style verify.
  *
  * @param [in] ctx     Signature context.
  * @param [in] sig     Signature.
@@ -609,7 +772,12 @@ static int wp_mldsa_digest_verify_final(wp_MlDsaSigCtx* ctx,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    ok = wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
+    if (ctx->hashType != WC_HASH_TYPE_NONE) {
+        ok = wp_mldsa_verify_prehash(ctx, sig, sigLen);
+    }
+    else {
+        ok = wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

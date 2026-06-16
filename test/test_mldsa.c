@@ -744,27 +744,49 @@ int test_mldsa_get_params(void* data)
 }
 
 /* DigestSignInit with non-empty mdName must fail (ML-DSA is pure). */
-int test_mldsa_digest_sign_init_rejects_md(void* data)
+int test_mldsa_digest_sign_prehash(void* data)
 {
     int err = 0;
     EVP_PKEY* k = NULL;
     EVP_MD_CTX* mdctx = NULL;
+    unsigned char sig[5000];
+    size_t sigLen = sizeof(sig);
+    const unsigned char msg[] = "wolfProvider ML-DSA pre-hash message";
     int rc;
 
     (void)data;
-    PRINT_MSG("DigestSignInit rejects non-empty md");
+    PRINT_MSG("DigestSign/Verify pre-hash (HashML-DSA) round-trip");
 
-    err = mldsa_keygen("ML-DSA-44", &k);
+    err = mldsa_keygen("ML-DSA-65", &k);
+    if (err == 0) {
+        mdctx = EVP_MD_CTX_new();
+        err = (mdctx == NULL);
+    }
+    /* A digest name selects FIPS 204 HashML-DSA; signing must succeed. */
+    if (err == 0) {
+        rc = EVP_DigestSignInit_ex(mdctx, NULL, "SHA-256", wpLibCtx, NULL, k,
+            NULL);
+        err = (rc != 1);
+        if (err) PRINT_ERR_MSG("DigestSignInit with mdName failed");
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdctx, sig, &sigLen, msg, sizeof(msg)) != 1;
+        if (err) PRINT_ERR_MSG("EVP_DigestSign (pre-hash) failed");
+    }
+    EVP_MD_CTX_free(mdctx);
+    mdctx = NULL;
     if (err == 0) {
         mdctx = EVP_MD_CTX_new();
         err = (mdctx == NULL);
     }
     if (err == 0) {
-        /* Pass "SHA-256" as mdName; ML-DSA is pure-mode so this MUST fail. */
-        rc = EVP_DigestSignInit_ex(mdctx, NULL, "SHA-256", wpLibCtx, NULL, k,
+        rc = EVP_DigestVerifyInit_ex(mdctx, NULL, "SHA-256", wpLibCtx, NULL, k,
             NULL);
-        err = (rc == 1);
-        if (err) PRINT_ERR_MSG("DigestSignInit with mdName unexpectedly OK");
+        err = (rc != 1);
+    }
+    if (err == 0) {
+        err = EVP_DigestVerify(mdctx, sig, sigLen, msg, sizeof(msg)) != 1;
+        if (err) PRINT_ERR_MSG("EVP_DigestVerify (pre-hash) failed");
     }
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(k);
