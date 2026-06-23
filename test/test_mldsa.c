@@ -1157,4 +1157,67 @@ int test_mldsa_x509_sign_verify(void* data)
     return err;
 }
 
+/* A public-only key must not be able to sign: pure streaming sign must reject
+ * it rather than producing a bogus signature. */
+int test_mldsa_pubonly_sign_fails(void* data)
+{
+    int err = 0;
+    EVP_PKEY* k = NULL;
+    EVP_PKEY* pubKey = NULL;
+    EVP_PKEY_CTX* ctx = NULL;
+    EVP_MD_CTX* mdctx = NULL;
+    OSSL_PARAM_BLD* bld = NULL;
+    OSSL_PARAM* params = NULL;
+    unsigned char* pub = NULL;
+    size_t pubLen = 0;
+    unsigned char sig[5000];
+    size_t sigLen = sizeof(sig);
+    const unsigned char msg[] = "no private key here";
+
+    (void)data;
+    PRINT_MSG("Public-only key cannot sign");
+
+    err = mldsa_keygen("ML-DSA-65", &k);
+    if (err == 0) {
+        err = mldsa_get_pub(k, &pub, &pubLen);
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "ML-DSA-65", NULL);
+        err = (ctx == NULL) || (EVP_PKEY_fromdata_init(ctx) != 1);
+    }
+    if (err == 0) {
+        bld = OSSL_PARAM_BLD_new();
+        err = (bld == NULL) || OSSL_PARAM_BLD_push_octet_string(bld,
+            OSSL_PKEY_PARAM_PUB_KEY, pub, pubLen) != 1;
+        if (err == 0) {
+            params = OSSL_PARAM_BLD_to_param(bld);
+            err = (params == NULL);
+        }
+        OSSL_PARAM_BLD_free(bld);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, &pubKey, EVP_PKEY_PUBLIC_KEY, params) != 1;
+    }
+    if (err == 0) {
+        mdctx = EVP_MD_CTX_new();
+        err = (mdctx == NULL);
+    }
+    /* DigestSignInit may succeed; the final sign must fail with no private. */
+    if (err == 0) {
+        if (EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, pubKey,
+                NULL) == 1) {
+            err = (EVP_DigestSign(mdctx, sig, &sigLen, msg, sizeof(msg)) == 1);
+        }
+        if (err) PRINT_ERR_MSG("public-only key produced a signature");
+    }
+
+    EVP_MD_CTX_free(mdctx);
+    OSSL_PARAM_free(params);
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(pubKey);
+    EVP_PKEY_free(k);
+    OPENSSL_free(pub);
+    return err;
+}
+
 #endif /* WP_HAVE_MLDSA */

@@ -210,6 +210,17 @@ int wp_mldsa_get_sig_size(const wp_MlDsa* mldsa)
 }
 
 /**
+ * Report whether the key has a usable private component.
+ *
+ * @param [in] mldsa  ML-DSA key.
+ * @return  1 if a private key is present, 0 otherwise.
+ */
+int wp_mldsa_has_private(const wp_MlDsa* mldsa)
+{
+    return (mldsa != NULL) && (mldsa->hasPriv != 0);
+}
+
+/**
  * Create a new ML-DSA key object.
  *
  * @param [in] provCtx  Provider context.

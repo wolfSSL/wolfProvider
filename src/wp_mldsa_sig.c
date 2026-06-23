@@ -688,7 +688,10 @@ static int wp_mldsa_stream_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     word32 sigSz;
     unsigned char mu[MLDSA_MU_SZ];
 
-    if ((ctx->mldsa == NULL) || (sigLen == NULL)) {
+    /* SignMuWithSeed does not reject a public-only key; the pure SignCtx path
+     * did, so guard here to fail cleanly rather than sign with no private. */
+    if ((ctx->mldsa == NULL) || (sigLen == NULL) ||
+            (!wp_mldsa_has_private(ctx->mldsa))) {
         return 0;
     }
     sigSz = (word32)wp_mldsa_get_sig_size(ctx->mldsa);
@@ -1224,6 +1227,21 @@ static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
     if (params == NULL) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
         return 1;
+    }
+
+    /* Once pure-mode streaming has started the message is no longer buffered
+     * and mu cannot be recomputed, so the context, external-mu, and
+     * message-encoding can no longer change without silently binding stale
+     * domain separation. Reject such late changes. */
+    if (ctx->muInit &&
+            ((OSSL_PARAM_locate_const(params,
+                  OSSL_SIGNATURE_PARAM_CONTEXT_STRING) != NULL) ||
+             (OSSL_PARAM_locate_const(params,
+                  OSSL_SIGNATURE_PARAM_MU) != NULL) ||
+             (OSSL_PARAM_locate_const(params,
+                  OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING) != NULL))) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
     }
 
     p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_CONTEXT_STRING);

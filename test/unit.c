@@ -515,6 +515,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mldsa_oneshot_sign_verify, NULL),
     TEST_DECL(test_mldsa_get_params, NULL),
     TEST_DECL(test_mldsa_digest_sign_prehash, NULL),
+    TEST_DECL(test_mldsa_pubonly_sign_fails, NULL),
     TEST_DECL(test_mldsa_import_mismatched_pubpriv, NULL),
     TEST_DECL(test_mldsa_empty_message, NULL),
     TEST_DECL(test_mldsa_reinit_null_key, NULL),
