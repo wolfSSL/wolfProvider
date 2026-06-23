@@ -1229,11 +1229,11 @@ static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
         return 1;
     }
 
-    /* Once pure-mode streaming has started the message is no longer buffered
-     * and mu cannot be recomputed, so the context, external-mu, and
-     * message-encoding can no longer change without silently binding stale
-     * domain separation. Reject such late changes. */
-    if (ctx->muInit &&
+    /* Once any message input has been consumed -- streamed into the mu SHAKE
+     * (muInit) or buffered as external mu (mdLen) -- the context, external-mu,
+     * and message-encoding can no longer change without silently dropping
+     * input or binding stale domain separation. Reject such late changes. */
+    if ((ctx->muInit || (ctx->mdLen > 0)) &&
             ((OSSL_PARAM_locate_const(params,
                   OSSL_SIGNATURE_PARAM_CONTEXT_STRING) != NULL) ||
              (OSSL_PARAM_locate_const(params,
