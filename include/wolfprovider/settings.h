@@ -28,6 +28,20 @@
 #include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/settings.h>
 
+/* wc_RNG_DRBG_Reseed is only reliably exported in non-FIPS >= 5.7.2 and FIPS
+ * v6+. FIPS v5.x bundles are inconsistent (some keep it WOLFSSL_LOCAL), so use
+ * the native reseed only where it's exported, else fall back to DRBG
+ * re-instantiation. WP_NO_DRBG_RESEED forces the fallback. */
+#if defined(WP_NO_DRBG_RESEED)
+    /* caller forced the re-instantiation fallback */
+#elif !defined(HAVE_FIPS)
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05007002
+        #define WP_HAVE_DRBG_RESEED
+    #endif
+#elif defined(HAVE_FIPS_VERSION_MAJOR) && HAVE_FIPS_VERSION_MAJOR >= 6
+    #define WP_HAVE_DRBG_RESEED
+#endif
+
 #define WP_HAVE_DIGEST
 #if !defined(NO_MD5)
     #define WP_HAVE_MD5

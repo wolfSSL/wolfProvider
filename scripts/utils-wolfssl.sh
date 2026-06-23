@@ -179,7 +179,16 @@ install_wolfssl() {
             # Determine configure option from tag
             local fips_configure_arg=""
             case "$fips_tag" in
+                v5.2.4|linuxv5.2.4)
+                    # Distinct module (SP math, PATCH 4) — not the v5/cert4718 base
+                    fips_configure_arg="v5.2.4"
+                    ;;
+                v5.2.3|linuxv5.2.3)
+                    # Distinct module (PATCH 3) — not the v5/cert4718 base
+                    fips_configure_arg="v5.2.3"
+                    ;;
                 v5.2.*|v5.3.*|v5.4.*|v5.5.*|linuxv5.*)
+                    # v5.2.1/cert4718 and other v5.x map to the base v5 module
                     fips_configure_arg="v5"
                     ;;
                 v6.*|linuxv6.*)
@@ -320,7 +329,12 @@ install_wolfssl() {
                 do_cleanup
                 exit 1
             fi
-            cd ..
+            # Only the clone path descended into XXX-fips-test; bundles build in
+            # wolfssl-source directly. Must mirror the descent guard, else the
+            # bundle path pops one level too far.
+            if [ -z "$WOLFSSL_FIPS_BUNDLE" ]; then
+                cd ..
+            fi
             printf "Done.\n"
         fi
     fi
