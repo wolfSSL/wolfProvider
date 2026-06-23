@@ -26,6 +26,9 @@ USER_CFLAGS="$CFLAGS"
 AC_PROG_CC
 AC_LANG(C)
 
+AC_CHECK_PROG([PYTHON3], [python3], [python3])
+AC_CHECK_PROG([PYSPDXTOOLS], [pyspdxtools], [pyspdxtools])
+
 # wolfSSL - check first so its -I/-L paths take precedence over OpenSSL prefix
 # which may contain stale wolfSSL headers from a different version
 AX_CHECK_WOLFSSL(
