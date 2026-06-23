@@ -269,6 +269,26 @@ static int child_test_rand_under_sandbox(OSSL_LIB_CTX *libCtx)
         err = 1;
     }
 
+    /* Reseed under the sandbox with NULL entropy: drives the fresh-entropy
+     * path, which must use the cached SEED-SRC fd, not open() /dev/urandom. */
+    if (err == 0) {
+        EVP_RAND_CTX *rctx = RAND_get0_public(libCtx);
+        if (rctx == NULL) {
+            PRINT_ERR_MSG("RAND_get0_public failed under sandbox");
+            err = 1;
+        }
+        else if (EVP_RAND_reseed(rctx, 0, NULL, 0, NULL, 0) != 1) {
+            PRINT_ERR_MSG("EVP_RAND_reseed failed under sandbox");
+            err = 1;
+        }
+    }
+
+    /* Confirm the DRBG is still usable after the sandboxed reseed. */
+    if (err == 0 && RAND_bytes(buf, sizeof(buf)) != 1) {
+        PRINT_ERR_MSG("RAND_bytes after reseed failed under sandbox");
+        err = 1;
+    }
+
     OSSL_LIB_CTX_set0_default(origCtx);
     return err;
 }

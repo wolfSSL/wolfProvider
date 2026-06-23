@@ -680,6 +680,25 @@ static int test_drbg_reseed_helper(OSSL_LIB_CTX *libCtx, const char *propq)
     }
     PRINT_MSG("Pre/post-reseed outputs differ as expected");
 
+    /* Reseed with explicit entropy + addIn. */
+    {
+        unsigned char ent[32], add[16];
+        memset(ent, 0xA5, sizeof(ent));
+        memset(add, 0x5A, sizeof(add));
+        if (EVP_RAND_reseed(drbg_ctx, 0, ent, sizeof(ent),
+                            add, sizeof(add)) != 1) {
+            PRINT_ERR_MSG("Reseed with entropy/addIn failed");
+            err = 1;
+            goto cleanup;
+        }
+        if (EVP_RAND_generate(drbg_ctx, buf1, sizeof(buf1), 256, 0, NULL, 0)
+                != 1 || memcmp(buf1, buf2, sizeof(buf1)) == 0) {
+            PRINT_ERR_MSG("Generate after entropy reseed failed/unchanged");
+            err = 1;
+            goto cleanup;
+        }
+    }
+
     /* Uninstantiate and verify zeroization (exercises fix #170). */
     if (EVP_RAND_uninstantiate(drbg_ctx) != 1) {
         PRINT_ERR_MSG("EVP_RAND_uninstantiate failed");
