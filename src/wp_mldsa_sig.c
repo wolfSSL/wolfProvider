@@ -33,6 +33,7 @@
 
 #include <wolfssl/wolfcrypt/wc_mldsa.h>
 #include <wolfssl/wolfcrypt/hash.h>
+#include <wolfssl/wolfcrypt/sha3.h>
 
 /**
  * ML-DSA signature context.
@@ -73,6 +74,10 @@ typedef struct wp_MlDsaSigCtx {
     enum wc_HashType hashType;
     /** Digest object updated with the message bytes in pre-hash mode. */
     wc_HashAlg hashObj;
+    /** SHAKE-256 that streams the message into the FIPS 204 mu (pure mode). */
+    wc_Shake muShake;
+    /** Whether muShake has been initialized (tr/prefix/ctx absorbed). */
+    int muInit;
 } wp_MlDsaSigCtx;
 
 static int wp_mldsa_set_ctx_params(wp_MlDsaSigCtx* ctx,
@@ -210,6 +215,9 @@ static void wp_mldsa_freectx(wp_MlDsaSigCtx* ctx)
         if (ctx->hashType != WC_HASH_TYPE_NONE) {
             wc_HashFree(&ctx->hashObj, ctx->hashType);
         }
+        if (ctx->muInit) {
+            wc_Shake256_Free(&ctx->muShake);
+        }
         wp_mldsa_free(ctx->mldsa);
         OPENSSL_clear_free(ctx->mdBuf, ctx->mdCap);
         /* ctx embeds the signing-randomizer override (testEntropy); cleanse. */
@@ -269,6 +277,15 @@ static wp_MlDsaSigCtx* wp_mldsa_dupctx(wp_MlDsaSigCtx* srcCtx)
         }
         dstCtx->hashType = srcCtx->hashType;
     }
+    /* Carry the in-progress mu SHAKE state so the dup signs identically. Set
+     * muInit only after a successful copy (mirrors the hashObj handling). */
+    if (srcCtx->muInit) {
+        if (wc_Shake256_Copy(&srcCtx->muShake, &dstCtx->muShake) != 0) {
+            wp_mldsa_freectx(dstCtx);
+            return NULL;
+        }
+        dstCtx->muInit = 1;
+    }
     return dstCtx;
 }
 
@@ -307,6 +324,10 @@ static int wp_mldsa_init(wp_MlDsaSigCtx* ctx, wp_MlDsa* mldsa,
     if (ctx->hashType != WC_HASH_TYPE_NONE) {
         wc_HashFree(&ctx->hashObj, ctx->hashType);
         ctx->hashType = WC_HASH_TYPE_NONE;
+    }
+    if (ctx->muInit) {
+        wc_Shake256_Free(&ctx->muShake);
+        ctx->muInit = 0;
     }
     /* Match OpenSSL: re-init clears external-mu but persists the context
      * string, deterministic flag and test-entropy until explicitly changed. */
@@ -532,6 +553,214 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     return ok;
 }
 
+/* Derive the FIPS 204 tr (= SHAKE256(pk)) for this key. tr is needed to start
+ * the streaming mu computation. Prefer the public key (verify keys and full
+ * keypairs); fall back to the tr embedded in a private-only key's raw
+ * encoding (rho || K || tr || ...), at offset MLDSA_PUB_SEED_SZ + MLDSA_K_SZ. */
+static int wp_mldsa_get_tr(wp_MlDsaSigCtx* ctx, unsigned char* tr)
+{
+    int ok = 1;
+    int rc;
+    wc_MlDsaKey* key = (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa);
+    unsigned char* buf = NULL;
+    size_t bufAlloc;
+    word32 bufLen;
+    word32 trOff = MLDSA_PUB_SEED_SZ + MLDSA_K_SZ;
+    wc_Shake trShake;
+    int trShakeInit = 0;
+
+    bufAlloc = MLDSA_MAX_PUB_KEY_SIZE;
+    buf = (unsigned char*)OPENSSL_malloc(bufAlloc);
+    if (buf == NULL) {
+        ok = 0;
+    }
+    if (ok) {
+        bufLen = MLDSA_MAX_PUB_KEY_SIZE;
+        rc = wc_MlDsaKey_ExportPubRaw(key, buf, &bufLen);
+        if (rc == 0) {
+            /* tr = SHAKE256(pk). */
+            if (wc_InitShake256(&trShake, NULL, INVALID_DEVID) != 0) {
+                ok = 0;
+            }
+            else {
+                trShakeInit = 1;
+            }
+            if (ok && (wc_Shake256_Update(&trShake, buf, bufLen) != 0)) {
+                ok = 0;
+            }
+            if (ok && (wc_Shake256_Final(&trShake, tr, MLDSA_TR_SZ) != 0)) {
+                ok = 0;
+            }
+        }
+        else {
+            /* No public key available: read tr from the raw private encoding
+             * (rho || K || tr || ...). */
+            OPENSSL_clear_free(buf, bufAlloc);
+            bufAlloc = MLDSA_MAX_KEY_SIZE;
+            buf = (unsigned char*)OPENSSL_malloc(bufAlloc);
+            if (buf == NULL) {
+                ok = 0;
+            }
+            if (ok) {
+                bufLen = MLDSA_MAX_KEY_SIZE;
+                rc = wc_MlDsaKey_ExportPrivRaw(key, buf, &bufLen);
+                if (rc != 0) {
+                    ok = 0;
+                }
+            }
+            if (ok && (bufLen < trOff + MLDSA_TR_SZ)) {
+                ok = 0;
+            }
+            if (ok) {
+                XMEMCPY(tr, buf + trOff, MLDSA_TR_SZ);
+            }
+        }
+    }
+    if (trShakeInit) {
+        wc_Shake256_Free(&trShake);
+    }
+    if (buf != NULL) {
+        OPENSSL_clear_free(buf, bufAlloc);
+    }
+    return ok;
+}
+
+/* Start the SHAKE-256 that computes mu by absorbing tr || 0x00 || ctxLen ||
+ * ctx (FIPS 204 sec 5.2, pure ML-DSA). The message bytes are streamed in
+ * afterwards by wp_mldsa_mu_ensure's callers. */
+static int wp_mldsa_mu_begin(wp_MlDsaSigCtx* ctx)
+{
+    int ok = 1;
+    int rc;
+    unsigned char tr[MLDSA_TR_SZ];
+    unsigned char prefix[2];
+
+    if (!wp_mldsa_get_tr(ctx, tr)) {
+        ok = 0;
+    }
+    if (ok && (wc_InitShake256(&ctx->muShake, NULL, INVALID_DEVID) != 0)) {
+        ok = 0;
+    }
+    if (ok) {
+        ctx->muInit = 1;
+        rc = wc_Shake256_Update(&ctx->muShake, tr, MLDSA_TR_SZ);
+        if (rc != 0) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        prefix[0] = 0; /* pure ML-DSA, not pre-hash */
+        prefix[1] = (unsigned char)ctx->contextLen;
+        rc = wc_Shake256_Update(&ctx->muShake, prefix, sizeof(prefix));
+        if (rc != 0) {
+            ok = 0;
+        }
+    }
+    if (ok && (ctx->contextLen > 0)) {
+        rc = wc_Shake256_Update(&ctx->muShake, ctx->context,
+            (word32)ctx->contextLen);
+        if (rc != 0) {
+            ok = 0;
+        }
+    }
+    return ok;
+}
+
+/* Ensure the mu SHAKE has been started (lazy, so any context string set
+ * between init and the first update is honored). */
+static int wp_mldsa_mu_ensure(wp_MlDsaSigCtx* ctx)
+{
+    int ok = 1;
+
+    if (!ctx->muInit) {
+        ok = wp_mldsa_mu_begin(ctx);
+    }
+    return ok;
+}
+
+/* Finalize the streamed mu and produce a pure ML-DSA signature without ever
+ * buffering the message. */
+static int wp_mldsa_stream_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
+    size_t* sigLen, size_t sigSize)
+{
+    int ok = 1;
+    int rc;
+    word32 sigSz;
+    unsigned char mu[MLDSA_MU_SZ];
+
+    if ((ctx->mldsa == NULL) || (sigLen == NULL)) {
+        return 0;
+    }
+    sigSz = (word32)wp_mldsa_get_sig_size(ctx->mldsa);
+    if (sig == NULL) {
+        *sigLen = sigSz;
+        return 1;
+    }
+    if (sigSize == (size_t)-1) {
+        sigSize = *sigLen;
+    }
+    if (sigSize < sigSz) {
+        ok = 0;
+    }
+    if (ok && !wp_mldsa_mu_ensure(ctx)) {
+        ok = 0;
+    }
+    if (ok && (wc_Shake256_Final(&ctx->muShake, mu, MLDSA_MU_SZ) != 0)) {
+        ok = 0;
+    }
+    if (ok) {
+        word32 outLen = sigSz;
+        wc_MlDsaKey* key = (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa);
+        unsigned char rnd[WP_MLDSA_RND_SZ];
+
+        /* Only a seeded mu signer exists, so derive the randomizer (test
+         * entropy, deterministic zeros, or RNG-hedged). */
+        if (wp_mldsa_fill_rnd(ctx, rnd) != 0) {
+            ok = 0;
+        }
+        if (ok) {
+            rc = wc_MlDsaKey_SignMuWithSeed(key, sig, &outLen, mu, MLDSA_MU_SZ,
+                rnd);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            *sigLen = outLen;
+        }
+        wc_ForceZero(rnd, sizeof(rnd));
+    }
+    return ok;
+}
+
+/* Finalize the streamed mu and verify a pure ML-DSA signature. */
+static int wp_mldsa_stream_verify_final(wp_MlDsaSigCtx* ctx,
+    const unsigned char* sig, size_t sigLen)
+{
+    int ok = 1;
+    int res = 0;
+    unsigned char mu[MLDSA_MU_SZ];
+
+    if ((ctx->mldsa == NULL) || (sig == NULL) || (sigLen > 0xFFFFFFFFU)) {
+        return 0;
+    }
+    if (!wp_mldsa_mu_ensure(ctx)) {
+        ok = 0;
+    }
+    if (ok && (wc_Shake256_Final(&ctx->muShake, mu, MLDSA_MU_SZ) != 0)) {
+        ok = 0;
+    }
+    if (ok) {
+        int rc = wc_MlDsaKey_VerifyMu(
+            (wc_MlDsaKey*)wp_mldsa_get_key(ctx->mldsa), sig, (word32)sigLen,
+            mu, MLDSA_MU_SZ, &res);
+        if ((rc != 0) || (res != 1)) {
+            ok = 0;
+        }
+    }
+    return ok;
+}
+
 /* Digests permitted for FIPS 204 HashML-DSA. Restricting to the SHA2/SHA3
  * families keeps the generic name mapper from admitting legacy/undersized
  * digests (MD5, SHA-1, SHA-512/224) as a HashML-DSA pre-hash. */
@@ -679,9 +908,10 @@ static int wp_mldsa_verify_prehash(wp_MlDsaSigCtx* ctx,
 }
 
 /**
- * Digest-sign init. With no digest name ML-DSA is pure: the buffer captures
- * the message and the one-shot signer runs at _final. With a digest name the
- * pre-hash (HashML-DSA) path streams the message into a digest object.
+ * Digest-sign init. With no digest name ML-DSA is pure: the message is
+ * streamed into the FIPS 204 mu via SHAKE-256 (no buffering) and signed at
+ * _final. With a digest name the pre-hash (HashML-DSA) path streams the
+ * message into a digest object instead.
  *
  * @param [in, out] ctx     Signature context.
  * @param [in]      mdName  Message digest name, or NULL/empty for pure ML-DSA.
@@ -752,17 +982,25 @@ static int wp_mldsa_digest_signverify_update(wp_MlDsaSigCtx* ctx,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    if (ctx->hashType != WC_HASH_TYPE_NONE) {
-        if (dataLen > 0xFFFFFFFFU) {
-            ok = 0;
-        }
-        else {
-            ok = (wc_HashUpdate(&ctx->hashObj, ctx->hashType, data,
-                (word32)dataLen) == 0);
-        }
+    if (dataLen > 0xFFFFFFFFU) {
+        ok = 0;
+    }
+    else if (ctx->hashType != WC_HASH_TYPE_NONE) {
+        /* Pre-hash (HashML-DSA): feed the digest object. */
+        ok = (wc_HashUpdate(&ctx->hashObj, ctx->hashType, data,
+            (word32)dataLen) == 0);
+    }
+    else if (ctx->mu) {
+        /* External-mu: the message is the 64-byte mu; accumulate it. */
+        ok = wp_mldsa_buf_append(ctx, data, dataLen);
     }
     else {
-        ok = wp_mldsa_buf_append(ctx, data, dataLen);
+        /* Pure ML-DSA: stream the message into the mu SHAKE -- never buffer. */
+        ok = wp_mldsa_mu_ensure(ctx);
+        if (ok && (wc_Shake256_Update(&ctx->muShake, data,
+                (word32)dataLen) != 0)) {
+            ok = 0;
+        }
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -791,8 +1029,12 @@ static int wp_mldsa_digest_sign_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     if (ctx->hashType != WC_HASH_TYPE_NONE) {
         ok = wp_mldsa_sign_prehash(ctx, sig, sigLen, sigSize);
     }
-    else {
+    else if (ctx->mu) {
+        /* External-mu: the accumulated buffer is the 64-byte mu. */
         ok = wp_mldsa_sign(ctx, sig, sigLen, sigSize, ctx->mdBuf, ctx->mdLen);
+    }
+    else {
+        ok = wp_mldsa_stream_sign_final(ctx, sig, sigLen, sigSize);
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -819,8 +1061,11 @@ static int wp_mldsa_digest_verify_final(wp_MlDsaSigCtx* ctx,
     if (ctx->hashType != WC_HASH_TYPE_NONE) {
         ok = wp_mldsa_verify_prehash(ctx, sig, sigLen);
     }
-    else {
+    else if (ctx->mu) {
         ok = wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
+    }
+    else {
+        ok = wp_mldsa_stream_verify_final(ctx, sig, sigLen);
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -851,7 +1096,12 @@ static int wp_mldsa_sign_message_final(wp_MlDsaSigCtx* ctx, unsigned char* sig,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    ok = wp_mldsa_sign(ctx, sig, sigLen, sigSize, ctx->mdBuf, ctx->mdLen);
+    if (ctx->mu) {
+        ok = wp_mldsa_sign(ctx, sig, sigLen, sigSize, ctx->mdBuf, ctx->mdLen);
+    }
+    else {
+        ok = wp_mldsa_stream_sign_final(ctx, sig, sigLen, sigSize);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -866,7 +1116,12 @@ static int wp_mldsa_verify_message_final(wp_MlDsaSigCtx* ctx,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    ok = wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
+    if (ctx->mu) {
+        ok = wp_mldsa_verify(ctx, sig, sigLen, ctx->mdBuf, ctx->mdLen);
+    }
+    else {
+        ok = wp_mldsa_stream_verify_final(ctx, sig, sigLen);
+    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
