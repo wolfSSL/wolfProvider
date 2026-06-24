@@ -36,6 +36,18 @@
 
 #ifdef WP_HAVE_RSA
 
+#ifdef HAVE_FIPS
+#include <openssl/obj_mac.h>
+#include <wolfssl/wolfcrypt/fips_test.h>
+
+static const int wp_rsa_decode_nids[] = {
+    NID_rsaEncryption,
+    NID_rsassaPss
+};
+#define WP_RSA_DECODE_NIDS_CNT  \
+    (sizeof(wp_rsa_decode_nids) / sizeof(*wp_rsa_decode_nids))
+#endif /* HAVE_FIPS */
+
 /* In 5.8.2 RSA_MIN_SIZE was changed from 1024 to 2048. We still need to
  * allow 1024 in some cases, and have extended logic in place for it already.
  * For FIPS 1024 bit keys, use existing checks and let wolfssl throw us back */
@@ -2577,12 +2589,21 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 
     ctx->selection = selection;
 
-    rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
-    if (rsa == NULL) {
-        ok = 0;
-    }
     if (ok) {
         ok = wp_read_der_bio(ctx->provCtx, cBio, &data, &len);
+    }
+#ifdef HAVE_FIPS
+    if (ok && wp_decode_should_skip(FIPS_CAST_RSA_SIGN_PKCS1v15, data, len,
+            ctx->format, wp_rsa_decode_nids, WP_RSA_DECODE_NIDS_CNT)) {
+        decoded = 0;
+        ok = 0;
+    }
+#endif
+    if (ok) {
+        rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
+        if (rsa == NULL) {
+            ok = 0;
+        }
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
         if (!wp_rsa_decode_spki(rsa, data, len)) {

@@ -242,6 +242,26 @@ int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
     unsigned char** data, word32* len);
 BIO* wp_corebio_get_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio);
 
+#ifdef HAVE_FIPS
+/**
+ * Decide whether a decoder should skip key-object instantiation (FIPS only).
+ *
+ * Cold-CAST optimization: if the wrapped key's (SPKI/PKCS#8) AlgorithmIdentifier
+ * OID is recognized but not in allowedNids, return 1 so the caller bails before
+ * instantiating a key (which would fire the lazy CAST).
+ *
+ * @param [in] castType     FIPS CAST id for this decoder's algorithm.
+ * @param [in] der          DER-encoded key bytes.
+ * @param [in] len          Length of der in bytes.
+ * @param [in] format       Encoding format (WP_ENC_FORMAT_*).
+ * @param [in] allowedNids  NIDs owned by this decoder.
+ * @param [in] nAllowed     Number of entries in allowedNids.
+ * @return  1 to skip instantiation, 0 to proceed.
+ */
+int wp_decode_should_skip(int castType, const unsigned char* der, word32 len,
+    int format, const int* allowedNids, size_t nAllowed);
+#endif /* HAVE_FIPS */
+
 byte wp_ct_byte_mask_eq(byte a, byte b);
 byte wp_ct_byte_mask_ne(byte a, byte b);
 byte wp_ct_int_mask_gte(int a, int b);

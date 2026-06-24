@@ -8,6 +8,12 @@
 noinst_HEADERS += test/standalone/test_common.h \
                   test/standalone/tests/fips_baseline/test_fips_baseline.h
 
+# Process-isolated decoder OID-precheck regression test. Unlike the other
+# standalone tests, this one IS part of 'make check' (added to check_PROGRAMS
+# below) because its safety invariant must be guarded automatically. It runs in
+# its own fresh process so the DH/ECC primitive-Z FIPS CASTs are cold (the
+# shared unit.test warms them); see the file header for details.
+
 # Standalone test programs
 # Each test compiles to its own binary for isolated execution
 # Note: These are NOT in check_PROGRAMS because they must be run through scripts, not directly
@@ -40,6 +46,15 @@ test_fips_baseline_test_SOURCES = test/standalone/tests/fips_baseline/test_fips_
                                   test/standalone/tests/fips_baseline/test_fips_baseline_hmac.c \
                                   test/standalone/tests/fips_baseline/test_fips_baseline_pbkdf2.c
 test_fips_baseline_test_LDADD = $(STANDALONE_COMMON_LDADD)
+
+# Decoder OID-precheck regression test - part of 'make check'
+check_PROGRAMS += test/decode_oid_precheck.test
+noinst_PROGRAMS += test/decode_oid_precheck.test
+DISTCLEANFILES += test/.libs/decode_oid_precheck.test
+test_decode_oid_precheck_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
+test_decode_oid_precheck_test_SOURCES = \
+    test/standalone/tests/decode_oid_precheck/test_decode_oid_precheck.c
+test_decode_oid_precheck_test_LDADD = $(STANDALONE_COMMON_LDADD)
 
 # Common test utilities are built automatically by automake
 
