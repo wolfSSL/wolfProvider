@@ -74,6 +74,34 @@ Information on how to configure, build, and test wolfProvider can be found here:
 * Ed25519, Ed448 (signatures)
 
 
+## SBOM / EU CRA Compliance
+
+wolfProvider generates a Software Bill of Materials (SBOM) in CycloneDX 1.6 and
+SPDX 2.3 formats to support compliance with the EU Cyber Resilience Act (CRA).
+
+```sh
+make sbom WOLFSSL_DIR=/path/to/wolfssl
+```
+
+Requires `python3` and `pyspdxtools` (`pip install spdx-tools`). `WOLFSSL_DIR`
+must point to a wolfssl source tree containing `scripts/gen-sbom` (branch
+`feat/sbom-embedded`, or `master` once wolfSSL/wolfssl#10343 merges).
+
+Output files in the build directory:
+
+| File | Format |
+|------|--------|
+| `wolfprov-1.1.1.cdx.json` | CycloneDX 1.6 |
+| `wolfprov-1.1.1.spdx.json` | SPDX 2.3 JSON |
+| `wolfprov-1.1.1.spdx` | SPDX 2.3 tag-value |
+
+```sh
+make install-sbom    # installs to $(datadir)/doc/wolfprov/
+make uninstall-sbom
+```
+
+For further CRA guidance see [wolfssl/doc/CRA.md](https://github.com/wolfSSL/wolfssl/blob/master/doc/CRA.md).
+
 ## Support
 
 - [GitHub Issues](https://github.com/wolfssl/wolfProvider/issues)
