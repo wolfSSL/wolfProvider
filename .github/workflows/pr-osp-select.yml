@@ -219,3 +219,7 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' multi-compiler ')
     uses: ./.github/workflows/nightly-multi-compiler.yml
+  perf:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' perf ')
+    uses: ./.github/workflows/perf-regression.yml
