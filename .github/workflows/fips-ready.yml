@@ -47,13 +47,30 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        uses: ./.github/actions/cache-build-deps
+        with:
+          variant: fips-ready
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_fixed_key: wolfssl-fips-${{ matrix.wolfssl_bundle_ref }}-${{ matrix.openssl_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache FIPS Ready Bundle zip
+        uses: actions/cache@v4
+        with:
+          path: wolfssl-fips-ready.zip
+          key: wolfssl-fips-bundle-${{ matrix.wolfssl_bundle_ref }}
+
       - name: Download FIPS Ready Bundle
         run: |
-          # Download FIPS ready bundle from wolfSSL website
-          BUNDLE_URL="https://www.wolfssl.com/wolfssl-${{matrix.wolfssl_bundle_ref}}-gplv3-fips-ready.zip"
-          
-          wget -O wolfssl-fips-ready.zip "$BUNDLE_URL"
-          unzip wolfssl-fips-ready.zip
+          # Bundle is a fixed stable release; only fetch on a cache miss. The
+          # build script's bundle copy still needs the extracted tree present,
+          # so unzip runs every time.
+          if [ ! -f wolfssl-fips-ready.zip ]; then
+            BUNDLE_URL="https://www.wolfssl.com/wolfssl-${{matrix.wolfssl_bundle_ref}}-gplv3-fips-ready.zip"
+            wget -O wolfssl-fips-ready.zip "$BUNDLE_URL"
+          fi
+          unzip -o wolfssl-fips-ready.zip
 
           # Find the extracted directory (build script requires directory, not zip)
           BUNDLE_DIR=$(find . -maxdepth 1 -type d -name "*fips-ready*" | head -n 1)

@@ -49,6 +49,14 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        uses: ./.github/actions/cache-build-deps
+        with:
+          variant: seed-src
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and test wolfProvider with SEED-SRC
         run: |
              # Force wolfSSL to not use getrandom syscall via ac_cv_func_getrandom=no.

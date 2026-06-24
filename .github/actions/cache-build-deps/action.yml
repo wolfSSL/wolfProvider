@@ -1,0 +1,62 @@
+name: Cache build dependencies
+description: Restore cached OpenSSL/wolfSSL installs keyed by resolved commit SHA so build-wolfprovider.sh skips configure+make on a hit.
+
+inputs:
+  variant:
+    description: Token capturing every build-config dimension that changes the produced binaries (compiler, debug, replace-default, seed-src, fips). Distinct configs must use distinct variants.
+    required: true
+  openssl_ref:
+    description: OpenSSL tag/branch/sha, resolved to a SHA for the cache key.
+    required: true
+  wolfssl_ref:
+    description: wolfSSL tag/branch/sha, resolved to a SHA for the cache key. Ignored when wolfssl_fixed_key is set.
+    required: false
+    default: ''
+  wolfssl_fixed_key:
+    description: Verbatim wolfSSL cache key, used instead of resolving wolfssl_ref (FIPS bundle case - fixed stable version with no git ref).
+    required: false
+    default: ''
+  cache_openssl_source:
+    description: Also cache openssl-source. Required for --replace-default / --fips-baseline builds whose mismatch checks read the patched source.
+    required: false
+    default: 'false'
+  github_token:
+    description: Token passed to resolve-ref.sh to avoid GitHub API rate limits.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve OpenSSL ref
+      id: openssl-ref
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: echo "sha=$("${GITHUB_WORKSPACE}/scripts/resolve-ref.sh" "${{ inputs.openssl_ref }}" openssl/openssl)" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve wolfSSL ref
+      id: wolfssl-ref
+      if: inputs.wolfssl_fixed_key == ''
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: echo "sha=$("${GITHUB_WORKSPACE}/scripts/resolve-ref.sh" "${{ inputs.wolfssl_ref }}" wolfssl/wolfssl)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache OpenSSL install
+      uses: actions/cache@v4
+      with:
+        path: openssl-install
+        key: openssl-install-${{ inputs.variant }}-${{ steps.openssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-openssl.sh', 'scripts/utils-wolfssl.sh', 'scripts/build-wolfprovider.sh') }}
+
+    - name: Cache OpenSSL source
+      if: inputs.cache_openssl_source == 'true'
+      uses: actions/cache@v4
+      with:
+        path: openssl-source
+        key: openssl-source-${{ inputs.variant }}-${{ steps.openssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-openssl.sh', 'scripts/utils-wolfssl.sh', 'scripts/build-wolfprovider.sh') }}
+
+    - name: Cache wolfSSL install
+      uses: actions/cache@v4
+      with:
+        path: wolfssl-install
+        key: wolfssl-install-${{ inputs.variant }}-${{ inputs.wolfssl_fixed_key || steps.wolfssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-openssl.sh', 'scripts/utils-wolfssl.sh', 'scripts/build-wolfprovider.sh') }}
