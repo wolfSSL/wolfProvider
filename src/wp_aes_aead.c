@@ -459,6 +459,37 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
 }
 
 /**
+ * Check whether a tag length is one of the algorithm's allowed sizes.
+ *
+ * GCM tags must be 4, 8, 12, 13, 14, 15 or 16 bytes (NIST SP 800-38D).
+ * CCM tags must be 4, 6, 8, 10, 12, 14 or 16 bytes (NIST SP 800-38C /
+ * RFC 3610).
+ *
+ * @param [in] mode  Cipher mode: EVP_CIPH_GCM_MODE or EVP_CIPH_CCM_MODE.
+ * @param [in] sz    Tag length in bytes to check.
+ * @return  1 if sz is an allowed length for mode.
+ * @return  0 otherwise.
+ */
+static int wp_aead_tag_len_valid(int mode, size_t sz)
+{
+    int ok;
+
+    if (mode == EVP_CIPH_GCM_MODE) {
+        ok = (sz == 4) || (sz == 8) || (sz == 12) || (sz == 13) ||
+             (sz == 14) || (sz == 15) || (sz == 16);
+    }
+    else if (mode == EVP_CIPH_CCM_MODE) {
+        ok = (sz == 4) || (sz == 6) || (sz == 8) || (sz == 10) ||
+             (sz == 12) || (sz == 14) || (sz == 16);
+    }
+    else {
+        ok = 0;
+    }
+
+    return ok;
+}
+
+/**
  * Set the AEAD tag from the parameters.
  *
  * @param [in, out] ctx     AEAD context object.
@@ -486,6 +517,9 @@ static int wp_aead_set_param_tag(wp_AeadCtx* ctx,
         sz = p->data_size;
     }
     if (ok && ((sz == 0) || ((p->data != NULL) && ctx->enc))) {
+        ok = 0;
+    }
+    if (ok && !wp_aead_tag_len_valid(ctx->mode, sz)) {
         ok = 0;
     }
     if (ok) {

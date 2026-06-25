@@ -1484,6 +1484,91 @@ int test_aes_gcm_tls_iv_fixed_oversized(void *data)
     return err;
 }
 
+/*
+ * Test that GCM tags smaller than the 32-bit minimum are rejected.
+ */
+static int test_aes_gcm_tag_len_undersized_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char iv[12];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "GCM plaintext for tag length test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    unsigned char tag[16];
+    int outLen = 0, fLen = 0;
+
+    memset(key, 0xAA, keyLen);
+    memset(iv, 0xBB, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    /* Encrypt normally to get a valid ciphertext/full-size tag pair. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, cipher, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+        outLen += fLen;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, sizeof(tag),
+                                  tag) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* A 1-byte tag length is below the NIST-mandated minimum (4 bytes)
+     * and must be rejected here. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 1, tag) == 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_SET_TAG incorrectly accepted "
+                          "a 1-byte tag length", cipherName);
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_gcm_tag_len_undersized(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM undersized tag length rejection");
+    err = test_aes_gcm_tag_len_undersized_helper(wpLibCtx, "AES-128-GCM",
+        16);
+
+    return err;
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/
@@ -1665,6 +1750,109 @@ int test_aes_ccm_bad_tag(void *data)
         PRINT_MSG("AES-256-CCM streaming decryption with tampered tag");
         err = test_aes_ccm_bad_tag_helper(wpLibCtx, "AES-256-CCM", 32);
     }
+
+    return err;
+}
+
+/*
+ * Test that CCM tags are at least 32 bits.
+ */
+static int test_aes_ccm_tag_len_undersized_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char iv[13];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "CCM plaintext for tag length test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    unsigned char tag[16];
+    int outLen = 0, fLen = 0;
+
+    memset(key, 0xAA, keyLen);
+    memset(iv, 0xBB, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    /* Encrypt normally to get a valid ciphertext/full-size tag pair. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, cipher, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, sizeof(tag),
+                                  NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, NULL, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+        outLen += fLen;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, sizeof(tag),
+                                  tag) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* A 1-byte tag length is below the NIST-mandated minimum (4 bytes)
+     * and must be rejected here. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 1, tag) == 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_SET_TAG incorrectly accepted "
+                          "a 1-byte tag length", cipherName);
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_ccm_tag_len_undersized(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-CCM undersized tag length rejection");
+    err = test_aes_ccm_tag_len_undersized_helper(wpLibCtx, "AES-128-CCM",
+        16);
 
     return err;
 }
