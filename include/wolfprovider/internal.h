@@ -248,18 +248,18 @@ BIO* wp_corebio_get_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio);
  *
  * Cold-CAST optimization: if the wrapped key's (SPKI/PKCS#8) AlgorithmIdentifier
  * OID is recognized but not in allowedNids, return 1 so the caller bails before
- * instantiating a key (which would fire the lazy CAST).
+ * instantiating a key (which would fire the lazy CAST). The OID is read from the
+ * DER directly, so the decoder's format label is not needed.
  *
  * @param [in] castType     FIPS CAST id for this decoder's algorithm.
  * @param [in] der          DER-encoded key bytes.
  * @param [in] len          Length of der in bytes.
- * @param [in] format       Encoding format (WP_ENC_FORMAT_*).
  * @param [in] allowedNids  NIDs owned by this decoder.
  * @param [in] nAllowed     Number of entries in allowedNids.
  * @return  1 to skip instantiation, 0 to proceed.
  */
 int wp_decode_should_skip(int castType, const unsigned char* der, word32 len,
-    int format, const int* allowedNids, size_t nAllowed);
+    const int* allowedNids, size_t nAllowed);
 #endif /* HAVE_FIPS */
 
 byte wp_ct_byte_mask_eq(byte a, byte b);

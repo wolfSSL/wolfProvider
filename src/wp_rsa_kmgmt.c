@@ -470,6 +470,10 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
     wp_Rsa* rsa = NULL;
 
     if (wolfssl_prov_is_running()) {
+        /* Serialize the FIPS RSA CAST before wc_InitRsaKey's lazy KAT can race
+         * a concurrent decode. */
+        WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_RSA);
+
         rsa = (wp_Rsa*)OPENSSL_zalloc(sizeof(*rsa));
     }
     if (rsa != NULL) {
@@ -2594,7 +2598,7 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
 #ifdef HAVE_FIPS
     if (ok && wp_decode_should_skip(FIPS_CAST_RSA_SIGN_PKCS1v15, data, len,
-            ctx->format, wp_rsa_decode_nids, WP_RSA_DECODE_NIDS_CNT)) {
+            wp_rsa_decode_nids, WP_RSA_DECODE_NIDS_CNT)) {
         decoded = 0;
         ok = 0;
     }

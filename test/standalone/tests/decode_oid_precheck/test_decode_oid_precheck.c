@@ -662,7 +662,6 @@ static int test_should_skip_logic(void)
         int                  cast;
         const unsigned char* der;
         size_t               len;
-        int                  format;
         const int*           nids;
         size_t               nNids;
         int                  expect; /* 1 = skip, 0 = proceed */
@@ -670,32 +669,27 @@ static int test_should_skip_logic(void)
         /* Cases gate on a still-cold CAST (DH/ECC primitive-Z); the RSA-sign
          * CAST is warm after Test 1/2 and would short-circuit the gate. */
         { "owned RSA SPKI vs RSA-set", FIPS_CAST_ECC_PRIMITIVE_Z,
-          rsa_spki_der, sizeof(rsa_spki_der), WP_ENC_FORMAT_SPKI,
-          rsaNids, nRsa, 0 },
+          rsa_spki_der, sizeof(rsa_spki_der), rsaNids, nRsa, 0 },
         { "foreign RSA SPKI vs DH-set", FIPS_CAST_DH_PRIMITIVE_Z,
-          rsa_spki_der, sizeof(rsa_spki_der), WP_ENC_FORMAT_SPKI,
-          dhNids, nDh, 1 },
+          rsa_spki_der, sizeof(rsa_spki_der), dhNids, nDh, 1 },
         { "foreign EC SPKI vs DH-set", FIPS_CAST_DH_PRIMITIVE_Z,
-          ec_spki_der, sizeof(ec_spki_der), WP_ENC_FORMAT_SPKI,
-          dhNids, nDh, 1 },
+          ec_spki_der, sizeof(ec_spki_der), dhNids, nDh, 1 },
         { "foreign DH PKCS#8 vs RSA-set", FIPS_CAST_ECC_PRIMITIVE_Z,
-          dh_pkcs8_der, sizeof(dh_pkcs8_der), WP_ENC_FORMAT_PKI,
-          rsaNids, nRsa, 1 },
-        { "raw PKCS#1 as PKI", FIPS_CAST_ECC_PRIMITIVE_Z,
-          rsa_pkcs1_priv_der, sizeof(rsa_pkcs1_priv_der), WP_ENC_FORMAT_PKI,
-          dhNids, nDh, 0 },
-        { "raw SEC1 as SPKI", FIPS_CAST_DH_PRIMITIVE_Z,
-          ec_sec1_priv_der, sizeof(ec_sec1_priv_der), WP_ENC_FORMAT_SPKI,
-          dhNids, nDh, 0 },
-        { "bare DHParameter as SPKI", FIPS_CAST_ECC_PRIMITIVE_Z,
-          dhparams_der, sizeof(dhparams_der), WP_ENC_FORMAT_SPKI,
-          rsaNids, nRsa, 0 },
+          dh_pkcs8_der, sizeof(dh_pkcs8_der), rsaNids, nRsa, 1 },
+        { "raw PKCS#1 (no OID)", FIPS_CAST_ECC_PRIMITIVE_Z,
+          rsa_pkcs1_priv_der, sizeof(rsa_pkcs1_priv_der), dhNids, nDh, 0 },
+        { "raw SEC1 (no OID)", FIPS_CAST_DH_PRIMITIVE_Z,
+          ec_sec1_priv_der, sizeof(ec_sec1_priv_der), dhNids, nDh, 0 },
+        { "bare DHParameter (no OID)", FIPS_CAST_ECC_PRIMITIVE_Z,
+          dhparams_der, sizeof(dhparams_der), rsaNids, nRsa, 0 },
         { "truncated RSA SPKI", FIPS_CAST_DH_PRIMITIVE_Z,
-          rsa_spki_der, sizeof(rsa_spki_der) - 1, WP_ENC_FORMAT_SPKI,
-          dhNids, nDh, 0 },
-        { "foreign RSA SPKI as TYPE_SPECIFIC", FIPS_CAST_DH_PRIMITIVE_Z,
-          rsa_spki_der, sizeof(rsa_spki_der), WP_ENC_FORMAT_TYPE_SPECIFIC,
-          dhNids, nDh, 0 },
+          rsa_spki_der, sizeof(rsa_spki_der) - 1, dhNids, nDh, 0 },
+        /* A well-formed foreign SPKI is identified by its OID regardless of the
+         * decoder's format label -- the real DH TYPE_SPECIFIC decoder reaches
+         * this with the same bytes and must skip. Raw material with no OID still
+         * proceeds (see the bare-DHParameter case above). */
+        { "foreign RSA SPKI vs DH-set (TYPE_SPECIFIC ctx)", FIPS_CAST_DH_PRIMITIVE_Z,
+          rsa_spki_der, sizeof(rsa_spki_der), dhNids, nDh, 1 },
     };
     size_t i;
     size_t n = sizeof(cases) / sizeof(cases[0]);
@@ -714,8 +708,7 @@ static int test_should_skip_logic(void)
 
     for (i = 0; i < n; i++) {
         int got = wp_decode_should_skip(cases[i].cast, cases[i].der,
-            (word32)cases[i].len, cases[i].format, cases[i].nids,
-            cases[i].nNids);
+            (word32)cases[i].len, cases[i].nids, cases[i].nNids);
         if (got != cases[i].expect) {
             TEST_ERROR("  [%s] expected %d, got %d", cases[i].desc,
                 cases[i].expect, got);

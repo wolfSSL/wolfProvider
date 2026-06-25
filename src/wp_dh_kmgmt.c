@@ -2077,8 +2077,6 @@ static int wp_dh_decode_spki(wp_Dh* dh, unsigned char* data, word32 len)
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
 
-    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_DH);
-
     rc = wc_DhPublicKeyDecode(data, &idx, &dh->key, len);
     if (rc != 0) {
         ok = 0;
@@ -2142,8 +2140,6 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
 
-    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_DH);
-
     rc = wc_DhKeyDecode(data, &idx, &dh->key, len);
     if (rc != 0) {
         ok = 0;
@@ -2180,6 +2176,12 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
             ok = 0;
         }
     }
+#ifdef HAVE_FIPS
+    /* wc_DhAgree fires the DH primitive-Z CAST; serialize it here. */
+    if (ok && wp_init_cast(WP_CAST_ALGO_DH) != 1) {
+        ok = 0;
+    }
+#endif
     if (ok) {
         rc = wc_DhAgree(&dh->key, dh->pub, &idx, dh->priv, (word32)dh->privSz,
             base, 1);
@@ -2323,7 +2325,7 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
 #ifdef HAVE_FIPS
     if (ok && wp_decode_should_skip(FIPS_CAST_DH_PRIMITIVE_Z, data, len,
-            ctx->format, wp_dh_decode_nids, WP_DH_DECODE_NIDS_CNT)) {
+            wp_dh_decode_nids, WP_DH_DECODE_NIDS_CNT)) {
         decoded = 0;
         ok = 0;
     }

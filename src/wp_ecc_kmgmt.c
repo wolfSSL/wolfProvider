@@ -2322,7 +2322,7 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
 #ifdef HAVE_FIPS
     if (ok && wp_decode_should_skip(FIPS_CAST_ECC_PRIMITIVE_Z, data, len,
-            ctx->format, wp_ecc_decode_nids, WP_ECC_DECODE_NIDS_CNT)) {
+            wp_ecc_decode_nids, WP_ECC_DECODE_NIDS_CNT)) {
         decoded = 0;
         ok = 0;
     }

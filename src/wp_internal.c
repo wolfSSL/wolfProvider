@@ -282,13 +282,31 @@ static int wp_pki_alg_nid(const unsigned char* der, word32 len)
     return nid;
 }
 
+/* Key-algorithm OIDs (the SPKI/PKCS#8 AlgorithmIdentifier) for every key type
+ * wolfProvider registers a decoder for -- keep in sync with wp_wolfprov.c. Lets
+ * the precheck positively identify a foreign-but-known key and skip it before
+ * instantiation, whose gated free fires the lazy CAST. Signature OIDs (e.g.
+ * sha256WithRSAEncryption) never appear in a key wrapper, so they are absent by
+ * design. An OID not listed can't be proven foreign. */
+static const int wp_known_key_nids[] = {
+    NID_rsaEncryption,
+    NID_rsassaPss,
+    NID_X9_62_id_ecPublicKey,
+    NID_dhKeyAgreement,
+    NID_dhpublicnumber,
+    NID_X25519,
+    NID_X448,
+    NID_ED25519,
+    NID_ED448
+};
+
 /**
  * Decide whether a decoder should skip key-object instantiation.
  *
  * See declaration in internal.h for the full contract.
  */
 int wp_decode_should_skip(int castType, const unsigned char* der, word32 len,
-    int format, const int* allowedNids, size_t nAllowed)
+    const int* allowedNids, size_t nAllowed)
 {
     int nid;
     size_t i;
@@ -296,28 +314,34 @@ int wp_decode_should_skip(int castType, const unsigned char* der, word32 len,
     if (wc_GetCastStatus_fips(castType) == FIPS_CAST_STATE_SUCCESS) {
         return 0;
     }
-    if ((format != WP_ENC_FORMAT_SPKI) && (format != WP_ENC_FORMAT_PKI)) {
-        return 0;
-    }
 
-    if (format == WP_ENC_FORMAT_SPKI) {
+    /* Pull the AlgorithmIdentifier OID with both readers regardless of the
+     * format label: a type-specific or mislabeled input is usually an
+     * OID-bearing PKCS#8/SPKI. */
+    nid = wp_pki_alg_nid(der, len);
+    if (nid == NID_undef) {
         nid = wp_spki_alg_nid(der, len);
     }
-    else {
-        nid = wp_pki_alg_nid(der, len);
-    }
 
-    /* Can't prove it foreign -> proceed; protects raw/unwrapped key material. */
+    /* No OID (raw/unwrapped material) -> can't prove foreign, proceed. */
     if (nid == NID_undef) {
         return 0;
     }
+    /* Owned by this decoder -> proceed. */
     for (i = 0; i < nAllowed; i++) {
         if (nid == allowedNids[i]) {
             return 0;
         }
     }
+    /* Positively a different known key type -> skip. */
+    for (i = 0; i < sizeof(wp_known_key_nids) / sizeof(*wp_known_key_nids); i++) {
+        if (nid == wp_known_key_nids[i]) {
+            return 1;
+        }
+    }
 
-    return 1;
+    /* Recognized OID but not one of ours -> can't prove foreign, proceed. */
+    return 0;
 }
 #endif /* HAVE_FIPS */
 
