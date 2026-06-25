@@ -354,6 +354,47 @@ static int wp_aead_cache_in(wp_AeadCtx *ctx, const unsigned char *in,
 #endif
 
 /**
+ * Check whether a tag length is one of the algorithm's allowed sizes.
+ *
+ * GCM tags must be 4, 8, 12, 13, 14, 15 or 16 bytes (NIST SP 800-38D).
+ * CCM tags must be 4, 6, 8, 10, 12, 14 or 16 bytes (NIST SP 800-38C /
+ * RFC 3610).
+ *
+ * Note: for GCM this is intentionally stricter than OpenSSL's default
+ * provider, which accepts any non-zero tag length up to 16 on
+ * EVP_CTRL_AEAD_SET_TAG and EVP_CTRL_AEAD_GET_TAG. wolfProvider enforces the
+ * NIST SP 800-38D set on both the set path (decrypt/verify) and the get path
+ * (encrypt/tag retrieval), so tag lengths such as 5, 6, 7, 9, 10 or 11 that
+ * stock OpenSSL would accept are rejected here.
+ *
+ * @param [in] mode  Cipher mode: EVP_CIPH_GCM_MODE or EVP_CIPH_CCM_MODE.
+ * @param [in] sz    Tag length in bytes to check.
+ * @return  1 if sz is an allowed length for mode.
+ * @return  0 otherwise.
+ */
+static int wp_aead_tag_len_valid(int mode, size_t sz)
+{
+    int ok;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_tag_len_valid");
+
+    if (mode == EVP_CIPH_GCM_MODE) {
+        ok = (sz == 4) || (sz == 8) || (sz == 12) || (sz == 13) ||
+             (sz == 14) || (sz == 15) || (sz == 16);
+    }
+    else if (mode == EVP_CIPH_CCM_MODE) {
+        ok = (sz == 4) || (sz == 6) || (sz == 8) || (sz == 10) ||
+             (sz == 12) || (sz == 14) || (sz == 16);
+    }
+    else {
+        ok = 0;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
  * Get the AEAD context parameters.
  *
  * @param [in]      ctx     AEAD context object.
@@ -432,7 +473,8 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
         if (p != NULL) {
             size_t sz = p->data_size;
             if ((!ctx->enc) || (ctx->tagLen == UNINITIALISED_SIZET) ||
-                (sz == 0) || (sz > ctx->tagLen)) {
+                (sz == 0) || (sz > ctx->tagLen) ||
+                (!wp_aead_tag_len_valid(ctx->mode, sz))) {
                 ok = 0;
             }
             if (ok && (!OSSL_PARAM_set_octet_string(p, ctx->buf, sz))) {
@@ -486,6 +528,9 @@ static int wp_aead_set_param_tag(wp_AeadCtx* ctx,
         sz = p->data_size;
     }
     if (ok && ((sz == 0) || ((p->data != NULL) && ctx->enc))) {
+        ok = 0;
+    }
+    if (ok && !wp_aead_tag_len_valid(ctx->mode, sz)) {
         ok = 0;
     }
     if (ok) {
@@ -959,9 +1004,10 @@ static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
     }
     else {
         /* Fixed field must be at least 4 bytes and invocation field at least 8
-         */
-        if ((len < EVP_GCM_TLS_FIXED_IV_LEN) ||
-            (ctx->ivLen - (int)len) < EVP_GCM_TLS_EXPLICIT_IV_LEN) {
+         * bytes */
+        if ((len < EVP_GCM_TLS_FIXED_IV_LEN) || (len > ctx->ivLen) ||
+            (len > sizeof(ctx->iv)) ||
+            (ctx->ivLen - len) < EVP_GCM_TLS_EXPLICIT_IV_LEN) {
                 return 0;
         }
         if (ctx->enc) {

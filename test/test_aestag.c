@@ -1416,6 +1416,225 @@ int test_aes_gcm_bad_tag(void *data)
     return err;
 }
 
+static int test_aes_gcm_tls_iv_fixed_oversized_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    /* ivLen (12, the GCM default) + EVP_GCM_TLS_EXPLICIT_IV_LEN (8) = 20: */
+    unsigned char iv[20];
+
+    memset(key, 0xCC, keyLen);
+    memset(iv, 0xDD, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+            EVP_GCM_TLS_FIXED_IV_LEN, iv) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        int ivLen = EVP_GCM_TLS_FIXED_IV_LEN + EVP_GCM_TLS_EXPLICIT_IV_LEN;
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                ivLen, iv) == 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_GCM_SET_IV_FIXED incorrectly "
+                          "accepted a fixed IV length (%d) equal to the "
+                          "IV length, leaving no room for the explicit "
+                          "field", cipherName, ivLen);
+            err = 1;
+        }
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Oversized fixed len (> ctx->ivLen, default 12) must be rejected. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                (int)sizeof(iv), iv) == 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_GCM_SET_IV_FIXED incorrectly "
+                          "accepted a fixed IV length (%d) larger than "
+                          "the IV length", cipherName, (int)sizeof(iv));
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_gcm_tls_iv_fixed_oversized(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM TLS1 fixed-IV length boundary rejection");
+    err = test_aes_gcm_tls_iv_fixed_oversized_helper(wpLibCtx,
+        "AES-128-GCM", 16);
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM TLS1 fixed-IV length boundary rejection");
+        err = test_aes_gcm_tls_iv_fixed_oversized_helper(wpLibCtx,
+            "AES-256-GCM", 32);
+    }
+
+    return err;
+}
+
+/*
+ * Test that GCM tag lengths are validated against the NIST SP 800-38D table.
+ */
+static int test_aes_gcm_tag_len_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName)
+{
+    int err;
+    int i;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char tag[16];
+    static const int invalidLen[] = { 1, 2, 3, 5, 6, 7 };
+    static const int validLen[] = { 4, 8, 12, 13, 14, 15, 16 };
+    int numInvalid = (int)(sizeof(invalidLen) / sizeof(invalidLen[0]));
+    int numValid = (int)(sizeof(validLen) / sizeof(validLen[0]));
+
+    memset(tag, 0, sizeof(tag));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    for (i = 0; (err == 0) && (i < numInvalid); i++) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+        if (err == 0) {
+            err = EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1;
+        }
+        if ((err == 0) &&
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, invalidLen[i],
+                                    tag) == 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_SET_TAG incorrectly accepted "
+                          "tag length %d", cipherName, invalidLen[i]);
+            err = 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    for (i = 0; (err == 0) && (i < numValid); i++) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+        if (err == 0) {
+            err = EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1;
+        }
+        if ((err == 0) &&
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, validLen[i],
+                                    tag) != 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_SET_TAG incorrectly rejected "
+                          "tag length %d", cipherName, validLen[i]);
+            err = 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    /* Get-tag (encrypt) path, after a normal encrypt, EVP_CTRL_AEAD_GET_TAG
+     * must reject tag lengths outside the allowed set and accept allowed ones,
+     * mirroring the set-tag validation above. */
+    if (err == 0) {
+        unsigned char key[32];
+        unsigned char iv[12];
+        unsigned char aad[16];
+        unsigned char msg[32];
+        unsigned char enc[32];
+        int encLen;
+
+        memset(key, 0, sizeof(key));
+        memset(iv, 0, sizeof(iv));
+        memset(aad, 0, sizeof(aad));
+        memset(msg, 0, sizeof(msg));
+
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+        if (err == 0) {
+            err = EVP_EncryptInit(ctx, cipher, key, iv) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptUpdate(ctx, NULL, &encLen, aad,
+                                    (int)sizeof(aad)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptUpdate(ctx, enc, &encLen, msg,
+                                    (int)sizeof(msg)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptFinal_ex(ctx, enc + encLen, &encLen) != 1;
+        }
+        for (i = 0; (err == 0) && (i < numInvalid); i++) {
+            if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, invalidLen[i],
+                                    tag) == 1) {
+                PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_GET_TAG incorrectly accepted "
+                              "tag length %d", cipherName, invalidLen[i]);
+                err = 1;
+            }
+        }
+        for (i = 0; (err == 0) && (i < numValid); i++) {
+            if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, validLen[i],
+                                    tag) != 1) {
+                PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_GET_TAG incorrectly rejected "
+                              "tag length %d", cipherName, validLen[i]);
+                err = 1;
+            }
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_gcm_tag_len_undersized(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM tag length validation");
+    err = test_aes_gcm_tag_len_helper(wpLibCtx, "AES-128-GCM");
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM tag length validation");
+        err = test_aes_gcm_tag_len_helper(wpLibCtx, "AES-256-GCM");
+    }
+
+    return err;
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/
@@ -1596,6 +1815,158 @@ int test_aes_ccm_bad_tag(void *data)
     if (err == 0) {
         PRINT_MSG("AES-256-CCM streaming decryption with tampered tag");
         err = test_aes_ccm_bad_tag_helper(wpLibCtx, "AES-256-CCM", 32);
+    }
+
+    return err;
+}
+
+/*
+ * Test that CCM tag lengths are validated against the NIST SP 800-38C.
+ */
+static int test_aes_ccm_tag_len_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName)
+{
+    int err;
+    int i;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char iv[13];
+    unsigned char tag[16];
+    static const int invalidLen[] = { 1, 2, 3, 5, 7, 9 };
+    static const int validLen[] = { 4, 6, 8, 10, 12, 14, 16 };
+    int numInvalid = (int)(sizeof(invalidLen) / sizeof(invalidLen[0]));
+    int numValid = (int)(sizeof(validLen) / sizeof(validLen[0]));
+
+    memset(tag, 0, sizeof(tag));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    for (i = 0; (err == 0) && (i < numInvalid); i++) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+        if (err == 0) {
+            err = EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1;
+        }
+        if (err == 0) {
+            err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                      (int)sizeof(iv), NULL) != 1;
+        }
+        if ((err == 0) &&
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, invalidLen[i],
+                                    tag) == 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_SET_TAG incorrectly accepted "
+                          "tag length %d", cipherName, invalidLen[i]);
+            err = 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    for (i = 0; (err == 0) && (i < numValid); i++) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+        if (err == 0) {
+            err = EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1;
+        }
+        if (err == 0) {
+            err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                      (int)sizeof(iv), NULL) != 1;
+        }
+        if ((err == 0) &&
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, validLen[i],
+                                    tag) != 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_SET_TAG incorrectly rejected "
+                          "tag length %d", cipherName, validLen[i]);
+            err = 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    /* Get-tag (encrypt) path: after a normal encrypt, EVP_CTRL_AEAD_GET_TAG
+     * must reject tag lengths outside the allowed set and accept allowed ones,
+     * mirroring the set-tag validation above. */
+    if (err == 0) {
+        unsigned char key[32];
+        unsigned char aad[16];
+        unsigned char msg[32];
+        unsigned char enc[32];
+        int encLen;
+
+        memset(key, 0, sizeof(key));
+        memset(iv, 0, sizeof(iv));
+        memset(aad, 0, sizeof(aad));
+        memset(msg, 0, sizeof(msg));
+
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+        if (err == 0) {
+            err = EVP_EncryptInit(ctx, cipher, NULL, NULL) != 1;
+        }
+        if (err == 0) {
+            err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                      (int)sizeof(iv), NULL) != 1;
+        }
+        if (err == 0) {
+            /* CCM needs the tag length fixed before encryption. */
+            err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16,
+                                      NULL) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptInit(ctx, NULL, key, iv) != 1;
+        }
+        if (err == 0) {
+            /* CCM requires the total plaintext length up front. */
+            err = EVP_EncryptUpdate(ctx, NULL, &encLen, NULL,
+                                    (int)sizeof(msg)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptUpdate(ctx, NULL, &encLen, aad,
+                                    (int)sizeof(aad)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptUpdate(ctx, enc, &encLen, msg,
+                                    (int)sizeof(msg)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptFinal_ex(ctx, enc + encLen, &encLen) != 1;
+        }
+        for (i = 0; (err == 0) && (i < numInvalid); i++) {
+            if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, invalidLen[i],
+                                    tag) == 1) {
+                PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_GET_TAG incorrectly accepted "
+                              "tag length %d", cipherName, invalidLen[i]);
+                err = 1;
+            }
+        }
+        for (i = 0; (err == 0) && (i < numValid); i++) {
+            if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, validLen[i],
+                                    tag) != 1) {
+                PRINT_ERR_MSG("%s: EVP_CTRL_AEAD_GET_TAG incorrectly rejected "
+                              "tag length %d", cipherName, validLen[i]);
+                err = 1;
+            }
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_ccm_tag_len_undersized(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-CCM tag length validation");
+    err = test_aes_ccm_tag_len_helper(wpLibCtx, "AES-128-CCM");
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM tag length validation");
+        err = test_aes_ccm_tag_len_helper(wpLibCtx, "AES-256-CCM");
     }
 
     return err;
