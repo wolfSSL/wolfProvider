@@ -27,6 +27,7 @@
 #include <openssl/params.h>
 #include <openssl/prov_ssl.h>
 
+#include <wolfprovider/settings.h>
 #include <wolfprovider/wp_logging.h>
 #include "wolfprovider/internal.h"
 
@@ -39,6 +40,7 @@ typedef struct wp_tls_group_consts {
     int maxTls;            /** Maximum TLS version (or 0 for all). */
     int minDtls;           /** Minimum DTLS version, -1 not supported. */
     int maxDtls;           /** Maximum DTLS version (or 0 for all). */
+    int isKem;             /** 1 when the group is a KEM (e.g. ML-KEM). */
 } wp_tls_group_consts;
 
 #define WP_TLS_12_DOWN      TLS1_VERSION  , TLS1_2_VERSION
@@ -51,21 +53,32 @@ typedef struct wp_tls_group_consts {
 
 /** List of group constants. */
 static const wp_tls_group_consts wp_group_const_list[35] = {
-    { WOLFSSL_ECC_SECP192R1      ,  80, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_SECP224R1      , 112, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_SECP256R1      , 128, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_SECP384R1      , 192, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_SECP521R1      , 256, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_BRAINPOOLP256R1, 128, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_BRAINPOOLP384R1, 192, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_BRAINPOOLP512R1, 256, WP_TLS_12_DOWN, WP_DTLS_12_DOWN },
-    { WOLFSSL_ECC_X25519         , 128, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_ECC_X448           , 224, WP_TLS_10_UP  , WP_DTLS_10_UP   },
-    { WOLFSSL_FFDHE_2048         , 112, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_3072         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_4096         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_6144         , 128, WP_TLS_13_UP  , WP_DTLS_NONE    },
-    { WOLFSSL_FFDHE_8192         , 192, WP_TLS_13_UP  , WP_DTLS_NONE    },
+    { WOLFSSL_ECC_SECP192R1      ,  80, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_SECP224R1      , 112, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_SECP256R1      , 128, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_SECP384R1      , 192, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_SECP521R1      , 256, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_BRAINPOOLP256R1, 128, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_BRAINPOOLP384R1, 192, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_BRAINPOOLP512R1, 256, WP_TLS_12_DOWN, WP_DTLS_12_DOWN, 0 },
+    { WOLFSSL_ECC_X25519         , 128, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_ECC_X448           , 224, WP_TLS_10_UP  , WP_DTLS_10_UP  , 0 },
+    { WOLFSSL_FFDHE_2048         , 112, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_3072         , 128, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_4096         , 128, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_6144         , 128, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+    { WOLFSSL_FFDHE_8192         , 192, WP_TLS_13_UP  , WP_DTLS_NONE   , 0 },
+#ifdef WP_HAVE_MLKEM
+    /* Pure ML-KEM (FIPS 203) groups, by IANA codepoint (512/513/514).
+     * TLS 1.3 only and flagged as KEMs. */
+    { 512                        , 128, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 513                        , 192, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 514                        , 256, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    /* Hybrid PQC groups, by IANA codepoint. TLS 1.3 only, flagged as KEMs. */
+    { 4588                       , 192, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 4587                       , 192, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+    { 4589                       , 256, WP_TLS_13_UP  , WP_DTLS_NONE, 1 },
+#endif
 };
 
 /** Parameters for a group. Index references constant list. */
@@ -89,12 +102,24 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
             (int *)&wp_group_const_list[idx].minDtls),                         \
         OSSL_PARAM_int(OSSL_CAPABILITY_TLS_GROUP_MAX_DTLS,                     \
             (int *)&wp_group_const_list[idx].maxDtls),                         \
+        OSSL_PARAM_int(OSSL_CAPABILITY_TLS_GROUP_IS_KEM,                       \
+            (int *)&wp_group_const_list[idx].isKem),                           \
         OSSL_PARAM_END                                                         \
     }
 
 /** Parameters for an EC group. Index references constant list. */
 #define WP_TLS_GROUP_ENTRY_EC(tlsName, internalName, idx)                      \
     WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "EC", 3)
+
+/** Parameters for a pure ML-KEM group. The alg name matches the keymgmt/KEM
+ * wolfProvider registers (ML-KEM-512/768/1024). */
+#define WP_TLS_GROUP_ENTRY_MLKEM(tlsName, idx, alg)                            \
+    WP_TLS_GROUP_ENTRY(tlsName, alg, idx, alg, sizeof(alg))
+
+/** Parameters for a hybrid ML-KEM group. The alg name matches the keymgmt/KEM
+ * wolfProvider registers (X25519MLKEM768, etc.). */
+#define WP_TLS_GROUP_ENTRY_MLX(name, idx)                                      \
+    WP_TLS_GROUP_ENTRY(name, name, idx, name, sizeof(name))
 
 /** Parameters for an X25519 group. Index references constant list. */
 #define WP_TLS_GROUP_ENTRY_X25519(tlsName, internalName, idx)                  \
@@ -109,7 +134,7 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
     WP_TLS_GROUP_ENTRY(tlsName, internalName, idx, "DH", 3)
 
 /** List of parameters for TLS groups. */
-static const OSSL_PARAM wp_param_group_list[][10] = {
+static const OSSL_PARAM wp_param_group_list[][11] = {
     WP_TLS_GROUP_ENTRY_EC(    "secp192r1"      , "prime192v1"     , 0 ),
     WP_TLS_GROUP_ENTRY_EC(    "P-192"          , "prime192v1"     , 0 ),
     WP_TLS_GROUP_ENTRY_EC(    "secp224r1"      , "secp224r1"      , 1 ),
@@ -132,11 +157,73 @@ static const OSSL_PARAM wp_param_group_list[][10] = {
     WP_TLS_GROUP_ENTRY_DH(    "ffdhe4096"      , "ffdhe4096"      , 12),
     WP_TLS_GROUP_ENTRY_DH(    "ffdhe6144"      , "ffdhe6144"      , 13),
     WP_TLS_GROUP_ENTRY_DH(    "ffdhe8192"      , "ffdhe8192"      , 14),
+#ifdef WP_HAVE_MLKEM
+    WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM512"       , 15, "ML-KEM-512" ),
+    WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM768"       , 16, "ML-KEM-768" ),
+    WP_TLS_GROUP_ENTRY_MLKEM( "MLKEM1024"      , 17, "ML-KEM-1024"),
+    WP_TLS_GROUP_ENTRY_MLX(   "X25519MLKEM768"    , 18 ),
+    WP_TLS_GROUP_ENTRY_MLX(   "SecP256r1MLKEM768" , 19 ),
+    WP_TLS_GROUP_ENTRY_MLX(   "SecP384r1MLKEM1024", 20 ),
+#endif
 };
 
 /** Count of supported TLS groups. */
 #define WP_PARAM_GROUP_CNT  \
     (sizeof(wp_param_group_list) / sizeof(*wp_param_group_list))
+
+#ifdef WP_HAVE_MLDSA
+/** Constants associated with a TLS signature algorithm. */
+typedef struct wp_tls_sigalg_consts {
+    unsigned int codePoint;  /** IANA signature scheme code point. */
+    unsigned int secBits;    /** #Bits of security. */
+    int minTls;              /** Minimum TLS version, -1 not supported. */
+    int maxTls;              /** Maximum TLS version (or 0 for all). */
+    int minDtls;             /** Minimum DTLS version, -1 not supported. */
+    int maxDtls;             /** Maximum DTLS version (or 0 for all). */
+} wp_tls_sigalg_consts;
+
+/** List of ML-DSA signature algorithm constants, by IANA code point. */
+static const wp_tls_sigalg_consts wp_sigalg_const_list[3] = {
+    { 0x0904, 128, TLS1_3_VERSION, 0, -1, -1 },
+    { 0x0905, 192, TLS1_3_VERSION, 0, -1, -1 },
+    { 0x0906, 256, TLS1_3_VERSION, 0, -1, -1 },
+};
+
+/** Parameters for a TLS signature algorithm. Index references constant list. */
+#define WP_TLS_SIGALG_ENTRY(tlsName, alg, oid, idx)                            \
+    {                                                                          \
+        OSSL_PARAM_utf8_string(OSSL_CAPABILITY_TLS_SIGALG_IANA_NAME,           \
+            (char*)tlsName, sizeof(tlsName)),                                  \
+        OSSL_PARAM_utf8_string(OSSL_CAPABILITY_TLS_SIGALG_NAME,                \
+            (char*)alg, sizeof(alg)),                                          \
+        OSSL_PARAM_utf8_string(OSSL_CAPABILITY_TLS_SIGALG_OID,                 \
+            (char*)oid, sizeof(oid)),                                          \
+        OSSL_PARAM_uint(OSSL_CAPABILITY_TLS_SIGALG_CODE_POINT,                 \
+            (unsigned int *)&wp_sigalg_const_list[idx].codePoint),             \
+        OSSL_PARAM_uint(OSSL_CAPABILITY_TLS_SIGALG_SECURITY_BITS,              \
+            (unsigned int *)&wp_sigalg_const_list[idx].secBits),               \
+        OSSL_PARAM_int(OSSL_CAPABILITY_TLS_SIGALG_MIN_TLS,                     \
+            (int *)&wp_sigalg_const_list[idx].minTls),                         \
+        OSSL_PARAM_int(OSSL_CAPABILITY_TLS_SIGALG_MAX_TLS,                     \
+            (int *)&wp_sigalg_const_list[idx].maxTls),                         \
+        OSSL_PARAM_int(OSSL_CAPABILITY_TLS_SIGALG_MIN_DTLS,                    \
+            (int *)&wp_sigalg_const_list[idx].minDtls),                        \
+        OSSL_PARAM_int(OSSL_CAPABILITY_TLS_SIGALG_MAX_DTLS,                    \
+            (int *)&wp_sigalg_const_list[idx].maxDtls),                        \
+        OSSL_PARAM_END                                                         \
+    }
+
+/** List of parameters for ML-DSA TLS signature algorithms. */
+static const OSSL_PARAM wp_param_sigalg_list[][10] = {
+    WP_TLS_SIGALG_ENTRY("mldsa44", "ML-DSA-44", "2.16.840.1.101.3.4.3.17", 0),
+    WP_TLS_SIGALG_ENTRY("mldsa65", "ML-DSA-65", "2.16.840.1.101.3.4.3.18", 1),
+    WP_TLS_SIGALG_ENTRY("mldsa87", "ML-DSA-87", "2.16.840.1.101.3.4.3.19", 2),
+};
+
+/** Count of supported TLS signature algorithms. */
+#define WP_PARAM_SIGALG_CNT  \
+    (sizeof(wp_param_sigalg_list) / sizeof(*wp_param_sigalg_list))
+#endif /* WP_HAVE_MLDSA */
 
 /**
  * Pass the list of parameters for TLS groups to the callback.
@@ -164,11 +251,40 @@ static int wp_tls_group_capability(OSSL_CALLBACK *cb, void *arg)
     return ok;
 }
 
+#ifdef WP_HAVE_MLDSA
+/**
+ * Pass the list of parameters for TLS signature algorithms to the callback.
+ *
+ * @param [in] cb   Callback.
+ * @param [in] arg  Argument for callback.
+ * @return 1 on success.
+ * @return 0 on failure.
+ */
+static int wp_tls_sigalg_capability(OSSL_CALLBACK *cb, void *arg)
+{
+    int ok = 1;
+    size_t i;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_tls_sigalg_capability");
+
+    for (i = 0; i < WP_PARAM_SIGALG_CNT; i++) {
+        if (!cb(wp_param_sigalg_list[i], arg)) {
+            ok = 0;
+            break;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+#endif /* WP_HAVE_MLDSA */
+
 /**
  * Get the capabilities of wolfSSL provider.
  *
  * Supports:
  *   TLS-GROUP
+ *   TLS-SIGALG (ML-DSA)
  *
  * @param [in] provCtx   Provider context. Unused.
  * @param [in] cb        Callback.
@@ -188,6 +304,11 @@ int wolfssl_prov_get_capabilities(void *provCtx, const char *capability,
     if (strcasecmp(capability, "TLS-GROUP") == 0) {
         ok = wp_tls_group_capability(cb, arg);
     }
+#ifdef WP_HAVE_MLDSA
+    else if (strcasecmp(capability, "TLS-SIGALG") == 0) {
+        ok = wp_tls_sigalg_capability(cb, arg);
+    }
+#endif
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

@@ -44,6 +44,7 @@ PR stands for Pull Request, and PR <NUMBER> references a GitHub pull request
 number where the code change was added.
 
 ## New Feature Additions
+* Add ML-KEM (FIPS 203) and ML-DSA (FIPS 204) post-quantum algorithm support via `--enable-pqc` (PR 399)
 * Add OpenSSL FIPS baseline process implementation (PR 357)
 * Add seed-src handling for wolfProvider (PR 350)
 * Add EC public key auto derivation from private key (PR 338)

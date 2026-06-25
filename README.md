@@ -74,6 +74,20 @@ Information on how to configure, build, and test wolfProvider can be found here:
 * X25519, X448 (key exchange)
 * Ed25519, Ed448 (signatures)
 
+### Post-Quantum (NIST FIPS 203 / 204)
+PQC is opt-in and requires wolfSSL master/v5.9.2-stable+ and OpenSSL 3.6+.
+
+* With the script: `./scripts/build-wolfprovider.sh --enable-pqc`
+  (or `--enable-mlkem` / `--enable-mldsa` for one only)
+* Building wolfProvider directly: `./configure --enable-pqc`
+  (or `--enable-mlkem` / `--enable-mldsa`); build wolfSSL with the matching
+  `--enable-mlkem` / `--enable-mldsa` and link an OpenSSL 3.6+
+
+Without an enable flag no PQC code is compiled, regardless of what wolfSSL enables.
+
+* ML-KEM (FIPS 203): ML-KEM-512, ML-KEM-768, ML-KEM-1024 (key encapsulation)
+* ML-DSA (FIPS 204): ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
+
 
 ## Support
 

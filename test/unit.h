@@ -486,4 +486,39 @@ int test_des3_tls_cbc_bad_pad(void *data);
 #endif
 #endif
 
+#ifdef WP_HAVE_MLKEM
+int test_mlkem_keygen(void *data);
+int test_mlkem_import_export_roundtrip(void *data);
+int test_mlkem_encap_decap(void *data);
+int test_mlkem_decap_tampered_ct(void *data);
+int test_mlkem_decap_wrong_key(void *data);
+int test_mlkem_dup(void *data);
+int test_mlkem_match(void *data);
+int test_mlkem_decap_size_query(void *data);
+int test_mlkem_get_params(void *data);
+int test_mlkem_import_mismatched_pubpriv(void *data);
+int test_mlx_encap_decap(void *data);
+#endif
+
+#ifdef WP_HAVE_MLDSA
+int test_mldsa_keygen(void *data);
+int test_mldsa_import_export_roundtrip(void *data);
+int test_mldsa_sign_verify(void *data);
+int test_mldsa_verify_tampered_sig(void *data);
+int test_mldsa_verify_tampered_msg(void *data);
+int test_mldsa_verify_wrong_key(void *data);
+int test_mldsa_dup(void *data);
+int test_mldsa_match(void *data);
+int test_mldsa_dupctx(void *data);
+int test_mldsa_oneshot_sign_verify(void *data);
+int test_mldsa_get_params(void *data);
+int test_mldsa_digest_sign_prehash(void *data);
+int test_mldsa_pubonly_sign_fails(void *data);
+int test_mldsa_import_mismatched_pubpriv(void *data);
+int test_mldsa_empty_message(void *data);
+int test_mldsa_reinit_null_key(void *data);
+int test_mldsa_encode_decode(void *data);
+int test_mldsa_x509_sign_verify(void *data);
+#endif
+
 #endif /* UNIT_H */

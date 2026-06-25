@@ -418,7 +418,10 @@ install_openssl() {
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
             CONFIG_CMD+=" enable-trace --debug"
         fi
-        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ]; then
+        # Replace-default builds skip the OpenSSL test suite for speed, unless
+        # --enable-openssl-test asks for it (e.g. CI that runs evp_test).
+        if [ "$WOLFPROV_REPLACE_DEFAULT" = "1" ] && \
+           [ "$WOLFPROV_OPENSSL_TEST" != "1" ]; then
             CONFIG_CMD+=" no-external-tests no-tests"
         fi
 

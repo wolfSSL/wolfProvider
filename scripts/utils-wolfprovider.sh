@@ -106,6 +106,16 @@ install_wolfprov() {
         WOLFPROV_CONFIG_CFLAGS="${WOLFPROV_CONFIG_CFLAGS} -DWOLFPROV_REPLACE_DEFAULT"
     fi
 
+    # PQC is opt-in and per-algorithm: only the requested algorithm is compiled
+    # in. Without these flags the PQC code is absent regardless of what the
+    # linked wolfSSL enables.
+    if [ "$WOLFPROV_MLKEM" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-mlkem"
+    fi
+    if [ "$WOLFPROV_MLDSA" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-mldsa"
+    fi
+
     if [ "$WOLFPROV_SEED_SRC" = "1" ]; then
         WOLFPROV_CONFIG_OPTS+=" --enable-seed-src"
     fi

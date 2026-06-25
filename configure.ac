@@ -166,6 +166,35 @@ if test "x$ENABLED_SEED_SRC" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DWP_HAVE_SEED_SRC"
 fi
 
+AC_ARG_ENABLE([pqc],
+    [AS_HELP_STRING([--enable-pqc],[Enable both ML-KEM (FIPS 203) and ML-DSA (FIPS 204). Requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+ (default: disabled).])],
+    [ ENABLED_PQC=$enableval ],
+    [ ENABLED_PQC=no ]
+    )
+AC_ARG_ENABLE([mlkem],
+    [AS_HELP_STRING([--enable-mlkem],[Enable ML-KEM (FIPS 203) only (default: disabled).])],
+    [ ENABLED_MLKEM=$enableval ],
+    [ ENABLED_MLKEM= ]
+    )
+AC_ARG_ENABLE([mldsa],
+    [AS_HELP_STRING([--enable-mldsa],[Enable ML-DSA (FIPS 204) only (default: disabled).])],
+    [ ENABLED_MLDSA=$enableval ],
+    [ ENABLED_MLDSA= ]
+    )
+
+# --enable-pqc is shorthand for both ML-KEM and ML-DSA, unless one was
+# explicitly disabled (--enable-pqc --disable-mldsa keeps ML-DSA off).
+if test "x$ENABLED_PQC" = "xyes"; then
+    if test "x$ENABLED_MLKEM" != "xno"; then ENABLED_MLKEM=yes; fi
+    if test "x$ENABLED_MLDSA" != "xno"; then ENABLED_MLDSA=yes; fi
+fi
+if test "x$ENABLED_MLKEM" = "xyes"; then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_MLKEM"
+fi
+if test "x$ENABLED_MLDSA" = "xyes"; then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_MLDSA"
+fi
+
 # Set OpenSSL lib directory for installing libdefault.so
 if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then
     if test -d "$OPENSSL_INSTALL_DIR/lib64"; then
@@ -220,9 +249,13 @@ echo "   * C Flags:                    $CFLAGS"
 echo "   * Debug enabled:              $ax_enable_debug"
 echo "   * Debug silent mode:          $ENABLED_DEBUG_SILENT"
 echo
+test "x$ENABLED_MLKEM" = "xyes" || ENABLED_MLKEM=no
+test "x$ENABLED_MLDSA" = "xyes" || ENABLED_MLDSA=no
 echo "   Features "
 echo "   * User settings:              $ENABLED_USERSETTINGS"
 echo "   * Dynamic provider:           $ENABLED_DYNAMIC_PROVIDER"
 echo "   * Replace default:            $ENABLED_REPLACE_DEFAULT"
+echo "   * ML-KEM (FIPS 203):          $ENABLED_MLKEM"
+echo "   * ML-DSA (FIPS 204):          $ENABLED_MLDSA"
 echo ""
 echo "---"
