@@ -263,6 +263,75 @@ The scan-build and infer thresholds are baseline-based, not strict —
 they let pre-existing issues slide but flag obvious regressions.
 Bringing them to 0 is a future cleanup.
 
+## Performance regression testing
+
+`perf-regression.yml` runs nightly at 07:00 UTC (and on
+`workflow_dispatch`). Customers run scripts that fire many `openssl`
+commands in a row, and each invocation is a fresh process paying a full
+wolfProvider init (plus, in FIPS builds, the per-algorithm CAST on first
+use). This job guards the per-invocation cost of that path so a repeat of
+the DH-CAST init blow-up gets caught automatically.
+
+**This is an overhead regression tripwire, not a crypto throughput
+benchmark, and not a wolfProvider-vs-OpenSSL speed comparison.** It only
+asks one question: did per-command load/init overhead grow versus the
+committed baseline? A loadable provider inherently pays process-startup
+cost the built-in default provider does not, so the measured `overhead`
+is expected to sit above 1.0 — that is not a defect and not a crypto-speed
+result.
+
+`scripts/perf_test/do-perf-tests.sh` times a small set of representative
+commands — a near-no-op init probe (`list -providers`, `version`) plus
+real verbs (`dgst`, `enc`, `genpkey` RSA/EC, `pkeyutl` sign, DH derive) —
+taking the **minimum** of N runs to cut runner noise. Each command is
+timed under both the OpenSSL default provider and wolfProvider; the
+default provider serves **only as a per-run baseline to cancel
+runner-speed variance**, and the `overhead` factor (wolfProvider ÷
+baseline) is checked against a committed budget
+(`scripts/perf_test/perf-baseline.{nonfips,fips}.json`). The init probes
+are gated on absolute ms. The job fails only when a command exceeds its
+budget (× tolerance) — i.e. when overhead *regresses*, never for being
+above 1.0.
+
+To keep the nightly from going red on a single noisy measurement, a
+command that fails the gate is measured up to `PERF_CONFIRM` times total
+(default 3) and only reported as a regression if it fails **every**
+attempt — one passing round clears it as a fluke. This is on top of each
+measurement already taking the minimum of N runs. A command that exits
+non-zero is reported as an error (not a silent pass), so a broken or
+removed capability fails the job instead of looking fast.
+
+There are two job variants. **non-FIPS** tracks general init/load
+overhead. **FIPS** is the one that actually guards the CAST class — the
+FIPS CAST code is compiled out of non-FIPS builds, so only the FIPS row
+exercises the DH-derive CAST that originally regressed.
+
+It runs nightly on its own cron, and can be pulled into a PR on demand by
+adding the `ci:perf` label (via `pr-osp-select.yml`, same as the OSP jobs).
+
+Run it locally:
+
+```sh
+# non-FIPS
+source scripts/env-setup
+./scripts/perf_test/do-perf-tests.sh
+
+# FIPS - export before sourcing so env-setup selects provider-fips.conf
+export WOLFSSL_ISFIPS=1
+source scripts/env-setup
+./scripts/perf_test/do-perf-tests.sh
+```
+
+Timing uses GNU `date +%s.%N`, so local runs need GNU coreutils (the
+script errors out early on BSD/macOS `date`). CI runs on Linux.
+
+The committed baselines are generous seeds — regenerate them on a stable
+runner once and commit the result to tighten the gate:
+
+```sh
+./scripts/perf_test/do-perf-tests.sh --update-baseline
+```
+
 ## Triggering manually
 
 Every nightly-capable workflow also has `workflow_dispatch:` so you

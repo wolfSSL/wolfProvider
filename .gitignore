@@ -89,7 +89,9 @@ ecc_outputs
 hash_outputs
 req_outputs
 rsa_outputs
+perf_outputs
 scripts/cmd_test/*.log
+scripts/perf_test/*.log
 
 IDE/Android/android-ndk-r26b/
 IDE/Android/openssl-source/
