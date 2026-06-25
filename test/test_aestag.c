@@ -1416,6 +1416,74 @@ int test_aes_gcm_bad_tag(void *data)
     return err;
 }
 
+static int test_aes_gcm_tls_iv_fixed_oversized_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    /* ivLen (12, the GCM default) + EVP_GCM_TLS_EXPLICIT_IV_LEN (8) = 20: */
+    unsigned char iv[20];
+
+    memset(key, 0xCC, keyLen);
+    memset(iv, 0xDD, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    /* A fixed len that leaves exactly the 8-byte
+     * explicit/invocation field must still be accepted. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+            EVP_GCM_TLS_FIXED_IV_LEN, iv) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Oversized fixed len (> ctx->ivLen, default 12) must be rejected. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                (int)sizeof(iv), iv) == 1) {
+            PRINT_ERR_MSG("%s: EVP_CTRL_GCM_SET_IV_FIXED incorrectly "
+                          "accepted a fixed IV length (%d) larger than "
+                          "the IV length", cipherName, (int)sizeof(iv));
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_gcm_tls_iv_fixed_oversized(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM TLS1 fixed-IV oversized length rejection");
+    err = test_aes_gcm_tls_iv_fixed_oversized_helper(wpLibCtx,
+        "AES-128-GCM", 16);
+
+    return err;
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/

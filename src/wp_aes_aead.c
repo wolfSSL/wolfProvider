@@ -959,9 +959,10 @@ static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
     }
     else {
         /* Fixed field must be at least 4 bytes and invocation field at least 8
-         */
-        if ((len < EVP_GCM_TLS_FIXED_IV_LEN) ||
-            (ctx->ivLen - (int)len) < EVP_GCM_TLS_EXPLICIT_IV_LEN) {
+         * bytes */
+        if ((len < EVP_GCM_TLS_FIXED_IV_LEN) || (len > ctx->ivLen) ||
+            (len > sizeof(ctx->iv)) ||
+            (ctx->ivLen - len) < EVP_GCM_TLS_EXPLICIT_IV_LEN) {
                 return 0;
         }
         if (ctx->enc) {

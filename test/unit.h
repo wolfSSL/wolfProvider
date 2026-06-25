@@ -219,6 +219,7 @@ int test_aes128_gcm_tls(void *data);
 int test_aes128_gcm_set_iv_inv(void *data);
 int test_aes128_gcm_key_then_iv(void *data);
 int test_aes_gcm_bad_tag(void *data);
+int test_aes_gcm_tls_iv_fixed_oversized(void *data);
 
 #endif /* WP_HAVE_AESGCM */
 
