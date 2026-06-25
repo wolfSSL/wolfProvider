@@ -56,6 +56,15 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        uses: ./.github/actions/cache-build-deps
+        with:
+          variant: simple${{ matrix.replace_default != '' && '-rd' || '' }}
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref }}
+          cache_openssl_source: ${{ matrix.replace_default != '' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and test wolfProvider
         run: |
              OPENSSL_TAG=${{ matrix.openssl_ref }} \

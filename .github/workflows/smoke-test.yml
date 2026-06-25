@@ -57,6 +57,14 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        uses: ./.github/actions/cache-build-deps
+        with:
+          variant: smoke
+          openssl_ref: ${{ needs.discover_versions.outputs.openssl_latest_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref || needs.discover_versions.outputs.wolfssl_latest_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and test wolfProvider
         run: |
           # Resolve "stable" matrix row to the discovered latest tag.
