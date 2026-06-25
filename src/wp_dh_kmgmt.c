@@ -33,6 +33,17 @@
 
 #ifdef WP_HAVE_DH
 
+#ifdef HAVE_FIPS
+#include <wolfssl/wolfcrypt/fips_test.h>
+
+static const int wp_dh_decode_nids[] = {
+    NID_dhKeyAgreement,
+    NID_dhpublicnumber
+};
+#define WP_DH_DECODE_NIDS_CNT  \
+    (sizeof(wp_dh_decode_nids) / sizeof(*wp_dh_decode_nids))
+#endif /* HAVE_FIPS */
+
 /** Supported selections (key parts) in this key manager for DH. */
 #define WP_DH_POSSIBLE_SELECTIONS                                              \
     (OSSL_KEYMGMT_SELECT_KEYPAIR | OSSL_KEYMGMT_SELECT_ALL_PARAMETERS)
@@ -2066,8 +2077,6 @@ static int wp_dh_decode_spki(wp_Dh* dh, unsigned char* data, word32 len)
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
 
-    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_DH);
-
     rc = wc_DhPublicKeyDecode(data, &idx, &dh->key, len);
     if (rc != 0) {
         ok = 0;
@@ -2131,8 +2140,6 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
 
-    WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_DH);
-
     rc = wc_DhKeyDecode(data, &idx, &dh->key, len);
     if (rc != 0) {
         ok = 0;
@@ -2169,6 +2176,12 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
             ok = 0;
         }
     }
+#ifdef HAVE_FIPS
+    /* wc_DhAgree fires the DH primitive-Z CAST; serialize it here. */
+    if (ok && wp_init_cast(WP_CAST_ALGO_DH) != 1) {
+        ok = 0;
+    }
+#endif
     if (ok) {
         rc = wc_DhAgree(&dh->key, dh->pub, &idx, dh->priv, (word32)dh->privSz,
             base, 1);
@@ -2307,14 +2320,21 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     ctx->selection = selection;
 
+    if (ok && (!wp_read_der_bio(ctx->provCtx, cBio, &data, &len))) {
+        ok = 0;
+    }
+#ifdef HAVE_FIPS
+    if (ok && wp_decode_should_skip(FIPS_CAST_DH_PRIMITIVE_Z, data, len,
+            wp_dh_decode_nids, WP_DH_DECODE_NIDS_CNT)) {
+        decoded = 0;
+        ok = 0;
+    }
+#endif
     if (ok) {
         dh = wp_dh_new(ctx->provCtx);
         if (dh == NULL) {
             ok = 0;
         }
-    }
-    if (ok && (!wp_read_der_bio(ctx->provCtx, cBio, &data, &len))) {
-        ok = 0;
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC)) {
         if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0){

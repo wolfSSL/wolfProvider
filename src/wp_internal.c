@@ -20,6 +20,9 @@
 
 
 #include <openssl/evp.h>
+#include <openssl/x509.h>
+#include <openssl/objects.h>
+#include <openssl/err.h>
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
@@ -29,6 +32,9 @@
 
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
+#ifdef HAVE_FIPS
+#include <wolfssl/wolfcrypt/fips_test.h>
+#endif
 
 #ifndef WP_SINGLE_THREADED
 
@@ -196,6 +202,148 @@ int wp_init_cast(int algo)
 }
 #endif /* HAVE_FIPS */
 #endif /* !WP_SINGLE_THREADED */
+
+#ifdef HAVE_FIPS
+/**
+ * Extract the AlgorithmIdentifier OID NID from a SubjectPublicKeyInfo DER.
+ *
+ * Not d2i_X509_PUBKEY: its custom d2i hook drives OSSL_DECODER, which re-enters
+ * this provider's decoders and recurses. ASN1_get_object + d2i_X509_ALGOR are
+ * plain templates and re-entry-safe.
+ *
+ * @param [in] der  DER bytes.
+ * @param [in] len  Length of der.
+ * @return  Algorithm NID, or NID_undef if not a fully-consumed SPKI.
+ */
+static int wp_spki_alg_nid(const unsigned char* der, word32 len)
+{
+    int nid = NID_undef;
+    const unsigned char* p = der;
+    long plen;
+    int tag, xclass, hdr;
+
+    ERR_set_mark();
+    hdr = ASN1_get_object(&p, &plen, &tag, &xclass, (long)len);
+    if (!(hdr & 0x80) && (tag == V_ASN1_SEQUENCE) &&
+            (xclass == V_ASN1_UNIVERSAL) &&
+            ((word32)(p - der) + (word32)plen == len)) {
+        const unsigned char* seqEnd = p + plen;
+        X509_ALGOR* alg = d2i_X509_ALGOR(NULL, &p, plen);
+        if (alg != NULL) {
+            const unsigned char* bsp = p;
+            long bslen;
+            int bstag, bsclass, bshdr;
+
+            /* Require the trailing BIT STRING so a foreign SEQUENCE is not
+             * mistaken for an SPKI. */
+            bshdr = ASN1_get_object(&bsp, &bslen, &bstag, &bsclass,
+                (long)(seqEnd - p));
+            if ((alg->algorithm != NULL) && !(bshdr & 0x80) &&
+                    (bstag == V_ASN1_BIT_STRING) &&
+                    (bsclass == V_ASN1_UNIVERSAL) &&
+                    (bsp + bslen == seqEnd)) {
+                nid = OBJ_obj2nid(alg->algorithm);
+            }
+            X509_ALGOR_free(alg);
+        }
+    }
+    ERR_pop_to_mark();
+
+    return nid;
+}
+
+/**
+ * Extract the AlgorithmIdentifier OID NID from a PKCS#8 PrivateKeyInfo DER.
+ *
+ * @param [in] der  DER bytes.
+ * @param [in] len  Length of der.
+ * @return  Algorithm NID, or NID_undef if not a fully-consumed PKCS#8.
+ */
+static int wp_pki_alg_nid(const unsigned char* der, word32 len)
+{
+    int nid = NID_undef;
+    const unsigned char* p = der;
+    PKCS8_PRIV_KEY_INFO* p8;
+
+    ERR_set_mark();
+    p8 = d2i_PKCS8_PRIV_KEY_INFO(NULL, &p, (long)len);
+    if (p8 != NULL) {
+        if (p == der + len) {
+            const ASN1_OBJECT* alg = NULL;
+            if ((PKCS8_pkey_get0(&alg, NULL, NULL, NULL, p8) == 1) &&
+                    (alg != NULL)) {
+                nid = OBJ_obj2nid(alg);
+            }
+        }
+        PKCS8_PRIV_KEY_INFO_free(p8);
+    }
+    ERR_pop_to_mark();
+
+    return nid;
+}
+
+/* Key-algorithm OIDs (the SPKI/PKCS#8 AlgorithmIdentifier) for every key type
+ * wolfProvider registers a decoder for -- keep in sync with wp_wolfprov.c. Lets
+ * the precheck positively identify a foreign-but-known key and skip it before
+ * instantiation, whose gated free fires the lazy CAST. Signature OIDs (e.g.
+ * sha256WithRSAEncryption) never appear in a key wrapper, so they are absent by
+ * design. An OID not listed can't be proven foreign. */
+static const int wp_known_key_nids[] = {
+    NID_rsaEncryption,
+    NID_rsassaPss,
+    NID_X9_62_id_ecPublicKey,
+    NID_dhKeyAgreement,
+    NID_dhpublicnumber,
+    NID_X25519,
+    NID_X448,
+    NID_ED25519,
+    NID_ED448
+};
+
+/**
+ * Decide whether a decoder should skip key-object instantiation.
+ *
+ * See declaration in internal.h for the full contract.
+ */
+int wp_decode_should_skip(int castType, const unsigned char* der, word32 len,
+    const int* allowedNids, size_t nAllowed)
+{
+    int nid;
+    size_t i;
+
+    if (wc_GetCastStatus_fips(castType) == FIPS_CAST_STATE_SUCCESS) {
+        return 0;
+    }
+
+    /* Pull the AlgorithmIdentifier OID with both readers regardless of the
+     * format label: a type-specific or mislabeled input is usually an
+     * OID-bearing PKCS#8/SPKI. */
+    nid = wp_pki_alg_nid(der, len);
+    if (nid == NID_undef) {
+        nid = wp_spki_alg_nid(der, len);
+    }
+
+    /* No OID (raw/unwrapped material) -> can't prove foreign, proceed. */
+    if (nid == NID_undef) {
+        return 0;
+    }
+    /* Owned by this decoder -> proceed. */
+    for (i = 0; i < nAllowed; i++) {
+        if (nid == allowedNids[i]) {
+            return 0;
+        }
+    }
+    /* Positively a different known key type -> skip. */
+    for (i = 0; i < sizeof(wp_known_key_nids) / sizeof(*wp_known_key_nids); i++) {
+        if (nid == wp_known_key_nids[i]) {
+            return 1;
+        }
+    }
+
+    /* Recognized OID but not one of ours -> can't prove foreign, proceed. */
+    return 0;
+}
+#endif /* HAVE_FIPS */
 
 /**
  * Get the wolfSSL random number generator from the provider context.

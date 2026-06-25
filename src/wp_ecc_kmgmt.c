@@ -34,6 +34,16 @@
 
 #ifdef WP_HAVE_ECC
 
+#ifdef HAVE_FIPS
+#include <wolfssl/wolfcrypt/fips_test.h>
+
+static const int wp_ecc_decode_nids[] = {
+    NID_X9_62_id_ecPublicKey
+};
+#define WP_ECC_DECODE_NIDS_CNT  \
+    (sizeof(wp_ecc_decode_nids) / sizeof(*wp_ecc_decode_nids))
+#endif /* HAVE_FIPS */
+
 /* Note: Explicit parameters are not supported. A predefined curve MUST be used.
  */
 
@@ -2307,12 +2317,21 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     ctx->selection = selection;
 
-    ecc = wp_ecc_new(ctx->provCtx);
-    if (ecc == NULL) {
-        ok = 0;
-    }
     if (ok && (!wp_read_der_bio(ctx->provCtx, cBio, &data, &len))) {
         ok = 0;
+    }
+#ifdef HAVE_FIPS
+    if (ok && wp_decode_should_skip(FIPS_CAST_ECC_PRIMITIVE_Z, data, len,
+            wp_ecc_decode_nids, WP_ECC_DECODE_NIDS_CNT)) {
+        decoded = 0;
+        ok = 0;
+    }
+#endif
+    if (ok) {
+        ecc = wp_ecc_new(ctx->provCtx);
+        if (ecc == NULL) {
+            ok = 0;
+        }
     }
     if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
                (ctx->format == WP_ENC_FORMAT_X9_62))) {
