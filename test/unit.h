@@ -300,6 +300,7 @@ int test_rsa_pss_restrictions(void *data);
 int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);
 int test_rsa_fromdata(void* data);
+int test_rsa_fromdata_oversize(void* data);
 int test_rsa_decode_pkcs8(void* data);
 int test_rsa_encode_pkcs8(void* data);
 int test_rsa_null_init(void* data);
@@ -316,6 +317,7 @@ int test_dh_invalid_kdf_strings(void *data);
 int test_dh_decode(void *data);
 int test_dh_get_params(void *data);
 int test_dh_krb5_keygen(void *data);
+int test_dh_fromdata_oversize(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC
@@ -450,6 +452,7 @@ int test_ec_auto_derive_pubkey(void* data);
 int test_ec_null_init(void* data);
 #ifdef WP_HAVE_EC_P256
 int test_ec_print_public(void* data);
+int test_ec_fromdata_oversize(void* data);
 #endif
 
 #endif /* WP_HAVE_ECC */
