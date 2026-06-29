@@ -18,10 +18,30 @@ if [[ "$REF" =~ ^[0-9a-f]{40}$ ]]; then
 else
     api_url="https://api.github.com/repos/$REPO/commits/$REF"
 
+    curl_args=(-fsSL)
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        sha=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api_url" | jq -r .sha)
-    else
-        sha=$(curl -fsSL "$api_url" | jq -r .sha)
+        curl_args+=(-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json")
+    fi
+
+    body=""
+    for attempt in 1 2 3 4 5; do
+        if body=$(curl "${curl_args[@]}" "$api_url"); then
+            break
+        fi
+        body=""
+        # GitHub rate-limits with 429/403; back off before retrying.
+        [[ "$attempt" -lt 5 ]] && sleep $((attempt * 10))
+    done
+
+    if [[ -z "$body" ]]; then
+        echo "resolve-ref: failed to resolve $REF in $REPO after retries" >&2
+        exit 1
+    fi
+
+    sha=$(echo "$body" | jq -r .sha)
+    if [[ -z "$sha" || "$sha" == "null" ]]; then
+        echo "resolve-ref: no sha for $REF in $REPO" >&2
+        exit 1
     fi
     echo "$sha"
 fi
