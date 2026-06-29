@@ -136,6 +136,27 @@ jobs:
             return 1
           }
 
+          # Prefer the version-pinned snapshot tag; fall back to rolling only on a definitive not-found.
+          pick_wolfssl_tag() {
+            local base="$1"
+            local suffix="$2"
+            local img err attempt
+            [ -z "$suffix" ] && { echo "$base"; return; }
+            img="${base}${suffix}"
+            for attempt in 1 2 3; do
+              if err=$(oras manifest fetch "$img" 2>&1 >/dev/null); then
+                echo "$img"; return
+              fi
+              case "$err" in
+                *"not found"*|*"failed to resolve"*) echo "$base"; return ;;
+              esac
+              echo "manifest fetch $img failed (attempt $attempt): $err" >&2
+              [ "$attempt" -lt 3 ] && sleep $((attempt * 10))
+            done
+            # Transient errors exhausted: keep the pinned tag so the pull fails loudly, not a silent version swap.
+            echo "$img"
+          }
+
           # Pull the wolfSSL deb pinned to this job's wolfssl_ref when it is
           # a stable tag (vX.Y.Z-stable), so a v5.8.4-stable job gets the
           # v5.8.4 debs and a v5.9.1-stable job gets the v5.9.1 debs. Any
@@ -146,14 +167,12 @@ jobs:
           esac
 
           if [ "${{ inputs.fips_ref }}" = "FIPS" ]; then
-            echo "Pulling FIPS wolfSSL packages (fips${WOLFSSL_TAG_SUFFIX})..."
-            oras_pull_with_retry "ghcr.io/wolfssl/wolfprovider/debs:fips${WOLFSSL_TAG_SUFFIX}" \
-              ${{ env.WOLFSSL_PACKAGES_PATH }}
+            WOLFSSL_TAG=$(pick_wolfssl_tag "ghcr.io/wolfssl/wolfprovider/debs:fips" "${WOLFSSL_TAG_SUFFIX}")
           else
-            echo "Pulling non-FIPS wolfSSL packages (nonfips${WOLFSSL_TAG_SUFFIX})..."
-            oras_pull_with_retry "ghcr.io/wolfssl/wolfprovider/debs:nonfips${WOLFSSL_TAG_SUFFIX}" \
-              ${{ env.WOLFSSL_PACKAGES_PATH }}
+            WOLFSSL_TAG=$(pick_wolfssl_tag "ghcr.io/wolfssl/wolfprovider/debs:nonfips" "${WOLFSSL_TAG_SUFFIX}")
           fi
+          echo "Pulling wolfSSL packages (${WOLFSSL_TAG})..."
+          oras_pull_with_retry "${WOLFSSL_TAG}" ${{ env.WOLFSSL_PACKAGES_PATH }}
 
           # Pull OpenSSL packages based on replace_default setting
           if [ "${{ inputs.replace_default }}" = "true" ]; then
