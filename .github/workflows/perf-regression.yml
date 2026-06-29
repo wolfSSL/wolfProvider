@@ -1,4 +1,4 @@
-name: Performance Regression
+name: Overhead Regression
 
 on:
   schedule:
@@ -16,7 +16,7 @@ jobs:
 
   perf_nonfips:
     needs: discover_versions
-    name: Perf regression (non-FIPS)
+    name: Overhead regression (non-FIPS)
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:
@@ -36,7 +36,7 @@ jobs:
         run: |
           OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
 
-      - name: Run perf regression
+      - name: Run overhead regression
         run: |
           source scripts/env-setup
           OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/perf_test/do-perf-tests.sh
@@ -51,7 +51,7 @@ jobs:
 
   perf_fips:
     needs: discover_versions
-    name: Perf regression (FIPS)
+    name: Overhead regression (FIPS)
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:
@@ -83,7 +83,7 @@ jobs:
           OPENSSL_TAG=${{ matrix.openssl_ref }} ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
             --fips-check=ready --wolfssl-ver=v${{ matrix.wolfssl_bundle_ref }}-stable
 
-      - name: Run perf regression
+      - name: Run overhead regression
         run: |
           export WOLFSSL_ISFIPS=1
           source scripts/env-setup

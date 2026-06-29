@@ -1,6 +1,6 @@
 #!/bin/bash
 # do-perf-tests.sh
-# Run the wolfProvider performance regression test.
+# Run the wolfProvider overhead regression test.
 #
 # Copyright (C) 2006-2025 wolfSSL Inc.
 #

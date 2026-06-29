@@ -263,9 +263,9 @@ The scan-build and infer thresholds are baseline-based, not strict —
 they let pre-existing issues slide but flag obvious regressions.
 Bringing them to 0 is a future cleanup.
 
-## Performance regression testing
+## Overhead regression testing
 
-`perf-regression.yml` runs nightly at 07:00 UTC (and on
+`perf-regression.yml` (workflow display name **Overhead Regression**) runs nightly at 07:00 UTC (and on
 `workflow_dispatch`). Customers run scripts that fire many `openssl`
 commands in a row, and each invocation is a fresh process paying a full
 wolfProvider init (plus, in FIPS builds, the per-algorithm CAST on first
@@ -293,13 +293,33 @@ are gated on absolute ms. The job fails only when a command exceeds its
 budget (× tolerance) — i.e. when overhead *regresses*, never for being
 above 1.0.
 
+Gating on the ratio (not absolute ms) is what makes machine/OS variance
+between runs cancel out: a slow runner inflates both numerator and
+denominator, so the ratio holds. That is also why the budget is a
+committed ratio rather than a head-to-head against a freshly built
+`master`: rebuilding master every run would roughly double build cost and
+still drift silently as master itself changes, whereas a committed ratio
+moves only when someone deliberately re-baselines (below). The absolute-ms
+probes are the exception — they are near-no-ops with no meaningful
+denominator, so their budget carries tolerance to absorb runner noise.
+
 To keep the nightly from going red on a single noisy measurement, a
 command that fails the gate is measured up to `PERF_CONFIRM` times total
 (default 3) and only reported as a regression if it fails **every**
-attempt — one passing round clears it as a fluke. This is on top of each
-measurement already taking the minimum of N runs. A command that exits
+attempt — one passing round clears it as a fluke. A command that exits
 non-zero is reported as an error (not a silent pass), so a broken or
 removed capability fails the job instead of looking fast.
+
+This is deliberately a second layer on top of the minimum-of-N inside one
+measurement, not a substitute for raising N. The two cancel different
+noise: min-of-N kills *jitter within one measurement window* (scheduler
+hiccups between iterations), but a transient runner-level event — CPU
+steal from a noisy neighbour, thermal throttling, a slow disk moment —
+can inflate **every** iteration in that window at once, and no value of N
+escapes a window that is uniformly slow. A fresh confirm round re-measures
+later, after the event has likely passed. Raising N alone would make each
+window longer and costlier without addressing whole-window contamination,
+which is the failure mode that actually produced red nightlies in testing.
 
 There are two job variants. **non-FIPS** tracks general init/load
 overhead. **FIPS** is the one that actually guards the CAST class — the
@@ -325,12 +345,34 @@ source scripts/env-setup
 Timing uses GNU `date +%s.%N`, so local runs need GNU coreutils (the
 script errors out early on BSD/macOS `date`). CI runs on Linux.
 
-The committed baselines are generous seeds — regenerate them on a stable
-runner once and commit the result to tighten the gate:
+### Updating the baseline
+
+The committed baselines are generous seeds. Regenerate on a stable runner
+and commit the result:
 
 ```sh
 ./scripts/perf_test/do-perf-tests.sh --update-baseline
 ```
+
+`--update-baseline` writes each command's budget as its just-measured
+value plus `PERF_MARGIN` (default 30%) headroom, so re-baselining on a
+faster result *tightens* the gate and re-baselining after a real
+slowdown *loosens* it.
+
+**Update when** the overhead change is understood and intended — e.g. a
+deliberate init/load change you've reviewed, or a move to a different
+runner class that shifts the ratio for everyone. **Do not** re-baseline to
+silence an unexplained regression; that is the exact signal the job exists
+to surface — investigate first, re-baseline only once you know why it
+moved.
+
+On **improvement**: the gate is one-sided on purpose — it never fails a
+command for being *faster* than budget, because a green-but-better run is
+never a problem to page on. But a sustained improvement is worth a
+deliberate re-baseline *downward*: tightening the budget to the new, lower
+overhead is what lets the job catch a later silent regression back to the
+old level. So significant improvement is a prompt to re-baseline (manually,
+after confirming it holds across runs), not an error and not automatic.
 
 ## Triggering manually
 
