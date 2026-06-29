@@ -1282,4 +1282,53 @@ int test_dh_x963_kdf(void *data)
 }
 #endif /* HAVE_X963_KDF && WP_HAVE_SHA256 */
 
+/* Pass an oversize OSSL_PARAM (>1024 bytes) for the FFC P component to
+ * EVP_PKEY_fromdata so wp_mp_read_unsigned_bin_le (wp_params.c) hits its
+ * size-guard branch via wp_dh_import_group. Expect failure rather than the
+ * stack buffer overflow that would happen without the guard. */
+int test_dh_fromdata_oversize(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx_wolf = NULL;
+    EVP_PKEY *pkey_wolf = NULL;
+    unsigned char p_oversize[2048];
+    unsigned char g_buf[1] = { 0x02 };
+    OSSL_PARAM params[3];
+    int status;
+
+    (void)data;
+    memset(p_oversize, 0xAA, sizeof(p_oversize));
+
+    PRINT_MSG("Testing EVP_PKEY_fromdata with oversize DH FFC_P component");
+
+    ctx_wolf = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+    if (ctx_wolf == NULL) {
+        err = 1;
+    }
+
+    if (err == 0) {
+        err |= EVP_PKEY_fromdata_init(ctx_wolf) != 1;
+    }
+
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_FFC_P,
+                                            p_oversize, sizeof(p_oversize));
+        params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_FFC_G,
+                                            g_buf, sizeof(g_buf));
+        params[2] = OSSL_PARAM_construct_end();
+
+        status = EVP_PKEY_fromdata(ctx_wolf, &pkey_wolf,
+                                   EVP_PKEY_KEY_PARAMETERS, params);
+        if (status == 1) {
+            PRINT_MSG("EVP_PKEY_fromdata unexpectedly succeeded with 2048-byte"
+                      " FFC_P");
+            err = 1;
+        }
+        EVP_PKEY_free(pkey_wolf);
+    }
+
+    EVP_PKEY_CTX_free(ctx_wolf);
+    return err;
+}
+
 #endif /* WP_HAVE_DH */

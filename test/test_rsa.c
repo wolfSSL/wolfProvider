@@ -1619,6 +1619,55 @@ int test_rsa_fromdata(void* data)
     return err;
 }
 
+/* Pass an oversize OSSL_PARAM (>1024 bytes) for the N component to
+ * EVP_PKEY_fromdata so wp_mp_read_unsigned_bin_le (wp_params.c) hits its
+ * size-guard branch. Expect failure rather than the stack buffer overflow
+ * that would happen without the guard. */
+int test_rsa_fromdata_oversize(void* data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx_wolf = NULL;
+    EVP_PKEY *pkey_wolf = NULL;
+    unsigned char n_oversize[2048];
+    unsigned char e_buf[3] = { 0x01, 0x00, 0x01 };
+    OSSL_PARAM params[3];
+    int status;
+
+    (void)data;
+    memset(n_oversize, 0xAA, sizeof(n_oversize));
+
+    PRINT_MSG("Testing EVP_PKEY_fromdata with oversize RSA n component");
+
+    ctx_wolf = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL);
+    if (ctx_wolf == NULL) {
+        err = 1;
+    }
+
+    if (err == 0) {
+        err |= EVP_PKEY_fromdata_init(ctx_wolf) != 1;
+    }
+
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_RSA_N,
+                                            n_oversize, sizeof(n_oversize));
+        params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_RSA_E,
+                                            e_buf, sizeof(e_buf));
+        params[2] = OSSL_PARAM_construct_end();
+
+        status = EVP_PKEY_fromdata(ctx_wolf, &pkey_wolf, EVP_PKEY_PUBLIC_KEY,
+                                   params);
+        if (status == 1) {
+            PRINT_MSG("EVP_PKEY_fromdata unexpectedly succeeded with 2048-byte"
+                      " n");
+            err = 1;
+        }
+        EVP_PKEY_free(pkey_wolf);
+    }
+
+    EVP_PKEY_CTX_free(ctx_wolf);
+    return err;
+}
+
 static int test_rsa_decode_pkcs8_old(void)
 {
     int err = 0;
