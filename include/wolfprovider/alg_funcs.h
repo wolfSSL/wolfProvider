@@ -170,6 +170,21 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_DH             "DH"
 #define WP_NAMES_DHX            "DHX"
 
+/* ML-KEM names (NIST FIPS 203). */
+#define WP_NAMES_ML_KEM_512     "ML-KEM-512"
+#define WP_NAMES_ML_KEM_768     "ML-KEM-768"
+#define WP_NAMES_ML_KEM_1024    "ML-KEM-1024"
+
+/* Hybrid PQC TLS key-exchange group names. */
+#define WP_NAMES_X25519MLKEM768     "X25519MLKEM768"
+#define WP_NAMES_SECP256R1MLKEM768  "SecP256r1MLKEM768"
+#define WP_NAMES_SECP384R1MLKEM1024 "SecP384r1MLKEM1024"
+
+/* ML-DSA names (NIST FIPS 204). */
+#define WP_NAMES_ML_DSA_44      "ML-DSA-44:MLDSA44:2.16.840.1.101.3.4.3.17:id-ml-dsa-44"
+#define WP_NAMES_ML_DSA_65      "ML-DSA-65:MLDSA65:2.16.840.1.101.3.4.3.18:id-ml-dsa-65"
+#define WP_NAMES_ML_DSA_87      "ML-DSA-87:MLDSA87:2.16.840.1.101.3.4.3.19:id-ml-dsa-87"
+
 /* DRBG names. */
 #define WP_NAMES_SEED_SRC       "SEED-SRC"
 #define WP_NAMES_CTR_DRBG       "CTR-DRBG"
@@ -221,6 +236,71 @@ int wp_ecx_up_ref(wp_Ecx* ecx);
 void wp_ecx_free(wp_Ecx* ecx);
 void* wp_ecx_get_key(wp_Ecx* ecx);
 wolfSSL_Mutex* wp_ecx_get_mutex(wp_Ecx* ecx);
+
+/* Internal ML-KEM types and functions. */
+typedef struct wp_MlKem wp_MlKem;
+typedef struct wp_MlKemData wp_MlKemData;
+
+int wp_mlkem_up_ref(wp_MlKem* mlkem);
+void wp_mlkem_free(wp_MlKem* mlkem);
+void* wp_mlkem_get_key(wp_MlKem* mlkem);
+const wp_MlKemData* wp_mlkem_get_data(const wp_MlKem* mlkem);
+word32 wp_mlkem_data_ct_size(const wp_MlKemData* data);
+/* ML-KEM shared secret size is a FIPS 203 constant (32 bytes) independent
+ * of the parameter set. */
+#define WP_MLKEM_SS_SIZE 32
+
+/* Internal hybrid (ML-KEM + classical ECDH) types and functions. */
+typedef struct wp_Mlx wp_Mlx;
+
+/**
+ * Per-group hybrid variant data. Matches OpenSSL's hybrid_vtable so the
+ * concatenated key_share interoperates with native OpenSSL.
+ */
+typedef struct wp_MlxData {
+    /** Classical component type (X25519 or ECC). */
+    int classicalType;
+    /** wolfSSL ECC curve id (when classicalType is ECC). */
+    int curveId;
+    /** wolfSSL ML-KEM parameter type (WC_ML_KEM_768/1024). */
+    int mlkemType;
+    /** ML-KEM public key size in bytes. */
+    word32 mlkemPubSize;
+    /** ML-KEM private key size in bytes. */
+    word32 mlkemPrivSize;
+    /** ML-KEM ciphertext size in bytes. */
+    word32 mlkemCtSize;
+    /** Classical public key size in bytes (encoded). */
+    word32 classicalPubSize;
+    /** Classical private key size in bytes. */
+    word32 classicalPrivSize;
+    /** Classical shared secret size in bytes. */
+    word32 classicalShSecSize;
+    /** Slot the ML-KEM component occupies (0 or 1) in the concatenation. */
+    int mlkemSlot;
+    /** Security bits (those of the ML-KEM component). */
+    int securityBits;
+    /** Group/algorithm name string. */
+    const char* name;
+} wp_MlxData;
+
+int wp_mlx_up_ref(wp_Mlx* mlx);
+void wp_mlx_free(wp_Mlx* mlx);
+void* wp_mlx_get_mlkem_key(wp_Mlx* mlx);
+void* wp_mlx_get_classical_key(wp_Mlx* mlx);
+const wp_MlxData* wp_mlx_get_data(const wp_Mlx* mlx);
+int wp_mlx_has_pub(const wp_Mlx* mlx);
+int wp_mlx_has_priv(const wp_Mlx* mlx);
+
+/* Internal ML-DSA types and functions. */
+typedef struct wp_MlDsa wp_MlDsa;
+
+int wp_mldsa_up_ref(wp_MlDsa* mldsa);
+void wp_mldsa_free(wp_MlDsa* mldsa);
+void* wp_mldsa_get_key(wp_MlDsa* mldsa);
+int wp_mldsa_get_sig_size(const wp_MlDsa* mldsa);
+int wp_mldsa_has_private(const wp_MlDsa* mldsa);
+int wp_mldsa_get_level(wp_MlDsa* mldsa);
 
 /* Internal DH types and functions. */
 typedef struct wp_Dh wp_Dh;
@@ -325,12 +405,15 @@ extern const OSSL_DISPATCH wp_ed25519_signature_functions[];
 extern const OSSL_DISPATCH wp_ed448_signature_functions[];
 extern const OSSL_DISPATCH wp_hmac_signature_functions[];
 extern const OSSL_DISPATCH wp_cmac_signature_functions[];
+extern const OSSL_DISPATCH wp_mldsa_signature_functions[];
 
 /* Asymmetric cipher implementations. */
 extern const OSSL_DISPATCH wp_rsa_asym_cipher_functions[];
 
 /* KEM implementations. */
 extern const OSSL_DISPATCH wp_rsa_asym_kem_functions[];
+extern const OSSL_DISPATCH wp_mlkem_asym_kem_functions[];
+extern const OSSL_DISPATCH wp_mlx_asym_kem_functions[];
 
 /* Key Management implementations. */
 extern const OSSL_DISPATCH wp_rsa_keymgmt_functions[];
@@ -344,6 +427,15 @@ extern const OSSL_DISPATCH wp_dh_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_hmac_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_cmac_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_kdf_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlkem512_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlkem768_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlkem1024_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlx_x25519_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlx_p256_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mlx_p384_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_keymgmt_functions[];
 
 /* Key exchange implementations. */
 extern const OSSL_DISPATCH wp_ecdh_keyexch_functions[];
@@ -380,6 +472,12 @@ extern const OSSL_DISPATCH wp_x448_spki_decoder_functions[];
 extern const OSSL_DISPATCH wp_x448_pki_decoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_spki_decoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_pki_decoder_functions[];
 extern const OSSL_DISPATCH wp_pem_to_der_decoder_functions[];
 extern const OSSL_DISPATCH wp_epki_to_pki_decoder_functions[];
 /* Encode implementations. */
@@ -439,6 +537,24 @@ extern const OSSL_DISPATCH wp_ed448_pki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_pki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_epki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_ed448_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa44_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa65_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_mldsa87_epki_pem_encoder_functions[];
 
 /* Storage implementations. */
 extern const OSSL_DISPATCH wp_file_store_functions[];

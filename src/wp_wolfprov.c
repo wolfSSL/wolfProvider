@@ -663,6 +663,29 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
     { WP_NAMES_TLS1_3_KDF, WOLFPROV_PROPERTIES, wp_kdf_keymgmt_functions,
       "HKDF" },
 
+#ifdef WP_HAVE_MLKEM
+    { WP_NAMES_ML_KEM_512, WOLFPROV_PROPERTIES,
+      wp_mlkem512_keymgmt_functions, "" },
+    { WP_NAMES_ML_KEM_768, WOLFPROV_PROPERTIES,
+      wp_mlkem768_keymgmt_functions, "" },
+    { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
+      wp_mlkem1024_keymgmt_functions, "" },
+    { WP_NAMES_X25519MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_x25519_keymgmt_functions, "" },
+    { WP_NAMES_SECP256R1MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_p256_keymgmt_functions, "" },
+    { WP_NAMES_SECP384R1MLKEM1024, WOLFPROV_PROPERTIES,
+      wp_mlx_p384_keymgmt_functions, "" },
+#endif
+#ifdef WP_HAVE_MLDSA
+    { WP_NAMES_ML_DSA_44, WOLFPROV_PROPERTIES,
+      wp_mldsa44_keymgmt_functions, "" },
+    { WP_NAMES_ML_DSA_65, WOLFPROV_PROPERTIES,
+      wp_mldsa65_keymgmt_functions, "" },
+    { WP_NAMES_ML_DSA_87, WOLFPROV_PROPERTIES,
+      wp_mldsa87_keymgmt_functions, "" },
+#endif
+
     { NULL, NULL, NULL, NULL }
 };
 
@@ -720,6 +743,14 @@ static const OSSL_ALGORITHM wolfprov_signature[] = {
     { WP_NAMES_CMAC, WOLFPROV_PROPERTIES, wp_cmac_signature_functions,
       "" },
 #endif
+#ifdef WP_HAVE_MLDSA
+    { WP_NAMES_ML_DSA_44, WOLFPROV_PROPERTIES,
+      wp_mldsa_signature_functions, "" },
+    { WP_NAMES_ML_DSA_65, WOLFPROV_PROPERTIES,
+      wp_mldsa_signature_functions, "" },
+    { WP_NAMES_ML_DSA_87, WOLFPROV_PROPERTIES,
+      wp_mldsa_signature_functions, "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -741,6 +772,20 @@ static const OSSL_ALGORITHM wolfprov_asym_kem[] = {
 #ifdef WP_HAVE_RSA
     { WP_NAMES_RSA, WOLFPROV_PROPERTIES, wp_rsa_asym_kem_functions,
       "" },
+#endif
+#ifdef WP_HAVE_MLKEM
+    { WP_NAMES_ML_KEM_512, WOLFPROV_PROPERTIES,
+      wp_mlkem_asym_kem_functions, "" },
+    { WP_NAMES_ML_KEM_768, WOLFPROV_PROPERTIES,
+      wp_mlkem_asym_kem_functions, "" },
+    { WP_NAMES_ML_KEM_1024, WOLFPROV_PROPERTIES,
+      wp_mlkem_asym_kem_functions, "" },
+    { WP_NAMES_X25519MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_asym_kem_functions, "" },
+    { WP_NAMES_SECP256R1MLKEM768, WOLFPROV_PROPERTIES,
+      wp_mlx_asym_kem_functions, "" },
+    { WP_NAMES_SECP384R1MLKEM1024, WOLFPROV_PROPERTIES,
+      wp_mlx_asym_kem_functions, "" },
 #endif
     { NULL, NULL, NULL, NULL }
 };
@@ -944,6 +989,63 @@ static const OSSL_ALGORITHM wolfprov_encoder[] = {
       "" },
 #endif
 
+#ifdef WP_HAVE_MLDSA
+    { WP_NAMES_ML_DSA_44, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_mldsa44_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_44, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_mldsa44_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_44, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_mldsa44_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_44, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_mldsa44_pki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_44, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_mldsa44_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_44, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_mldsa44_epki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_mldsa65_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_mldsa65_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_mldsa65_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_mldsa65_pki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_mldsa65_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_mldsa65_epki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, der),
+      wp_mldsa87_spki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_ENCODER_PROPERTIES(SubjectPublicKeyInfo, pem),
+      wp_mldsa87_spki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_ENCODER_PROPERTIES(PrivateKeyInfo, der),
+      wp_mldsa87_pki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_ENCODER_PROPERTIES(PrivateKeyInfo, pem),
+      wp_mldsa87_pki_pem_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, der),
+      wp_mldsa87_epki_der_encoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_ENCODER_PROPERTIES(EncryptedPrivateKeyInfo, pem),
+      wp_mldsa87_epki_pem_encoder_functions,
+      "" },
+#endif
+
     { NULL, NULL, NULL, NULL }
 };
 
@@ -1101,6 +1203,27 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
       "" },
     { WP_NAMES_ED448, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_ed448_pki_decoder_functions,
+      "" },
+#endif
+
+#ifdef WP_HAVE_MLDSA
+    { WP_NAMES_ML_DSA_44, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
+      wp_mldsa44_spki_decoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_44, WP_DECODER_PROPERTIES(PrivateKeyInfo),
+      wp_mldsa44_pki_decoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
+      wp_mldsa65_spki_decoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_65, WP_DECODER_PROPERTIES(PrivateKeyInfo),
+      wp_mldsa65_pki_decoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_DECODER_PROPERTIES(SubjectPublicKeyInfo),
+      wp_mldsa87_spki_decoder_functions,
+      "" },
+    { WP_NAMES_ML_DSA_87, WP_DECODER_PROPERTIES(PrivateKeyInfo),
+      wp_mldsa87_pki_decoder_functions,
       "" },
 #endif
 

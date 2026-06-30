@@ -131,6 +131,10 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' nginx ')
     uses: ./.github/workflows/nginx.yml
+  nginx-pqc:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' nginx-pqc ')
+    uses: ./.github/workflows/nginx-pqc.yml
   openldap:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' openldap ')

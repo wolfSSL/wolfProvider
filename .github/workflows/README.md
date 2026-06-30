@@ -96,7 +96,7 @@ gh workflow run pr-osp-select.yml --ref <branch> -f jobs="all"
 
 ### What runs in the nightly fan-out
 
-42 workflows total: 39 third-party OSS integrations, 2 internal
+43 workflows total: 40 third-party OSS integrations, 2 internal
 validations, and the static-analysis suite. Every one of these patches
 the upstream project (where needed) via `osp/wolfProvider/<app>/*.patch`
 from [wolfssl/osp](https://github.com/wolfssl/osp), builds it against
@@ -112,6 +112,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `openvpn.yml` | OpenVPN | control-channel TLS, tls-auth/tls-crypt HMAC, data-channel ciphers |
 | `stunnel.yml` | stunnel TLS proxy | server + client TLS 1.2 termination (TLS 1.3 + X25519/X448 paths skipped in FIPS) |
 | `nginx.yml` | nginx web server | server-side TLS, certificate selection, OCSP stapling |
+| `nginx-pqc.yml` | oqs-demos nginx (PQC) | ML-DSA (FIPS 204) cert auth + ML-KEM/hybrid (FIPS 203) KEX over TLS 1.3 (master + latest -stable, v5.9.2 PQC floor) |
 | `socat.yml` | socat (multipurpose relay) | OpenSSL bridge mode (TLS in/out) |
 | `tcpdump.yml` | tcpdump packet capture | build + link against wolfprov-backed libssl (no live decrypt) |
 | `tnftp.yml` | NetBSD FTP client | FTPS (TLS over FTP control + data) |
