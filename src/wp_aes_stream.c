@@ -590,6 +590,13 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
         if (inLen < AES_BLOCK_SIZE) {
             ok = 0;
         }
+        /* The CTS helpers cast the block count to int, so an inLen past
+         * 0x7FFFFFFF overflows blocks*AES_BLOCK_SIZE. Not reachable via
+         * EVP_CipherUpdate (its inl is int) - defense in depth for a caller
+         * driving OSSL_FUNC_cipher_update directly. */
+        if (inLen > 0x7FFFFFFFU) {
+            ok = 0;
+        }
         if (ok) {
             if (ctx->enc) {
                 ok = wp_aes_cts_encrypt(ctx, out, in, inLen);
