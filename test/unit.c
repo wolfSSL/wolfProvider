@@ -468,6 +468,9 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_PBE
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_pbe, NULL),
+        #ifdef WP_HAVE_SHA256
+        TEST_DECL(test_pbkdf2, NULL),
+        #endif
     #endif
 #endif
 

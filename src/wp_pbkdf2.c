@@ -41,6 +41,17 @@
     OSSL_PARAM_uint64(OSSL_KDF_PARAM_ITER, NULL)
 
 
+/* SP 800-132 lower bounds applied for the PKCS5=0 opt-in, matching OpenSSL's
+ * pbkdf2 KDF (providers/implementations/kdfs/pbkdf2.c). Only key length, salt
+ * length and iteration count are enforced. OpenSSL's handling of a minimum
+ * password length varies across versions (e.g. 3.5 accepts an empty password
+ * even with the checks enabled), so that bound is intentionally not applied
+ * here. FIPS enforcement is left to wolfCrypt's wc_PBKDF2_ex. */
+#define WP_PBKDF2_MIN_KEY_LEN_BITS  112
+#define WP_PBKDF2_MIN_ITERATIONS    1000
+#define WP_PBKDF2_MIN_SALT_LEN      (128 / 8)
+
+
 /**
  * The PBKDF2 context structure.
  * Includes everything for PBKDF2.
@@ -64,7 +75,7 @@ typedef struct wp_Pbkdf2Ctx {
     size_t saltSz;
     /** Number of iterations. */
     uint64_t iterations;
-    /** Used for PKCS#5. */
+    /** SP 800-132 lower-bound checks enabled (set when PKCS5 parameter is 0). */
     int pkcs5;
     /** PKCS12 key usage byte used in derivation. */
     int keyUse;
@@ -263,6 +274,29 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
         ok = 0;
     }
 
+    /* PKCS5 == 0 opts into the SP 800-132 lower bounds, matching OpenSSL's
+     * pbkdf2 KDF: minimum key length, salt length and iteration count. The
+     * minimum-password-length check is omitted as OpenSSL's behaviour there is
+     * version-dependent. Applied here for the non-FIPS opt-in case; in a FIPS
+     * build the equivalent SP 800-132 checks are performed inside
+     * wc_PBKDF2_ex, so they are not duplicated here. */
+    if (ok && ctx->pkcs5) {
+        if ((keyLen * 8) < WP_PBKDF2_MIN_KEY_LEN_BITS) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_PBKDF2, "PBKDF2 key size too small");
+            ok = 0;
+        }
+        if (ok && (ctx->saltSz < WP_PBKDF2_MIN_SALT_LEN)) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_PBKDF2, "PBKDF2 salt too small");
+            ok = 0;
+        }
+        if (ok && (ctx->iterations < WP_PBKDF2_MIN_ITERATIONS)) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_PBKDF2,
+                "PBKDF2 iteration count too low");
+            ok = 0;
+        }
+    }
+    /* wc_PBKDF2_ex fails when ctx->iterations is 0. */
+
     if (ok) {
         int rc;
 
@@ -297,8 +331,20 @@ static int wp_kdf_pbkdf2_set_ctx_params(wp_Pbkdf2Ctx* ctx,
     WOLFPROV_ENTER(WP_LOG_COMP_PBKDF2, "wp_kdf_pbkdf2_set_ctx_params");
 
     ok = wp_pbkdf2_base_set_ctx_params(ctx, params);
-    if (ok && !wp_params_get_int(params, OSSL_KDF_PARAM_PKCS5, &ctx->pkcs5)) {
-        ok = 0;
+    if (ok && (params != NULL)) {
+        const OSSL_PARAM* p = OSSL_PARAM_locate_const(params,
+            OSSL_KDF_PARAM_PKCS5);
+        if (p != NULL) {
+            int pkcs5;
+            if (!OSSL_PARAM_get_int(p, &pkcs5)) {
+                ok = 0;
+            }
+            else {
+                /* PKCS5 == 0 opts into the SP 800-132 lower-bound checks; a
+                 * non-zero (legacy PKCS#5) value disables them. */
+                ctx->pkcs5 = (pkcs5 == 0);
+            }
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PBKDF2, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -382,10 +428,14 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
 
     if (ok) {
         int rc;
+        /* OpenSSL's PKCS12KDF derive loop always runs at least once, so an
+         * iteration count of 0 produces the same output as 1. wolfCrypt
+         * rejects iterations <= 0, so map 0 to 1 to match OpenSSL. */
+        int iterations = (ctx->iterations == 0) ? 1 : (int)ctx->iterations;
 
         PRIVATE_KEY_UNLOCK();
         rc = wc_PKCS12_PBKDF_ex(key, ctx->password, (int)ctx->passwordSz,
-            ctx->salt, (int)ctx->saltSz, (int)ctx->iterations, (int)keyLen,
+            ctx->salt, (int)ctx->saltSz, iterations, (int)keyLen,
             ctx->mdType, ctx->keyUse, NULL);
         PRIVATE_KEY_LOCK();
         if (rc != 0) {
