@@ -466,6 +466,9 @@ int test_ec_fromdata_oversize(void* data);
 
 #ifdef WP_HAVE_PBE
 int test_pbe(void *data);
+#if defined(WP_HAVE_SHA256)
+int test_pbkdf2(void *data);
+#endif
 #endif /* WP_HAVE_PBE */
 
 #if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)

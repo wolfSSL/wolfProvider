@@ -149,6 +149,9 @@ static void wp_drbg_free(wp_DrbgCtx* ctx)
 }
 
 static int wp_drbg_uninstantiate(wp_DrbgCtx* ctx);
+static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
+    const unsigned char* entropy, size_t entropyLen,
+    const unsigned char* addIn, size_t addInLen);
 
 /**
  * Instantiate a new DRBG.
@@ -295,12 +298,20 @@ static int wp_drbg_uninstantiate(wp_DrbgCtx* ctx)
  * Generate random data.
  *
  * @param [in, out] ctx         DRBG context object.
+ * @param [out]     out         Buffer to hold generated random data.
+ * @param [in]      outLen      Number of random bytes to generate.
  * @param [in]      strength    Strength in bits required.
- * @param [in]      predResist  Prediction resistance required.
- * @param [in]      addIn       Additional input data to seed with.
+ * @param [in]      predResist  Prediction resistance required. When set, the
+ *                              DRBG is reseeded with fresh entropy before
+ *                              generating (SP 800-90A 9.3.1). Honored only when
+ *                              built with WP_HAVE_DRBG_RESEED; otherwise
+ *                              ignored.
+ * @param [in]      addIn       Additional input data. Ignored: wolfCrypt has no
+ *                              public generate API that accepts additional
+ *                              input on a live WC_RNG.
  * @param [in]      addInLen    Length of additional input data in bytes.
  * @return  1 on success.
- * @return  0 on success.
+ * @return  0 on failure.
  */
 static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
     size_t outLen, unsigned int strength, int predResist,
@@ -310,8 +321,6 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
     int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_generate");
-
-    (void)predResist;
 
     if (strength > WP_DRBG_STRENGTH) {
         ok = 0;
@@ -326,29 +335,50 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
         ok = 0;
     }
 #endif
-#if 0
+
+    if (ok && (outLen > 0xFFFFFFFFU)) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG, "Request length is too big");
+        ok = 0;
+    }
+
+    /* wolfCrypt exposes no public generate API that accepts additional input on
+     * a live WC_RNG (wc_RNG_GenerateBlock passes NULL to Hash_DRBG_Generate),
+     * so addIn must be ignored. Per SP 800-90A additional_input on Generate is
+     * optional, so dropping it is standards-compliant. */
     if (ok && (addInLen > 0)) {
-        rc = wc_RNG_DRBG_Reseed(ctx->rng, addIn, addInLen);
-        if (rc != 0) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG, "Additional data ignored");
+        (void)addIn;
+    }
+
+    /* SP 800-90A 9.3.1: prediction resistance requires reseeding with fresh
+     * entropy immediately before generating. wolfCrypt's public generate API
+     * has no PR flag, so emulate it via the in-place reseed path (fresh OS
+     * entropy, no caller-supplied material). Only available where a true
+     * reseed exists; without it the fallback re-instantiates the whole DRBG,
+     * so predResist is ignored. */
+#ifdef WP_HAVE_DRBG_RESEED
+    if (ok && predResist) {
+        if (!wp_drbg_reseed(ctx, 1, NULL, 0, NULL, 0)) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                "Prediction resistance reseed failed");
             ok = 0;
         }
     }
 #else
-    (void)addIn;
-    (void)addInLen;
+    (void)predResist;
 #endif
-    if (ok && (outLen > 0xFFFFFFFFU)) {
-        ok = 0;
-    }
+
     if (ok) {
         rc = wc_RNG_GenerateBlock(ctx->rng, out, (word32)outLen);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_RNG_GenerateBlock", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_RNG_GenerateBlock",
+                rc);
             ok = 0;
         }
     }
 
-    WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 }
 
@@ -366,7 +396,7 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
  * @param [in]      addInLen    Length of additional input data in bytes.
  * @param [in]      params      Other parameters.
  * @return  1 on success.
- * @return  0 on success.
+ * @return  0 on failure.
  */
 static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
     const unsigned char* entropy, size_t entropyLen,
@@ -504,7 +534,7 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
  *
  * @param [in, out] ctx  DRBG context object.
  * @return  1 on success.
- * @return  0 on success.
+ * @return  0 on failure.
  */
 static int wp_drbg_enable_locking(wp_DrbgCtx* ctx)
 {
@@ -539,7 +569,7 @@ static int wp_drbg_enable_locking(wp_DrbgCtx* ctx)
  *
  * @param [in, out] ctx  DRBG context object.
  * @return  1 on success.
- * @return  0 on success.
+ * @return  0 on failure.
  */
 static int wp_drbg_lock(wp_DrbgCtx* ctx)
 {
@@ -690,6 +720,7 @@ static int wp_drbg_set_ctx_params(wp_DrbgCtx* ctx, const OSSL_PARAM params[])
  *
  * @param [in] ctx      DRBG context object. Unused.
  * @return  1 on success.
+ * @return  0 on failure.
  */
 static int wp_drbg_verify_zeroization(wp_DrbgCtx* ctx)
 {
