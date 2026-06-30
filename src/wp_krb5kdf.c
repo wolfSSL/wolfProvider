@@ -479,6 +479,9 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
     if (ok && (ctx->constant == NULL || ctx->constantSz == 0)) {
         ok = 0;
     }
+    if (ok && (ctx->constantSz > AES_BLOCK_SIZE)) {
+        ok = 0;
+    }
     if (ok) {
         XMEMSET(key, 0, keyLen);
 
