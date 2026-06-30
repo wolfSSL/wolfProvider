@@ -90,6 +90,12 @@ static int test_krb5kdf_error_cases(OSSL_LIB_CTX* libCtx)
     unsigned char constant[] = {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
     };
+    /* Constant longer than the cipher block size. */
+    unsigned char constantLong[] = {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+        0x99
+    };
 
     PRINT_MSG("Testing KRB5KDF error case - AES-128-CBC with 32-byte key");
     /* This should fail since AES-128 key size is 16 bytes */
@@ -123,6 +129,15 @@ static int test_krb5kdf_error_cases(OSSL_LIB_CTX* libCtx)
         return 1;
     }
     PRINT_MSG("Negative test passed - KRB5KDF correctly rejected 0 length constant");
+
+    PRINT_MSG("Testing KRB5KDF error case - constant longer than block size");
+    err = test_krb5kdf_calc(libCtx, key, 16, "AES-128-CBC",
+        inKey16, sizeof(inKey16), constantLong, sizeof(constantLong));
+    if (err == 0) {
+        PRINT_MSG("FAILED: KRB5KDF accepted constant longer than block size");
+        return 1;
+    }
+    PRINT_MSG("Negative test passed - KRB5KDF correctly rejected oversized constant");
 
     return 0;
 }
