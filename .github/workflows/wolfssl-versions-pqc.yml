@@ -98,6 +98,9 @@ jobs:
     name: ${{ matrix.name }}
     needs: discover-versions
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -111,11 +114,30 @@ jobs:
       # Every row builds against the latest OpenSSL release. PQC needs OpenSSL
       # 3.6+ (and the enable flag enforces that floor); the interop step then
       # compares wolfProvider against that release's native ML-KEM/ML-DSA.
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: pqc
+          openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
+          wolfssl_ref: ${{ matrix.wolfssl-ref }}
+          extra_key: ${{ matrix.enable }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build wolfProvider (${{ matrix.enable || 'no PQC flag' }})
         run: |
           OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
           WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
             ./scripts/build-wolfprovider.sh ${{ matrix.enable }}
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       # Opt-in is per-algorithm: assert exactly the expected PQC test families
       # are present (both / mlkem / mldsa / none). This catches a leaked

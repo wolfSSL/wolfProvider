@@ -14,6 +14,9 @@ on:
 jobs:
   test_sssd:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     timeout-minutes: 60
     container:
       image: quay.io/sssd/ci-client-devel:ubuntu-latest
@@ -36,9 +39,27 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: sssd
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build wolfProvider
         run: |
           OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Install dependencies
         run: |

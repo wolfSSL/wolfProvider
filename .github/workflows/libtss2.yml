@@ -18,6 +18,9 @@ jobs:
   test_tpm2_tss:
     needs: discover_versions
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     container:
       image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
@@ -49,11 +52,29 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: libtss2
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build wolfProvider
         run: |
           OPENSSL_TAG=${{ matrix.openssl_ref }} \
           WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
             ./scripts/build-wolfprovider.sh
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Checkout tpm2-tss
         uses: actions/checkout@v4
