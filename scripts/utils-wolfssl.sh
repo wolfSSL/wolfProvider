@@ -259,7 +259,8 @@ install_wolfssl() {
                 # So for the 'git' commands, we'll just use whatever the system comes with.
                 if [ "$fips_check_script" = "fips-check-PILOT.sh" ]; then
                     # PILOT script has different usage: [flavor] [keep]
-                    LD_LIBRARY_PATH="" ./$fips_check_script "$fips_tag" keep >$LOG_FILE 2>&1
+                    # v5.2.1 FIPS base predates DH_MIN_SIZE; supply it via CPPFLAGS (keeps default -O2 for the hash).
+                    CPPFLAGS="${CPPFLAGS:-} -DDH_MIN_SIZE=2048" LD_LIBRARY_PATH="" ./$fips_check_script "$fips_tag" keep >$LOG_FILE 2>&1
                     RET_CODE=$?
                 else
                     # Regular fips-check.sh usage: [flavor] [keep] [nomakecheck]
