@@ -298,7 +298,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
         }
         else {
             /* Front pad with zeros if required. */
-            if (ctx->pad && (len != maxLen)) {
+            if (ctx->pad && (len != maxLen) && (len <= (word32)maxLen)) {
                 XMEMMOVE(secret + maxLen - len, secret, len);
                 XMEMSET(secret, 0, maxLen - len);
                 len = (word32)maxLen;
