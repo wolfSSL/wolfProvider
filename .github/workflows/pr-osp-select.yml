@@ -20,7 +20,7 @@ on:
 
 permissions:
   contents: read
-  packages: read
+  packages: write
   actions: read
 
 concurrency:

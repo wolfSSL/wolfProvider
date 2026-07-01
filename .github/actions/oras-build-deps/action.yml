@@ -1,0 +1,238 @@
+name: ORAS build deps
+description: Pull prebuilt OpenSSL/wolfSSL installs from ghcr.io (ORAS) keyed by resolved commit SHA, falling back to actions/cache, so build-wolfprovider.sh skips configure+make on a hit.
+
+inputs:
+  variant:
+    description: Token capturing every build-config dimension that changes the produced binaries (compiler, debug, replace-default, seed-src, fips). Distinct configs must use distinct variants. Installs bake in an absolute prefix/rpath, so a variant must also be unique per runner image - do not reuse a variant across the container/non-container boundary (e.g. multi-compiler uses -bookworm, nightly uses -${OS}).
+    required: true
+  openssl_ref:
+    description: OpenSSL tag/branch/sha, resolved to a SHA for the artifact key.
+    required: true
+  wolfssl_ref:
+    description: wolfSSL tag/branch/sha, resolved to a SHA for the artifact key. Ignored when wolfssl_fixed_key is set.
+    required: false
+    default: ''
+  wolfssl_fixed_key:
+    description: Verbatim wolfSSL key, used instead of resolving wolfssl_ref (FIPS bundle case - fixed stable version with no git ref).
+    required: false
+    default: ''
+  cache_openssl_source:
+    description: Also fetch openssl-source. Required for --replace-default / --fips-baseline builds whose mismatch checks read the patched source.
+    required: false
+    default: 'false'
+  extra_key:
+    description: Extra key segment folded into the artifact tag and fallback cache key. Use for build flags defined in the workflow file (e.g. sanitizer CFLAGS) so a flag change invalidates the artifact.
+    required: false
+    default: ''
+  github_token:
+    description: Token passed to resolve-ref.sh and oras login to avoid GitHub API rate limits.
+    required: true
+
+outputs:
+  registry:
+    description: ghcr.io OCI repo the artifacts live in.
+    value: ${{ steps.tags.outputs.registry }}
+  openssl_install_tag:
+    description: Tag for the openssl-install artifact.
+    value: ${{ steps.tags.outputs.openssl_install_tag }}
+  wolfssl_install_tag:
+    description: Tag for the wolfssl-install artifact.
+    value: ${{ steps.tags.outputs.wolfssl_install_tag }}
+  openssl_source_tag:
+    description: Tag for the openssl-source artifact.
+    value: ${{ steps.tags.outputs.openssl_source_tag }}
+  openssl_hit:
+    description: Set to 'true' when openssl-install was pulled from ORAS.
+    value: ${{ steps.pull-openssl.outputs.hit }}
+  wolfssl_hit:
+    description: Set to 'true' when wolfssl-install was pulled from ORAS.
+    value: ${{ steps.pull-wolfssl.outputs.hit }}
+  openssl_source_hit:
+    description: Set to 'true' when openssl-source was pulled from ORAS.
+    value: ${{ steps.pull-openssl-source.outputs.hit }}
+  cache_openssl_source:
+    description: Echo of the cache_openssl_source input, for the push action.
+    value: ${{ inputs.cache_openssl_source }}
+
+runs:
+  using: composite
+  steps:
+    # Standalone assignment (not echo "$(...)") so a resolver failure trips
+    # set -e and fails the step instead of writing an empty SHA that would
+    # collapse distinct commits onto one poisoned cache tag.
+    - name: Resolve OpenSSL ref
+      id: openssl-ref
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        REF: ${{ inputs.openssl_ref }}
+      run: |
+        sha=$("${GITHUB_WORKSPACE}/scripts/resolve-ref.sh" "$REF" openssl/openssl)
+        [ -n "$sha" ] || { echo "resolve-ref: empty sha for $REF" >&2; exit 1; }
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve wolfSSL ref
+      id: wolfssl-ref
+      if: inputs.wolfssl_fixed_key == ''
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        REF: ${{ inputs.wolfssl_ref }}
+      run: |
+        sha=$("${GITHUB_WORKSPACE}/scripts/resolve-ref.sh" "$REF" wolfssl/wolfssl)
+        [ -n "$sha" ] || { echo "resolve-ref: empty sha for $REF" >&2; exit 1; }
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+    - name: Compute artifact tags
+      id: tags
+      shell: bash
+      env:
+        VARIANT: ${{ inputs.variant }}
+        OPENSSL_SHA: ${{ steps.openssl-ref.outputs.sha }}
+        WOLFSSL_KEY: ${{ inputs.wolfssl_fixed_key || steps.wolfssl-ref.outputs.sha }}
+        # Short build-logic hash; a build-script change invalidates the artifact.
+        SCRIPTS_HASH: ${{ hashFiles('scripts/utils-*.sh', 'scripts/build-wolfprovider.sh', 'scripts/patch-*.sh', 'patches/**') }}
+        EXTRA_KEY: ${{ inputs.extra_key }}
+      run: |
+        v=$(echo "$VARIANT" | tr '[:upper:]' '[:lower:]')
+        sh="${SCRIPTS_HASH:0:12}"
+        # extra_key (sanitizer/PQC flags) only changes the wolfSSL build, so
+        # fold it into the wolfSSL tag only - stock OpenSSL stays shared across
+        # flag values. Hash it (not a prefix) so flag strings cannot collide.
+        wsh="$sh"
+        [ -n "$EXTRA_KEY" ] && wsh="${sh}-$(printf '%s' "$EXTRA_KEY" | sha256sum | cut -c1-12)"
+        {
+          echo "registry=ghcr.io/wolfssl/wolfprovider/build-deps"
+          echo "openssl_install_tag=openssl-${v}-${OPENSSL_SHA}-${sh}"
+          echo "openssl_source_tag=openssl-source-${v}-${OPENSSL_SHA}-${sh}"
+          # wolfSSL is keyed independently of OpenSSL on purpose: the wolfSSL
+          # build never includes real OpenSSL headers (those are gated behind
+          # TEST_OPENSSL_COEXIST, which this build does not set), so one wolfSSL
+          # build is reused across every OpenSSL version (e.g. openssl-version).
+          echo "wolfssl_install_tag=wolfssl-${v}-${WOLFSSL_KEY}-${wsh}"
+        } >> "$GITHUB_OUTPUT"
+
+    # Gated to the canonical repo (mirrors the debs pull gate) so the package
+    # stays private: only pushes need a write token, which forks lack. Fork
+    # PRs run in the base repo, so this gate is still true for them - they run
+    # the pull steps, miss on the private package, and fall back to
+    # actions/cache + source build.
+    # Best-effort: if oras cannot be fetched or verified, skip the install and
+    # continue - the pull steps then miss and the job falls back to
+    # actions/cache + source build rather than the whole canonical CI dying.
+    - name: Install ORAS
+      if: github.repository == 'wolfSSL/wolfProvider'
+      shell: bash
+      run: |
+        command -v oras >/dev/null 2>&1 && { oras version; exit 0; }
+        ORAS_VERSION="1.2.2"
+        ORAS_CHECKSUM="bff970346470e5ef888e9f2c0bf7f8ee47283f5a45207d6e7a037da1fb0eae0d"
+        tgz="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+        rm -f "$tgz"
+        ok=""
+        for attempt in 1 2 3; do
+          if curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/${tgz}"; then ok=1; break; fi
+          echo "ORAS download attempt $attempt failed."
+          [ "$attempt" -lt 3 ] && sleep $((attempt * 10))
+        done
+        if [ -z "$ok" ]; then
+          echo "ORAS download failed; continuing without ORAS (pulls miss and fall back)"
+          exit 0
+        fi
+        if ! echo "${ORAS_CHECKSUM}  ${tgz}" | sha256sum -c -; then
+          echo "ORAS checksum mismatch; refusing to install, continuing without ORAS (pulls fall back)"
+          rm -f "$tgz"
+          exit 0
+        fi
+        mkdir -p "$GITHUB_WORKSPACE/.bin"
+        tar xzf "$tgz" -C "$GITHUB_WORKSPACE/.bin/" oras
+        echo "$GITHUB_WORKSPACE/.bin" >> "$GITHUB_PATH"
+        rm -f "$tgz"
+        "$GITHUB_WORKSPACE/.bin/oras" version
+
+    # Login is only needed to PUSH (canonical repo, write token). Pulls of a
+    # public build-deps package work anonymously, so a login failure must not
+    # break the pull path - keep it best-effort.
+    - name: Login to ghcr.io (best-effort)
+      if: github.repository == 'wolfSSL/wolfProvider'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        OWNER: ${{ github.repository_owner }}
+      run: |
+        echo "$GH_TOKEN" | oras login --username "$OWNER" --password-stdin ghcr.io \
+          || echo "oras login failed; continuing (private-package pulls just miss and fall back)"
+
+    # Pull openssl-source first when required, so the install pull can refuse a
+    # hit that lacks its matching source (which would otherwise skip the build
+    # yet fail the replace-default mismatch check with no way to self-heal).
+    - name: Pull OpenSSL source
+      id: pull-openssl-source
+      if: github.repository == 'wolfSSL/wolfProvider' && inputs.cache_openssl_source == 'true'
+      shell: bash
+      run: |
+        if "${GITHUB_WORKSPACE}/scripts/oras-build-deps.sh" pull \
+             "${{ steps.tags.outputs.registry }}:${{ steps.tags.outputs.openssl_source_tag }}" openssl-source; then
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Pull OpenSSL install
+      id: pull-openssl
+      if: github.repository == 'wolfSSL/wolfProvider'
+      shell: bash
+      env:
+        NEED_SOURCE: ${{ inputs.cache_openssl_source }}
+        SOURCE_HIT: ${{ steps.pull-openssl-source.outputs.hit }}
+      run: |
+        # A cached install without its matching source (replace-default) would
+        # skip the build yet fail the patched-source mismatch check; force a
+        # full rebuild so both are regenerated together.
+        if [ "$NEED_SOURCE" = "true" ] && [ "$SOURCE_HIT" != "true" ]; then
+          echo "openssl-source missing; forcing openssl rebuild"
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+        elif "${GITHUB_WORKSPACE}/scripts/oras-build-deps.sh" pull \
+             "${{ steps.tags.outputs.registry }}:${{ steps.tags.outputs.openssl_install_tag }}" openssl-install; then
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Pull wolfSSL install
+      id: pull-wolfssl
+      if: github.repository == 'wolfSSL/wolfProvider'
+      shell: bash
+      run: |
+        if "${GITHUB_WORKSPACE}/scripts/oras-build-deps.sh" pull \
+             "${{ steps.tags.outputs.registry }}:${{ steps.tags.outputs.wolfssl_install_tag }}" wolfssl-install; then
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    # Fallback: when ORAS misses, restore PR #412's actions/cache so a warm
+    # GH cache still skips the build. On an ORAS hit these steps are skipped.
+    # Source is restored before install so install can be gated on source
+    # being present (same replace-default coupling as the ORAS pulls).
+    - name: Cache OpenSSL source (fallback)
+      id: src-fallback
+      if: inputs.cache_openssl_source == 'true' && steps.pull-openssl-source.outputs.hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: openssl-source
+        key: openssl-source-${{ inputs.variant }}-${{ steps.openssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-*.sh', 'scripts/build-wolfprovider.sh', 'scripts/patch-*.sh', 'patches/**') }}
+
+    - name: Cache OpenSSL install (fallback)
+      if: steps.pull-openssl.outputs.hit != 'true' && (inputs.cache_openssl_source != 'true' || steps.pull-openssl-source.outputs.hit == 'true' || steps.src-fallback.outputs.cache-hit == 'true')
+      uses: actions/cache@v4
+      with:
+        path: openssl-install
+        key: openssl-install-${{ inputs.variant }}-${{ steps.openssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-*.sh', 'scripts/build-wolfprovider.sh', 'scripts/patch-*.sh', 'patches/**') }}
+
+    - name: Cache wolfSSL install (fallback)
+      if: steps.pull-wolfssl.outputs.hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: wolfssl-install
+        key: wolfssl-install-${{ inputs.variant }}-${{ inputs.wolfssl_fixed_key || steps.wolfssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-*.sh', 'scripts/build-wolfprovider.sh', 'scripts/patch-*.sh', 'patches/**') }}${{ inputs.extra_key != '' && format('-{0}', inputs.extra_key) || '' }}

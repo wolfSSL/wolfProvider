@@ -14,6 +14,9 @@ jobs:
   cppcheck:
     name: cppcheck Static Analysis
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     container:
       image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
@@ -25,10 +28,28 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: static
+          openssl_ref: openssl-3.5.4
+          wolfssl_ref: master
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build dependencies (OpenSSL and wolfSSL)
         run: |
           OPENSSL_TAG=openssl-3.5.4 WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh 2>&1 | tail -100 || true
           # We only need the build to succeed enough to have headers available
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Generate configure script
         run: |
@@ -104,6 +125,9 @@ jobs:
   scan-build:
     name: clang Static Analyzer (scan-build)
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     container:
       image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
@@ -115,9 +139,27 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: static
+          openssl_ref: openssl-3.5.4
+          wolfssl_ref: master
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build dependencies (OpenSSL and wolfSSL)
         run: |
           OPENSSL_TAG=openssl-3.5.4 WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh 2>&1 | tail -100 || true
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Generate configure script
         run: |
@@ -188,6 +230,9 @@ jobs:
   infer:
     name: Facebook Infer Static Analysis
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     container:
       image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
       env:
@@ -211,9 +256,27 @@ jobs:
           mv infer-linux64-v${VERSION} /opt/infer
           ln -sf /opt/infer/bin/infer /usr/local/bin/infer
 
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: static
+          openssl_ref: openssl-3.5.4
+          wolfssl_ref: master
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build dependencies (OpenSSL and wolfSSL)
         run: |
           OPENSSL_TAG=openssl-3.5.4 WOLFSSL_TAG=master ./scripts/build-wolfprovider.sh 2>&1 | tail -100 || true
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Generate configure script
         run: |
