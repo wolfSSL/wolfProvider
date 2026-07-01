@@ -440,6 +440,9 @@ static void wp_bio_consume_all(BIO* bio)
     do {
         bytes_read = BIO_read(bio, buffer, sizeof(buffer));
     } while (bytes_read > 0);
+
+    /* buffer may hold private key material from the drained file. */
+    OPENSSL_cleanse(buffer, sizeof(buffer));
 }
 
 /**

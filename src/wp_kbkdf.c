@@ -402,6 +402,9 @@ static int wp_kbkdf_init_hmac(wp_KbkdfCtx* ctx, unsigned char* key,
         }
     }
 
+    /* localKey holds a copy of the secret KDF key. */
+    OPENSSL_cleanse(localKey, sizeof(localKey));
+
     WOLFPROV_LEAVE(WP_LOG_COMP_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     /* Use rc style return */
     return (ok == 1) ? 0 : -1;
@@ -682,6 +685,9 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
         written += toWrite;
         wp_kbkdf_mac_free(ctx);
     }
+
+    /* k_i holds derived key block(s) (and feedback state). */
+    OPENSSL_cleanse(k_i, sizeof(k_i));
 
     WOLFPROV_LEAVE(WP_LOG_COMP_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;

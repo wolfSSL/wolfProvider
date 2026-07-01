@@ -674,6 +674,9 @@ static int wp_tls13_hkdf_extract(wp_HkdfCtx* ctx, unsigned char* key,
         }
     }
 
+    /* secret may hold a Derive-Secret intermediate used as the salt. */
+    OPENSSL_cleanse(secret, sizeof(secret));
+
     WOLFPROV_LEAVE(WP_LOG_COMP_HKDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

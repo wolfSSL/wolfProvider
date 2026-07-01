@@ -339,6 +339,8 @@ void wp_ecx_free(wp_Ecx* ecx)
             wc_FreeMutex(&ecx->mutex);
     #endif
             (*ecx->data->freeKey)((void*)&ecx->key);
+            /* unclamped holds 2 bytes of the original private key. */
+            OPENSSL_cleanse(ecx->unclamped, sizeof(ecx->unclamped));
             OPENSSL_free(ecx);
         }
     }

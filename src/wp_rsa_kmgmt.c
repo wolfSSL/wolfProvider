@@ -3316,6 +3316,10 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
         }
     }
 
+    /* encodedKey holds the plaintext PKCS#8 private key before encryption. */
+    if (encodedKey != NULL) {
+        OPENSSL_cleanse(encodedKey, len);
+    }
     XFREE(encodedKey, NULL, DYNAMIC_TYPE_RSA_BUFFER);
 
     OPENSSL_cleanse(password, sizeof(password));
@@ -4276,7 +4280,7 @@ static int wp_rsa_encode_text_format_hex(BIO *out, const mp_int* num,
     }
     else if (mp_to_unsigned_bin((mp_int*)num, binData) != MP_OKAY) {
         ok = 0;
-        OPENSSL_free(binData);
+        OPENSSL_clear_free(binData, binLen);
         binData = NULL;
     }
     else {
@@ -4315,7 +4319,8 @@ static int wp_rsa_encode_text_format_hex(BIO *out, const mp_int* num,
             }
         }
 
-        OPENSSL_free(binData);
+        /* binData may hold private CRT components (d/p/q/dP/dQ/u). */
+        OPENSSL_clear_free(binData, binLen);
         binData = NULL;
     }
 

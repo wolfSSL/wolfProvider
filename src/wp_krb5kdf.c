@@ -528,6 +528,10 @@ static int wp_kdf_krb5kdf_derive(wp_Krb5kdfCtx* ctx, unsigned char* key,
 
     wc_AesFree(&aes);
 
+    /* block and cipherBlock hold derived key material. */
+    OPENSSL_cleanse(block, sizeof(block));
+    OPENSSL_cleanse(cipherBlock, sizeof(cipherBlock));
+
     WOLFPROV_LEAVE(WP_LOG_COMP_KRB5KDF, "wp_kdf_krb5kdf_derive", ok);
     return ok;
 }

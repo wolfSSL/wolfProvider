@@ -63,6 +63,9 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
         }
     }
 
+    /* rdata may hold private key material (RSA d/p/q, EC/DH private). */
+    OPENSSL_cleanse(rdata, sizeof(rdata));
+
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

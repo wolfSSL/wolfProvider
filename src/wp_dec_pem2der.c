@@ -439,8 +439,8 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
                 dataCbArg, pwCb, pwCbArg);
         }
     }
-    /* Dispose of the PEM data buffer. */
-    OPENSSL_free(data);
+    /* Dispose of the PEM data buffer (may contain private key material). */
+    OPENSSL_clear_free(data, len);
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PK, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;

@@ -1207,6 +1207,9 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
         }
     }
 
+    /* buf may hold plaintext private key DER fragments. */
+    OPENSSL_cleanse(buf, sizeof(buf));
+
     BIO_free(bio);
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -1265,6 +1268,9 @@ int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
             break;
         }
     }
+
+    /* buf may hold plaintext private key PEM line fragments. */
+    OPENSSL_cleanse(buf, sizeof(buf));
 
     BIO_free(bio);
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
