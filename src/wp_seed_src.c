@@ -657,14 +657,14 @@ static size_t wp_seed_src_get_seed(wp_SeedSrcCtx* ctx, unsigned char** pSeed,
     if (rc != (int)minLen) {
         WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
             "wp_urandom_read failed", rc);
-        OPENSSL_free(buffer);
+        OPENSSL_clear_free(buffer, minLen);
         buffer = NULL;
         goto end;
     }
 
     /* Mix in additional input if provided */
     if (!wp_seed_src_adin_mix_in(buffer, minLen, addIn, addInLen)) {
-        OPENSSL_free(buffer);
+        OPENSSL_clear_free(buffer, minLen);
         buffer = NULL;
         goto end;
     }
