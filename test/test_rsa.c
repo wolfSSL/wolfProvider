@@ -1192,9 +1192,12 @@ int test_rsa_pkey_keygen(void *data)
      * we're using wolfCrypt FIPS. Can't do 2048 because that's the default. */
     const int newKeySize = 3072;
     const int badKeyGenSizes[] = {512, 1024};
+    /* FIPS 186 requires the RSA public exponent >= 65537; e=3 is rejected. */
+    const long newKeyExp = 65537;
 #else
     const int newKeySize = 1024;
     const int badKeyGenSizes[] = {256};
+    const long newKeyExp = 3;
 #endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
     const int numBad = sizeof(badKeyGenSizes) / sizeof(*badKeyGenSizes);
     int i = 0;
@@ -1217,7 +1220,7 @@ int test_rsa_pkey_keygen(void *data)
         err = (eCmd = BN_new()) == NULL;
     }
     if (err == 0) {
-        err = BN_set_word(eCmd, 3) != 1;
+        err = BN_set_word(eCmd, newKeyExp) != 1;
     }
     if (err == 0) {
         PRINT_MSG("Change the public exponent w/ ctrl command");
@@ -1268,6 +1271,13 @@ int test_rsa_get_params(void *data)
     BIGNUM *eCmd = NULL;
     BIGNUM *eRet = NULL;
     const int newKeySize = 2048;
+#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION) || \
+    (defined(RSA_MIN_SIZE) && RSA_MIN_SIZE >= 2048)
+    /* FIPS 186 requires the RSA public exponent >= 65537; e=3 is rejected. */
+    const long newKeyExp = 65537;
+#else
+    const long newKeyExp = 3;
+#endif
     (void)data;
 
     err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL)) == NULL;
@@ -1284,7 +1294,7 @@ int test_rsa_get_params(void *data)
         err = (eCmd = BN_new()) == NULL;
     }
     if (err == 0) {
-        err = BN_set_word(eCmd, 3) != 1;
+        err = BN_set_word(eCmd, newKeyExp) != 1;
     }
     if (err == 0) {
         PRINT_MSG("Change the public exponent w/ ctrl command");
@@ -1314,7 +1324,7 @@ int test_rsa_get_params(void *data)
     /* Check return sizes, then verify e matches the one we set */
     if (err == 0) {
         if ((params[0].return_size != (size_t)(newKeySize / 8)) ||
-            (params[1].return_size != 1)) {
+            (params[1].return_size != (size_t)BN_num_bytes(eCmd))) {
             err = 1;
         }
     }
