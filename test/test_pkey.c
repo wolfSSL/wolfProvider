@@ -19,6 +19,9 @@
  */
 
 #include "unit.h"
+#include <openssl/encoder.h>
+#include <openssl/decoder.h>
+#include <openssl/err.h>
 
 int test_digest_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *data,
     size_t len, const char *md, const EVP_MD *mgf1Md, unsigned char *sig,
@@ -291,6 +294,97 @@ int test_pkey_dec(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *msg,
     if (buf != NULL) {
         OPENSSL_free(buf);
     }
+
+    return err;
+}
+
+/* Encode as EncryptedPrivateKeyInfo with encProp, decode with decLibCtx and
+ * check it matches; a wrong passphrase must fail. Drives both directions. */
+int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
+    const char* encProp, OSSL_LIB_CTX* decLibCtx)
+{
+    int err = 0;
+    EVP_PKEY* pkey2 = NULL;
+    EVP_PKEY* badKey = NULL;
+    OSSL_ENCODER_CTX* ectx = NULL;
+    OSSL_DECODER_CTX* dctx = NULL;
+    OSSL_DECODER_CTX* bctx = NULL;
+    unsigned char* data = NULL;
+    size_t dataLen = 0;
+    size_t encLen = 0;
+    const unsigned char* pp;
+    const char* pass = "wolfprov-test-pass";
+    const char* badPass = "wrong-passphrase";
+    size_t passLen = strlen(pass);
+
+    /* Encode as EncryptedPrivateKeyInfo with the requested provider. */
+    ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
+        "EncryptedPrivateKeyInfo", encProp);
+    err = (ectx == NULL);
+    if (err == 0) {
+        err = OSSL_ENCODER_CTX_set_cipher(ectx, "AES-256-CBC", NULL) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_ENCODER_CTX_set_passphrase(ectx, (const unsigned char*)pass,
+            passLen) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_ENCODER_to_data(ectx, &data, &dataLen) != 1;
+    }
+    if (err == 0) {
+        /* Save the encoded length; OSSL_DECODER_from_data consumes it. */
+        encLen = dataLen;
+    }
+
+    /* Decode with the requested library context and the correct passphrase. */
+    if (err == 0) {
+        pp = data;
+        dctx = OSSL_DECODER_CTX_new_for_pkey(&pkey2, fmt, NULL,
+            EVP_PKEY_get0_type_name(pkey), EVP_PKEY_KEYPAIR, decLibCtx, NULL);
+        err = (dctx == NULL);
+    }
+    if (err == 0) {
+        err = OSSL_DECODER_CTX_set_passphrase(dctx, (const unsigned char*)pass,
+            passLen) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_DECODER_from_data(dctx, &pp, &dataLen) != 1;
+    }
+    if (err == 0) {
+        err = (pkey2 == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_eq(pkey, pkey2) != 1;
+    }
+
+    /* Negative case: a wrong passphrase must not yield a key. */
+    if (err == 0) {
+        pp = data;
+        dataLen = encLen;
+        bctx = OSSL_DECODER_CTX_new_for_pkey(&badKey, fmt, NULL,
+            EVP_PKEY_get0_type_name(pkey), EVP_PKEY_KEYPAIR, decLibCtx, NULL);
+        err = (bctx == NULL);
+    }
+    if (err == 0) {
+        err = OSSL_DECODER_CTX_set_passphrase(bctx,
+            (const unsigned char*)badPass, strlen(badPass)) != 1;
+    }
+    if (err == 0) {
+        /* Decode is expected to fail; success with a recovered key is wrong. */
+        if ((OSSL_DECODER_from_data(bctx, &pp, &dataLen) == 1) &&
+                (badKey != NULL)) {
+            err = 1;
+        }
+        /* The failed decrypt leaves an expected error on the queue. */
+        ERR_clear_error();
+    }
+
+    OSSL_DECODER_CTX_free(bctx);
+    OSSL_DECODER_CTX_free(dctx);
+    OSSL_ENCODER_CTX_free(ectx);
+    OPENSSL_free(data);
+    EVP_PKEY_free(badKey);
+    EVP_PKEY_free(pkey2);
 
     return err;
 }

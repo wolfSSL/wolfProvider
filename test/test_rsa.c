@@ -2370,6 +2370,70 @@ int test_rsa_encode_pkcs8(void* data)
     return err;
 }
 
+#ifdef WP_HAVE_EPKI_TEST
+int test_rsa_encode_epki(void* data)
+{
+    int err = 0;
+    const unsigned char* p = rsa_key_der_2048_pkcs8;
+    PKCS8_PRIV_KEY_INFO* p8 = NULL;
+    EVP_PKEY* pkey = NULL;
+    EVP_PKEY* osslKey = NULL;
+
+    (void)data;
+
+    /* Load the key into a wolfProvider-backed EVP_PKEY. */
+    p8 = d2i_PKCS8_PRIV_KEY_INFO(NULL, &p, sizeof(rsa_key_der_2048_pkcs8));
+    err = (p8 == NULL);
+    if (err == 0) {
+        pkey = EVP_PKCS82PKEY_ex(p8, wpLibCtx, NULL);
+        err = (pkey == NULL);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx);
+    }
+
+    /* Decode an OpenSSL-produced blob (foreign PBES2 params). */
+    if (err == 0) {
+        osslKey = EVP_PKCS82PKEY_ex(p8, osslLibCtx, NULL);
+        err = (osslKey == NULL);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: OpenSSL -> wolfProvider");
+        err = test_epki_encode_decode(osslKey, "DER", "provider=default",
+            wpLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: OpenSSL -> wolfProvider");
+        err = test_epki_encode_decode(osslKey, "PEM", "provider=default",
+            wpLibCtx);
+    }
+
+    EVP_PKEY_free(osslKey);
+    EVP_PKEY_free(pkey);
+    PKCS8_PRIV_KEY_INFO_free(p8);
+
+    return err;
+}
+#endif /* WP_HAVE_EPKI_TEST */
+
 static int test_rsa_null_sign_init_ex(OSSL_LIB_CTX *libCtx)
 {
     int err = 0;

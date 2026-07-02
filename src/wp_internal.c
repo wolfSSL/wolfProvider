@@ -32,6 +32,7 @@
 
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
+#include <wolfssl/wolfcrypt/asn_public.h>
 #ifdef HAVE_FIPS
 #include <wolfssl/wolfcrypt/fips_test.h>
 #endif
@@ -948,265 +949,303 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     return ok;
 }
 
-#ifndef WOLFSSL_ENCRYPTED_KEYS
-#ifdef WP_HAVE_MD5
-/*
- * wolfProvider version of EncryptedInfo.
- */
-typedef struct wp_EncryptedInfo {
-    /* Cipher identifier. */
-    int    cipherType;
-    /* Length of IV. */
-    word32 ivSz;
-    /* Length of key. */
-    word32 keySz;
-    /* Name of cipher alglorithm. */
-    char   name[NAME_SZ];
-    /* IV for encryption. */
-    byte   iv[IV_SZ];
-} wp_EncryptedInfo;
+/* Salt length used for PBES2 EncryptedPrivateKeyInfo encoding. The same value
+ * is used for the size query and the encrypt call so the reported and actual
+ * output sizes agree. */
+#define WP_EPKI_SALT_LEN    16
 
-#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
-    static wcchar kEncTypeAesCbc128 = "AES-128-CBC";
-#endif
-#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_192)
-    static wcchar kEncTypeAesCbc192 = "AES-192-CBC";
-#endif
-#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_256)
-    static wcchar kEncTypeAesCbc256 = "AES-256-CBC";
-#endif
-
-static int wp_EncryptedInfoGet(wp_EncryptedInfo* info, const char* cipherInfo)
-{
-    int ret = 0;
-
-    if (info == NULL || cipherInfo == NULL)
-        return BAD_FUNC_ARG;
-
-    /* determine cipher information */
-#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_128)
-    if (XSTRCMP(cipherInfo, kEncTypeAesCbc128) == 0) {
-        info->cipherType = WC_CIPHER_AES_CBC;
-        info->keySz = AES_128_KEY_SIZE;
-        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
-    }
-    else
-#endif
-#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_192)
-    if (XSTRCMP(cipherInfo, kEncTypeAesCbc192) == 0) {
-        info->cipherType = WC_CIPHER_AES_CBC;
-        info->keySz = AES_192_KEY_SIZE;
-        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
-    }
-    else
-#endif
-#if !defined(NO_AES) && defined(HAVE_AES_CBC) && defined(WOLFSSL_AES_256)
-    if (XSTRCMP(cipherInfo, kEncTypeAesCbc256) == 0) {
-        info->cipherType = WC_CIPHER_AES_CBC;
-        info->keySz = AES_256_KEY_SIZE;
-        if (info->ivSz == 0) info->ivSz  = AES_IV_SIZE;
-    }
-    else
-#endif
-    {
-        ret = NOT_COMPILED_IN;
-    }
-    return ret;
-}
-
-#define PKCS5_SALT_SZ   8
-
-static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
-    const byte* password, int passwordSz, int hashType)
-{
-    int ret = NOT_COMPILED_IN;
-#ifdef WOLFSSL_SMALL_STACK
-    byte* key      = NULL;
-#else
-    byte  key[WC_MAX_SYM_KEY_SIZE];
-#endif
-
-    (void)derSz;
-    (void)passwordSz;
-    (void)hashType;
-
-    if (der == NULL || password == NULL || info == NULL || info->keySz == 0 ||
-            info->ivSz < PKCS5_SALT_SZ) {
-        return BAD_FUNC_ARG;
-    }
-
-#ifdef WOLFSSL_SMALL_STACK
-    key = (byte*)XMALLOC(WC_MAX_SYM_KEY_SIZE, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
-    if (key == NULL) {
-        return MEMORY_E;
-    }
-#endif /* WOLFSSL_SMALL_STACK */
-
-    (void)XMEMSET(key, 0, WC_MAX_SYM_KEY_SIZE);
-
-#ifndef NO_PWDBASED
-    if ((ret = wc_PBKDF1(key, password, passwordSz, info->iv, PKCS5_SALT_SZ, 1,
-                                        info->keySz, hashType)) != 0) {
-        ForceZero(key, WC_MAX_SYM_KEY_SIZE);
-#ifdef WOLFSSL_SMALL_STACK
-        XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
-#endif
-        return ret;
-    }
-#endif
-
-#ifndef NO_DES3
-    if (info->cipherType == WC_CIPHER_DES)
-        ret = wc_Des_CbcEncryptWithKey(der, der, derSz, key, info->iv);
-    if (info->cipherType == WC_CIPHER_DES3)
-        ret = wc_Des3_CbcEncryptWithKey(der, der, derSz, key, info->iv);
-#endif /* NO_DES3 */
-#if !defined(NO_AES) && defined(HAVE_AES_CBC)
-    if (info->cipherType == WC_CIPHER_AES_CBC)
-        ret = wc_AesCbcEncryptWithKey(der, der, derSz, key, info->keySz,
-            info->iv);
-#endif /* !NO_AES && HAVE_AES_CBC */
-
-    ForceZero(key, WC_MAX_SYM_KEY_SIZE);
-#ifdef WOLFSSL_SMALL_STACK
-    XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
-#endif
-
-    return ret;
-}
-#endif /* WP_HAVE_MD5 */
-#endif /* WOLFSSL_ENCRYPTED_KEYS */
+/* Maximum passphrase length read from the password callback. */
+#define WP_EPKI_PASSWORD_MAX    1024
 
 /**
- * Encrypt the PKCS #8 key.
+ * Get the size of the PBES2 EncryptedPrivateKeyInfo encoding of a PKCS #8 key.
  *
- * Calls password callback and generates a random IV.
+ * The encrypted structure is larger than the plaintext (it carries the PBES2
+ * AlgorithmIdentifier), and the exact size depends on the cipher, so the size
+ * is obtained from wolfSSL rather than computed.
  *
- * @param [in]      provCtx     Provider context.
- * @param [in]      cipherName  Name of cipher to encrypt with.
- * @param [in, out] keyData     On in, PKCS #8 encoded key.
- *                              On out, encrypted PKCS #8 encoded key.
- * @param [in, out] keyLen      On in, length of buffer in bytes.
- *                              On out, length of encrypted key in bytes.
- * @param [in]      pkcs8Len    Length of PKCS #8 key in bytes.
- * @param [in]      pwCb        Password callback.
- * @param [in]      pwCbArg     Argument to pass to password callback.
- * @param [out]     cipherInfo  Information about encryption.
+ * @param [in]  provCtx   Provider context (supplies the RNG).
+ * @param [in]  cipher    wolfCrypt cipher identifier to encrypt with.
+ * @param [in]  plainLen  Length of the plaintext PKCS #8 key in bytes.
+ * @param [out] outLen    Length of the encrypted encoding in bytes.
  * @return  1 on success.
  * @return  0 on failure.
  */
-int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
-    unsigned char* keyData, size_t* keyLen, word32 pkcs8Len,
-    OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg, byte** cipherInfo)
+int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
+    word32 plainLen, size_t* outLen)
 {
-#ifdef WP_HAVE_MD5
+#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
     int ok = 1;
-    int rc;
-    word32 len = (word32)*keyLen;
-#ifdef WOLFSSL_ENCRYPTED_KEYS
-    EncryptedInfo info[1];
-#else
-    wp_EncryptedInfo info[1];
-#endif
-    word32 cipherInfoSz;
-    char password[1024];
-    size_t passwordSz = sizeof(password);
+    int rc = 0;
+    word32 outSz = 0;
+    byte fakeData[1] = { 0 };
+    byte fakeSalt[WP_EPKI_SALT_LEN] = { 0 };
 
-    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_encrypt_key");
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_encrypt_key_pkcs8_size");
 
-    /* Get password. */
-    if (!pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
-        ok = 0;
-    }
-    if (ok && (passwordSz > sizeof(password))) {
+    /* A cipher must be selected to produce an encrypted key. */
+    if (cipher == 0) {
         ok = 0;
     }
     if (ok) {
-        XMEMSET(info, 0, sizeof(info));
-        XSTRNCPY(info->name, cipherName, NAME_SZ-1);
-        info->name[NAME_SZ-1] = '\0';
-
-    #ifdef WOLFSSL_ENCRYPTED_KEYS
-        rc = wc_EncryptedInfoGet(info, info->name);
+        /* Passing a NULL output buffer returns the required length. The _ex
+         * form (wolfSSL 5.8.2+) selects the HMAC-SHA256 PBKDF2 PRF; older
+         * wolfSSL uses the SHA-1 PRF. */
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05008002
+        rc = wc_EncryptPKCS8Key_ex(fakeData, plainLen, NULL, &outSz, "", 0,
+            WP_PKCS5, WP_PBES2, cipher, fakeSalt, sizeof(fakeSalt),
+            WP_PKCS12_ITERATIONS_DEFAULT, HMAC_SHA256_OID,
+            wp_provctx_get_rng(provCtx), NULL);
     #else
-        rc = wp_EncryptedInfoGet(info, info->name);
+        rc = wc_EncryptPKCS8Key(fakeData, plainLen, NULL, &outSz, "", 0,
+            WP_PKCS5, WP_PBES2, cipher, fakeSalt, sizeof(fakeSalt),
+            WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(provCtx), NULL);
     #endif
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "EncryptedInfoGet", rc);
+        if (rc != LENGTH_ONLY_E) {
             ok = 0;
         }
-    }
-    if (ok) {
-        /* Calculate random IV. */
-        WC_RNG* rng = wp_provctx_get_rng(provCtx);
-
-    #ifndef WP_SINGLE_THREADED
-        wp_provctx_lock_rng(provCtx);
-    #endif
-        rc = wc_RNG_GenerateBlock(rng, info->iv, info->ivSz);
-    #ifndef WP_SINGLE_THREADED
-        wp_provctx_unlock_rng(provCtx);
-    #endif
-        if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RNG_GenerateBlock", rc);
-            ok = 0;
+        else {
+            *outLen = (size_t)outSz;
         }
-    }
-    if (ok) {
-        /* Pad with zeros. */
-        XMEMSET(keyData + pkcs8Len, 0, len - pkcs8Len);
-
-        /* Encrypt key and padding. */
-    #ifdef WOLFSSL_ENCRYPTED_KEYS
-        rc = wc_BufferKeyEncrypt(info, keyData, len, (byte*)password,
-            (int)passwordSz, WC_MD5);
-    #else
-        rc = wp_BufferKeyEncrypt(info, keyData, len, (byte*)password,
-            (int)passwordSz, WC_MD5);
-    #endif
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "BufferKeyEncrypt", rc);
-            ok = 0;
-        }
-    }
-    if (ok && (cipherInfo != NULL)) {
-        /* cipher name | ',' | hex encoded IV */
-        cipherInfoSz = (word32)(XSTRLEN(info->name) + 2 + info->ivSz * 2);
-        *cipherInfo = (byte*)OPENSSL_malloc(cipherInfoSz);
-        if (*cipherInfo == NULL) {
-            ok = 0;
-        }
-    }
-    if (ok && (cipherInfo != NULL)) {
-        word32 idx = (word32)XSTRLEN(info->name);
-        XSTRNCPY((char*)*cipherInfo, info->name, cipherInfoSz);
-        cipherInfoSz -= idx;
-        XSTRNCAT((char*)*cipherInfo, ",", cipherInfoSz);
-        cipherInfoSz--;
-        rc = Base16_Encode(info->iv, info->ivSz, *cipherInfo + idx,
-            &cipherInfoSz);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "Base16_Encode", rc);
-            ok = 0;
-        }
-    }
-    if (ok) {
-        *keyLen = len;
     }
 
-    OPENSSL_cleanse(password, sizeof(password));
-
-    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
     return ok;
 #else
     (void)provCtx;
-    (void)cipherName;
-    (void)keyData;
-    (void)keyLen;
-    (void)pkcs8Len;
+    (void)cipher;
+    (void)plainLen;
+    (void)outLen;
+    return 0;
+#endif
+}
+
+/**
+ * Encrypt a plaintext PKCS #8 key into a PBES2 EncryptedPrivateKeyInfo.
+ *
+ * Derives the key with PBKDF2 and encrypts with the requested cipher, producing
+ * a standards-compliant EncryptedPrivateKeyInfo structure. The plaintext and
+ * output buffers must be different (wolfSSL requirement).
+ *
+ * @param [in]      provCtx   Provider context (supplies the RNG).
+ * @param [in]      cipher    wolfCrypt cipher identifier to encrypt with.
+ * @param [in]      plain     Plaintext PKCS #8 key.
+ * @param [in]      plainLen  Length of the plaintext key in bytes.
+ * @param [out]     out       Buffer to hold the encrypted encoding.
+ * @param [in, out] outLen    On in, size of buffer; on out, length written.
+ * @param [in]      pwCb      Password callback.
+ * @param [in]      pwCbArg   Argument to pass to the password callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
+    const unsigned char* plain, word32 plainLen,
+    unsigned char* out, size_t* outLen,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+    int ok = 1;
+    int rc = 0;
+    word32 outSz = (word32)*outLen;
+    byte salt[WP_EPKI_SALT_LEN];
+#ifdef WOLFSSL_SMALL_STACK
+    char* password = NULL;
+#else
+    char password[WP_EPKI_PASSWORD_MAX];
+#endif
+    size_t passwordSz = WP_EPKI_PASSWORD_MAX;
+    WC_RNG* rng = wp_provctx_get_rng(provCtx);
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_encrypt_key_pkcs8");
+
+#ifdef WOLFSSL_SMALL_STACK
+    password = (char*)XMALLOC(WP_EPKI_PASSWORD_MAX, NULL,
+        DYNAMIC_TYPE_TMP_BUFFER);
+    if (password == NULL) {
+        ok = 0;
+    }
+#endif
+
+    /* A cipher must be selected and the in/out buffers must differ. */
+    if (ok && ((cipher == 0) || (plain == NULL) || (out == NULL) ||
+            (plain == out))) {
+        ok = 0;
+    }
+    /* Get the password from the callback. */
+    if (ok && (!pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg))) {
+        ok = 0;
+    }
+    /* Callback reports the length written - reject one past the buffer. */
+    if (ok && (passwordSz > WP_EPKI_PASSWORD_MAX)) {
+        ok = 0;
+    }
+    if (ok) {
+    #ifndef WP_SINGLE_THREADED
+        wp_provctx_lock_rng(provCtx);
+    #endif
+        /* Generate the PBKDF2 salt. */
+        rc = wc_RNG_GenerateBlock(rng, salt, sizeof(salt));
+        if (rc == 0) {
+            /* Encrypt into the separate output buffer as PBES2. The _ex form
+             * (wolfSSL 5.8.2+) selects the HMAC-SHA256 PBKDF2 PRF; older
+             * wolfSSL uses the SHA-1 PRF. */
+        #if LIBWOLFSSL_VERSION_HEX >= 0x05008002
+            rc = wc_EncryptPKCS8Key_ex((byte*)plain, plainLen, out, &outSz,
+                password, (int)passwordSz, WP_PKCS5, WP_PBES2, cipher,
+                salt, sizeof(salt), WP_PKCS12_ITERATIONS_DEFAULT,
+                HMAC_SHA256_OID, rng, NULL);
+        #else
+            rc = wc_EncryptPKCS8Key((byte*)plain, plainLen, out, &outSz,
+                password, (int)passwordSz, WP_PKCS5, WP_PBES2, cipher,
+                salt, sizeof(salt), WP_PKCS12_ITERATIONS_DEFAULT, rng, NULL);
+        #endif
+        }
+    #ifndef WP_SINGLE_THREADED
+        wp_provctx_unlock_rng(provCtx);
+    #endif
+        if (rc <= 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_EncryptPKCS8Key",
+                rc);
+            ok = 0;
+        }
+        else {
+            *outLen = (size_t)outSz;
+        }
+    }
+
+    /* Password is sensitive - force zeroization. */
+#ifdef WOLFSSL_SMALL_STACK
+    if (password != NULL) {
+        OPENSSL_cleanse(password, WP_EPKI_PASSWORD_MAX);
+        XFREE(password, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+#else
+    OPENSSL_cleanse(password, sizeof(password));
+#endif
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
+    return ok;
+#else
+    (void)provCtx;
+    (void)cipher;
+    (void)plain;
+    (void)plainLen;
+    (void)out;
+    (void)outLen;
     (void)pwCb;
     (void)pwCbArg;
-    (void)cipherInfo;
+    return 0;
+#endif
+}
+
+#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+/* DER encoding of the PBKDF2 OID (1.2.840.113549.1.5.12). */
+static const unsigned char wp_pbkdf2_oid[] = {
+    42, 134, 72, 134, 247, 13, 1, 5, 12
+};
+
+/*
+ * Detect whether a DER blob is a PBES2-encrypted PKCS#8 key by looking for the
+ * PBKDF2 OID near the start of the encryptionAlgorithm field. Avoids prompting
+ * for a passphrase on data that is not an encrypted key.
+ */
+static int wp_is_pbkdf2_encrypted(const unsigned char* data, word32 len)
+{
+    int found = 0;
+    word32 i;
+
+    for (i = 0; (i < 40) && (i + sizeof(wp_pbkdf2_oid) <= len); i++) {
+        if (XMEMCMP(data + i, wp_pbkdf2_oid, sizeof(wp_pbkdf2_oid)) == 0) {
+            found = 1;
+            break;
+        }
+    }
+
+    return found;
+}
+#endif
+
+/**
+ * Decrypt a PBES2 EncryptedPrivateKeyInfo to plaintext PKCS#8 in place, getting
+ * the passphrase from the callback. Returns 0 without prompting when the data
+ * is not a PBES2-encrypted key.
+ *
+ * @param [in, out] data     On in, encrypted key; on out, plaintext PKCS#8.
+ * @param [in, out] len      On in, encrypted length; on out, plaintext length.
+ * @param [in]      pwCb     Password callback.
+ * @param [in]      pwCbArg  Argument to pass to the password callback.
+ * @return  1 on success.
+ * @return  0 on failure or when the data is not an encrypted PKCS#8 key.
+ */
+int wp_decrypt_key_pkcs8(unsigned char* data, word32* len,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+    int ok = 1;
+    int rc;
+#ifdef WOLFSSL_SMALL_STACK
+    char* password = NULL;
+#else
+    char password[WP_EPKI_PASSWORD_MAX];
+#endif
+    size_t passwordSz = WP_EPKI_PASSWORD_MAX;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_decrypt_key_pkcs8");
+
+    /* Only handle data that looks like a PBES2-encrypted PKCS#8 key. */
+    if ((data == NULL) || (!wp_is_pbkdf2_encrypted(data, *len))) {
+        ok = 0;
+    }
+#ifdef WOLFSSL_SMALL_STACK
+    if (ok) {
+        password = (char*)XMALLOC(WP_EPKI_PASSWORD_MAX, NULL,
+            DYNAMIC_TYPE_TMP_BUFFER);
+        if (password == NULL) {
+            ok = 0;
+        }
+    }
+#endif
+    /* Get the password from the callback. */
+    if (ok && (!pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg))) {
+        ok = 0;
+    }
+    /* Callback reports the length written - reject one past the buffer. */
+    if (ok && (passwordSz > WP_EPKI_PASSWORD_MAX)) {
+        ok = 0;
+    }
+    if (ok) {
+        /* Decrypt the key in place. */
+        rc = wc_DecryptPKCS8Key(data, *len, password, (int)passwordSz);
+        if (rc <= 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_DecryptPKCS8Key",
+                rc);
+            ok = 0;
+        }
+        else {
+            *len = (word32)rc;
+        }
+    }
+
+    /* Password is sensitive - force zeroization. */
+#ifdef WOLFSSL_SMALL_STACK
+    if (password != NULL) {
+        OPENSSL_cleanse(password, WP_EPKI_PASSWORD_MAX);
+        XFREE(password, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+#else
+    OPENSSL_cleanse(password, sizeof(password));
+#endif
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
+    return ok;
+#else
+    (void)data;
+    (void)len;
+    (void)pwCb;
+    (void)pwCbArg;
     return 0;
 #endif
 }

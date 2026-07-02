@@ -50,6 +50,13 @@
     #define AES_BLOCK_SIZE 16
 #endif
 
+/* Encrypted PKCS#8 (EncryptedPrivateKeyInfo) round-trip tests require
+ * encrypted-key, PKCS#8 and PBKDF support in the linked wolfSSL. */
+#if defined(WOLFSSL_ENCRYPTED_KEYS) && defined(HAVE_PKCS8) && \
+    !defined(NO_PWDBASED)
+    #define WP_HAVE_EPKI_TEST
+#endif
+
 #ifdef TEST_MULTITHREADED
 #define PRINT_MSG(str)
 #define PRINT_ERR_MSG(str)
@@ -316,6 +323,8 @@ int test_pkey_enc_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
 int test_pkey_dec_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
                   unsigned char *ciphertext, size_t cipherLen, int padMode,
                   const EVP_MD *rsaMd, const EVP_MD *rsaMgf1Md);
+int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
+                  const char* encProp, OSSL_LIB_CTX* decLibCtx);
 int test_rsa_sign_sha1(void *data);
 int test_rsa_sign_verify_pkcs1(void *data);
 int test_rsa_sign_verify_recover_pkcs1(void *data);
@@ -338,6 +347,9 @@ int test_rsa_fromdata(void* data);
 int test_rsa_fromdata_oversize(void* data);
 int test_rsa_decode_pkcs8(void* data);
 int test_rsa_encode_pkcs8(void* data);
+#ifdef WP_HAVE_EPKI_TEST
+int test_rsa_encode_epki(void* data);
+#endif
 int test_rsa_null_init(void* data);
 int test_rsa_param_prefix_match(void* data);
 int test_rsa_kem_prefix_match(void* data);
@@ -350,6 +362,9 @@ int test_rsa_key_integrity(void* data);
 int test_dh_pgen_pkey(void *data);
 int test_dh_pkey(void *data);
 int test_dh_invalid_kdf_strings(void *data);
+#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST)
+int test_dh_encode_epki(void *data);
+#endif
 int test_dh_decode(void *data);
 int test_dh_get_params(void *data);
 int test_dh_krb5_keygen(void *data);
@@ -442,6 +457,9 @@ int test_ecdh_p224(void *data);
 #endif /* WP_HAVE_EC_P224 */
 #ifdef WP_HAVE_EC_P256
 int test_ecdh_invalid_kdf_strings(void *data);
+#ifdef WP_HAVE_EPKI_TEST
+int test_ecc_encode_epki(void *data);
+#endif
 int test_ecdh_p256(void *data);
 #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
 int test_ecdh_x963_kdf(void *data);
@@ -514,6 +532,9 @@ int test_pbkdf2(void *data);
 #endif /* WP_HAVE_PBE */
 
 #if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
+#if defined(WP_HAVE_ED25519) && defined(WP_HAVE_EPKI_TEST)
+int test_ecx_encode_epki(void *data);
+#endif
 int test_ecx_sign_verify(void *data);
 int test_ecx_sign_verify_raw_priv(void *data);
 int test_ecx_sign_verify_raw_pub(void *data);
@@ -563,6 +584,9 @@ int test_mlx_encap_decap(void *data);
 #endif
 
 #ifdef WP_HAVE_MLDSA
+#ifdef WP_HAVE_EPKI_TEST
+int test_mldsa_encode_epki(void *data);
+#endif
 int test_mldsa_keygen(void *data);
 int test_mldsa_import_export_roundtrip(void *data);
 int test_mldsa_sign_verify(void *data);

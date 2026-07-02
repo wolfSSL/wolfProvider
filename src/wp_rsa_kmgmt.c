@@ -2707,41 +2707,6 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
 
 #ifdef WOLFSSL_ENCRYPTED_KEYS
 
-/** PBKDF2 OPID. */
-unsigned char pbkdf2_oid[] = {
-    42, 134, 72, 134, 247, 13, 1, 5, 12
-};
-/** Size of PBKDF2 OID. */
-#define PBKDF2_OID_SZ    sizeof(pbkdf2_oid)
-
-/**
- * Find the PBKDF2 OID in the key and set type.
- *
- * @param [in]      data  DER encoding.
- * @param [in]      len   Length, in bytes, of DER encoding.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_rsa_find_pbkdf2_oid(unsigned char* data, word32 len)
-{
-    int ok = 0;
-    word32 i;
-
-    WOLFPROV_ENTER_SILENT(WP_LOG_COMP_RSA, WOLFPROV_FUNC_NAME);
-
-    for (i = 0; i < 40 && i + PBKDF2_OID_SZ < len; i++) {
-        /* Find the base OID. */
-        if (XMEMCMP(data + i, pbkdf2_oid, PBKDF2_OID_SZ) == 0) {
-            ok = 1;
-            break;
-        }
-    }
-
-    WOLFPROV_LEAVE_SILENT(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
-        ok);
-    return ok;
-}
-
 /**
  * Decode the encrypted DER encoded RSA private key into the RSA key object.
  *
@@ -2757,43 +2722,20 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
      OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
 {
     int ok = 1;
-    char password[1024];
-    size_t passwordSz = sizeof(password);
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_RSA, WOLFPROV_FUNC_NAME);
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
-
-    /* Look for the PBKDF2 OID to know we have an encrypted key. */
-    if (ok && !wp_rsa_find_pbkdf2_oid(data, len)) {
-        ok = 0;
-    }
-    /* Get password for decryption. */
-    if (ok && !pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
-        ok = 0;
-    }
-    if (ok && (passwordSz > sizeof(password))) {
+    /* Decrypt the PBES2 EncryptedPrivateKeyInfo in place. */
+    if (ok && (!wp_decrypt_key_pkcs8(data, &len, pwCb, pwCbArg))) {
         ok = 0;
     }
     if (ok) {
-        /* Decrypt to encoded private key. */
-        int ret = wc_DecryptPKCS8Key(data, len, password, (int)passwordSz);
-        if (ret <= 0) {
-            ok = 0;
-        }
-        else {
-            /* Get length of encoded private key. */
-            len = (word32)ret;
-        }
-    }
-    if (ok) {
-        /* Decode private key. */
+        /* Decode the recovered plaintext private key. */
         ok = wp_rsa_decode_pki(rsa, data, len);
     }
-
-    OPENSSL_cleanse(password, sizeof(password));
 
     WOLFPROV_LEAVE_SILENT(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
         ok);
@@ -3501,26 +3443,15 @@ static int wp_rsa_encode_enc_pki_size(const wp_RsaEncDecCtx* ctx,
 {
     int ok;
     size_t len;
-    word32 outSz;
-    byte fakeData[1];
-    byte fakeSalt[16];
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_encode_enc_pki_size");
 
-    /* Get encode private key length. */
+    /* Get the plaintext PKCS #8 encoding length. */
     ok = wp_rsa_encode_pki_size(rsa, &len, RSA_ALGO_ID(ctx));
     if (ok) {
-        /* Get encrypted encode private key. */
-        if (wc_EncryptPKCS8Key(fakeData, (word32)len, NULL, &outSz, "", 0,
-                WP_PKCS5, WP_PBES2, ctx->cipher, fakeSalt, sizeof(fakeSalt),
-                WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(ctx->provCtx),
-                NULL) != LENGTH_ONLY_E) {
-            ok = 0;
-        }
-        else {
-            /* Return the length calculated. */
-            *keyLen = (size_t)outSz;
-        }
+        /* Get the size of the PBES2 EncryptedPrivateKeyInfo encoding. */
+        ok = wp_encrypt_key_pkcs8_size(ctx->provCtx, ctx->cipher, (word32)len,
+            keyLen);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -3528,7 +3459,7 @@ static int wp_rsa_encode_enc_pki_size(const wp_RsaEncDecCtx* ctx,
 }
 
 /**
- * Encode the RSA key in a Encrypted Private Key format.
+ * Encode the RSA key in a PBES2 EncryptedPrivateKeyInfo format.
  *
  * @param [in]      ctx      RSA encoder/decoder context object.
  * @param [in]      rsa      RSA key object.
@@ -3546,51 +3477,27 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
 {
     int ok = 1;
     size_t len;
-    word32 outSz = (word32)*keyLen;
-    byte salt[WP_MAX_SALT_SIZE];
-    int saltLen = 16;
-    char password[1024];
-    size_t passwordSz = sizeof(password);
     byte* encodedKey = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_encode_enc_pki");
 
-    /* TODO: support salt length of 8 for DES3. */
-
-    /* Encode key. */
+    /* Determine the plaintext PKCS #8 length. */
     ok = wp_rsa_encode_pki_size(rsa, &len, RSA_ALGO_ID(ctx));
     if (ok) {
-        /* Allocate buffer for encrypted key to be placed into. */
+        /* Allocate the plaintext buffer - must differ from the output. */
         encodedKey = XMALLOC(len, NULL, DYNAMIC_TYPE_RSA_BUFFER);
         if (encodedKey == NULL) {
             ok = 0;
         }
     }
     if (ok) {
-        /* Encode key. */
+        /* Encode the plaintext PKCS #8 key. */
         ok = wp_rsa_encode_pki(rsa, encodedKey, &len, RSA_ALGO_ID(ctx));
     }
-    /* Generate salt. */
-    if (ok && (wc_RNG_GenerateBlock(wp_provctx_get_rng(ctx->provCtx), salt,
-            saltLen) != 0)) {
-        ok = 0;
-    }
-    /* Get password. */
-    if (ok && !pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
-        ok = 0;
-    }
     if (ok) {
-        /* Encrypt encoded key - in and out buffers must be different. */
-        if (wc_EncryptPKCS8Key(encodedKey, (word32)len, keyData, &outSz,
-                password, (word32)passwordSz, WP_PKCS5, WP_PBES2, ctx->cipher,
-                salt, saltLen, WP_PKCS12_ITERATIONS_DEFAULT,
-                wp_provctx_get_rng(ctx->provCtx), NULL) <= 0) {
-            ok = 0;
-        }
-        else {
-            /* Return actual size of encrypted encoded private key. */
-            *keyLen = (size_t)outSz;
-        }
+        /* Encrypt as a PBES2 EncryptedPrivateKeyInfo. */
+        ok = wp_encrypt_key_pkcs8(ctx->provCtx, ctx->cipher, encodedKey,
+            (word32)len, keyData, keyLen, pwCb, pwCbArg);
     }
 
     /* encodedKey holds the plaintext PKCS#8 private key before encryption. */
@@ -3598,67 +3505,6 @@ static int wp_rsa_encode_enc_pki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
         OPENSSL_cleanse(encodedKey, len);
     }
     XFREE(encodedKey, NULL, DYNAMIC_TYPE_RSA_BUFFER);
-
-    OPENSSL_cleanse(password, sizeof(password));
-
-    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
- * Get the Encrypted PKCS#8 encoding size for the key.
- *
- * @param [in]  rsa     RSA key object.
- * @param [out] keyLen  Length of encoding in bytes.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_rsa_encode_epki_size(const wp_RsaEncDecCtx* ctx,
-    const wp_Rsa* rsa, size_t* keyLen)
-{
-    int ok;
-    size_t len;
-
-    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_encode_epki_size");
-
-    ok = wp_rsa_encode_pki_size(rsa, &len, RSA_ALGO_ID(ctx));
-    if (ok) {
-        *keyLen = ((len + 15) / 16) * 16;
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
- * Encode the RSA key in an Encrypted PKCS#8 format.
- *
- * @param [in]      ctx         RSA encoder/decoder context object.
- * @param [in]      rsa         RSA key object.
- * @param [out]     keyData     Buffer to hold encoded data.
- * @param [in, out] keyLen      On in, length of buffer in bytes.
- *                              On out, length of encoding in bytes.
- * @param [in]      pwCb        Password callback.
- * @param [in]      pwCbArg     Argument to pass to password callback.
- * @param [out]     cipherInfo  Information about encryption.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_rsa_encode_epki(const wp_RsaEncDecCtx* ctx, const wp_Rsa* rsa,
-    unsigned char* keyData, size_t* keyLen, OSSL_PASSPHRASE_CALLBACK* pwCb,
-    void* pwCbArg, byte** cipherInfo)
-{
-    int ok = 1;
-    size_t len = *keyLen;
-
-    WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_encode_epki");
-
-    /* Encode key. */
-    ok = wp_rsa_encode_pki(rsa, keyData, &len, RSA_ALGO_ID(ctx));
-    if (ok && (!wp_encrypt_key(ctx->provCtx, ctx->cipherName, keyData, keyLen,
-            (word32)len, pwCb, pwCbArg, cipherInfo))) {
-        ok = 0;
-    }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -3699,7 +3545,6 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     size_t pemLen = 0;
     int pemType = PKCS8_PRIVATEKEY_TYPE;
     int private = 0;
-    byte* cipherInfo = NULL;
 
     (void)params;
     (void)selection;
@@ -3728,7 +3573,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
 #ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
-        if (!wp_rsa_encode_epki_size(ctx, key, &derLen)) {
+        if (!wp_rsa_encode_enc_pki_size(ctx, key, &derLen)) {
             ok = 0;
         }
     }
@@ -3776,8 +3621,8 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 #ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
-        if (!wp_rsa_encode_epki(ctx, key, derData, &derLen, pwCb, pwCbArg,
-                (ctx->encoding == WP_FORMAT_PEM) ? &cipherInfo : NULL)) {
+        pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
+        if (!wp_rsa_encode_enc_pki(ctx, key, derData, &derLen, pwCb, pwCbArg)) {
             ok = 0;
         }
     }
@@ -3802,7 +3647,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         keyLen = derLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo,
+        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, NULL,
             pemType);
         if (rc <= 0) {
             ok = 0;

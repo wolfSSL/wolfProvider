@@ -2352,6 +2352,43 @@ static int wp_dh_dec_send_params(wp_Dh* dh, OSSL_CALLBACK *dataCb,
     return ok;
 }
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
+/**
+ * Decode an encrypted PKCS#8 DER DH private key into the DH key object.
+ *
+ * @param [in, out] dh       DH key object.
+ * @param [in]      data     DER encoding (decrypted in place).
+ * @param [in]      len      Length, in bytes, of DER encoding.
+ * @param [in]      pwCb     Password callback.
+ * @param [in]      pwCbArg  Argument to pass to password callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_dh_decode_enc_pki(wp_Dh* dh, unsigned char* data, word32 len,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    int ok = 1;
+
+    WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+    /* Decrypt the PBES2 EncryptedPrivateKeyInfo in place. */
+    if (ok && (!wp_decrypt_key_pkcs8(data, &len, pwCb, pwCbArg))) {
+        ok = 0;
+    }
+    if (ok) {
+        /* Decode the recovered plaintext private key. */
+        ok = wp_dh_decode_pki(dh, data, len);
+    }
+
+    WOLFPROV_LEAVE_SILENT(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
+    return ok;
+}
+#endif
+
 /**
  * Decode the data in the core BIO.
  *
@@ -2432,8 +2469,13 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         if (!wp_dh_decode_pki(dh, data, len)) {
-            ok = 0;
-            decoded = 0;
+#ifdef WOLFSSL_ENCRYPTED_KEYS
+            if (!wp_dh_decode_enc_pki(dh, data, len, pwCb, pwCbArg))
+#endif
+            {
+                ok = 0;
+                decoded = 0;
+            }
         }
     }
 
@@ -2670,7 +2712,8 @@ static int wp_dh_encode_pki(const wp_Dh *dh, unsigned char* keyData,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_dh_encode_epki_size(const wp_Dh *dh, size_t* keyLen)
+static int wp_dh_encode_epki_size(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
+    size_t* keyLen)
 {
     int ok = 1;
     int ret;
@@ -2678,12 +2721,14 @@ static int wp_dh_encode_epki_size(const wp_Dh *dh, size_t* keyLen)
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_encode_epki_size");
 
+    /* Get the plaintext PKCS #8 length. */
     ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &len);
     if (ret != LENGTH_ONLY_E) {
         ok = 0;
     }
     if (ok) {
-        *keyLen = ((len + 15) / 16) * 16;
+        /* Get the size of the PBES2 EncryptedPrivateKeyInfo encoding. */
+        ok = wp_encrypt_key_pkcs8_size(ctx->provCtx, ctx->cipher, len, keyLen);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -2691,7 +2736,7 @@ static int wp_dh_encode_epki_size(const wp_Dh *dh, size_t* keyLen)
 }
 
 /**
- * Encode the DH key in an Encrypted PKCS#8 format.
+ * Encode the DH key in a PBES2 EncryptedPrivateKeyInfo format.
  *
  * @param [in]      ctx         DH encoder/decoder context object.
  * @param [in]      dh          DH key object.
@@ -2700,28 +2745,48 @@ static int wp_dh_encode_epki_size(const wp_Dh *dh, size_t* keyLen)
  *                              On out, length of encoding in bytes.
  * @param [in]      pwCb        Password callback.
  * @param [in]      pwCbArg     Argument to pass to password callback.
- * @param [out]     cipherInfo  Information about encryption.
  * @return  1 on success.
  * @return  0 on failure.
  */
 static int wp_dh_encode_epki(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
     unsigned char* keyData, size_t* keyLen, OSSL_PASSPHRASE_CALLBACK *pwCb,
-    void *pwCbArg, byte** cipherInfo)
+    void *pwCbArg)
 {
     int ok = 1;
     int rc;
-    word32 pkcs8Len = (word32)*keyLen;
+    word32 pkcs8Len = 0;
+    byte* encodedKey = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_encode_epki");
 
-    /* Encode key. */
-    rc = wc_DhPrivKeyToDer((DhKey*)&dh->key, keyData, &pkcs8Len);
-    if (rc <= 0) {
+    /* Determine the plaintext PKCS #8 length. */
+    rc = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &pkcs8Len);
+    if (rc != LENGTH_ONLY_E) {
         ok = 0;
     }
-    if (ok && (!wp_encrypt_key(ctx->provCtx, ctx->cipherName, keyData, keyLen,
-            pkcs8Len, pwCb, pwCbArg, cipherInfo))) {
-        ok = 0;
+    if (ok) {
+        /* Allocate the plaintext buffer - must differ from the output. */
+        encodedKey = OPENSSL_malloc(pkcs8Len);
+        if (encodedKey == NULL) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        /* Encode the plaintext PKCS #8 key. */
+        rc = wc_DhPrivKeyToDer((DhKey*)&dh->key, encodedKey, &pkcs8Len);
+        if (rc <= 0) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        /* Encrypt as a PBES2 EncryptedPrivateKeyInfo. */
+        ok = wp_encrypt_key_pkcs8(ctx->provCtx, ctx->cipher, encodedKey,
+            pkcs8Len, keyData, keyLen, pwCb, pwCbArg);
+    }
+
+    /* encodedKey holds the plaintext PKCS#8 private key before encryption. */
+    if (encodedKey != NULL) {
+        OPENSSL_clear_free(encodedKey, pkcs8Len);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -2766,7 +2831,6 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     size_t pemLen = 0;
     int pemType = DH_PRIVATEKEY_TYPE;
     int private = 0;
-    byte* cipherInfo = NULL;
 
     if (out == NULL) {
         ok = 0;
@@ -2797,7 +2861,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 #ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
-        if (!wp_dh_encode_epki_size(key, &derLen)) {
+        if (!wp_dh_encode_epki_size(ctx, key, &derLen)) {
             ok = 0;
         }
     }
@@ -2832,8 +2896,8 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 #ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
-        if (!wp_dh_encode_epki(ctx, key, derData, &derLen, pwCb, pwCbArg,
-                (ctx->encoding == WP_FORMAT_PEM) ? &cipherInfo : NULL)) {
+        pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
+        if (!wp_dh_encode_epki(ctx, key, derData, &derLen, pwCb, pwCbArg)) {
             ok = 0;
         }
     }
@@ -2843,7 +2907,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         keyLen = derLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo,
+        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, NULL,
             pemType);
         if (rc <= 0) {
             ok = 0;
@@ -2857,7 +2921,7 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
         if (ok) {
             rc = wc_DerToPemEx(derData, (word32)derLen, pemData, (word32)pemLen,
-                cipherInfo, pemType);
+                NULL, pemType);
             if (rc <= 0) {
                 ok = 0;
             }
@@ -2882,7 +2946,6 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         OPENSSL_free(derData);
         OPENSSL_free(pemData);
     }
-    OPENSSL_free(cipherInfo);
 
     BIO_free(out);
 #else

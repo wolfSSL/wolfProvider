@@ -328,6 +328,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),
     TEST_DECL(test_dh_invalid_kdf_strings, NULL),
+#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST)
+    TEST_DECL(test_dh_encode_epki, NULL),
+#endif
     TEST_DECL(test_dh_decode, NULL),
     TEST_DECL(test_dh_krb5_keygen, NULL),
     TEST_DECL(test_dh_pad, NULL),
@@ -366,6 +369,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_fromdata_oversize, NULL),
     TEST_DECL(test_rsa_decode_pkcs8, NULL),
     TEST_DECL(test_rsa_encode_pkcs8, NULL),
+#ifdef WP_HAVE_EPKI_TEST
+    TEST_DECL(test_rsa_encode_epki, NULL),
+#endif
     TEST_DECL(test_rsa_null_init, NULL),
     TEST_DECL(test_rsa_param_prefix_match, NULL),
     TEST_DECL(test_rsa_kem_prefix_match, NULL),
@@ -404,6 +410,9 @@ TEST_CASE test_case[] = {
     #endif
 #endif
 #ifdef WP_HAVE_EC_P256
+    #ifdef WP_HAVE_EPKI_TEST
+        TEST_DECL(test_ecc_encode_epki, NULL),
+    #endif
     #ifdef WP_HAVE_ECKEYGEN
         TEST_DECL(test_eckeygen_p256, NULL),
     #endif
@@ -507,6 +516,9 @@ TEST_CASE test_case[] = {
 #endif
 
 #if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
+#if defined(WP_HAVE_ED25519) && defined(WP_HAVE_EPKI_TEST)
+    TEST_DECL(test_ecx_encode_epki, NULL),
+#endif
     TEST_DECL(test_ecx_sign_verify, NULL),
     TEST_DECL(test_ecx_sign_verify_raw_priv, NULL),
     TEST_DECL(test_ecx_sign_verify_raw_pub, NULL),
@@ -554,6 +566,9 @@ TEST_CASE test_case[] = {
 #endif
 
 #ifdef WP_HAVE_MLDSA
+    #ifdef WP_HAVE_EPKI_TEST
+    TEST_DECL(test_mldsa_encode_epki, NULL),
+    #endif
     TEST_DECL(test_mldsa_keygen, NULL),
     TEST_DECL(test_mldsa_import_export_roundtrip, NULL),
     TEST_DECL(test_mldsa_sign_verify, NULL),
