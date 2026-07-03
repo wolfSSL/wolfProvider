@@ -51,13 +51,6 @@ static const int wp_dh_decode_nids[] = {
 /** Maximum size of the group name string. */
 #define WP_MAX_DH_GROUP_NAME_SZ     10
 
-/* Min accepted bitlen for keygen */
-#ifdef HAVE_FIPS
-#define WP_DH_MIN_BITS 2048
-#else
-#define WP_DH_MIN_BITS 1024
-#endif
-
 /**
  * DH key.
  */
@@ -1574,17 +1567,18 @@ static wp_DhGenCtx* wp_dh_gen_init(WOLFPROV_CTX* provCtx,
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitRng", rc);
             ok = 0;
         }
-        if (ok) {
-            if (!wp_dh_gen_set_params(ctx, params)) {
-                wc_FreeRng(&ctx->rng);
-                ok = 0;
-            }
-        }
+        /* Defaults first so init-time parameters override them. */
         if (ok) {
             ctx->provCtx   = provCtx;
             ctx->selection = selection;
             ctx->bits      = 2048;
             ctx->generator = 2;
+        }
+        if (ok) {
+            if (!wp_dh_gen_set_params(ctx, params)) {
+                wc_FreeRng(&ctx->rng);
+                ok = 0;
+            }
         }
 
         if (!ok) {
@@ -1644,13 +1638,25 @@ static int wp_dh_gen_set_template(wp_DhGenCtx* ctx, const wp_Dh* dh)
 static int wp_dh_gen_set_params(wp_DhGenCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
+    int bits;
     const OSSL_PARAM* p;
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_gen_set_params");
 
     p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_FFC_PBITS);
-    if ((p != NULL) && (!OSSL_PARAM_get_int(p, &ctx->bits))) {
-        ok = 0;
+    if (p != NULL) {
+        if (!OSSL_PARAM_get_int(p, &bits)) {
+            ok = 0;
+        }
+        /* Reject a prime size below the provider minimum. */
+        if (ok && (bits < WP_DH_MIN_BITS)) {
+            ERR_raise(ERR_LIB_PROV, PROV_R_KEY_SIZE_TOO_SMALL);
+            ok = 0;
+        }
+        /* Only store the value once it has passed the size check. */
+        if (ok) {
+            ctx->bits = bits;
+        }
     }
     if (ok) {
         p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_DH_PRIV_LEN);
@@ -1928,12 +1934,13 @@ static wp_Dh* wp_dh_gen(wp_DhGenCtx *ctx, OSSL_CALLBACK *cb, void *cbArg)
         else if (!wp_dh_gen_copy_parameters(ctx, dh)) {
             ok = 0;
         }
+        /* Validate parameters meet minimum requirements in every path. */
+        if (ok && (!wp_dh_params_validate(dh))) {
+            ok = 0;
+        }
         /* Generate key pair if requested. */
         if (ok && ((ctx->selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0)) {
-            if (!wp_dh_params_validate(dh)) {
-                ok = 0;
-            }
-            if (ok && (!wp_dh_gen_keypair(ctx, dh))) {
+            if (!wp_dh_gen_keypair(ctx, dh)) {
                 ok = 0;
             }
         }

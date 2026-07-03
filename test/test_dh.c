@@ -21,6 +21,7 @@
 #include "unit.h"
 #include <openssl/core_names.h>
 #include <openssl/decoder.h>
+#include <wolfprovider/internal.h>
 
 #ifdef WP_HAVE_DH
 
@@ -1543,6 +1544,100 @@ int test_dh_import_group_no_nul(void *data)
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(ctx);
     OPENSSL_free(name);
+    return err;
+}
+
+/* Enforce the minimum prime size: a below-minimum request must not produce
+ * parameters, while a request at the minimum must still succeed. Sizes come
+ * from the provider's own WP_DH_MIN_BITS so the two cannot diverge. */
+#define TEST_DH_MIN_BITS  WP_DH_MIN_BITS
+#define TEST_DH_WEAK_BITS (WP_DH_MIN_BITS / 2)
+int test_dh_pgen_min_bits(void *data)
+{
+    int err = 0;
+    int rc;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *keyParams = NULL;
+    EVP_PKEY *weakParams = NULL;
+    BIGNUM *prime = NULL;
+
+    (void)data;
+
+    PRINT_MSG("Testing DH parameter generation minimum prime size enforcement");
+
+    /* Below-minimum size must be rejected at set-params time. */
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        rc = EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctx, TEST_DH_WEAK_BITS);
+        if (rc == 1) {
+            PRINT_MSG("set_dh_paramgen_prime_len accepted a below-minimum size");
+            err = 1;
+        }
+    }
+    EVP_PKEY_CTX_free(ctx);
+    ctx = NULL;
+
+    /* A caller that ignores the set-params failure must never end up with
+     * below-minimum parameters: generation either fails, or the prime it
+     * produced is at least the minimum size. */
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        (void)EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctx, TEST_DH_WEAK_BITS);
+        if (EVP_PKEY_paramgen(ctx, &weakParams) == 1) {
+            err = EVP_PKEY_get_bn_param(weakParams, OSSL_PKEY_PARAM_FFC_P,
+                                        &prime) != 1;
+            if ((err == 0) && (BN_num_bits(prime) < TEST_DH_MIN_BITS)) {
+                PRINT_MSG("paramgen produced a prime below the minimum size");
+                err = 1;
+            }
+        }
+    }
+    EVP_PKEY_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Size at the minimum must still succeed. */
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctx, TEST_DH_MIN_BITS)
+              != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen(ctx, &keyParams) != 1;
+        if (err != 0) {
+            PRINT_MSG("DH paramgen failed at the minimum prime size");
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(keyParams, OSSL_PKEY_PARAM_FFC_P,
+                                    &prime) != 1;
+        if ((err == 0) && (BN_num_bits(prime) < TEST_DH_MIN_BITS)) {
+            PRINT_MSG("paramgen produced a prime below the minimum size");
+            err = 1;
+        }
+    }
+
+    BN_free(prime);
+    EVP_PKEY_free(weakParams);
+    EVP_PKEY_free(keyParams);
+    EVP_PKEY_CTX_free(ctx);
     return err;
 }
 
