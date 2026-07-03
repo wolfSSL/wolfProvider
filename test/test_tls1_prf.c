@@ -352,6 +352,93 @@ static int test_tls1_prf_fail(void)
     return err;
 }
 
+#ifdef WP_HAVE_SHA256
+/* Configure a TLS1-PRF keyexch (secretLen-byte secret), dup it, and confirm
+ * both derive the same key so the dup preserved config. secretLen == 0
+ * exercises the empty-secret boundary. */
+static int test_tls1_prf_dup_calc(int secretLen)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY_CTX *dupCtx = NULL;
+    unsigned char secret[32];
+    unsigned char seed[16];
+    unsigned char keyA[48];
+    unsigned char keyB[48];
+    size_t lenA = sizeof(keyA);
+    size_t lenB = sizeof(keyB);
+
+    memset(secret, 0x11, sizeof(secret));
+    memset(seed, 0x22, sizeof(seed));
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "TLS1-PRF", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_derive_init(ctx) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_CTX_set_tls1_prf_md(ctx, EVP_sha256()) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_CTX_set1_tls1_prf_secret(ctx, secret,
+            secretLen) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_CTX_add1_tls1_prf_seed(ctx, seed,
+            sizeof(seed)) != 1) {
+        err = 1;
+    }
+
+    /* Duplicate after configuring - the path that must deep-copy state. */
+    if (err == 0) {
+        dupCtx = EVP_PKEY_CTX_dup(ctx);
+        if (dupCtx == NULL) {
+            PRINT_MSG("Failed to duplicate TLS1-PRF context");
+            err = 1;
+        }
+    }
+
+    if (err == 0 && EVP_PKEY_derive(ctx, keyA, &lenA) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_derive(dupCtx, keyB, &lenB) != 1) {
+        PRINT_MSG("Duplicated TLS1-PRF context failed to derive");
+        err = 1;
+    }
+    if (err == 0 && ((lenA != lenB) || (memcmp(keyA, keyB, lenA) != 0))) {
+        PRINT_MSG("Duplicated TLS1-PRF context derived a different key");
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(dupCtx);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+#endif /* WP_HAVE_SHA256 */
+
+int test_tls1_prf_dup(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("Testing TLS1-PRF context dup preserves configuration");
+#ifdef WP_HAVE_SHA256
+    err = test_tls1_prf_dup_calc(32);
+#ifndef HAVE_FIPS
+    /* FIPS enforces a minimum HMAC key length, so an empty secret is not a
+     * valid FIPS configuration - only exercise it in non-FIPS builds. */
+    if (err == 0) {
+        PRINT_MSG("Testing TLS1-PRF context dup with empty secret");
+        err = test_tls1_prf_dup_calc(0);
+    }
+#endif
+#endif
+
+    return err;
+}
+
 int test_tls1_prf(void *data)
 {
     int err = 0;

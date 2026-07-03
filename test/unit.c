@@ -208,6 +208,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_hmac_key_no_digest, NULL),
     TEST_DECL(test_hmac_multi_update, NULL),
     TEST_DECL(test_hmac_dup, NULL),
+    TEST_DECL(test_hmac_size_query, NULL),
     TEST_DECL(test_mac_key_match, NULL),
     TEST_DECL(test_mac_sig_dup, NULL),
 #endif
@@ -215,6 +216,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_cmac_create, &flags),
     TEST_DECL(test_cmac_multi_update, &flags),
     TEST_DECL(test_cmac_dup, &flags),
+    TEST_DECL(test_cmac_size_query, &flags),
 #endif
 #ifdef WP_HAVE_GMAC
     TEST_DECL(test_gmac_create, &flags),
@@ -222,9 +224,11 @@ TEST_CASE test_case[] = {
 #endif
 #ifdef WP_HAVE_TLS1_PRF
     TEST_DECL(test_tls1_prf, NULL),
+    TEST_DECL(test_tls1_prf_dup, NULL),
 #endif
 #ifdef WP_HAVE_HKDF
     TEST_DECL(test_hkdf, NULL),
+    TEST_DECL(test_hkdf_dup, NULL),
 #endif
 #ifdef WP_HAVE_KBKDF
     TEST_DECL(test_kbkdf, NULL),

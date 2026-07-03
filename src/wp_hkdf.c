@@ -194,6 +194,66 @@ static void wp_kdf_hkdf_reset(wp_HkdfCtx* ctx)
 }
 
 /**
+ * Duplicate the HKDF context object.
+ *
+ * Deep copies the configured key material so the copy derives identically.
+ *
+ * @param [in] src  HKDF context object.
+ * @return  New HKDF context object on success.
+ * @return  NULL on failure.
+ */
+static wp_HkdfCtx* wp_kdf_hkdf_dup(wp_HkdfCtx* src)
+{
+    wp_HkdfCtx* dst = NULL;
+
+    if (wolfssl_prov_is_running()) {
+        dst = wp_kdf_hkdf_new(src->provCtx);
+    }
+    if (dst != NULL) {
+        int ok = 1;
+
+        dst->mode = src->mode;
+        dst->mdType = src->mdType;
+        dst->mdLen = src->mdLen;
+        dst->keySz = src->keySz;
+        dst->saltSz = src->saltSz;
+        dst->infoSz = src->infoSz;
+        dst->prefixLen = src->prefixLen;
+        dst->labelLen = src->labelLen;
+        dst->dataLen = src->dataLen;
+        XMEMCPY(dst->info, src->info, src->infoSz);
+
+        if (ok && (src->key != NULL)) {
+            dst->key = wp_octet_dup(src->key, src->keySz);
+            ok = dst->key != NULL;
+        }
+        if (ok && (src->salt != NULL)) {
+            dst->salt = wp_octet_dup(src->salt, src->saltSz);
+            ok = dst->salt != NULL;
+        }
+        if (ok && (src->prefix != NULL)) {
+            dst->prefix = wp_octet_dup(src->prefix, src->prefixLen);
+            ok = dst->prefix != NULL;
+        }
+        if (ok && (src->label != NULL)) {
+            dst->label = wp_octet_dup(src->label, src->labelLen);
+            ok = dst->label != NULL;
+        }
+        if (ok && (src->data != NULL)) {
+            dst->data = wp_octet_dup(src->data, src->dataLen);
+            ok = dst->data != NULL;
+        }
+
+        if (!ok) {
+            wp_kdf_hkdf_free(dst);
+            dst = NULL;
+        }
+    }
+
+    return dst;
+}
+
+/**
  * Derive a key using HKDF.
  *
  * @param [in, out] ctx     HKDF context object.
@@ -528,6 +588,7 @@ static const OSSL_PARAM* wp_kdf_hkdf_gettable_ctx_params(wp_HkdfCtx* ctx,
 /** Dispatch table for HKDF functions implemented using wolfSSL. */
 const OSSL_DISPATCH wp_kdf_hkdf_functions[] = {
     { OSSL_FUNC_KDF_NEWCTX,              (DFUNC)wp_kdf_hkdf_new               },
+    { OSSL_FUNC_KDF_DUPCTX,              (DFUNC)wp_kdf_hkdf_dup               },
     { OSSL_FUNC_KDF_FREECTX,             (DFUNC)wp_kdf_hkdf_free              },
     { OSSL_FUNC_KDF_RESET,               (DFUNC)wp_kdf_hkdf_reset             },
     { OSSL_FUNC_KDF_DERIVE,              (DFUNC)wp_kdf_hkdf_derive            },
@@ -795,6 +856,7 @@ static const OSSL_PARAM* wp_kdf_tls1_3_settable_ctx_params(wp_HkdfCtx* ctx,
 /** Dispatch table for TLS 1.3 HKDF functions implemented using wolfSSL. */
 const OSSL_DISPATCH wp_kdf_tls1_3_kdf_functions[] = {
     { OSSL_FUNC_KDF_NEWCTX,          (DFUNC)wp_kdf_hkdf_new                   },
+    { OSSL_FUNC_KDF_DUPCTX,          (DFUNC)wp_kdf_hkdf_dup                   },
     { OSSL_FUNC_KDF_FREECTX,         (DFUNC)wp_kdf_hkdf_free                  },
     { OSSL_FUNC_KDF_RESET,           (DFUNC)wp_kdf_hkdf_reset                 },
     { OSSL_FUNC_KDF_DERIVE,          (DFUNC)wp_kdf_tls1_3_derive              },

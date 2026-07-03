@@ -217,6 +217,7 @@ int wp_init_cast(int algo);
 int wolfssl_prov_get_capabilities(void *provctx, const char *capability,
     OSSL_CALLBACK *cb, void *arg);
 
+unsigned char* wp_octet_dup(const unsigned char* data, size_t len);
 int wp_name_to_nid(OSSL_LIB_CTX* libCtx, const char* name, const char* propQ);
 enum wc_HashType wp_name_to_wc_hash_type(OSSL_LIB_CTX* libCtx, const char* name,
     const char* propQ);
