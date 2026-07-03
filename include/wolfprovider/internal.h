@@ -65,6 +65,13 @@
 /** Maximum supported digest name size. */
 #define WP_MAX_PROPS_SIZE       80
 
+/** Minimum accepted DH prime size in bits for parameter/key generation. */
+#ifdef HAVE_FIPS
+#define WP_DH_MIN_BITS          2048
+#else
+#define WP_DH_MIN_BITS          1024
+#endif
+
 /* DER key encoding/decoding formats. */
 /** SubjectPublicKeyInfo encoding format. */
 #define WP_ENC_FORMAT_SPKI              1
