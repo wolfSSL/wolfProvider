@@ -32,6 +32,8 @@
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
+#include <wolfssl/wolfcrypt/types.h>
+
 /* TODO: support directory access. */
 
 /**
@@ -354,6 +356,55 @@ static const wp_DecoderInfo wp_decoders[] = {
 #define WP_DECODERS_SIZE  (sizeof(wp_decoders) / sizeof(*wp_decoders))
 
 /**
+ * Combine a decoder's structure query with the caller's property query.
+ *
+ * @param [in]  base    Structure property query. May be NULL.
+ * @param [in]  caller  Caller's property query. May be NULL.
+ * @param [out] query   Combined property query string, or NULL when neither
+ *                      input constrains the fetch.
+ * @return  1 on success.
+ * @return  0 on allocation failure.
+ */
+static int wp_file_decoder_prop_query(const char* base, const char* caller,
+    char** query)
+{
+    int ok = 1;
+    size_t len;
+
+    /* Treat an empty query string the same as an absent (NULL) one. */
+    if ((base != NULL) && (*base == '\0')) {
+        base = NULL;
+    }
+    if ((caller != NULL) && (*caller == '\0')) {
+        caller = NULL;
+    }
+
+    *query = NULL;
+    if (base == NULL) {
+        if (caller != NULL) {
+            *query = OPENSSL_strdup(caller);
+            ok = (*query != NULL);
+        }
+    }
+    else if (caller == NULL) {
+        *query = OPENSSL_strdup(base);
+        ok = (*query != NULL);
+    }
+    else {
+        len = XSTRLEN(base) + XSTRLEN(caller) + 2;
+        *query = OPENSSL_malloc(len);
+        if (*query == NULL) {
+            ok = 0;
+        }
+        else {
+            XSNPRINTF(*query, len, "%s,%s", base, caller);
+        }
+    }
+
+    return ok;
+}
+
+/**
  * Set the decoders into the decoder context.
  *
  * @param [in]      ctx     File system context object.
@@ -366,19 +417,28 @@ static int wp_file_set_decoder(wp_FileCtx* ctx, OSSL_DECODER_CTX* decCtx)
     int ok = 1;
     size_t i;
     OSSL_DECODER* decoder;
+    char* query = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_file_set_decoder");
 
     for (i = 0; ok && (i < WP_DECODERS_SIZE); i++) {
-        decoder = OSSL_DECODER_fetch(ctx->provCtx->libCtx, wp_decoders[i].name,
-            wp_decoders[i].propQuery);
-        if (decoder == NULL) {
+        if (!wp_file_decoder_prop_query(wp_decoders[i].propQuery,
+                ctx->propQuery, &query)) {
             ok = 0;
         }
-        if (ok && !OSSL_DECODER_CTX_add_decoder(decCtx, decoder)) {
-            ok = 0;
+        if (ok) {
+            decoder = OSSL_DECODER_fetch(ctx->provCtx->libCtx,
+                wp_decoders[i].name, query);
+            if (decoder == NULL) {
+                ok = 0;
+            }
+            if (ok && !OSSL_DECODER_CTX_add_decoder(decCtx, decoder)) {
+                ok = 0;
+            }
+            OSSL_DECODER_free(decoder);
         }
-        OSSL_DECODER_free(decoder);
+        OPENSSL_free(query);
+        query = NULL;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

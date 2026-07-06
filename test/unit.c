@@ -343,6 +343,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_pss_restrictions, NULL),
     TEST_DECL(test_rsa_load_key, NULL),
     TEST_DECL(test_rsa_load_cert, NULL),
+    TEST_DECL(test_rsa_load_key_prop_query, NULL),
     TEST_DECL(test_rsa_fromdata, NULL),
     TEST_DECL(test_rsa_fromdata_oversize, NULL),
     TEST_DECL(test_rsa_decode_pkcs8, NULL),
