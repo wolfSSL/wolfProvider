@@ -1,0 +1,98 @@
+name: Overhead Regression
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
+  perf_nonfips:
+    needs: discover_versions
+    name: Overhead regression (non-FIPS)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        openssl_ref:
+          - master
+          - ${{ needs.discover_versions.outputs.openssl_latest_ref }}
+        wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build wolfProvider
+        run: |
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Run overhead regression
+        run: |
+          source scripts/env-setup
+          OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/perf_test/do-perf-tests.sh
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results-nonfips-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: perf_outputs/results.json
+          retention-days: 7
+
+  perf_fips:
+    needs: discover_versions
+    name: Overhead regression (FIPS)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_bundle_ref: [ '5.8.2' ]
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download FIPS Ready Bundle
+        run: |
+          BUNDLE_URL="https://www.wolfssl.com/wolfssl-${{ matrix.wolfssl_bundle_ref }}-gplv3-fips-ready.zip"
+          wget -O wolfssl-fips-ready.zip "$BUNDLE_URL"
+          unzip wolfssl-fips-ready.zip
+          BUNDLE_DIR=$(find . -maxdepth 1 -type d -name "*fips-ready*" | head -n 1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            echo "ERROR: Could not find FIPS ready bundle directory after extraction"
+            ls -la
+            exit 1
+          fi
+          echo "FIPS_BUNDLE_PATH=$(pwd)/$BUNDLE_DIR" >> $GITHUB_ENV
+
+      - name: Build wolfProvider with FIPS Ready Bundle
+        run: |
+          OPENSSL_TAG=${{ matrix.openssl_ref }} ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
+            --fips-check=ready --wolfssl-ver=v${{ matrix.wolfssl_bundle_ref }}-stable
+
+      - name: Run overhead regression
+        run: |
+          export WOLFSSL_ISFIPS=1
+          source scripts/env-setup
+          WOLFSSL_TAG=v${{ matrix.wolfssl_bundle_ref }}-stable OPENSSL_TAG=${{ matrix.openssl_ref }} ./scripts/perf_test/do-perf-tests.sh
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results-fips-${{ matrix.wolfssl_bundle_ref }}-${{ matrix.openssl_ref }}
+          path: perf_outputs/results.json
+          retention-days: 7

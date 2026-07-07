@@ -1,0 +1,13 @@
+{
+  "tolerance": 0.25,
+  "commands": {
+    "init-probe": { "abs_ms_max": 15 },
+    "version": { "abs_ms_max": 15 },
+    "dgst-sha256": { "ratio_max": 1.6 },
+    "enc-aes": { "ratio_max": 1.5 },
+    "genpkey-rsa": { "ratio_max": 1.8 },
+    "genpkey-ec": { "ratio_max": 1.3 },
+    "pkeyutl-rsa": { "ratio_max": 1.2 },
+    "dh-derive": { "ratio_max": 1.5 }
+  }
+}
