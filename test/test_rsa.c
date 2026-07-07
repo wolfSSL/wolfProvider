@@ -1192,12 +1192,26 @@ int test_rsa_pkey_keygen(void *data)
      * we're using wolfCrypt FIPS. Can't do 2048 because that's the default. */
     const int newKeySize = 3072;
     const int badKeyGenSizes[] = {512, 1024};
+    /* FIPS 186 requires the RSA public exponent >= 65537; e=3 is rejected. */
+    const long newKeyExp = 65537;
+    const long altGoodExp = 65539;
+    const long badKeyGenExps[] = {3, 65535};
+    const int numBadExps = sizeof(badKeyGenExps) / sizeof(*badKeyGenExps);
 #else
     const int newKeySize = 1024;
     const int badKeyGenSizes[] = {256};
+    const long newKeyExp = 3;
+    const long altGoodExp = 17;
+    const long badKeyGenExps[] = {0};
+    const int numBadExps = 0;
 #endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
     const int numBad = sizeof(badKeyGenSizes) / sizeof(*badKeyGenSizes);
     int i = 0;
+    int j = 0;
+    BIGNUM *altE = NULL;
+    BIGNUM *badE = NULL;
+    EVP_PKEY *altPkey = NULL;
+    EVP_PKEY *badPkey = NULL;
 
     (void)data;
     (void)rsa_key_der_256;
@@ -1217,7 +1231,7 @@ int test_rsa_pkey_keygen(void *data)
         err = (eCmd = BN_new()) == NULL;
     }
     if (err == 0) {
-        err = BN_set_word(eCmd, 3) != 1;
+        err = BN_set_word(eCmd, newKeyExp) != 1;
     }
     if (err == 0) {
         PRINT_MSG("Change the public exponent w/ ctrl command");
@@ -1241,6 +1255,21 @@ int test_rsa_pkey_keygen(void *data)
         err = BN_cmp(eCmd, eKey) != 0;
     }
 
+    if (err == 0) {
+        PRINT_MSG("Generate RSA key w/ alternate valid public exponent");
+        err = (altE = BN_new()) == NULL;
+    }
+    if (err == 0) {
+        err = BN_set_word(altE, altGoodExp) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN,
+                                EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP, 0, altE) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(ctx, &altPkey) != 1;
+    }
+
     if ((err == 0) && (!noKeyLimits)) {
         PRINT_MSG("Check that ctrl commands to set invalid key gen size fail");
         for (; i < numBad && err != 1; ++i) {
@@ -1250,7 +1279,33 @@ int test_rsa_pkey_keygen(void *data)
         }
     }
 
+    if ((err == 0) && (!noKeyLimits)) {
+        PRINT_MSG("Check that generating a key w/ invalid public exponent fails");
+        for (; j < numBadExps && err != 1; ++j) {
+            err = (badE = BN_new()) == NULL;
+            if (err == 0) {
+                err = BN_set_word(badE, badKeyGenExps[j]) != 1;
+            }
+            if (err == 0) {
+                err = EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN,
+                                        EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP, 0,
+                                        badE) <= 0;
+            }
+            if (err == 0) {
+                err = EVP_PKEY_keygen(ctx, &badPkey) == 1;
+            }
+            EVP_PKEY_free(badPkey);
+            badPkey = NULL;
+            BN_free(badE);
+            badE = NULL;
+        }
+    }
+
     BN_free(eCmd);
+    BN_free(altE);
+    BN_free(badE);
+    EVP_PKEY_free(altPkey);
+    EVP_PKEY_free(badPkey);
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(ctx);
 
@@ -1268,6 +1323,13 @@ int test_rsa_get_params(void *data)
     BIGNUM *eCmd = NULL;
     BIGNUM *eRet = NULL;
     const int newKeySize = 2048;
+#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION) || \
+    (defined(RSA_MIN_SIZE) && RSA_MIN_SIZE >= 2048)
+    /* FIPS 186 requires the RSA public exponent >= 65537; e=3 is rejected. */
+    const long newKeyExp = 65537;
+#else
+    const long newKeyExp = 3;
+#endif
     (void)data;
 
     err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA", NULL)) == NULL;
@@ -1284,7 +1346,7 @@ int test_rsa_get_params(void *data)
         err = (eCmd = BN_new()) == NULL;
     }
     if (err == 0) {
-        err = BN_set_word(eCmd, 3) != 1;
+        err = BN_set_word(eCmd, newKeyExp) != 1;
     }
     if (err == 0) {
         PRINT_MSG("Change the public exponent w/ ctrl command");
@@ -1314,7 +1376,7 @@ int test_rsa_get_params(void *data)
     /* Check return sizes, then verify e matches the one we set */
     if (err == 0) {
         if ((params[0].return_size != (size_t)(newKeySize / 8)) ||
-            (params[1].return_size != 1)) {
+            (params[1].return_size != (size_t)BN_num_bytes(eCmd))) {
             err = 1;
         }
     }
