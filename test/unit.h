@@ -94,6 +94,7 @@ int test_ct_masks(void *data);
 
 extern OSSL_LIB_CTX* wpLibCtx;
 extern OSSL_LIB_CTX* osslLibCtx;
+extern OSSL_PROVIDER* wpProv;
 extern int noKeyLimits;
 
 
@@ -461,6 +462,7 @@ int test_ec_decode(void* data);
 int test_ec_import(void* data);
 int test_ec_auto_derive_pubkey(void* data);
 int test_ec_null_init(void* data);
+int test_ec_tls_group_p192(void* data);
 #ifdef WP_HAVE_EC_P256
 int test_ec_print_public(void* data);
 int test_ec_fromdata_oversize(void* data);

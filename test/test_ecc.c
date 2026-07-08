@@ -2845,4 +2845,92 @@ int test_ec_fromdata_oversize(void *data)
 }
 #endif /* WP_HAVE_EC_P256 */
 
+/* Collected while walking the advertised TLS-GROUP capability list. */
+typedef struct wp_group_scan {
+    int total;           /* Number of groups advertised. */
+    int foundP192;       /* "P-192" was advertised. */
+    int foundSecp192r1;  /* "secp192r1" was advertised. */
+    int foundP256;       /* "P-256" was advertised. */
+} wp_group_scan;
+
+/* Record whether the weak P-192 group is advertised. P-256 is always in the
+ * table and anchors the name matching, so an absent P-192 is not confused
+ * with a broken name lookup. */
+static int wp_group_name_cb(const OSSL_PARAM params[], void *arg)
+{
+    wp_group_scan *scan = (wp_group_scan*)arg;
+    const OSSL_PARAM *p;
+    const char *name = NULL;
+
+    p = OSSL_PARAM_locate_const(params, OSSL_CAPABILITY_TLS_GROUP_NAME);
+    if ((p != NULL) && OSSL_PARAM_get_utf8_string_ptr(p, &name) &&
+            (name != NULL)) {
+        scan->total++;
+        if (strcmp(name, "P-192") == 0) {
+            scan->foundP192 = 1;
+        }
+        else if (strcmp(name, "secp192r1") == 0) {
+            scan->foundSecp192r1 = 1;
+        }
+        else if (strcmp(name, "P-256") == 0) {
+            scan->foundP256 = 1;
+        }
+    }
+
+    return 1;
+}
+
+/* P-192 gives only 80 bits of security and is not FIPS approved. Advertise it
+ * as a TLS group only in non-FIPS builds where the curve is compiled in and
+ * usable (WP_HAVE_EC_P192). */
+int test_ec_tls_group_p192(void *data)
+{
+    int err = 0;
+    wp_group_scan scan;
+
+    (void)data;
+
+    memset(&scan, 0, sizeof(scan));
+
+    if (wpProv == NULL) {
+        PRINT_ERR_MSG("wolfProvider not loaded");
+        err = 1;
+    }
+
+    if (err == 0) {
+        if (OSSL_PROVIDER_get_capabilities(wpProv, "TLS-GROUP",
+                wp_group_name_cb, &scan) != 1) {
+            PRINT_ERR_MSG("get_capabilities(TLS-GROUP) failed");
+            err = 1;
+        }
+    }
+
+    if (err == 0 && scan.total == 0) {
+        PRINT_ERR_MSG("No TLS groups advertised");
+        err = 1;
+    }
+
+    /* Anchor: proves name matching works, so an absent P-192 below is a real
+     * absence rather than a broken lookup. */
+    if (err == 0 && scan.foundP256 == 0) {
+        PRINT_ERR_MSG("P-256 should always be advertised");
+        err = 1;
+    }
+
+#if defined(WP_HAVE_EC_P192) && !defined(HAVE_FIPS) && \
+    !defined(HAVE_FIPS_VERSION)
+    if (err == 0 && (scan.foundP192 == 0 || scan.foundSecp192r1 == 0)) {
+        PRINT_ERR_MSG("P-192 should be advertised when the curve is usable");
+        err = 1;
+    }
+#else
+    if (err == 0 && (scan.foundP192 != 0 || scan.foundSecp192r1 != 0)) {
+        PRINT_ERR_MSG("P-192 must not be advertised (80-bit / non-FIPS only)");
+        err = 1;
+    }
+#endif
+
+    return err;
+}
+
 #endif /* WP_HAVE_ECC */
