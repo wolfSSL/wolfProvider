@@ -287,6 +287,92 @@ static int test_tls1_prf_str_md(const char *md)
 }
 #endif
 
+#if defined(WP_HAVE_SHA1) || defined(WP_HAVE_SHA224) || defined(WP_HAVE_SHA512)
+/* A digest outside MD5-SHA1, SHA-256 and SHA-384 must be rejected, not
+ * silently computed with SHA-384. Only wolfProvider is exercised; the OpenSSL
+ * default provider accepts these digests for the TLS 1.2 PRF. */
+static int test_tls1_prf_unsupported_md_calc(const EVP_MD *md, const char *name)
+{
+    int err = 0;
+    int rejected = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    unsigned char key[128];
+    unsigned char secret[32] = { 0, };
+    unsigned char seed[32] = { 0, };
+    size_t len = sizeof(key);
+
+    PRINT_MSG("Unsupported digest %s rejected by wolfProvider", name);
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "TLS1-PRF", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        if (EVP_PKEY_derive_init(ctx) != 1) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        /* Rejecting the digest here is a pass too - nothing gets derived. */
+        if (EVP_PKEY_CTX_set_tls1_prf_md(ctx, md) != 1) {
+            rejected = 1;
+        }
+    }
+    if ((err == 0) && (!rejected)) {
+        if (EVP_PKEY_CTX_set1_tls1_prf_secret(ctx, secret,
+                                              sizeof(secret)) != 1) {
+            err = 1;
+        }
+    }
+    if ((err == 0) && (!rejected)) {
+        if (EVP_PKEY_CTX_add1_tls1_prf_seed(ctx, seed, sizeof(seed)) != 1) {
+            err = 1;
+        }
+    }
+    if ((err == 0) && (!rejected)) {
+        /* Derivation must fail for the unsupported digest. */
+        if (EVP_PKEY_derive(ctx, key, &len) == 1) {
+            PRINT_MSG("FAILED unsupported digest %s was accepted", name);
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+static int test_tls1_prf_unsupported_md(void)
+{
+    int err = 0;
+    const EVP_MD *md[3];
+    const char *name[3];
+    int cnt = 0;
+    int i;
+
+#ifdef WP_HAVE_SHA1
+    md[cnt] = EVP_sha1();
+    name[cnt] = "SHA-1";
+    cnt++;
+#endif
+#ifdef WP_HAVE_SHA224
+    md[cnt] = EVP_sha224();
+    name[cnt] = "SHA-224";
+    cnt++;
+#endif
+#ifdef WP_HAVE_SHA512
+    md[cnt] = EVP_sha512();
+    name[cnt] = "SHA-512";
+    cnt++;
+#endif
+
+    for (i = 0; (err == 0) && (i < cnt); i++) {
+        err = test_tls1_prf_unsupported_md_calc(md[i], name[i]);
+    }
+
+    return err;
+}
+#endif /* WP_HAVE_SHA1 || WP_HAVE_SHA224 || WP_HAVE_SHA512 */
+
 static int test_tls1_prf_fail_calc(OSSL_LIB_CTX* libCtx)
 {
     int err = 0;
@@ -378,6 +464,11 @@ int test_tls1_prf(void *data)
 #elif defined(WP_HAVE_SHA384)
     if (err == 0) {
         err = test_tls1_prf_str_md("sha384");
+    }
+#endif
+#if defined(WP_HAVE_SHA1) || defined(WP_HAVE_SHA224) || defined(WP_HAVE_SHA512)
+    if (err == 0) {
+        err = test_tls1_prf_unsupported_md();
     }
 #endif
     if (err == 0) {
