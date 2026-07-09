@@ -525,13 +525,13 @@ static wp_Rsa* wp_rsa_base_new(WOLFPROV_CTX* provCtx, int type)
 void wp_rsa_free(wp_Rsa* rsa)
 {
     if (rsa != NULL) {
-        int cnt;
+        int cnt = 1; /* non-zero default: on lock failure do not free (leak-safe) */
     #ifndef WP_SINGLE_THREADED
         int rc;
 
         rc = wc_LockMutex(&rsa->mutex);
-        cnt = --rsa->refCnt;
         if (rc == 0) {
+            cnt = --rsa->refCnt;
             wc_UnLockMutex(&rsa->mutex);
         }
     #else
