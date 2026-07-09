@@ -486,6 +486,9 @@ TEST_CASE test_case[] = {
 #endif
     TEST_DECL(test_ecx_dup, NULL),
 #endif
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
+    TEST_DECL(test_ecx_x_security_bits, NULL),
+#endif
 
     TEST_DECL(test_pkcs7_x509_sign_verify, NULL),
     TEST_DECL(test_x509_cert, NULL),

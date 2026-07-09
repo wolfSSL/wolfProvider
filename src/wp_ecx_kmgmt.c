@@ -513,11 +513,15 @@ static int wp_ecx_get_security_bits(wp_Ecx* ecx)
 {
     int bits = 0;
 
-    if (ecx->data->bits >= 456) {
-        bits = 224;
-    }
-    else if (ecx->data->bits >= 256) {
-        bits = 128;
+    switch (ecx->data->keyType) {
+        case WP_KEY_TYPE_X448:
+        case WP_KEY_TYPE_ED448:
+            bits = 224;
+            break;
+        case WP_KEY_TYPE_X25519:
+        case WP_KEY_TYPE_ED25519:
+            bits = 128;
+            break;
     }
 
     return bits;

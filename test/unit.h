@@ -484,6 +484,10 @@ int test_ecx_x25519_raw_priv_roundtrip(void *data);
 int test_ecx_dup(void *data);
 #endif
 
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
+int test_ecx_x_security_bits(void *data);
+#endif
+
 int test_pkcs7_x509_sign_verify(void *data);
 int test_x509_cert(void *data);
 
