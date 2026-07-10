@@ -126,10 +126,11 @@ void wp_kdf_free(wp_Kdf* kdf)
         int rc;
 
         rc = wc_LockMutex(&kdf->mutex);
-        cnt = --kdf->refCnt;
-        if (rc == 0) {
-            wc_UnLockMutex(&kdf->mutex);
+        if (rc != 0) {
+            return;
         }
+        cnt = --kdf->refCnt;
+        wc_UnLockMutex(&kdf->mutex);
     #else
         cnt = --kdf->refCnt;
     #endif
