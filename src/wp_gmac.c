@@ -420,8 +420,9 @@ static int wp_gmac_setup_cipher(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
             size_t i;
 
             for (i = 0; i < WP_GMAC_CIPHER_NAMES_LEN; i++) {
-                if (XSTRNCMP(p->data, wp_gmac_cipher_names[i].name,
-                        p->data_size) == 0) {
+                if ((XSTRLEN(wp_gmac_cipher_names[i].name) == p->data_size) &&
+                        (XSTRNCMP(p->data, wp_gmac_cipher_names[i].name,
+                        p->data_size) == 0)) {
                     macCtx->expKeySize = wp_gmac_cipher_names[i].keySize;
                     break;
                 }
