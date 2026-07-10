@@ -650,6 +650,9 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
         if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
             ok = 0;
         }
+        if (ok && ((tbsLen > 0xFFFFFFFFU) || (sigSize > 0xFFFFFFFFU))) {
+            ok = 0;
+        }
         if (ok) {
             PRIVATE_KEY_UNLOCK();
             rc = wc_RsaSSL_Sign(tbs, (word32)tbsLen, sig, (word32)sigSize,
