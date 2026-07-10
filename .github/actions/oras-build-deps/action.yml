@@ -211,7 +211,7 @@ runs:
           echo "hit=false" >> "$GITHUB_OUTPUT"
         fi
 
-    # Fallback: when ORAS misses, restore PR #412's actions/cache so a warm
+    # Fallback: when ORAS misses, restore the actions/cache entry so a warm
     # GH cache still skips the build. On an ORAS hit these steps are skipped.
     # Source is restored before install so install can be gated on source
     # being present (same replace-default coupling as the ORAS pulls).
