@@ -450,12 +450,14 @@ void wp_dh_free(wp_Dh* dh)
         int rc;
 
         rc = wc_LockMutex(&dh->mutex);
-        if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
-        }
-        cnt = --dh->refCnt;
         if (rc == 0) {
+            cnt = --dh->refCnt;
             wc_UnLockMutex(&dh->mutex);
+        }
+        else {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = dh->refCnt;
         }
     #else
         cnt = --dh->refCnt;
