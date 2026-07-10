@@ -982,25 +982,72 @@ int test_dh_pad(void *data)
     return err;
 }
 
+/* Derive through libCtx into the caller-provided buffer, setting the pad
+ * parameter. The raw EVP_PKEY_derive() result is returned in *deriveRet and
+ * the length in *outLen, so callers can assert on the derive result directly.
+ * Returns non-zero only on setup failure. */
+static int test_dh_derive_into(OSSL_LIB_CTX *libCtx, EVP_PKEY *key,
+    EVP_PKEY *peer, int pad, unsigned char *out, size_t *outLen,
+    int *deriveRet)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+
+    *deriveRet = 0;
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(libCtx, key, NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_int(OSSL_EXCHANGE_PARAM_PAD, &pad);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(ctx, params) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_set_peer(ctx, peer) <= 0;
+    }
+    if (err == 0) {
+        *deriveRet = EVP_PKEY_derive(ctx, out, outLen);
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
 /**
  * Test DH derive with an output buffer smaller than the prime.
  *
- * Without a KDF the secret is written directly into the caller's buffer, so a
- * buffer shorter than the prime must be rejected rather than overflowed. Uses
- * one byte less than the prime length to check the boundary.
+ * Without a KDF the secret is written straight into the caller's buffer and
+ * its unpadded length is not known until the derive completes. Both
+ * wolfProvider and OpenSSL's default provider therefore require a buffer at
+ * least the prime length, even when the natural output is shorter. This checks
+ * that a buffer sized to the actual unpadded secret - shorter than the prime -
+ * is rejected by both providers rather than derived into.
  */
 int test_dh_derive_small_buffer(void *data)
 {
     int err = 0;
     EVP_PKEY *keyA = NULL;
     EVP_PKEY *keyB = NULL;
-    EVP_PKEY_CTX *ctx = NULL;
-    unsigned char secret[sizeof(dh_p) - 1];
-    size_t secretLen = sizeof(secret);
+    const size_t maxLen = sizeof(dh_p);
+    unsigned char full[sizeof(dh_p)];
+    size_t natLen = sizeof(full);
+    int deriveRet = 0;
+    struct {
+        OSSL_LIB_CTX* libCtx;
+        const char* name;
+    } provs[] = {
+        { wpLibCtx, "wolfProvider" },
+        { osslLibCtx, "OpenSSL" },
+    };
+    size_t i;
 
     (void)data;
 
-    PRINT_MSG("Test DH derive rejects under-sized output buffer");
+    PRINT_MSG("Test DH derive rejects buffer shorter than the prime");
 
     /* keyA holds our private key; keyB provides the peer public key. */
     err = test_dh_key_from_fixed(&keyA, dh_pad_pubA, sizeof(dh_pad_pubA),
@@ -1009,23 +1056,44 @@ int test_dh_derive_small_buffer(void *data)
         err = test_dh_key_from_fixed(&keyB, dh_pad_pubB, sizeof(dh_pad_pubB),
             NULL, 0);
     }
+
+    /* Derive unpadded into a full prime-sized buffer to learn the natural
+     * length. The fixed keys yield a secret with a leading zero, so this is
+     * shorter than the prime. */
     if (err == 0) {
-        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, keyA, NULL);
-        err = ctx == NULL;
+        err = test_dh_derive_into(wpLibCtx, keyA, keyB, 0, full, &natLen,
+            &deriveRet);
+        if (err == 0 && deriveRet <= 0) {
+            PRINT_ERR_MSG("Full-size unpadded derive failed");
+            err = 1;
+        }
     }
-    if (err == 0) {
-        err = EVP_PKEY_derive_init(ctx) <= 0;
-    }
-    if (err == 0) {
-        err = EVP_PKEY_derive_set_peer(ctx, keyB) <= 0;
-    }
-    if (err == 0 && EVP_PKEY_derive(ctx, secret, &secretLen) > 0) {
-        PRINT_ERR_MSG("DH derive accepted under-sized buffer (buffer %zu, "
-            "prime length %zu)", sizeof(secret), sizeof(dh_p));
+    if (err == 0 && natLen >= maxLen) {
+        PRINT_ERR_MSG("Unpadded secret length %zu not shorter than prime %zu; "
+            "under-sized buffer path not exercised", natLen, maxLen);
         err = 1;
     }
 
-    EVP_PKEY_CTX_free(ctx);
+    /* A buffer sized to the actual output but shorter than the prime must be
+     * rejected by both providers. Allocate exactly natLen so a stray
+     * full-length write is caught by the sanitizer. */
+    for (i = 0; (err == 0) && (i < sizeof(provs) / sizeof(provs[0])); i++) {
+        unsigned char* small = (unsigned char*)OPENSSL_malloc(natLen);
+        size_t len = natLen;
+
+        err = small == NULL;
+        if (err == 0) {
+            err = test_dh_derive_into(provs[i].libCtx, keyA, keyB, 0, small,
+                &len, &deriveRet);
+        }
+        if (err == 0 && deriveRet > 0) {
+            PRINT_ERR_MSG("%s accepted buffer %zu < prime %zu", provs[i].name,
+                natLen, maxLen);
+            err = 1;
+        }
+        OPENSSL_free(small);
+    }
+
     EVP_PKEY_free(keyA);
     EVP_PKEY_free(keyB);
 
