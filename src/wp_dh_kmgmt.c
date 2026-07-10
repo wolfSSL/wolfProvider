@@ -861,13 +861,21 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
                 p->return_size = dh->privSz;
             }
             else if (p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
-                if (p->data_size < dh->privSz) {
+                mp_int priv;
+
+                if (mp_init(&priv) != 0) {
                     ok = 0;
                 }
                 else {
-                    /* OSSL returns a BIGNUM, but we copy raw bytes*/
-                    XMEMCPY(p->data, dh->priv, dh->privSz);
-                    p->return_size = dh->privSz;
+                    if (mp_read_unsigned_bin(&priv, dh->priv,
+                            (int)dh->privSz) != 0) {
+                        ok = 0;
+                    }
+                    if (ok) {
+                        ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_PRIV_KEY,
+                            &priv, 1);
+                    }
+                    mp_forcezero(&priv);
                 }
             }
             else { 
