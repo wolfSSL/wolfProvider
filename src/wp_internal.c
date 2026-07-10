@@ -1074,6 +1074,9 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
     if (!pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
         ok = 0;
     }
+    if (ok && (passwordSz > sizeof(password))) {
+        ok = 0;
+    }
     if (ok) {
         XMEMSET(info, 0, sizeof(info));
         XSTRNCPY(info->name, cipherName, NAME_SZ-1);
