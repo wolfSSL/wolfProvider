@@ -880,6 +880,9 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
     if (paddedSz <= 0) {
         ok = 0;
     }
+    if (ok && (tbsLen >= (size_t)paddedSz)) {
+        ok = 0;
+    }
     if (ok) {
         tbuf = (unsigned char *)OPENSSL_malloc(paddedSz);
         if (tbuf == NULL) {
