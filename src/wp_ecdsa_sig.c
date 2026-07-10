@@ -301,8 +301,11 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
             if (sigSize == (size_t)-1) {
                 sigSize = *sigLen;
             }
+            if ((sigSize > 0xFFFFFFFFU) || (tbsLen > 0xFFFFFFFFU)) {
+                ok = 0;
+            }
             len = (word32)sigSize;
-            if (wp_lock(wp_ecc_get_mutex(ctx->ecc)) != 1) {
+            if (ok && (wp_lock(wp_ecc_get_mutex(ctx->ecc)) != 1)) {
                 ok = 0;
             }
             if (ok) {
