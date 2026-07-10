@@ -244,6 +244,9 @@ static int wp_gmac_update(wp_GmacCtx* macCtx, const unsigned char* data,
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_gmac_update");
 
     /* Data cached as wolfSSL doesn't have a streaming API. */
+    if (dataLen > 0xFFFFFFFFU - macCtx->dataLen) {
+        return 0;
+    }
     p = OPENSSL_realloc(macCtx->data, macCtx->dataLen + dataLen);
     if (p == NULL) {
         ok = 0;
