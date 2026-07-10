@@ -1628,6 +1628,9 @@ static int wp_dh_gen_parameters(wp_DhGenCtx *ctx, wp_Dh* dh)
         WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_DhGenerateParams", rc);
         ok = 0;
     }
+    if (ok) {
+        dh->bits = mp_count_bits(&dh->key.p);
+    }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
