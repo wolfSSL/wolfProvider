@@ -277,8 +277,11 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_derive_secret");
 
+    if (*secLen > 0xFFFFFFFFU) {
+        ok = 0;
+    }
     /* Get our private key data. */
-    if (!wp_dh_get_priv(ctx->key, &priv, &privSz)) {
+    if (ok && (!wp_dh_get_priv(ctx->key, &priv, &privSz))) {
         ok = 0;
     }
     /* Get peer's public key data. */
