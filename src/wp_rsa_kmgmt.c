@@ -1609,7 +1609,7 @@ static int wp_rsa_import(wp_Rsa* rsa, int selection, const OSSL_PARAM params[])
     if (ok) {
         rsa->bits    = mp_count_bits(&rsa->key.n);
         rsa->hasPub  = importPub;
-        rsa->hasPriv = importPriv;
+        rsa->hasPriv = importPriv && !mp_iszero((mp_int*)&rsa->key.d);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
