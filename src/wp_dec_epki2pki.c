@@ -145,7 +145,8 @@ static int wp_DecryptPKCS8Key(byte* input, word32 sz, const char* password,
             ret = 0;
         }
         if (ret == 0) {
-            ret = wc_AllocDer(&pkcs8Der, pkcs8Sz, DYNAMIC_TYPE_KEY, NULL);
+            /* PRIVATEKEY_TYPE so wc_FreeDer zeroizes the decrypted key. */
+            ret = wc_AllocDer(&pkcs8Der, pkcs8Sz, PRIVATEKEY_TYPE, NULL);
         }
         if (ret == 0) {
             ret = wc_CreatePKCS8Key(pkcs8Der->buffer, &pkcs8Der->length,
