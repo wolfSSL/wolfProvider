@@ -154,6 +154,7 @@ static wp_EcdhCtx* wp_ecdh_dup(wp_EcdhCtx* src)
             dst->cofactor = src->cofactor;
             dst->kdfType  = src->kdfType;
             dst->kdfMd    = src->kdfMd;
+            XMEMCPY(dst->kdfMdName, src->kdfMdName, sizeof(dst->kdfMdName));
             dst->ukmLen   = src->ukmLen;
             dst->keyLen   = src->keyLen;
         }

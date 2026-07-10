@@ -152,6 +152,7 @@ static wp_DhCtx* wp_dh_dupctx(wp_DhCtx* src)
             dst->pad     = src->pad;
             dst->kdfType = src->kdfType;
             dst->kdfMd   = src->kdfMd;
+            XMEMCPY(dst->kdfMdName, src->kdfMdName, sizeof(dst->kdfMdName));
             dst->ukmLen  = src->ukmLen;
             dst->keyLen  = src->keyLen;
         }
