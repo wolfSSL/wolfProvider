@@ -1524,6 +1524,9 @@ static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, unsigned char* rout,
         ok = 0;
     }
 
+    if (ok && ((sigLen > 0xFFFFFFFFU) || (routsize > 0xFFFFFFFFU))) {
+        ok = 0;
+    }
     if (ok) {
         rc = wc_RsaSSL_Verify(sig, (word32)sigLen, rout, (word32)routsize,
             wp_rsa_get_key(ctx->rsa));
