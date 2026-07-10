@@ -120,6 +120,9 @@ static int wp_cmac_set_key(wp_CmacCtx* macCtx, const unsigned char* key,
     if (keyLen > AES_256_KEY_SIZE) {
         ok = 0;
     }
+    if (ok && (macCtx->expKeySize != 0) && (keyLen != macCtx->expKeySize)) {
+        ok = 0;
+    }
     if (ok) {
         if (macCtx->keyLen > 0) {
             OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
