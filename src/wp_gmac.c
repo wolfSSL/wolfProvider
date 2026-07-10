@@ -279,7 +279,10 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_gmac_final");
 
-    if (!wolfssl_prov_is_running()) {
+    if ((macCtx->dataLen > 0xFFFFFFFFU) || (outSize > 0xFFFFFFFFU)) {
+        ok = 0;
+    }
+    if (ok && !wolfssl_prov_is_running()) {
         ok = 0;
     }
     if (ok && (outSize < AES_BLOCK_SIZE)) {
