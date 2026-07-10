@@ -1150,6 +1150,26 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
             NULL))) {
         ok = 0;
     }
+    if (ok && priv) {
+        int idx = wc_ecc_get_curve_idx(ecc->curveId);
+        const ecc_set_type* dp = (idx >= 0) ? wc_ecc_get_curve_params(idx) :
+            NULL;
+        mp_int order;
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
+        mp_int* d = wc_ecc_key_get_priv(&ecc->key);
+#else
+        mp_int* d = &(ecc->key.k);
+#endif
+
+        /* Reject a private scalar outside [1, n-1] (FIPS 186-4). */
+        if ((dp != NULL) && (mp_init(&order) == MP_OKAY)) {
+            if ((mp_read_radix(&order, dp->order, 16) == MP_OKAY) &&
+                (mp_cmp(d, &order) != MP_LT)) {
+                ok = 0;
+            }
+            mp_clear(&order);
+        }
+    }
     if (ok &&
 #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
             (!mp_iszero(wc_ecc_key_get_priv(&ecc->key)))

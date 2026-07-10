@@ -2578,6 +2578,61 @@ static int test_ec_import_pub(void)
     return err;
 }
 
+/*
+ * A private scalar equal to the curve order n is outside [1, n-1] and must be
+ * rejected on import (FIPS 186-4).
+ */
+static int test_ec_import_priv_out_of_range(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM *params = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    BIGNUM *priv = NULL;
+    /* P-256 group order n. */
+    static const unsigned char p256_order[] = {
+        0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84,
+        0xf3, 0xb9, 0xca, 0xc2, 0xfc, 0x63, 0x25, 0x51
+    };
+
+    err = (bld = OSSL_PARAM_BLD_new()) == NULL;
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
+                ecc_p256_group_str, 0) != 1;
+    }
+    if (err == 0) {
+        err = (priv = BN_bin2bn(p256_order, sizeof(p256_order), NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PRIV_KEY, priv) != 1;
+    }
+    if (err == 0) {
+        err = (params = OSSL_PARAM_BLD_to_param(bld)) == NULL;
+    }
+    if (err == 0) {
+        err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0 &&
+            EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) == 1) {
+        PRINT_ERR_MSG("EC import accepted private scalar d == n");
+        err = 1;
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    BN_free(priv);
+
+    return err;
+}
+
 int test_ec_import(void* data)
 {
     int err = 0;
@@ -2586,6 +2641,9 @@ int test_ec_import(void* data)
     err = test_ec_import_priv();
     if (err == 0) {
         err = test_ec_import_pub();
+    }
+    if (err == 0) {
+        err = test_ec_import_priv_out_of_range();
     }
 
     return err;
