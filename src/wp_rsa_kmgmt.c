@@ -530,9 +530,13 @@ void wp_rsa_free(wp_Rsa* rsa)
         int rc;
 
         rc = wc_LockMutex(&rsa->mutex);
-        cnt = --rsa->refCnt;
         if (rc == 0) {
+            cnt = --rsa->refCnt;
             wc_UnLockMutex(&rsa->mutex);
+        }
+        else {
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = rsa->refCnt;
         }
     #else
         cnt = --rsa->refCnt;
