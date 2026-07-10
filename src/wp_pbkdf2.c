@@ -431,6 +431,10 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     if (ok && (keyLen == 0)) {
         ok = 0;
     }
+    /* RFC 7292 diversifier id is 1 (key), 2 (IV) or 3 (MAC). */
+    if (ok && ((ctx->keyUse < 1) || (ctx->keyUse > 3))) {
+        ok = 0;
+    }
 
     if (ok) {
         int rc;

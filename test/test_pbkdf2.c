@@ -314,6 +314,39 @@ static int test_pbkdf2_iter_truncation(void)
     return err;
 }
 
+/* PKCS12KDF must reject a diversifier id outside the RFC 7292 {1,2,3} range. */
+static int test_pkcs12_bad_id(void)
+{
+    int err = 0;
+    int deriveRet = 0;
+    unsigned char out[24];
+    static unsigned char pass[] = "password";
+    static unsigned char salt[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    uint64_t iter = 2048;
+    int id = 4;
+    char digest[] = "SHA256";
+    OSSL_PARAM params[6];
+    OSSL_PARAM* p = params;
+
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_PASSWORD,
+        pass, sizeof(pass) - 1);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
+        salt, sizeof(salt));
+    *p++ = OSSL_PARAM_construct_uint64(OSSL_KDF_PARAM_ITER, &iter);
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digest, 0);
+    *p++ = OSSL_PARAM_construct_int(OSSL_KDF_PARAM_PKCS12_ID, &id);
+    *p = OSSL_PARAM_construct_end();
+
+    err = test_kdf_derive(wpLibCtx, "PKCS12KDF", params, out, sizeof(out),
+        &deriveRet);
+    if (err == 0 && deriveRet > 0) {
+        PRINT_MSG("PKCS12KDF accepted invalid diversifier id");
+        err = 1;
+    }
+
+    return err;
+}
+
 int test_pbkdf2(void *data)
 {
     int err = 0;
@@ -322,6 +355,11 @@ int test_pbkdf2(void *data)
 
     PRINT_MSG("PKCS12KDF OpenSSL vs wolfProvider");
     err = test_pkcs12_kdf();
+
+    if (err == 0) {
+        PRINT_MSG("PKCS12KDF invalid diversifier id");
+        err = test_pkcs12_bad_id();
+    }
 
     if (err == 0) {
         PRINT_MSG("PBKDF2 OpenSSL vs wolfProvider");
