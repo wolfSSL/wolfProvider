@@ -399,6 +399,9 @@ static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
                 }
             }
         }
+        if (ok && (tbsLen > 0xFFFFFFFFU)) {
+            ok = 0;
+        }
         if (ok) {
             if (wp_lock(wp_ecx_get_mutex(ctx->ecx)) != 1) {
                 ok = 0;
