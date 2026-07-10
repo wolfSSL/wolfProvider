@@ -1212,7 +1212,7 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
             ok = 0;
         }
         if (ok && (readLen > 0) &&
-                ((size_t)*len + (size_t)readLen > UINT32_MAX)) {
+                ((uint64_t)*len + (uint64_t)readLen > (uint64_t)UINT32_MAX)) {
             ok = 0;
         }
         if (ok && (readLen > 0)) {
