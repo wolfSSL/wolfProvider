@@ -138,12 +138,8 @@ static void wp_drbg_free(wp_DrbgCtx* ctx)
             OPENSSL_free(ctx->mutex);
         }
     #endif
-    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-        (void)wc_rng_free(ctx->rng);
-    #else
         wc_FreeRng(ctx->rng);
         OPENSSL_clear_free(ctx->rng, sizeof(*ctx->rng));
-    #endif
         OPENSSL_free(ctx);
     }
 }
@@ -235,28 +231,20 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "No parent DRBG, using direct seeding");
 
-    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-        ctx->rng = wc_rng_new((byte*)pStr, (word32)pStrLen, NULL);
-        if (ctx->rng == NULL) {
-            ok = 0;
-        }
-    #else
-        (void)pStr;
-        (void)pStrLen;
-
+        /* wc_InitRngNonce (not wc_rng_new) keeps rng on the OPENSSL allocator to match the parent path's free. */
         ctx->rng = OPENSSL_zalloc(sizeof(*ctx->rng));
         if (ctx->rng == NULL) {
             ok = 0;
         }
         if (ok) {
-            int rc = wc_InitRng(ctx->rng);
+            int rc = wc_InitRngNonce(ctx->rng, (byte*)pStr, (word32)pStrLen);
             if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_InitRng", rc);
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_InitRngNonce", rc);
                 OPENSSL_clear_free(ctx->rng, sizeof(*ctx->rng));
+                ctx->rng = NULL;
                 ok = 0;
             }
         }
-    #endif
     }
 
 #ifndef WP_HAVE_DRBG_RESEED
@@ -279,12 +267,8 @@ static int wp_drbg_uninstantiate(wp_DrbgCtx* ctx)
 {
     WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_uninstantiate");
 
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-    (void)wc_rng_free(ctx->rng);
-#else
     wc_FreeRng(ctx->rng);
     OPENSSL_clear_free(ctx->rng, sizeof(*ctx->rng));
-#endif
     ctx->rng = NULL;
 #ifndef WP_HAVE_DRBG_RESEED
     ctx->rngError = 0;
