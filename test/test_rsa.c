@@ -20,6 +20,7 @@
 
 #include "unit.h"
 #include <wolfprovider/wp_fips.h>
+#include <wolfprovider/alg_funcs.h>
 #include <wolfssl/wolfcrypt/asn.h>
 
 #include <openssl/store.h>
@@ -966,6 +967,49 @@ static int test_rsa_pss_restrict_params(OSSL_LIB_CTX *libCtx)
     return err;
 }
 
+/*
+ * A salt length >= 256 must encode both bytes of the 2-byte DER INTEGER in the
+ * RSA-PSS AlgorithmIdentifier. saltLen 300 (0x012C) needs the high byte 0x01;
+ * a dropped high byte decodes as 44. rsa is unused for an explicit salt length.
+ */
+static int test_rsa_pss_saltlen_encode(void)
+{
+    int err = 0;
+    int ok;
+    int saltLen = 300;
+    byte algId[128];
+    word32 len = 0;
+    word32 i;
+    int found = 0;
+    static const byte saltMarker[] = { 0xa2, 0x04, 0x02, 0x02 };
+
+    ok = wp_rsa_pss_encode_alg_id(NULL, "SHA256", "SHA256", saltLen, algId,
+        &len);
+    if (ok != 1) {
+        PRINT_ERR_MSG("PSS AlgId encode failed");
+        err = 1;
+    }
+    for (i = 0; (err == 0) && (i + sizeof(saltMarker) + 1 < len); i++) {
+        if (memcmp(algId + i, saltMarker, sizeof(saltMarker)) == 0) {
+            int encoded = (algId[i + sizeof(saltMarker)] << 8) |
+                algId[i + sizeof(saltMarker) + 1];
+            found = 1;
+            if (encoded != saltLen) {
+                PRINT_ERR_MSG("PSS salt length encoded as %d, expected %d",
+                    encoded, saltLen);
+                err = 1;
+            }
+            break;
+        }
+    }
+    if ((err == 0) && !found) {
+        PRINT_ERR_MSG("PSS 2-byte salt length marker not found");
+        err = 1;
+    }
+
+    return err;
+}
+
 int test_rsa_pss_restrictions(void *data)
 {
     int err;
@@ -977,6 +1021,10 @@ int test_rsa_pss_restrictions(void *data)
     if (err == 0) {
         PRINT_MSG("Test WolfProvider");
         err = test_rsa_pss_restrict_params(wpLibCtx) == 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("PSS salt length >= 256 encoding");
+        err = test_rsa_pss_saltlen_encode();
     }
 
     return err;

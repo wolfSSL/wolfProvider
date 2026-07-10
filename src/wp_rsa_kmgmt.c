@@ -2818,8 +2818,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
         else {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, saltLenDer2, sizeof(saltLenDer2));
-                pssAlgId[i + sizeof(saltLenDer2)] = 0;
-                pssAlgId[i + sizeof(saltLenDer2) + 1] = saltLen;
+                pssAlgId[i + sizeof(saltLenDer2)] = (byte)(saltLen >> 8);
+                pssAlgId[i + sizeof(saltLenDer2) + 1] = (byte)(saltLen & 0xff);
                 pssAlgId[seq1LenIdx] += sizeof(saltLenDer2) + 2;
                 pssAlgId[seq2LenIdx] += sizeof(saltLenDer2) + 2;
             }
