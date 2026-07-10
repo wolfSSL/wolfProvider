@@ -27,13 +27,6 @@ concurrency:
 permissions:
   contents: read
 
-# TODO(revert before merge): the malformed-key vectors in OpenSSL's PQC KAT
-# set only pass with the wolfcrypt FIPS 203/204 decode-validation fix, which
-# currently lives on aidangarske/wolfssl branch pqc-decode-validation. The PQC
-# rows therefore build wolfSSL from that fork/branch (matrix wolfssl-git).
-# Once the fix merges to wolfSSL master, point the PQC rows back at the
-# upstream repo and the dynamic latest-stable / master refs (see discover job).
-
 jobs:
   discover-versions:
     name: Resolve wolfSSL/OpenSSL matrix
@@ -78,18 +71,10 @@ jobs:
           # normal and force-fail anti-test mode (the matrix owns the force-fail
           # axis; the test step hands its raw result to check-workflow-result.sh
           # which inverts the expectation). The pre-PQC row builds only.
-          #
-          # TODO(revert before merge): the PQC rows build the fork branch
-          # pqc-decode-validation. Restore upstream and the latest-stable /
-          # master refs once the wolfcrypt fix is on wolfSSL master.
-          UPSTREAM="https://github.com/wolfSSL/wolfssl.git"
-          FORK="https://github.com/aidangarske/wolfssl.git"
           MATRIX=$(jq -nc \
               --arg latest "$LATEST" \
-              --arg upstream "$UPSTREAM" \
-              --arg fork "$FORK" \
               --argjson latest_pqc "$LATEST_PQC" '
-            def rows($git; $ref; $pqc; $lbl):
+            def rows($ref; $pqc; $lbl):
               if $pqc then
                 [ {"replace":true,"ff":"WOLFPROV_FORCE_FAIL=1",
                    "sfx":" [replace-default] [force-fail]"},
@@ -97,19 +82,18 @@ jobs:
                   {"replace":false,"ff":"WOLFPROV_FORCE_FAIL=1",
                    "sfx":" [non-replace] [force-fail]"},
                   {"replace":false,"ff":"","sfx":" [non-replace]"} ]
-                | map({"name":($lbl+.sfx),"wolfssl-git":$git,
+                | map({"name":($lbl+.sfx),
                        "wolfssl-ref":$ref,"pqc":true,"replace":.replace,
                        "force_fail":.ff})
               else
-                [ {"name":($lbl+" [build-only]"),"wolfssl-git":$git,
+                [ {"name":($lbl+" [build-only]"),
                    "wolfssl-ref":$ref,"pqc":false,"replace":false,
                    "force_fail":""} ]
               end;
             { include:
-                ( rows($upstream; "v5.8.0-stable"; false; "pre-PQC v5.8.0-stable")
-                + rows($fork; "pqc-decode-validation"; $latest_pqc;
-                       ("latest stable " + $latest))
-                + rows($fork; "pqc-decode-validation"; true; "master") )
+                ( rows("v5.8.0-stable"; false; "pre-PQC v5.8.0-stable")
+                + rows($latest; $latest_pqc; ("latest stable " + $latest))
+                + rows("master"; true; "master") )
             }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
@@ -117,6 +101,9 @@ jobs:
     name: ${{ matrix.name }}
     needs: discover-versions
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -126,6 +113,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      # The KAT runs OpenSSL's evp_test, which lives in openssl-source/test and
+      # only exists after a full source build - so the PQC rows cache
+      # openssl-source too (cache_openssl_source), and the action couples
+      # install+source so a hit always restores evp_test alongside the install.
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: pqckat${{ matrix.replace == true && '-rd' || '' }}
+          openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
+          wolfssl_ref: ${{ matrix.wolfssl-ref }}
+          extra_key: pqc${{ matrix.pqc }}
+          cache_openssl_source: ${{ matrix.pqc }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wolfProvider (PQC=${{ matrix.pqc }}, replace=${{ matrix.replace }})
         run: |
@@ -141,10 +143,21 @@ jobs:
           if [ "${{ matrix.pqc }}" = "true" ]; then
             ARGS="$ARGS --enable-openssl-test"
           fi
-          WOLFSSL_GIT=${{ matrix.wolfssl-git }} \
           OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
           WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
             ./scripts/build-wolfprovider.sh $ARGS
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_source_tag: ${{ steps.deps.outputs.openssl_source_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
+          openssl_source_hit: ${{ steps.deps.outputs.openssl_source_hit }}
+          cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
 
       # Runs all 2602 OpenSSL ML-KEM/ML-DSA vectors. In normal mode every file
       # must pass and the full count must run; in force-fail mode the run fails

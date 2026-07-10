@@ -1,0 +1,51 @@
+name: ORAS build deps push
+description: Push freshly built OpenSSL/wolfSSL installs to ghcr.io (ORAS) after a cache miss, so the next job reuses them. Consumes the outputs of the oras-build-deps action; run it after the build step.
+
+inputs:
+  registry:
+    description: OCI repo from the oras-build-deps action output.
+    required: true
+  openssl_install_tag:
+    required: true
+  wolfssl_install_tag:
+    required: true
+  openssl_source_tag:
+    required: false
+    default: ''
+  openssl_hit:
+    required: true
+  wolfssl_hit:
+    required: true
+  openssl_source_hit:
+    required: false
+    default: 'true'
+  cache_openssl_source:
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    # Push only where a write-scoped token exists: canonical repo on a push
+    # event or a same-repo PR. Fork PRs lack write scope, so skip entirely
+    # instead of burning retries on a doomed push.
+    - name: Push OpenSSL install
+      if: github.repository == 'wolfSSL/wolfProvider' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && inputs.openssl_hit != 'true'
+      shell: bash
+      run: |
+        "${GITHUB_WORKSPACE}/scripts/oras-build-deps.sh" push \
+          "${{ inputs.registry }}:${{ inputs.openssl_install_tag }}" openssl-install openssl-source
+
+    - name: Push wolfSSL install
+      if: github.repository == 'wolfSSL/wolfProvider' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && inputs.wolfssl_hit != 'true'
+      shell: bash
+      run: |
+        "${GITHUB_WORKSPACE}/scripts/oras-build-deps.sh" push \
+          "${{ inputs.registry }}:${{ inputs.wolfssl_install_tag }}" wolfssl-install wolfssl-source
+
+    - name: Push OpenSSL source
+      if: github.repository == 'wolfSSL/wolfProvider' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && inputs.cache_openssl_source == 'true' && inputs.openssl_source_hit != 'true'
+      shell: bash
+      run: |
+        "${GITHUB_WORKSPACE}/scripts/oras-build-deps.sh" push \
+          "${{ inputs.registry }}:${{ inputs.openssl_source_tag }}" openssl-source openssl-source
