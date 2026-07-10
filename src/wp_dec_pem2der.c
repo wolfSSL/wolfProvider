@@ -124,6 +124,9 @@ static int wp_pem_password_cb(char* passwd, int sz, int rw, void* userdata)
     if (!osslCb->cb(passwd, sz, &len, NULL, osslCb->cbArg)) {
         ret = -1;
     }
+    else if (len > (size_t)sz) {
+        ret = -1;
+    }
     else {
         ret = (int)len;
     }
