@@ -1544,7 +1544,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
             XMEMCPY(out, tmp + offset, (ctx->inLen - offset));
             *outLen = (ctx->inLen - offset);
         }
-        OPENSSL_free(tmp);
+        OPENSSL_clear_free(tmp, ctx->inLen);
     }
     else {
         *outLen = 0;
