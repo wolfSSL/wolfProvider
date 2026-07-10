@@ -613,6 +613,68 @@ static int test_hkdf_extract_only_bad_len(OSSL_LIB_CTX *libCtx)
 
 #define NUM_MODES     3
 
+#ifdef WP_HAVE_SHA256
+/*
+ * A duplicated HKDF context must carry the full KDF state, not just the key
+ * reference, so a derive from the dup produces the same key as the original.
+ */
+static int test_hkdf_dup_calc(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY_CTX *dupCtx = NULL;
+    unsigned char inKey[32] = { 0, };
+    unsigned char salt[32] = { 0, };
+    unsigned char info[32] = { 0, };
+    unsigned char key1[32];
+    unsigned char key2[32];
+    size_t len1 = sizeof(key1);
+    size_t len2 = sizeof(key2);
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "HKDF", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set1_hkdf_key(ctx, inKey, sizeof(inKey)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set1_hkdf_salt(ctx, salt, sizeof(salt)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_add1_hkdf_info(ctx, info, sizeof(info)) != 1;
+    }
+    if (err == 0) {
+        /* Dup may be unsupported (NULL); but a returned ctx must carry the
+         * full state, not derive a wrong/empty key. */
+        dupCtx = EVP_PKEY_CTX_dup(ctx);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive(ctx, key1, &len1) != 1;
+    }
+    if (err == 0 && dupCtx != NULL) {
+        if (EVP_PKEY_derive(dupCtx, key2, &len2) != 1) {
+            PRINT_ERR_MSG("Duplicated HKDF ctx failed to derive");
+            err = 1;
+        }
+        else if (len1 != len2 || memcmp(key1, key2, len1) != 0) {
+            PRINT_ERR_MSG("Duplicated HKDF ctx produced a different key");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_CTX_free(dupCtx);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+#endif /* WP_HAVE_SHA256 */
+
 int test_hkdf(void *data)
 {
     int err = 0;
@@ -653,6 +715,11 @@ int test_hkdf(void *data)
     if (err == 0) {
         err = test_hkdf_extract_only_bad_len(wpLibCtx);
     }
+#ifdef WP_HAVE_SHA256
+    if (err == 0) {
+        err = test_hkdf_dup_calc();
+    }
+#endif
 
     return err;
 }
