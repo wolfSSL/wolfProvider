@@ -1090,6 +1090,10 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx* ctx, const unsigned char* sig,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_verify_pkcs1");
 
+    if (sigLen > 0xFFFFFFFFU) {
+        return 0;
+    }
+
     rc = wc_RsaSSL_Verify(sig, (word32)sigLen, decryptedSig, (word32)sigLen,
         wp_rsa_get_key(ctx->rsa));
     if (rc < 0) {
