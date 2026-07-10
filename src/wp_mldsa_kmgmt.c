@@ -531,7 +531,7 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
                 ok = 0;
             }
         }
-        if (ok && ((lenA != lenB) || (XMEMCMP(bufA, bufB, lenA) != 0))) {
+        if (ok && ((lenA != lenB) || (CRYPTO_memcmp(bufA, bufB, lenA) != 0))) {
             ok = 0;
         }
         /* Zero full allocations even if export truncated the out lengths. */
