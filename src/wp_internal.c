@@ -1196,6 +1196,10 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
             WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_read error (%d) in %s:%d", readLen, __FILE__, __LINE__);
             ok = 0;
         }
+        if (ok && (readLen > 0) &&
+                ((size_t)*len + (size_t)readLen > UINT32_MAX)) {
+            ok = 0;
+        }
         if (ok && (readLen > 0)) {
             /* Reallocate for new data. */
             p = OPENSSL_realloc(*data, *len + readLen);
