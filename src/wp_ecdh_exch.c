@@ -229,6 +229,11 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDH, "wp_ecdh_kdf_derive");
 
+    if ((secLen > 0xFFFFFFFFU) || (ctx->ukmLen > 0xFFFFFFFFU) ||
+            (ctx->keyLen > 0xFFFFFFFFU)) {
+        return 0;
+    }
+
     if (keySize < ctx->keyLen) {
         ok = 0;
     }
