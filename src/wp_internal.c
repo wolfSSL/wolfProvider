@@ -885,8 +885,9 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
             size_t i;
 
             for (i = 0; i < WP_CIPHER_NAMES_LEN; i++) {
-                if (XSTRNCMP(p->data, wp_cipher_names[i].name,
-                        p->data_size) == 0) {
+                if ((XSTRLEN(wp_cipher_names[i].name) == p->data_size) &&
+                        (XSTRNCMP(p->data, wp_cipher_names[i].name,
+                        p->data_size) == 0)) {
                     *cipher = wp_cipher_names[i].id;
                     if (cipherName != NULL) {
                         *cipherName = wp_cipher_names[i].canonName;
