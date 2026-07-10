@@ -255,6 +255,18 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         }
 
         if (ok) {
+            p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_LABEL);
+            if ((p != NULL) && (p->data != NULL)) {
+                OPENSSL_free(ctx->label);
+                ctx->label = NULL;
+                if (!OSSL_PARAM_get_octet_string(p, (void**)&ctx->label, 0,
+                        &ctx->labelLen)) {
+                    ok = 0;
+                }
+            }
+        }
+
+        if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_INFO);
             if ((p != NULL) && (p->data != NULL)) {
                 OPENSSL_free(ctx->context);
