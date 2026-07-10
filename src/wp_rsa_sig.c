@@ -1157,10 +1157,14 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_verify_pss");
 
+    if (sigLen > 0xFFFFFFFFU) {
+        ok = 0;
+    }
+
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
-    if (ctx->hash.type == WC_HASH_TYPE_NONE)
+    if (ok && (ctx->hash.type == WC_HASH_TYPE_NONE))
 #else
-    if (ctx->hashType == WC_HASH_TYPE_NONE)
+    if (ok && (ctx->hashType == WC_HASH_TYPE_NONE))
 #endif
     {
         ok = wp_rsa_setup_md(ctx, WP_RSA_DEFAULT_MD, NULL, EVP_PKEY_OP_VERIFY);
