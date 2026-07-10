@@ -232,6 +232,9 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
             pwCbArg))) {
         done = 1;
     }
+    if ((!done) && ok && (passwordLen > sizeof(password))) {
+        ok = 0;
+    }
     if ((!done) && ok) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
         rc = wc_DecryptPKCS8Key(data, len, password, (int)passwordLen);
