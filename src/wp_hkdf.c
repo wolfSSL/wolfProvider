@@ -158,7 +158,7 @@ static void wp_kdf_hkdf_clear(wp_HkdfCtx* ctx)
     }
     OPENSSL_free(ctx->label);
     OPENSSL_free(ctx->prefix);
-    OPENSSL_free(ctx->salt);
+    OPENSSL_clear_free(ctx->salt, ctx->saltSz);
     OPENSSL_cleanse(ctx->info, ctx->infoSz);
 }
 
@@ -368,7 +368,7 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
 #else
             if (p != NULL) {
 #endif
-                OPENSSL_free(ctx->salt);
+                OPENSSL_clear_free(ctx->salt, ctx->saltSz);
                 ctx->salt = NULL;
                 if (!OSSL_PARAM_get_octet_string(
                         p, (void**)&ctx->salt, 0, &ctx->saltSz)) {
