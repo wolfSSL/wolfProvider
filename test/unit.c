@@ -315,6 +315,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_x963_kdf, NULL),
 #endif
     TEST_DECL(test_dh_fromdata_oversize, NULL),
+    TEST_DECL(test_dh_param_check_explicit, NULL),
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif

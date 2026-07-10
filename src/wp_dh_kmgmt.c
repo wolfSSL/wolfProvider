@@ -1026,7 +1026,18 @@ static int wp_dh_validate(const wp_Dh* dh, int selection, int checkType)
 
     if (((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) &&
         (dh->id == 0)) {
-        /* TODO: check explicit parameters. */
+        int isPrime = 0;
+        mp_int* p = (mp_int*)&dh->key.p;
+        mp_int* g = (mp_int*)&dh->key.g;
+
+        /* Explicit domain parameters: p must be prime and g in [2, p-1). */
+        rc = mp_prime_is_prime(p, 8, &isPrime);
+        if ((rc != 0) || (!isPrime)) {
+            ok = 0;
+        }
+        if (ok && ((mp_cmp_d(g, 2) == MP_LT) || (mp_cmp(g, p) != MP_LT))) {
+            ok = 0;
+        }
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000

@@ -1331,4 +1331,55 @@ int test_dh_fromdata_oversize(void *data)
     return err;
 }
 
+/*
+ * Explicit FFC domain parameters with a composite modulus must be rejected by
+ * EVP_PKEY_param_check (the explicit-parameter path was previously a no-op).
+ */
+int test_dh_param_check_explicit(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY_CTX *checkCtx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM params[3];
+    unsigned char p_composite[256];
+    unsigned char g_buf[1] = { 0x02 };
+
+    (void)data;
+
+    /* 2048-bit even value: composite, so not a valid DH modulus. */
+    memset(p_composite, 0xFF, sizeof(p_composite));
+    p_composite[sizeof(p_composite) - 1] = 0xFE;
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_FFC_P,
+                                            p_composite, sizeof(p_composite));
+        params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_FFC_G,
+                                            g_buf, sizeof(g_buf));
+        params[2] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS,
+                                params) != 1;
+    }
+    if (err == 0) {
+        checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
+        err = checkCtx == NULL;
+    }
+    if (err == 0 && EVP_PKEY_param_check(checkCtx) == 1) {
+        PRINT_ERR_MSG("param_check accepted a composite DH modulus");
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(checkCtx);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
 #endif /* WP_HAVE_DH */
