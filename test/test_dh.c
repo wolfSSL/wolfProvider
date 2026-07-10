@@ -982,6 +982,56 @@ int test_dh_pad(void *data)
     return err;
 }
 
+/**
+ * Test DH derive with an output buffer smaller than the prime.
+ *
+ * Without a KDF the secret is written directly into the caller's buffer, so a
+ * buffer shorter than the prime must be rejected rather than overflowed. Uses
+ * one byte less than the prime length to check the boundary.
+ */
+int test_dh_derive_small_buffer(void *data)
+{
+    int err = 0;
+    EVP_PKEY *keyA = NULL;
+    EVP_PKEY *keyB = NULL;
+    EVP_PKEY_CTX *ctx = NULL;
+    unsigned char secret[sizeof(dh_p) - 1];
+    size_t secretLen = sizeof(secret);
+
+    (void)data;
+
+    PRINT_MSG("Test DH derive rejects under-sized output buffer");
+
+    /* keyA holds our private key; keyB provides the peer public key. */
+    err = test_dh_key_from_fixed(&keyA, dh_pad_pubA, sizeof(dh_pad_pubA),
+        dh_pad_privA, sizeof(dh_pad_privA));
+    if (err == 0) {
+        err = test_dh_key_from_fixed(&keyB, dh_pad_pubB, sizeof(dh_pad_pubB),
+            NULL, 0);
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, keyA, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_set_peer(ctx, keyB) <= 0;
+    }
+    if (err == 0 && EVP_PKEY_derive(ctx, secret, &secretLen) > 0) {
+        PRINT_ERR_MSG("DH derive accepted under-sized buffer (buffer %zu, "
+            "prime length %zu)", sizeof(secret), sizeof(dh_p));
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(keyA);
+    EVP_PKEY_free(keyB);
+
+    return err;
+}
+
 #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
 /* Apply X9.63 KDF using OpenSSL's reference implementation. */
 static int test_dh_x963_kdf_ref(const unsigned char* secret, size_t secLen,
