@@ -39,8 +39,20 @@
 #ifndef WP_SINGLE_THREADED
 
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+#include <pthread.h>
+#endif
 /* Global mutex for urandom file access (used by seed callback) */
 static wolfSSL_Mutex urandomMutex;
+
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+/* Re-init the mutex in a forked child so an inherited locked mutex cannot
+ * deadlock entropy reads. */
+static void wolfprov_urandom_atfork_child(void)
+{
+    wc_InitMutex(&urandomMutex);
+}
+#endif
 
 /**
  * Initialize the urandom mutex on library load.
@@ -52,6 +64,9 @@ __attribute__((constructor))
 static void wolfprov_init_urandom_mutex(void)
 {
     wc_InitMutex(&urandomMutex);
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+    (void)pthread_atfork(NULL, NULL, wolfprov_urandom_atfork_child);
+#endif
 }
 
 /**
