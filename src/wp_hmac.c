@@ -122,17 +122,26 @@ static int wp_hmac_set_key(wp_HmacCtx* macCtx, const unsigned char* key,
     size_t keyLen, int restart)
 {
     int ok = 1;
-    word32 blockSize = wc_HashGetBlockSize(macCtx->type);
+    int blockSizeRet = wc_HashGetBlockSize(macCtx->type);
+    word32 blockSize = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_hmac_set_key");
 
     WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_HMAC);
 
-    if (macCtx->keyLen > 0) {
+    /* wc_HashGetBlockSize returns a negative error when no digest is set. */
+    if (blockSizeRet <= 0) {
+        ok = 0;
+    }
+    else {
+        blockSize = (word32)blockSizeRet;
+    }
+
+    if (ok && (macCtx->keyLen > 0)) {
         OPENSSL_secure_clear_free(macCtx->key, macCtx->keyLen);
     }
 
-    if (keyLen < blockSize) {
+    if (ok && (keyLen < blockSize)) {
         /* wolfSSL FIPS needs a key that is at least block size in length with
          * the unused parts zeroed out.
          */
@@ -145,7 +154,7 @@ static int wp_hmac_set_key(wp_HmacCtx* macCtx, const unsigned char* key,
             ok = 0;
         }
     }
-    else {
+    else if (ok) {
         macCtx->keyLen = keyLen;
         macCtx->key = OPENSSL_secure_malloc(keyLen);
         if (macCtx->key == NULL) {

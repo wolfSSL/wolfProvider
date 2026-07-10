@@ -205,6 +205,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_digest_multi_update, NULL),
 #ifdef WP_HAVE_HMAC
     TEST_DECL(test_hmac_create, NULL),
+    TEST_DECL(test_hmac_key_no_digest, NULL),
     TEST_DECL(test_hmac_multi_update, NULL),
     TEST_DECL(test_hmac_dup, NULL),
     TEST_DECL(test_mac_key_match, NULL),

@@ -121,6 +121,7 @@ int test_digest_multi_update(void *data);
 
 #ifdef WP_HAVE_HMAC
 int test_hmac_create(void *data);
+int test_hmac_key_no_digest(void *data);
 int test_hmac_multi_update(void *data);
 int test_hmac_dup(void *data);
 int test_mac_key_match(void *data);
