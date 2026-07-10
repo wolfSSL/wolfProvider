@@ -31,7 +31,7 @@ ready_for_review) and on every push to `master`, `main`, or
 | `smoke-test.yml` | Minimal end-to-end: build, load the provider into stock OpenSSL, run `openssl list -providers` and a handful of `openssl` subcommands. Catches link-time and provider-registration regressions. |
 | `cmdline.yml` | Runs `scripts/cmd_test/do-cmd-tests.sh` — exercises every `openssl` CLI verb (genrsa, pkeyutl, enc, dgst, …) through wolfProvider. |
 | `fips-ready.yml` | Same as `simple` but builds wolfSSL with `--enable-fips=ready`. Sanity check that FIPS-ready compiles and basic tests pass without the full FIPS bundle. |
-| `seed-src.yml` | Builds with `--enable-seed-src` (entropy seed source variant) and runs the unit tests. |
+| `seed-src.yml` | Builds with `--enable-seed-src` (entropy seed source variant) and `-DWP_TEST_SECCOMP_SANDBOX`, then runs the unit tests including the OpenSSH fork+seccomp-sandbox regression suite. |
 | `multi-compiler.yml` | Cross-compiler sweep: gcc-9 through gcc-14 and clang-12 through latest. Catches toolchain-specific warnings / UB. |
 | `codespell.yml` | Spell-check on tracked source. `*.patch` is excluded because OSP patches mirror upstream source whose original spelling we shouldn't silently rewrite. |
 | `sanitizers.yml` | Builds wolfProvider with `-fsanitize=address,undefined` (one job) and `-fsanitize=thread` (separate job — TSan and ASan can't coexist in one binary), runs `make test` + `cmd_test/do-cmd-tests.sh` under each. Caches OpenSSL + wolfSSL source/install to avoid the ~15 min rebuild on every push. |

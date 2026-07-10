@@ -96,6 +96,26 @@ extern OSSL_LIB_CTX* wpLibCtx;
 extern OSSL_LIB_CTX* osslLibCtx;
 extern int noKeyLimits;
 
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+/*
+ * Provider location for the SEED-SRC tests, from --dir/--provider (and forwarded
+ * to re-exec'd helpers so a fresh helper loads the same provider).
+ */
+extern const char *wpUnitProviderDir;
+extern const char *wpUnitProviderName;
+/*
+ * Fresh-process worker for the SEED-SRC teardown -> reload test, re-exec'd by
+ * test_seed_src_reload() so the refcount starts from zero.
+ */
+int test_seed_src_reload_helper(void);
+#endif
+
+#if defined(WP_TEST_SECCOMP_SANDBOX) && defined(WP_HAVE_SEED_SRC) && \
+    defined(WP_HAVE_RANDOM)
+int test_seccomp_sandbox_helper(const char *mode, const char *providerDir,
+    const char *providerName);
+#endif
+
 
 #ifdef WP_HAVE_DIGEST
 
@@ -248,6 +268,8 @@ int test_random(void *data);
 /* DRBG SEED-SRC hierarchy tests */
 int test_rand_seed(void *data);
 int test_drbg_reseed(void *data);
+int test_seed_src_refcount(void *data);
+int test_seed_src_reload(void *data);
 
 /* Seccomp sandbox test - mimics OpenSSH fork+sandbox behavior */
 int test_seccomp_sandbox(void *data);

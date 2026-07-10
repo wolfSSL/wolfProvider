@@ -36,6 +36,10 @@
 #include <wolfssl/wolfcrypt/coding.h>
 #include <wolfssl/wolfcrypt/asn_public.h>
 
+/* WP_HAVE_* feature macros: keep the config-guarded WOLFPROV_CTX fields below
+ * consistent across every translation unit that includes this header. */
+#include <wolfprovider/settings.h>
+
 #include "wp_params.h"
 
 #ifndef AES_BLOCK_SIZE
@@ -146,16 +150,18 @@ typedef struct WOLFPROV_CTX {
    wolfSSL_Mutex rng_mutex;
 #endif
    BIO_METHOD *coreBioMethod;
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+   /** Set once this context holds a urandom reference, so a failed init is not
+    * balanced by a cleanup that releases a reference it never took. */
+   int urandomInitialized;
+#endif
 } WOLFPROV_CTX;
 
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
 /*
- * Global /dev/urandom subsystem functions.
- *
- * These manage a cached file handle to /dev/urandom that is opened lazily
- * on first entropy request (matching OpenSSL's default provider behavior).
- * The file stays open so child processes inherit it and can read even
- * in sandboxed environments that block openat().
+ * Shared /dev/urandom entropy subsystem (cached fd + wolfSSL seed callback),
+ * reference counted: balance each wp_urandom_init() with one
+ * wp_urandom_cleanup(). See wp_seed_src.c.
  */
 int wp_urandom_init(void);
 void wp_urandom_cleanup(void);
