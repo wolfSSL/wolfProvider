@@ -349,6 +349,10 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
         ok = 0;
     }
 
+    if (ok && ((inLen > UINT32_MAX) || (outSize > UINT32_MAX))) {
+        ok = 0;
+    }
+
     if (ok && (inLen == 0)) {
         *outLen = 0;
     }
