@@ -438,6 +438,8 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         XMEMCPY(out + AES_BLOCK_SIZE, ctsBlock, inLen - AES_BLOCK_SIZE);
     }
 
+    OPENSSL_cleanse(ctsBlock, sizeof(ctsBlock));
+
     return ok;
 }
 
@@ -504,6 +506,9 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
             XMEMCPY(ctx->iv, tmp, ctx->ivLen);
         }
     }
+
+    OPENSSL_cleanse(ctsBlock, sizeof(ctsBlock));
+    OPENSSL_cleanse(tmp, sizeof(tmp));
 
     return ok;
 }
