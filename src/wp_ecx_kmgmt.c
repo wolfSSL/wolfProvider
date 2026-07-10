@@ -739,7 +739,7 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     if (ok && (len1 != len2)) {
         ok = 0;
     }
-    if (ok && (XMEMCMP(key1, key2, len1) != 0)) {
+    if (ok && (CRYPTO_memcmp(key1, key2, len1) != 0)) {
         ok = 0;
     }
 
