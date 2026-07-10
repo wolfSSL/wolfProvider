@@ -394,6 +394,9 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
                  (tbsLen < WC_MIN_DIGEST_SIZE)) {
             ok = 0;
         }
+        else if ((sigLen > 0xFFFFFFFFU) || (tbsLen > 0xFFFFFFFFU)) {
+            ok = 0;
+        }
         else {
             int res;
             int rc = wc_ecc_verify_hash(sig, (word32)sigLen, tbs, (word32)tbsLen,
