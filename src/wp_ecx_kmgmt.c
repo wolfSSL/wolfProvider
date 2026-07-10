@@ -1024,7 +1024,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
 
 /** ECX private key parameters. */
 #define WP_ECX_PRIVATE_KEY_PARAMS                                              \
-    OSSL_PARAM_BN(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0)
+    OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0)
 /** ECX public key parameters. */
 #define WP_ECX_PUBLIC_KEY_PARAMS                                               \
     OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0)
