@@ -1003,6 +1003,7 @@ static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
 #ifndef NO_PWDBASED
     if ((ret = wc_PBKDF1(key, password, passwordSz, info->iv, PKCS5_SALT_SZ, 1,
                                         info->keySz, hashType)) != 0) {
+        ForceZero(key, WC_MAX_SYM_KEY_SIZE);
 #ifdef WOLFSSL_SMALL_STACK
         XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
 #endif
@@ -1022,6 +1023,7 @@ static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
             info->iv);
 #endif /* !NO_AES && HAVE_AES_CBC */
 
+    ForceZero(key, WC_MAX_SYM_KEY_SIZE);
 #ifdef WOLFSSL_SMALL_STACK
     XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
 #endif
