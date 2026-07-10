@@ -479,6 +479,10 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kbkdf_mac_update");
 
+    if (dataLen > 0xFFFFFFFFU) {
+        return 0;
+    }
+
     switch(ctx->mac) {
 #ifdef WP_HAVE_HMAC
         case WP_MAC_TYPE_HMAC:
