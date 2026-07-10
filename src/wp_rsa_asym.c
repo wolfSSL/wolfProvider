@@ -293,7 +293,10 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsaa_encrypt");
 
-    if (!wolfssl_prov_is_running()) {
+    if ((inLen > 0xFFFFFFFFU) || (outSize > 0xFFFFFFFFU)) {
+        ok = 0;
+    }
+    if (ok && !wolfssl_prov_is_running()) {
         ok = 0;
     }
     else if (!wp_rsa_check_key_size(ctx->rsa, 1)) {
