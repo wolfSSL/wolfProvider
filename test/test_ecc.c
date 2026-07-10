@@ -2633,6 +2633,51 @@ static int test_ec_import_priv_out_of_range(void)
     return err;
 }
 
+/*
+ * A non-NUL-terminated GROUP_NAME UTF8_STRING param must not cause an
+ * out-of-bounds read in the group-name comparison.
+ */
+static int test_ec_import_group_no_nul(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM params[2];
+    char *name = NULL;
+
+    /* "prime256v1" with no NUL terminator, sized exactly. */
+    name = OPENSSL_malloc(10);
+    if (name == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        memcpy(name, "prime256v1", 10);
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0].key = OSSL_PKEY_PARAM_GROUP_NAME;
+        params[0].data_type = OSSL_PARAM_UTF8_STRING;
+        params[0].data = name;
+        params[0].data_size = 10;
+        params[0].return_size = 0;
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS,
+                params) != 1) {
+            PRINT_ERR_MSG("EC group import failed for valid curve name");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OPENSSL_free(name);
+    return err;
+}
+
 int test_ec_import(void* data)
 {
     int err = 0;
@@ -2644,6 +2689,9 @@ int test_ec_import(void* data)
     }
     if (err == 0) {
         err = test_ec_import_priv_out_of_range();
+    }
+    if (err == 0) {
+        err = test_ec_import_group_no_nul();
     }
 
     return err;
