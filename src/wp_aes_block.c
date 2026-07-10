@@ -747,6 +747,7 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
     int ok = 1;
     size_t oLen = 0;
     size_t nextBlocks;
+    unsigned char *outStart = out;
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aes_block_update");
 
@@ -812,7 +813,7 @@ static int wp_aes_block_update(wp_AesBlockCtx *ctx, unsigned char *out,
         *outLen = oLen;
     }
     if (ok && (ctx->tls_version > 0) && (!ctx->enc)) {
-        ok = wp_aes_block_tls_dec_record(ctx, out, oLen, outLen);
+        ok = wp_aes_block_tls_dec_record(ctx, outStart, oLen, outLen);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

@@ -327,6 +327,90 @@ static int test_aes_tls_cbc_bad_pad_helper(OSSL_LIB_CTX *libCtx,
     return err;
 }
 
+/*
+ * Decrypt a TLS 1.2 CBC record split across two EVP_CipherUpdate calls so the
+ * second completes a buffered block. Exercises the buffered-block path that
+ * advanced the output pointer before the record's IV/padding processing.
+ */
+static int test_aes_tls_cbc_split_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen, int macSize)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM params[3];
+    unsigned int tlsVer = TLS1_2_VERSION;
+    size_t macSz = (size_t)macSize;
+    unsigned char key[32];
+    unsigned char iv[BS];
+    unsigned char mac[48];
+    unsigned char buf[BS + sizeof(testPlain) + 48 + BS];
+    unsigned char *out = NULL;
+    int encLen = 0;
+    int l1 = 0;
+    int l2 = 0;
+    int split = BS + 1; /* leave one byte buffered after the first update */
+
+    memset(key, 0xAA, keyLen);
+    memset(iv, 0xBB, BS);
+    memset(mac, 0xCC, macSize);
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = test_tls_cbc_enc(cipher, key, iv, testPlain, sizeof(testPlain),
+                               mac, macSize, buf, &encLen);
+    }
+    /* Output buffer sized to the produced plaintext so an overread past the
+     * written region is caught. */
+    if (err == 0) {
+        out = OPENSSL_malloc((size_t)(encLen - BS));
+        err = out == NULL;
+    }
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 0) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
+                                              &tlsVer);
+        params[1] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_TLS_MAC_SIZE,
+                                                &macSz);
+        params[2] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        (void)EVP_CipherUpdate(ctx, out, &l1, buf, split);
+        (void)EVP_CipherUpdate(ctx, out, &l2, buf + split, encLen - split);
+    }
+
+    OPENSSL_free(out);
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_tls_cbc_split(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("TLS 1.2 AES-256-CBC split-record decrypt (wolfProvider)");
+    err = test_aes_tls_cbc_split_helper(wpLibCtx, "AES-256-CBC", 32, 48);
+    if (err == 0) {
+        PRINT_MSG("TLS 1.2 AES-128-CBC split-record decrypt (wolfProvider)");
+        err = test_aes_tls_cbc_split_helper(wpLibCtx, "AES-128-CBC", 16, 32);
+    }
+
+    return err;
+}
+
 int test_aes_tls_cbc_bad_pad(void *data)
 {
     int err = 0;

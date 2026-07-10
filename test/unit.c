@@ -499,6 +499,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_tls12_cbc_ossl, NULL),
     TEST_DECL(test_tls12_cbc, NULL),
     TEST_DECL(test_aes_tls_cbc_bad_pad, NULL),
+    TEST_DECL(test_aes_tls_cbc_split, NULL),
 #endif
 #ifdef WP_HAVE_DES3CBC
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)

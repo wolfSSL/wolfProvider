@@ -496,6 +496,7 @@ int test_x509_cert(void *data);
 int test_tls12_cbc(void *data);
 int test_tls12_cbc_ossl(void *data);
 int test_aes_tls_cbc_bad_pad(void *data);
+int test_aes_tls_cbc_split(void *data);
 #endif
 
 #ifdef WP_HAVE_DES3CBC
