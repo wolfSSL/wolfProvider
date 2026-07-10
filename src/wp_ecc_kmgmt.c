@@ -1167,7 +1167,7 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
         mp_int* d = &(ecc->key.k);
 #endif
 
-        /* Reject a private scalar outside [1, n-1] (FIPS 186-4). */
+        /* Reject a private scalar >= group order n (FIPS 186-4); d == 0 is caught by the private-key gate below. */
         if ((dp != NULL) && (mp_init(&order) == MP_OKAY)) {
             if ((mp_read_radix(&order, dp->order, 16) == MP_OKAY) &&
                 (mp_cmp(d, &order) != MP_LT)) {
