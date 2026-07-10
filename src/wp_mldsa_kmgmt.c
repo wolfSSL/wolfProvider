@@ -1574,6 +1574,7 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         OPENSSL_free(pemData);
     }
     OPENSSL_free(cipherInfo);
+    BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

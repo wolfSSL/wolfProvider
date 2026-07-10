@@ -2240,6 +2240,7 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         OPENSSL_free(pemData);
     }
     OPENSSL_free(cipherInfo);
+    BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_COMP_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
