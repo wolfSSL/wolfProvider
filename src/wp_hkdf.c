@@ -209,6 +209,11 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_kdf_hkdf_derive");
+
+    if ((keyLen > 0xFFFFFFFFU) || (ctx->keySz > 0xFFFFFFFFU) ||
+            (ctx->saltSz > 0xFFFFFFFFU) || (ctx->infoSz > 0xFFFFFFFFU)) {
+        return 0;
+    }
     WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "HKDF derive: keyLen=%zu, mode=%d", keyLen, ctx->mode);
     WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "HKDF derive: keySz=%zu, saltSz=%zu, infoSz=%zu", 
                        ctx->keySz, ctx->saltSz, ctx->infoSz);
