@@ -1976,7 +1976,10 @@ static int wp_rsa_get_ctx_params(wp_RsaSigCtx* ctx, OSSL_PARAM* params)
     if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
         if (p != NULL) {
-            ok = wp_rsa_get_alg_id(ctx, p);
+            /* An unencodable digest must not fail the whole get; mark it empty. */
+            if (!wp_rsa_get_alg_id(ctx, p)) {
+                p->return_size = 0;
+            }
         }
     }
 
