@@ -1986,6 +1986,10 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesccm_encdec");
 
+    if ((inLen > 0xFFFFFFFFU) || (ctx->aadLen > 0xFFFFFFFFU)) {
+        return 0;
+    }
+
     if (ctx->tagLen == UNINITIALISED_SIZET) {
         ctx->tagLen = EVP_CCM_TLS_TAG_LEN;
     }
