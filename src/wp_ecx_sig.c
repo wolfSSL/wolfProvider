@@ -684,6 +684,9 @@ static int wp_ed448_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
             }
         }
     }
+    if (ok && ((sigLen > 0xFFFFFFFFU) || (tbsLen > 0xFFFFFFFFU))) {
+        ok = 0;
+    }
     if (ok) {
         int res = 0;
         int rc = wc_ed448_verify_msg(sig, (word32)sigLen, tbs, (word32)tbsLen,
