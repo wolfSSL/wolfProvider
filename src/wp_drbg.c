@@ -611,7 +611,7 @@ static const OSSL_PARAM* wp_drbg_gettable_ctx_params(wp_DrbgCtx* ctx,
      */
     static const OSSL_PARAM wp_supported_gettable_drbg_ctx_params[] = {
         OSSL_PARAM_size_t(OSSL_RAND_PARAM_MAX_REQUEST, NULL),
-        OSSL_PARAM_size_t(OSSL_RAND_PARAM_STATE, NULL),
+        OSSL_PARAM_int(OSSL_RAND_PARAM_STATE, NULL),
         OSSL_PARAM_END
     };
     (void)ctx;
