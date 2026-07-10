@@ -916,6 +916,9 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
             ok = 0;
         }
     }
+    if (ok && (sigSize > 0xFFFFFFFFU)) {
+        ok = 0;
+    }
     if (ok) {
         word32 len = (word32)sigSize;
         if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
