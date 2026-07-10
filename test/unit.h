@@ -323,6 +323,7 @@ int test_dh_x963_kdf(void *data);
 #endif
 int test_dh_fromdata_oversize(void *data);
 int test_dh_param_check_explicit(void *data);
+int test_dh_import_group_no_nul(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC
