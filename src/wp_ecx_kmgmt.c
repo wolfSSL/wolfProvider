@@ -1154,6 +1154,7 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
             }
             wp_param_set_octet_string_ptr(&params[i++],
                 OSSL_PKEY_PARAM_PRIV_KEY, data + *idx, outLen);
+            *idx += outLen;
         }
     }
 
