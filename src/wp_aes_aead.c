@@ -290,9 +290,14 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_cache_aad");
 
     if (inLen > 0) {
-        p = (unsigned char*)OPENSSL_realloc(ctx->aad, ctx->aadLen + inLen);
-        if (p == NULL) {
+        if (inLen > 0xFFFFFFFFU - ctx->aadLen) {
             ok = 0;
+        }
+        if (ok) {
+            p = (unsigned char*)OPENSSL_realloc(ctx->aad, ctx->aadLen + inLen);
+            if (p == NULL) {
+                ok = 0;
+            }
         }
         if (ok) {
             ctx->aad = p;
