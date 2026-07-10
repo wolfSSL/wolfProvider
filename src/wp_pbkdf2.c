@@ -300,6 +300,10 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     if (ok && (ctx->iterations > 0x7FFFFFFFU)) {
         ok = 0;
     }
+    if (ok && ((ctx->passwordSz > 0x7FFFFFFFU) ||
+            (ctx->saltSz > 0x7FFFFFFFU) || (keyLen > 0x7FFFFFFFU))) {
+        ok = 0;
+    }
 
     if (ok) {
         int rc;
