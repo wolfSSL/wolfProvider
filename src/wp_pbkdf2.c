@@ -297,6 +297,10 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     }
     /* wc_PBKDF2_ex fails when ctx->iterations is 0. */
 
+    if (ok && (ctx->iterations > 0x7FFFFFFFU)) {
+        ok = 0;
+    }
+
     if (ok) {
         int rc;
 
