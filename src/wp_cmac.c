@@ -419,8 +419,9 @@ static int wp_cmac_setup_cipher(wp_CmacCtx* macCtx, const OSSL_PARAM params[])
             macCtx->size = AES_BLOCK_SIZE;
 
             for (i = 0; i < WP_CMAC_CIPHER_NAMES_LEN; i++) {
-                if (XSTRNCMP(p->data, wp_cmac_cipher_names[i].name,
-                        p->data_size) == 0) {
+                if ((XSTRLEN(wp_cmac_cipher_names[i].name) == p->data_size) &&
+                        (XSTRNCMP(p->data, wp_cmac_cipher_names[i].name,
+                        p->data_size) == 0)) {
                     macCtx->expKeySize = wp_cmac_cipher_names[i].keySize;
                     break;
                 }
