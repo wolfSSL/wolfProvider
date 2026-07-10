@@ -847,7 +847,25 @@ static int wp_dh_get_params(wp_Dh* dh, OSSL_PARAM params[])
             if (p->data == NULL) {
                 p->return_size = dh->pubSz;
             }
-            else { 
+            else if (p->data_type == OSSL_PARAM_UNSIGNED_INTEGER) {
+                mp_int pub;
+
+                if (mp_init(&pub) != 0) {
+                    ok = 0;
+                }
+                else {
+                    if (mp_read_unsigned_bin(&pub, dh->pub,
+                            (int)dh->pubSz) != 0) {
+                        ok = 0;
+                    }
+                    if (ok) {
+                        ok = wp_params_set_mp(params, OSSL_PKEY_PARAM_PUB_KEY,
+                            &pub, 1);
+                    }
+                    mp_clear(&pub);
+                }
+            }
+            else {
                 /* return_size is set within this function */
                 ok = wp_params_set_octet_string_be(params, OSSL_PKEY_PARAM_PUB_KEY,
                     dh->pub, dh->pubSz);
@@ -1196,7 +1214,7 @@ static int wp_dh_import(wp_Dh* dh, int selection, const OSSL_PARAM params[])
     OSSL_PARAM_BN(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0)
 /** DH public key parameters. */
 #define WP_DH_PUBLIC_KEY_PARAMS                                                \
-    OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0)
+    OSSL_PARAM_BN(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0)
 /** DH domain parameters - with FFC_Q. */
 #define WP_DH_DOMAIN_PARAMS                                                    \
     OSSL_PARAM_BN(OSSL_PKEY_PARAM_FFC_P, NULL, 0),                             \
