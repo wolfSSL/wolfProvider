@@ -915,7 +915,7 @@ static int wp_rsa_get_params_key_data(wp_Rsa* rsa,  OSSL_PARAM params[])
             size_t oLen;
             mp_int* mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[i]);
             oLen = mp_unsigned_bin_size(mp);
-            if (oLen > p->data_size) {
+            if ((p->data != NULL) && (oLen > p->data_size)) {
                 ok = 0;
             }
             if (ok && (p->data != NULL) &&
