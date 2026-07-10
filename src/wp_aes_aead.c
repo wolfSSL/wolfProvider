@@ -1554,7 +1554,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
         ctx->aad = NULL;
         ctx->aadLen = 0;
         ctx->aadSet = 0;
-        OPENSSL_free(ctx->in);
+        OPENSSL_clear_free(ctx->in, ctx->inLen);
         ctx->bufSize = 0;
         ctx->in = NULL;
         ctx->inLen = 0;
