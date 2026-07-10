@@ -21,6 +21,7 @@
 #include "unit.h"
 
 #include <openssl/store.h>
+#include <openssl/decoder.h>
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
 
@@ -2675,6 +2676,40 @@ static int test_ec_import_group_no_nul(void)
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(ctx);
     OPENSSL_free(name);
+    return err;
+}
+
+/*
+ * A truncated PEM (header only) must be rejected without an out-of-bounds read
+ * in wp_pem2der_convert (base64Data past the buffer / base64Len underflow).
+ */
+int test_ec_decode_short_pem(void *data)
+{
+    int err = 0;
+    OSSL_DECODER_CTX *dctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    static const char shortPem[] = "-----BEGIN EC PARAMETERS-----\n";
+    const unsigned char *p = (const unsigned char *)shortPem;
+    size_t pLen = sizeof(shortPem) - 1;
+
+    (void)data;
+
+    dctx = OSSL_DECODER_CTX_new_for_pkey(&pkey, "PEM", NULL, "EC",
+        EVP_PKEY_KEY_PARAMETERS, wpLibCtx, NULL);
+    if (dctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        /* Truncated PEM simply fails to decode; must not read out of bounds. */
+        (void)OSSL_DECODER_from_data(dctx, &p, &pLen);
+        if (pkey != NULL) {
+            PRINT_ERR_MSG("Truncated PEM unexpectedly produced a key");
+            err = 1;
+        }
+    }
+
+    OSSL_DECODER_CTX_free(dctx);
+    EVP_PKEY_free(pkey);
     return err;
 }
 

@@ -457,6 +457,7 @@ int test_ec_load_cert(void* data);
 #endif /* WP_HAVE_ECDSA */
 
 int test_ec_decode(void* data);
+int test_ec_decode_short_pem(void* data);
 int test_ec_import(void* data);
 int test_ec_auto_derive_pubkey(void* data);
 int test_ec_null_init(void* data);
