@@ -230,7 +230,11 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
 
     /* Identify the type of object by looking at the header. */
     /* TODO: support more PEM headers. */
-    if (XMEMCMP(data, "-----BEGIN CERTIFICATE-----", 27) == 0) {
+    /* Reject input too short for the fixed-length header compares below. */
+    if (len < 41) {
+        ok = 0;
+    }
+    else if (XMEMCMP(data, "-----BEGIN CERTIFICATE-----", 27) == 0) {
         type = CERT_TYPE;
         obj = OSSL_OBJECT_CERT;
     }
