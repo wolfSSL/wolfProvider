@@ -631,11 +631,11 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
 
 #ifdef WP_HAVE_ED25519
     { WP_NAMES_ED25519, WOLFPROV_PROPERTIES, wp_ed25519_keymgmt_functions,
-      "X25519" },
+      "ED25519" },
 #endif
 #ifdef WP_HAVE_ED448
     { WP_NAMES_ED448, WOLFPROV_PROPERTIES, wp_ed448_keymgmt_functions,
-      "X448" },
+      "ED448" },
 #endif
 
 #ifdef WP_HAVE_DH
