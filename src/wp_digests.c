@@ -640,7 +640,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
-    if (ok && (outSize < ctx->outLen)) {                                       \
+    if (ok && ((outSize < ctx->outLen) || (ctx->outLen > 0xFFFFFFFFU))) {                                       \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \
