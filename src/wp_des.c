@@ -489,6 +489,10 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
         }
         *outLen = oLen;
     }
+    if (ok && (ctx->tls_version > 0) && (!ctx->enc) &&
+            (oLen < (size_t)(2 * DES_BLOCK_SIZE))) {
+        ok = 0;
+    }
     if (ok && (ctx->tls_version > 0) && (!ctx->enc)) {
         unsigned char pad = out[oLen-1];
         int padStart = DES_BLOCK_SIZE - pad - 1;
