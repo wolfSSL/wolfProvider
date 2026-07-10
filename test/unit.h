@@ -44,6 +44,8 @@
 #include <wolfprovider/settings.h>
 #include <wolfprovider/wp_logging.h>
 
+/* Parse wolfSSL's AES_BLOCK_SIZE enum before the fallback macro can shadow it. */
+#include <wolfssl/wolfcrypt/aes.h>
 #ifndef AES_BLOCK_SIZE
     #define AES_BLOCK_SIZE 16
 #endif
