@@ -284,9 +284,13 @@ void wp_mldsa_free(wp_MlDsa* mldsa)
         int rc;
 
         rc = wc_LockMutex(&mldsa->mutex);
-        cnt = --mldsa->refCnt;
         if (rc == 0) {
+            cnt = --mldsa->refCnt;
             wc_UnLockMutex(&mldsa->mutex);
+        }
+        else {
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = mldsa->refCnt;
         }
     #else
         cnt = --mldsa->refCnt;
