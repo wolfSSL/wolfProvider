@@ -2500,6 +2500,9 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     if (ok && !pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
         ok = 0;
     }
+    if (ok && (passwordSz > sizeof(password))) {
+        ok = 0;
+    }
     if (ok) {
         /* Decrypt to encoded private key. */
         int ret = wc_DecryptPKCS8Key(data, len, password, (int)passwordSz);
