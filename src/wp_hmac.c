@@ -102,7 +102,7 @@ static void wp_hmac_free(wp_HmacCtx* macCtx)
     if (macCtx != NULL) {
         wc_HmacFree(&macCtx->hmac);
         OPENSSL_secure_clear_free(macCtx->key, macCtx->keyLen);
-        OPENSSL_free(macCtx);
+        OPENSSL_clear_free(macCtx, sizeof(*macCtx));
     }
 }
 
