@@ -1622,6 +1622,54 @@ int test_ecdsa_verify_md_len_mismatch(void *data)
 
     return err;
 }
+
+/*
+ * A digest rejected by wp_ecdsa_setup_md (e.g. MD5) must not overwrite the
+ * previously configured digest. After the failed set, the context still
+ * enforces SHA-256's 32-byte size, so a raw sign of a 16-byte input fails.
+ */
+int test_ecdsa_setup_md_reject_atomic(void *data)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    EVP_PKEY_CTX *ctx = NULL;
+    const unsigned char *p = ecc_key_der_256;
+    unsigned char digest[32];
+    unsigned char sig[80];
+    size_t sigLen = sizeof(sig);
+
+    (void)data;
+
+    memset(digest, 0x5A, sizeof(digest));
+
+    pkey = d2i_PrivateKey(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256));
+    if (pkey == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_signature_md(ctx, EVP_sha256()) <= 0;
+    }
+    if (err == 0 && EVP_PKEY_CTX_set_signature_md(ctx, EVP_md5()) > 0) {
+        PRINT_ERR_MSG("MD5 unexpectedly accepted for ECDSA");
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_sign(ctx, sig, &sigLen, digest, 16) > 0) {
+        PRINT_ERR_MSG("ECDSA signed a 16-byte input after a rejected digest");
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
 #endif /* WP_HAVE_EC_P256 */
 
 #ifdef WP_HAVE_EC_P384

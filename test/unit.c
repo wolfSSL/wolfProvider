@@ -396,6 +396,7 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_ecdsa_p256, NULL),
         TEST_DECL(test_ecdsa_verify_undersized_hash, NULL),
         TEST_DECL(test_ecdsa_verify_md_len_mismatch, NULL),
+        TEST_DECL(test_ecdsa_setup_md_reject_atomic, NULL),
     #endif
     TEST_DECL(test_ec_decode, NULL),
     TEST_DECL(test_ec_import, NULL),

@@ -438,6 +438,7 @@ int test_ecdsa_p256_pkey(void *data);
 int test_ecdsa_p256(void *data);
 int test_ecdsa_verify_undersized_hash(void *data);
 int test_ecdsa_verify_md_len_mismatch(void *data);
+int test_ecdsa_setup_md_reject_atomic(void *data);
 #endif /* WP_HAVE_EC_P256 */
 
 #ifdef WP_HAVE_EC_P384
