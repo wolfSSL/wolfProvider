@@ -275,6 +275,45 @@ static int test_pbkdf2_bounds(void)
     return err;
 }
 
+/*
+ * A PBKDF2 iteration count above INT_MAX must not silently truncate to a small
+ * value. iter = 2^32 + 1 collapses to 1 in a plain (int) cast, which would
+ * derive the same key as a single iteration.
+ */
+static int test_pbkdf2_iter_truncation(void)
+{
+    int err = 0;
+    int retHuge = 0;
+    int ret1 = 0;
+    unsigned char keyHuge[32];
+    unsigned char key1[32];
+    static const unsigned char salt16[16] = {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+    };
+    uint64_t hugeIter = ((uint64_t)1 << 32) + 1;
+
+    memset(keyHuge, 0, sizeof(keyHuge));
+    memset(key1, 0, sizeof(key1));
+
+    err = pbkdf2_derive(wpLibCtx, hugeIter, salt16, sizeof(salt16), 0, 0,
+        keyHuge, sizeof(keyHuge), &retHuge);
+    if (err == 0) {
+        err = pbkdf2_derive(wpLibCtx, 1, salt16, sizeof(salt16), 0, 0,
+            key1, sizeof(key1), &ret1);
+    }
+    if ((err == 0) && (ret1 <= 0)) {
+        PRINT_MSG("PBKDF2 baseline iter=1 derive failed");
+        err = 1;
+    }
+    if ((err == 0) && (retHuge > 0) &&
+            (memcmp(keyHuge, key1, sizeof(key1)) == 0)) {
+        PRINT_MSG("PBKDF2 iteration count above INT_MAX truncated to 1");
+        err = 1;
+    }
+
+    return err;
+}
+
 int test_pbkdf2(void *data)
 {
     int err = 0;
@@ -287,6 +326,11 @@ int test_pbkdf2(void *data)
     if (err == 0) {
         PRINT_MSG("PBKDF2 OpenSSL vs wolfProvider");
         err = test_pbkdf2_bounds();
+    }
+
+    if (err == 0) {
+        PRINT_MSG("PBKDF2 iteration count truncation");
+        err = test_pbkdf2_iter_truncation();
     }
 
     return err;
