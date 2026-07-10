@@ -583,6 +583,10 @@ static int wp_ecdsa_digest_signverify_update(wp_EcdsaSigCtx *ctx,
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDSA, "wp_ecdsa_digest_signverify_update");
 
+    if (dataLen > 0xFFFFFFFFU) {
+        return 0;
+    }
+
     int rc = wc_HashUpdate(&ctx->hash,
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
             ctx->hash.type,
