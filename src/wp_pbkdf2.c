@@ -435,6 +435,10 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     if (ok && ((ctx->keyUse < 1) || (ctx->keyUse > 3))) {
         ok = 0;
     }
+    /* Reject iteration counts that would truncate in the int cast below. */
+    if (ok && (ctx->iterations > (uint64_t)INT_MAX)) {
+        ok = 0;
+    }
 
     if (ok) {
         int rc;
