@@ -580,6 +580,12 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_tls13_hkdf_expand");
+
+    if ((keyLen > 0xFFFFFFFFU) || (inKeyLen > 0xFFFFFFFFU) ||
+            (dataLen > 0xFFFFFFFFU) || (ctx->prefixLen > 0xFFFFFFFFU) ||
+            (ctx->labelLen > 0xFFFFFFFFU)) {
+        return 0;
+    }
     WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF,
         "TLS1.3 HKDF expand: inKeyLen=%zu, dataLen=%zu, keyLen=%zu",
         inKeyLen, dataLen, keyLen);
