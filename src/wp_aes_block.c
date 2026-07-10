@@ -589,7 +589,6 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
             gd = d - 1;
         }
         ivRecLen -= gd & ((size_t)padV + 1);
-        *outLen = ivRecLen;
         /* No MAC to extract */
         ctx->tlsmac = NULL;
         ctx->tlsmacAlloced = 0;
@@ -597,8 +596,13 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
          * already verified by the record layer, so there is no padding
          * oracle concern).  Matches OpenSSL ssl3_cbc_copy_mac returning
          * 0 when good==0 and mac_size==0. */
-        if (gd == 0)
+        if (gd == 0) {
             ok = 0;
+            *outLen = 0;
+        }
+        else {
+            *outLen = ivRecLen;
+        }
     }
     else if (ok) {
         /* 64-byte aligned buffer for cache-line-aware MAC rotation */
