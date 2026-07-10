@@ -406,12 +406,14 @@ void wp_ecc_free(wp_Ecc* ecc)
         int rc;
 
         rc = wc_LockMutex(&ecc->mutex);
-        if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
-        }
-        cnt = --ecc->refCnt;
         if (rc == 0) {
+            cnt = --ecc->refCnt;
             wc_UnLockMutex(&ecc->mutex);
+        }
+        else {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = ecc->refCnt;
         }
     #else
         cnt = --ecc->refCnt;
