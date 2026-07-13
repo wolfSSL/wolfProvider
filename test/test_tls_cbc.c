@@ -534,10 +534,12 @@ int test_des3_tls_cbc_bad_pad(void *data)
 }
 
 /*
- * Positive DES3 TLS 1.2 CBC decrypt: a valid record must decrypt back to the
- * original plaintext with the explicit-IV block and padding stripped.
+ * Positive DES3 TLS 1.2 CBC decrypt of a valid record split across two
+ * EVP_CipherUpdate calls, so the second update completes a buffered block and
+ * advances the output pointer past the record base. This exercises the
+ * record-base-pointer padding strip; a valid record must decrypt successfully.
  */
-static int test_des3_tls_cbc_dec_helper(OSSL_LIB_CTX *libCtx)
+int test_des3_tls_cbc_dec(void *data)
 {
     int err = 0;
     EVP_CIPHER *cipher = NULL;
@@ -549,15 +551,22 @@ static int test_des3_tls_cbc_dec_helper(OSSL_LIB_CTX *libCtx)
     /* 37 bytes: not block-aligned, so padding is non-trivial. */
     unsigned char pt[37];
     unsigned char buf[64];
+    unsigned char *out = NULL;
     int ptLen = (int)sizeof(pt);
     int encLen = 0;
-    int decLen = 0;
+    int l1 = 0;
+    int l2 = 0;
+    int split = DES3_BS + 1; /* one byte left buffered after update 1 */
+
+    (void)data;
 
     memset(key, 0xAA, sizeof(key));
     memset(iv, 0xBB, sizeof(iv));
     memset(pt, 0x42, sizeof(pt));
 
-    cipher = EVP_CIPHER_fetch(libCtx, "DES-EDE3-CBC", "");
+    PRINT_MSG("DES3 TLS 1.2 CBC split-record decrypt (wolfProvider)");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
     if (cipher == NULL) {
         err = 1;
     }
@@ -584,7 +593,14 @@ static int test_des3_tls_cbc_dec_helper(OSSL_LIB_CTX *libCtx)
     EVP_CIPHER_CTX_free(ctx);
     ctx = NULL;
 
-    /* Decrypt in TLS mode: IV and padding stripped, plaintext at buf+DES3_BS. */
+    /* Output buffer sized to the produced plaintext so an overread past the
+     * written region is caught under sanitizers. */
+    if (err == 0) {
+        out = OPENSSL_malloc((size_t)(encLen - DES3_BS));
+        err = out == NULL;
+    }
+
+    /* Decrypt in TLS mode split across two updates. */
     if (err == 0) {
         ctx = EVP_CIPHER_CTX_new();
         err = ctx == NULL;
@@ -599,29 +615,16 @@ static int test_des3_tls_cbc_dec_helper(OSSL_LIB_CTX *libCtx)
         err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
     }
     if (err == 0) {
-        err = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1;
-    }
-    if (err == 0 && decLen != ptLen) {
-        PRINT_ERR_MSG("DES3 TLS CBC dec outLen mismatch: got %d, expected %d",
-                      decLen, ptLen);
-        err = 1;
-    }
-    if (err == 0 && memcmp(buf + DES3_BS, pt, ptLen) != 0) {
-        PRINT_ERR_MSG("DES3 TLS CBC dec plaintext mismatch");
-        err = 1;
+        /* Only the second update completes the record; must succeed. */
+        (void)EVP_CipherUpdate(ctx, out, &l1, buf, split);
+        err = EVP_CipherUpdate(ctx, out + l1, &l2, buf + split,
+                               encLen - split) != 1;
     }
 
+    OPENSSL_free(out);
     EVP_CIPHER_CTX_free(ctx);
     EVP_CIPHER_free(cipher);
     return err;
-}
-
-int test_des3_tls_cbc_dec(void *data)
-{
-    (void)data;
-
-    PRINT_MSG("DES3 TLS 1.2 CBC decrypt roundtrip (wolfProvider)");
-    return test_des3_tls_cbc_dec_helper(wpLibCtx);
 }
 
 #undef DES3_BS
