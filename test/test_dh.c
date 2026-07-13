@@ -1347,9 +1347,9 @@ int test_dh_param_check_explicit(void *data)
 
     (void)data;
 
-    /* 2048-bit even value: composite, so not a valid DH modulus. */
+    /* Even modulus (byte 0 = LSB, FFC_P parsed little-endian): composite. */
     memset(p_composite, 0xFF, sizeof(p_composite));
-    p_composite[sizeof(p_composite) - 1] = 0xFE;
+    p_composite[0] = 0xFE;
 
     ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
     if (ctx == NULL) {
