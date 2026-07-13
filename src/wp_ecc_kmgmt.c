@@ -1058,21 +1058,24 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
        (void)checkType;
     #endif
         {
-            int locked = (wp_lock(wp_ecc_get_mutex((wp_Ecc*)ecc)) == 1);
-
-            /* We may have a private key inside that does not match the public
-             * key that has been set, which is OK. Override the internal type
-             * to force a public key only check */
-            origType = ecc->key.type;
-            ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
-            rc = wc_ecc_check_key((ecc_key*)&ecc->key);
-            ((wp_Ecc*)ecc)->key.type = origType;
-            if (locked) {
-                wp_unlock(wp_ecc_get_mutex((wp_Ecc*)ecc));
-            }
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_check_key", rc);
+            /* Fail closed if the key mutex can't be held for the check. */
+            if (wp_lock(wp_ecc_get_mutex((wp_Ecc*)ecc)) != 1) {
                 ok = 0;
+            }
+            if (ok) {
+                /* We may have a private key inside that does not match the
+                 * public key that has been set, which is OK. Override the
+                 * internal type to force a public key only check */
+                origType = ecc->key.type;
+                ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
+                rc = wc_ecc_check_key((ecc_key*)&ecc->key);
+                ((wp_Ecc*)ecc)->key.type = origType;
+                wp_unlock(wp_ecc_get_mutex((wp_Ecc*)ecc));
+                if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                        "wc_ecc_check_key", rc);
+                    ok = 0;
+                }
             }
         }
     }
