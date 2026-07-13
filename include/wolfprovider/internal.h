@@ -48,6 +48,9 @@
 /** Maximum value of a size_t. */
 #define MAX_SIZE_T    ((size_t)-1)
 
+/** True when a length fits in a wolfCrypt word32; guards 32-bit truncation. */
+#define WP_FITS_WORD32(len)    ((uint64_t)(len) <= (uint64_t)UINT32_MAX)
+
 /** Maximum supported digest name size. */
 #define WP_MAX_MD_NAME_SIZE     15
 /** Maximum supported cipher name size. */

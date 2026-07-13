@@ -229,8 +229,8 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDH, "wp_ecdh_kdf_derive");
 
-    if ((secLen > 0xFFFFFFFFU) || (ctx->ukmLen > 0xFFFFFFFFU) ||
-            (ctx->keyLen > 0xFFFFFFFFU)) {
+    if ((!WP_FITS_WORD32(secLen)) || (!WP_FITS_WORD32(ctx->ukmLen)) ||
+            (!WP_FITS_WORD32(ctx->keyLen))) {
         return 0;
     }
 

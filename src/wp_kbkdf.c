@@ -431,7 +431,7 @@ static int wp_kbkdf_init_mac(wp_KbkdfCtx* ctx, unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kbkdf_init_mac");
 
-    if (keyLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(keyLen)) {
         return 0;
     }
 
@@ -495,7 +495,7 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kbkdf_mac_update");
 
-    if (dataLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(dataLen)) {
         return 0;
     }
 

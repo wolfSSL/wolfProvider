@@ -282,7 +282,7 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_gmac_final");
 
-    if ((macCtx->dataLen > 0xFFFFFFFFU) || (outSize > 0xFFFFFFFFU)) {
+    if ((!WP_FITS_WORD32(macCtx->dataLen)) || (!WP_FITS_WORD32(outSize))) {
         ok = 0;
     }
     if (ok && !wolfssl_prov_is_running()) {

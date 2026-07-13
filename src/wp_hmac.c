@@ -128,7 +128,7 @@ static int wp_hmac_set_key(wp_HmacCtx* macCtx, const unsigned char* key,
 
     WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_HMAC);
 
-    if (keyLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(keyLen)) {
         return 0;
     }
 
@@ -266,7 +266,8 @@ static int wp_hmac_update(wp_HmacCtx* macCtx, const unsigned char* data,
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_hmac_update");
 
     while (ok && (dataLen > 0)) {
-        word32 chunk = (dataLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)dataLen;
+        word32 chunk = (!WP_FITS_WORD32(dataLen)) ?
+            0xFFFFFFFFU : (word32)dataLen;
         int rc = wc_HmacUpdate(&macCtx->hmac, data, chunk);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HmacUpdate",

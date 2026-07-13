@@ -277,7 +277,7 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_derive_secret");
 
-    if (*secLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(*secLen)) {
         ok = 0;
     }
     /* Get our private key data. */

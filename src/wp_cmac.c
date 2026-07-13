@@ -237,7 +237,8 @@ static int wp_cmac_update(wp_CmacCtx* macCtx, const unsigned char* data,
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_cmac_update");
 
     while (ok && (dataLen > 0)) {
-        word32 chunk = (dataLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)dataLen;
+        word32 chunk = (!WP_FITS_WORD32(dataLen)) ?
+            0xFFFFFFFFU : (word32)dataLen;
         int rc = wc_CmacUpdate(&macCtx->cmac, data, chunk);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_CmacUpdate",

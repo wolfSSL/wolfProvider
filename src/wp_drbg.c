@@ -320,7 +320,7 @@ static int wp_drbg_generate(wp_DrbgCtx* ctx, unsigned char* out,
     }
 #endif
 
-    if (ok && (outLen > 0xFFFFFFFFU)) {
+    if (ok && (!WP_FITS_WORD32(outLen))) {
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG, "Request length is too big");
         ok = 0;
     }
@@ -397,10 +397,10 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
     }
 
     /* wolfCrypt RNG APIs take word32 lengths; reject oversized inputs. */
-    if (ok && entropy != NULL && entropyLen > 0xFFFFFFFFU) {
+    if (ok && entropy != NULL && !WP_FITS_WORD32(entropyLen)) {
         ok = 0;
     }
-    if (ok && addIn != NULL && addInLen > 0xFFFFFFFFU) {
+    if (ok && addIn != NULL && !WP_FITS_WORD32(addInLen)) {
         ok = 0;
     }
 
@@ -767,7 +767,7 @@ static size_t wp_drbg_get_seed(wp_DrbgCtx* ctx, unsigned char** pSeed,
         goto end;
     }
 
-    if (minLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(minLen)) {
         OPENSSL_secure_free(buffer);
         goto end;
     }

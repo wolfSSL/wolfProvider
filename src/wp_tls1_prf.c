@@ -166,7 +166,7 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
     if (ok && (keyLen == 0)) {
         ok = 0;
     }
-    if (ok && (keyLen > 0xFFFFFFFFU)) {
+    if (ok && (!WP_FITS_WORD32(keyLen))) {
         ok = 0;
     }
 

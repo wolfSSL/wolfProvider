@@ -647,7 +647,7 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
     }
     if (ok) {
-        if ((tbsLen > 0xFFFFFFFFU) || (sigSize > 0xFFFFFFFFU)) {
+        if ((!WP_FITS_WORD32(tbsLen)) || (!WP_FITS_WORD32(sigSize))) {
             ok = 0;
         }
         if (ok && (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1)) {
@@ -706,7 +706,7 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_sign_pss");
 
     if (ok) {
-        if ((tbsLen > 0xFFFFFFFFU) || (sigSize > 0xFFFFFFFFU)) {
+        if ((!WP_FITS_WORD32(tbsLen)) || (!WP_FITS_WORD32(sigSize))) {
             ok = 0;
         }
         if (ok && (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1)) {
@@ -916,7 +916,7 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
             ok = 0;
         }
     }
-    if (ok && (sigSize > 0xFFFFFFFFU)) {
+    if (ok && (!WP_FITS_WORD32(sigSize))) {
         ok = 0;
     }
     if (ok) {
@@ -1090,7 +1090,7 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx* ctx, const unsigned char* sig,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_verify_pkcs1");
 
-    if (sigLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(sigLen)) {
         return 0;
     }
 
@@ -1157,7 +1157,7 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_verify_pss");
 
-    if (sigLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(sigLen)) {
         ok = 0;
     }
 
@@ -1532,7 +1532,7 @@ static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, unsigned char* rout,
         ok = 0;
     }
 
-    if (ok && ((sigLen > 0xFFFFFFFFU) || (routsize > 0xFFFFFFFFU))) {
+    if (ok && ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(routsize)))) {
         ok = 0;
     }
     if (ok) {
@@ -1594,7 +1594,7 @@ static int wp_rsa_digest_signverify_update(wp_RsaSigCtx* ctx,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_digest_signverify_update");
 
-    if (dataLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(dataLen)) {
         return 0;
     }
 

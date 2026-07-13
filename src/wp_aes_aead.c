@@ -1465,7 +1465,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_encdec");
 
-    if ((ctx->inLen > 0xFFFFFFFFU) || (ctx->aadLen > 0xFFFFFFFFU)) {
+    if ((!WP_FITS_WORD32(ctx->inLen)) || (!WP_FITS_WORD32(ctx->aadLen))) {
         return 0;
     }
 
@@ -1991,7 +1991,7 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesccm_encdec");
 
-    if ((inLen > 0xFFFFFFFFU) || (ctx->aadLen > 0xFFFFFFFFU)) {
+    if ((!WP_FITS_WORD32(inLen)) || (!WP_FITS_WORD32(ctx->aadLen))) {
         return 0;
     }
 
