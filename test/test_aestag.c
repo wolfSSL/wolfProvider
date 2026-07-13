@@ -979,6 +979,210 @@ static int test_aes_tag_tls(void *data, const char *cipher,
     return err;
 }
 
+/*
+ * Shared driver for the "key supplied, IV/nonce deliberately omitted" AEAD
+ * tests. GCM and CCM, encrypt and decrypt, single-shot and streaming all reduce
+ * to the same skeleton, so they are described by a small config and run here.
+ */
+typedef struct {
+    int keyLen;
+    int isCCM;  /* CCM-style init (set ivlen/tag before key, pre-declare len) */
+    int enc;    /* 1 = encrypt, 0 = decrypt */
+    int chunk;  /* >0: feed the payload in fixed-size chunks (streaming) */
+} aead_no_iv_cfg;
+
+/*
+ * Run one key-only test with IV not supplied.
+ */
+static int aead_no_iv_pass(EVP_CIPHER *cipher, const aead_no_iv_cfg *cfg,
+    unsigned char *out, int *outLen)
+{
+    EVP_CIPHER_CTX *ctx;
+    unsigned char key[32];
+    unsigned char aad[] = "aad";
+    unsigned char payload[32];
+    unsigned char tag[16];
+    unsigned char buf[64];
+    /* Default CCM nonce length: 15 - L(=8) = 7 bytes. */
+    const int ivLen = 7;
+    const int aadLen = (int)(sizeof(aad) - 1);
+    const int payloadLen = (int)sizeof(payload);
+    const int step = cfg->chunk > 0 ? cfg->chunk : payloadLen;
+    int total = 0;
+    int len = 0;
+    int off;
+    int ok = 1;
+
+    memset(key, 0x42, cfg->keyLen);
+    memset(payload, 0x5A, sizeof(payload));
+    memset(tag, 0, sizeof(tag));
+    memset(buf, 0, sizeof(buf));
+    if (outLen != NULL)
+        *outLen = 0;
+
+    ctx = EVP_CIPHER_CTX_new();
+    if (ctx == NULL)
+        return -1;
+
+    /* Init with the key but no IV/nonce. CCM needs the IV and tag lengths fixed
+     * before the key is set. GCM decrypt supplies a tag so the only missing
+     * input is the IV. */
+    if (cfg->isCCM) {
+        if (cfg->enc ? EVP_EncryptInit(ctx, cipher, NULL, NULL) != 1
+                     : EVP_DecryptInit(ctx, cipher, NULL, NULL) != 1)
+            ok = 0;
+        if (ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, ivLen,
+                NULL) != 1)
+            ok = 0;
+        if (ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG,
+                (int)sizeof(tag), cfg->enc ? NULL : tag) != 1)
+            ok = 0;
+        if (ok && (cfg->enc ? EVP_EncryptInit(ctx, NULL, key, NULL) != 1
+                            : EVP_DecryptInit(ctx, NULL, key, NULL) != 1))
+            ok = 0;
+    }
+    else {
+        if (cfg->enc ? EVP_EncryptInit_ex(ctx, cipher, NULL, key, NULL) != 1
+                     : EVP_DecryptInit_ex(ctx, cipher, NULL, key, NULL) != 1)
+            ok = 0;
+        if (ok && !cfg->enc &&
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG,
+                    (int)sizeof(tag), tag) != 1)
+            ok = 0;
+    }
+
+    /* CCM pre-declares the total payload length. GCM feeds AAD instead. */
+    if (ok) {
+        if (cfg->isCCM) {
+            if (cfg->enc ? EVP_EncryptUpdate(ctx, NULL, &len, NULL,
+                               payloadLen) != 1
+                         : EVP_DecryptUpdate(ctx, NULL, &len, NULL,
+                               payloadLen) != 1)
+                ok = 0;
+        }
+        else if (cfg->enc ? EVP_EncryptUpdate(ctx, NULL, &len, aad,
+                                aadLen) != 1
+                          : EVP_DecryptUpdate(ctx, NULL, &len, aad,
+                                aadLen) != 1) {
+            ok = 0;
+        }
+    }
+
+    /* Feed the payload, in fixed-size chunks when streaming. */
+    for (off = 0; ok && off < payloadLen; off += step) {
+        int n = (payloadLen - off < step) ? (payloadLen - off) : step;
+        if (cfg->enc ? EVP_EncryptUpdate(ctx, buf + total, &len,
+                           payload + off, n) != 1
+                     : EVP_DecryptUpdate(ctx, buf + total, &len,
+                           payload + off, n) != 1)
+            ok = 0;
+        else
+            total += len;
+    }
+
+    /* GCM verifies the tag (and CCM completes the encrypt) at Final. A CCM
+     * decrypt is a one-shot whose rejection already happened in the update
+     * above, so there is nothing left to finalise. */
+    if (ok && !(cfg->isCCM && !cfg->enc)) {
+        if (cfg->enc ? EVP_EncryptFinal_ex(ctx, buf + total, &len) != 1
+                     : EVP_DecryptFinal_ex(ctx, buf + total, &len) != 1)
+            ok = 0;
+        else
+            total += len;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    if (ok && out != NULL && total <= (int)sizeof(buf))
+        memcpy(out, buf, (size_t)total);
+    if (outLen != NULL)
+        *outLen = total;
+    return ok;
+}
+
+/*
+ * Encrypt with a key but no IV/nonce must be rejected. If it is instead
+ * accepted, a second pass that yields identical ciphertext additionally flags a
+ * reused nonce.
+ */
+static int test_aes_aead_encrypt_key_no_iv(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen, int isCCM, int chunk)
+{
+    int err = 0;
+    EVP_CIPHER *cipher;
+    aead_no_iv_cfg cfg;
+    unsigned char ct1[64];
+    unsigned char ct2[64];
+    int len1 = 0;
+    int len2 = 0;
+    const char *stream = chunk > 0 ? "streaming " : "";
+    int st;
+
+    cfg.keyLen = keyLen;
+    cfg.isCCM  = isCCM;
+    cfg.enc    = 1;
+    cfg.chunk  = chunk;
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    if (cipher == NULL)
+        return 1;
+
+    st = aead_no_iv_pass(cipher, &cfg, ct1, &len1);
+    if (st < 0) {
+        err = 1;
+    }
+    else if (st == 1) {
+        PRINT_ERR_MSG("%s: %sencrypt without %s succeeded", cipherName, stream,
+                      isCCM ? "nonce" : "IV");
+        err = 1;
+
+        if (aead_no_iv_pass(cipher, &cfg, ct2, &len2) == 1 &&
+                len1 > 0 && len1 == len2 &&
+                memcmp(ct1, ct2, (size_t)len1) == 0) {
+            PRINT_ERR_MSG("%s: two key-only %sencrypts produced identical "
+                          "ciphertext (nonce reused)", cipherName, stream);
+        }
+    }
+
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/*
+ * Decrypt with a key (and tag) but no IV/nonce must be rejected.
+ */
+static int test_aes_aead_decrypt_key_no_iv(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen, int isCCM, int chunk)
+{
+    int err = 0;
+    EVP_CIPHER *cipher;
+    aead_no_iv_cfg cfg;
+    const char *stream = chunk > 0 ? "streaming " : "";
+    int st;
+
+    cfg.keyLen = keyLen;
+    cfg.isCCM  = isCCM;
+    cfg.enc    = 0;
+    cfg.chunk  = chunk;
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    if (cipher == NULL)
+        return 1;
+
+    st = aead_no_iv_pass(cipher, &cfg, NULL, NULL);
+    if (st < 0) {
+        err = 1;
+    }
+    else if (st == 1) {
+        PRINT_ERR_MSG("%s: %sdecrypt without %s succeeded", cipherName, stream,
+                      isCCM ? "nonce" : "IV");
+        err = 1;
+    }
+
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
 #endif /* WP_HAVE_AESGCM || WP_HAVE_AESCCM */
 
 #ifdef WP_HAVE_AESGCM
@@ -1508,6 +1712,38 @@ int test_aes_gcm_tls_iv_fixed_oversized(void *data)
     return err;
 }
 
+int test_aes_gcm_key_no_iv(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM: encrypt without IV must be rejected");
+    err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-128-GCM", 16, 0, 0);
+    if (err == 0) {
+        PRINT_MSG("AES-192-GCM: encrypt without IV must be rejected");
+        err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-192-GCM", 24, 0, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM: encrypt without IV must be rejected");
+        err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-256-GCM", 32, 0, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-128-GCM: decrypt without IV must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-128-GCM", 16, 0, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-192-GCM: decrypt without IV must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-192-GCM", 24, 0, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM: decrypt without IV must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-256-GCM", 32, 0, 0);
+    }
+
+    return err;
+}
+
 /*
  * Test that GCM tag lengths are validated against the NIST SP 800-38D table.
  */
@@ -1630,6 +1866,135 @@ int test_aes_gcm_tag_len_undersized(void *data)
     if (err == 0) {
         PRINT_MSG("AES-256-GCM tag length validation");
         err = test_aes_gcm_tag_len_helper(wpLibCtx, "AES-256-GCM");
+    }
+
+    return err;
+}
+
+int test_aes_gcm_stream_key_no_iv(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM: streaming encrypt without IV must be rejected");
+    err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-128-GCM", 16, 0, 8);
+    if (err == 0) {
+        PRINT_MSG("AES-192-GCM: streaming encrypt without IV must be rejected");
+        err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-192-GCM", 24, 0, 8);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM: streaming encrypt without IV must be rejected");
+        err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-256-GCM", 32, 0, 8);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-128-GCM: streaming decrypt without IV must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-128-GCM", 16, 0, 8);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-192-GCM: streaming decrypt without IV must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-192-GCM", 24, 0, 8);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM: streaming decrypt without IV must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-256-GCM", 32, 0, 8);
+    }
+
+    return err;
+}
+
+/*
+ * GCM encrypt/decrypt with a key but no IV that goes straight to final without
+ * any update call must be rejected.
+ */
+static int test_aes_gcm_final_no_update_no_iv_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char out[16];
+    unsigned char tag[16];
+    int fLen = 0;
+
+    memset(key, 0x42, keyLen);
+    memset(out, 0, sizeof(out));
+    memset(tag, 0x00, sizeof(tag));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt: key supplied, IV deliberately omitted, no update. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        if (EVP_EncryptInit_ex(ctx, cipher, NULL, key, NULL) != 1)
+            err = 1;
+    }
+    if (err == 0) {
+        if (EVP_EncryptFinal_ex(ctx, out, &fLen) == 1) {
+            PRINT_ERR_MSG("%s: encrypt final without IV/update succeeded",
+                          cipherName);
+            err = 1;
+        }
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Decrypt: key supplied, IV deliberately omitted, no update. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        if (ctx == NULL)
+            err = 1;
+    }
+    if (err == 0) {
+        if (EVP_DecryptInit_ex(ctx, cipher, NULL, key, NULL) != 1)
+            err = 1;
+    }
+    /* Supply a tag so the decrypt path reaches the IV guard rather than being
+     * rejected earlier for a missing tag. */
+    if (err == 0) {
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, (int)sizeof(tag),
+                tag) != 1)
+            err = 1;
+    }
+    if (err == 0) {
+        if (EVP_DecryptFinal_ex(ctx, out, &fLen) == 1) {
+            PRINT_ERR_MSG("%s: decrypt final without IV/update succeeded",
+                          cipherName);
+            err = 1;
+        }
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_gcm_final_no_update_no_iv(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-GCM: final without IV/update must be rejected");
+    err = test_aes_gcm_final_no_update_no_iv_helper(wpLibCtx, "AES-128-GCM", 16);
+    if (err == 0) {
+        PRINT_MSG("AES-192-GCM: final without IV/update must be rejected");
+        err = test_aes_gcm_final_no_update_no_iv_helper(wpLibCtx, "AES-192-GCM",
+            24);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-GCM: final without IV/update must be rejected");
+        err = test_aes_gcm_final_no_update_no_iv_helper(wpLibCtx, "AES-256-GCM",
+            32);
     }
 
     return err;
@@ -1967,6 +2332,38 @@ int test_aes_ccm_tag_len_undersized(void *data)
     if (err == 0) {
         PRINT_MSG("AES-256-CCM tag length validation");
         err = test_aes_ccm_tag_len_helper(wpLibCtx, "AES-256-CCM");
+    }
+
+    return err;
+}
+
+int test_aes_ccm_key_no_iv(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-CCM: encrypt without nonce must be rejected");
+    err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-128-CCM", 16, 1, 0);
+    if (err == 0) {
+        PRINT_MSG("AES-192-CCM: encrypt without nonce must be rejected");
+        err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-192-CCM", 24, 1, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM: encrypt without nonce must be rejected");
+        err = test_aes_aead_encrypt_key_no_iv(wpLibCtx, "AES-256-CCM", 32, 1, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-128-CCM: decrypt without nonce must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-128-CCM", 16, 1, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-192-CCM: decrypt without nonce must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-192-CCM", 24, 1, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM: decrypt without nonce must be rejected");
+        err = test_aes_aead_decrypt_key_no_iv(wpLibCtx, "AES-256-CCM", 32, 1, 0);
     }
 
     return err;
