@@ -505,6 +505,7 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_DES3CBC
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_des3_tls_cbc_bad_pad, NULL),
+        TEST_DECL(test_des3_tls_cbc_dec, NULL),
     #endif
 #endif
 

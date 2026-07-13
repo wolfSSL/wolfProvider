@@ -533,6 +533,97 @@ int test_des3_tls_cbc_bad_pad(void *data)
     return test_des3_tls_cbc_bad_pad_helper(wpLibCtx);
 }
 
+/*
+ * Positive DES3 TLS 1.2 CBC decrypt: a valid record must decrypt back to the
+ * original plaintext with the explicit-IV block and padding stripped.
+ */
+static int test_des3_tls_cbc_dec_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+    unsigned int tlsVer = TLS1_2_VERSION;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    /* 37 bytes: not block-aligned, so padding is non-trivial. */
+    unsigned char pt[37];
+    unsigned char buf[64];
+    int ptLen = (int)sizeof(pt);
+    int encLen = 0;
+    int decLen = 0;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(pt, 0x42, sizeof(pt));
+
+    cipher = EVP_CIPHER_fetch(libCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt the record [explicit_IV][plaintext] in TLS mode. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 1) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
+                                              &tlsVer);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        memcpy(buf, iv, DES3_BS);
+        memcpy(buf + DES3_BS, pt, ptLen);
+        err = EVP_CipherUpdate(ctx, buf, &encLen, buf, DES3_BS + ptLen) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Decrypt in TLS mode: IV and padding stripped, plaintext at buf+DES3_BS. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 0) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
+                                              &tlsVer);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1;
+    }
+    if (err == 0 && decLen != ptLen) {
+        PRINT_ERR_MSG("DES3 TLS CBC dec outLen mismatch: got %d, expected %d",
+                      decLen, ptLen);
+        err = 1;
+    }
+    if (err == 0 && memcmp(buf + DES3_BS, pt, ptLen) != 0) {
+        PRINT_ERR_MSG("DES3 TLS CBC dec plaintext mismatch");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_des3_tls_cbc_dec(void *data)
+{
+    (void)data;
+
+    PRINT_MSG("DES3 TLS 1.2 CBC decrypt roundtrip (wolfProvider)");
+    return test_des3_tls_cbc_dec_helper(wpLibCtx);
+}
+
 #undef DES3_BS
 
 /*

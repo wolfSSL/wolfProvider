@@ -505,6 +505,7 @@ int test_aes_tls_cbc_split(void *data);
 #ifdef WP_HAVE_DES3CBC
 #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
 int test_des3_tls_cbc_bad_pad(void *data);
+int test_des3_tls_cbc_dec(void *data);
 #endif
 #endif
 
