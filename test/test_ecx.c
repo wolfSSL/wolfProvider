@@ -757,6 +757,45 @@ int test_ecx_x25519_raw_priv_roundtrip(void *data)
     EVP_PKEY_free(pkey);
     return err;
 }
+
+/* A zero-length private key octet string must be rejected without an
+ * out-of-bounds read (privData[len-1] with len==0). */
+int test_ecx_import_zero_priv(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    unsigned char *buf = NULL;
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    buf = OPENSSL_malloc(1);
+    if (buf == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "X25519", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PRIV_KEY,
+            buf, 0);
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) == 1) {
+            PRINT_ERR_MSG("X25519 import accepted zero-length private key");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OPENSSL_free(buf);
+    return err;
+}
 #endif /* WP_HAVE_X25519 */
 
 int test_ecx_dup(void *data)

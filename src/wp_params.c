@@ -464,11 +464,12 @@ int wp_params_get_utf8_string(const OSSL_PARAM* params, const char* key,
     if ((p != NULL) && (p->data_type != OSSL_PARAM_UTF8_STRING)) {
         ok = 0;
     }
-    if ((p != NULL) && ok && (p->data_size > len)) {
+    if ((p != NULL) && ok && (p->data_size >= len)) {
         ok = 0;
     }
     if ((p != NULL) && ok) {
-        XSTRNCPY(str, p->data, len);
+        XMEMCPY(str, p->data, p->data_size);
+        str[p->data_size] = '\0';
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

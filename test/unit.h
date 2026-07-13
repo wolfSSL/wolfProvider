@@ -44,6 +44,8 @@
 #include <wolfprovider/settings.h>
 #include <wolfprovider/wp_logging.h>
 
+/* Parse wolfSSL's AES_BLOCK_SIZE enum before the fallback macro can shadow it. */
+#include <wolfssl/wolfcrypt/aes.h>
 #ifndef AES_BLOCK_SIZE
     #define AES_BLOCK_SIZE 16
 #endif
@@ -121,6 +123,7 @@ int test_digest_multi_update(void *data);
 
 #ifdef WP_HAVE_HMAC
 int test_hmac_create(void *data);
+int test_hmac_key_no_digest(void *data);
 int test_hmac_multi_update(void *data);
 int test_hmac_dup(void *data);
 int test_mac_key_match(void *data);
@@ -326,6 +329,8 @@ int test_dh_pad(void *data);
 int test_dh_x963_kdf(void *data);
 #endif
 int test_dh_fromdata_oversize(void *data);
+int test_dh_param_check_explicit(void *data);
+int test_dh_import_group_no_nul(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC
@@ -442,6 +447,7 @@ int test_ecdsa_p256_pkey(void *data);
 int test_ecdsa_p256(void *data);
 int test_ecdsa_verify_undersized_hash(void *data);
 int test_ecdsa_verify_md_len_mismatch(void *data);
+int test_ecdsa_setup_md_reject_atomic(void *data);
 #endif /* WP_HAVE_EC_P256 */
 
 #ifdef WP_HAVE_EC_P384
@@ -458,6 +464,7 @@ int test_ec_load_cert(void* data);
 #endif /* WP_HAVE_ECDSA */
 
 int test_ec_decode(void* data);
+int test_ec_decode_short_pem(void* data);
 int test_ec_import(void* data);
 int test_ec_auto_derive_pubkey(void* data);
 int test_ec_null_init(void* data);
@@ -483,6 +490,7 @@ int test_ecx_misc(void *data);
 int test_ecx_null_init(void *data);
 #ifdef WP_HAVE_X25519
 int test_ecx_x25519_raw_priv_roundtrip(void *data);
+int test_ecx_import_zero_priv(void *data);
 #endif /* WP_HAVE_X25519 */
 int test_ecx_dup(void *data);
 #endif
@@ -499,11 +507,13 @@ int test_x509_cert(void *data);
 int test_tls12_cbc(void *data);
 int test_tls12_cbc_ossl(void *data);
 int test_aes_tls_cbc_bad_pad(void *data);
+int test_aes_tls_cbc_split(void *data);
 #endif
 
 #ifdef WP_HAVE_DES3CBC
 #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
 int test_des3_tls_cbc_bad_pad(void *data);
+int test_des3_tls_cbc_dec(void *data);
 #endif
 #endif
 

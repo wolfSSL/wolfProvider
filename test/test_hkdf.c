@@ -613,6 +613,42 @@ static int test_hkdf_extract_only_bad_len(OSSL_LIB_CTX *libCtx)
 
 #define NUM_MODES     3
 
+#ifdef WP_HAVE_SHA256
+/* HKDF ctx dup is unsupported: it must return NULL, not a broken context. */
+static int test_hkdf_dup_unsupported(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY_CTX *dupCtx = NULL;
+    unsigned char inKey[32] = { 0, };
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "HKDF", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set1_hkdf_key(ctx, inKey, sizeof(inKey)) != 1;
+    }
+    if (err == 0) {
+        dupCtx = EVP_PKEY_CTX_dup(ctx);
+        if (dupCtx != NULL) {
+            PRINT_ERR_MSG("HKDF ctx dup unexpectedly returned a context");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_CTX_free(dupCtx);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+#endif /* WP_HAVE_SHA256 */
+
 int test_hkdf(void *data)
 {
     int err = 0;
@@ -653,6 +689,11 @@ int test_hkdf(void *data)
     if (err == 0) {
         err = test_hkdf_extract_only_bad_len(wpLibCtx);
     }
+#ifdef WP_HAVE_SHA256
+    if (err == 0) {
+        err = test_hkdf_dup_unsupported();
+    }
+#endif
 
     return err;
 }

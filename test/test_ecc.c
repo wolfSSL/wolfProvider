@@ -21,6 +21,7 @@
 #include "unit.h"
 
 #include <openssl/store.h>
+#include <openssl/decoder.h>
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
 
@@ -1622,6 +1623,54 @@ int test_ecdsa_verify_md_len_mismatch(void *data)
 
     return err;
 }
+
+/*
+ * A digest rejected by wp_ecdsa_setup_md (e.g. MD5) must not overwrite the
+ * previously configured digest. After the failed set, the context still
+ * enforces SHA-256's 32-byte size, so a raw sign of a 16-byte input fails.
+ */
+int test_ecdsa_setup_md_reject_atomic(void *data)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    EVP_PKEY_CTX *ctx = NULL;
+    const unsigned char *p = ecc_key_der_256;
+    unsigned char digest[32];
+    unsigned char sig[80];
+    size_t sigLen = sizeof(sig);
+
+    (void)data;
+
+    memset(digest, 0x5A, sizeof(digest));
+
+    pkey = d2i_PrivateKey(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256));
+    if (pkey == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_signature_md(ctx, EVP_sha256()) <= 0;
+    }
+    if (err == 0 && EVP_PKEY_CTX_set_signature_md(ctx, EVP_md5()) > 0) {
+        PRINT_ERR_MSG("MD5 unexpectedly accepted for ECDSA");
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_sign(ctx, sig, &sigLen, digest, 16) > 0) {
+        PRINT_ERR_MSG("ECDSA signed a 16-byte input after a rejected digest");
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
 #endif /* WP_HAVE_EC_P256 */
 
 #ifdef WP_HAVE_EC_P384
@@ -2530,6 +2579,140 @@ static int test_ec_import_pub(void)
     return err;
 }
 
+/*
+ * A private scalar equal to the curve order n is outside [1, n-1] and must be
+ * rejected on import (FIPS 186-4).
+ */
+static int test_ec_import_priv_out_of_range(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM *params = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    BIGNUM *priv = NULL;
+    /* P-256 group order n. */
+    static const unsigned char p256_order[] = {
+        0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84,
+        0xf3, 0xb9, 0xca, 0xc2, 0xfc, 0x63, 0x25, 0x51
+    };
+
+    err = (bld = OSSL_PARAM_BLD_new()) == NULL;
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
+                ecc_p256_group_str, 0) != 1;
+    }
+    if (err == 0) {
+        err = (priv = BN_bin2bn(p256_order, sizeof(p256_order), NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PRIV_KEY, priv) != 1;
+    }
+    if (err == 0) {
+        err = (params = OSSL_PARAM_BLD_to_param(bld)) == NULL;
+    }
+    if (err == 0) {
+        err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0 &&
+            EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) == 1) {
+        PRINT_ERR_MSG("EC import accepted private scalar d == n");
+        err = 1;
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    BN_free(priv);
+
+    return err;
+}
+
+/*
+ * A non-NUL-terminated GROUP_NAME UTF8_STRING param must not cause an
+ * out-of-bounds read in the group-name comparison.
+ */
+static int test_ec_import_group_no_nul(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM params[2];
+    char *name = NULL;
+
+    /* "prime256v1" with no NUL terminator, sized exactly. */
+    name = OPENSSL_malloc(10);
+    if (name == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        memcpy(name, "prime256v1", 10);
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0].key = OSSL_PKEY_PARAM_GROUP_NAME;
+        params[0].data_type = OSSL_PARAM_UTF8_STRING;
+        params[0].data = name;
+        params[0].data_size = 10;
+        params[0].return_size = 0;
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS,
+                params) != 1) {
+            PRINT_ERR_MSG("EC group import failed for valid curve name");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OPENSSL_free(name);
+    return err;
+}
+
+/*
+ * A truncated PEM (header only) must be rejected without an out-of-bounds read
+ * in wp_pem2der_convert (base64Data past the buffer / base64Len underflow).
+ */
+int test_ec_decode_short_pem(void *data)
+{
+    int err = 0;
+    OSSL_DECODER_CTX *dctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    static const char shortPem[] = "-----BEGIN EC PARAMETERS-----\n";
+    const unsigned char *p = (const unsigned char *)shortPem;
+    size_t pLen = sizeof(shortPem) - 1;
+
+    (void)data;
+
+    dctx = OSSL_DECODER_CTX_new_for_pkey(&pkey, "PEM", NULL, "EC",
+        EVP_PKEY_KEY_PARAMETERS, wpLibCtx, NULL);
+    if (dctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        /* Truncated PEM simply fails to decode; must not read out of bounds. */
+        (void)OSSL_DECODER_from_data(dctx, &p, &pLen);
+        if (pkey != NULL) {
+            PRINT_ERR_MSG("Truncated PEM unexpectedly produced a key");
+            err = 1;
+        }
+    }
+
+    OSSL_DECODER_CTX_free(dctx);
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
 int test_ec_import(void* data)
 {
     int err = 0;
@@ -2538,6 +2721,12 @@ int test_ec_import(void* data)
     err = test_ec_import_priv();
     if (err == 0) {
         err = test_ec_import_pub();
+    }
+    if (err == 0) {
+        err = test_ec_import_priv_out_of_range();
+    }
+    if (err == 0) {
+        err = test_ec_import_group_no_nul();
     }
 
     return err;

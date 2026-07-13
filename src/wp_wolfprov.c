@@ -1397,6 +1397,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
     const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
 {
     int ok = 1;
+    const OSSL_DISPATCH* origIn = in;
 
     wolfProv_LogInit();
 
@@ -1488,7 +1489,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
          * uninitialized libctx in certain init flows. Instead create
          * a new child libctx. The child libctx being NULL is allowed. */
         wolfssl_prov_ctx_set0_lib_ctx(*provCtx,
-            OSSL_LIB_CTX_new_child(handle, in));
+            OSSL_LIB_CTX_new_child(handle, origIn));
         /* Cache the handle in provider context. */
         wolfssl_prov_ctx_set0_handle(*provCtx, handle);
 
