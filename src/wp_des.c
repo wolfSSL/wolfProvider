@@ -505,8 +505,13 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
             check &= wp_ct_byte_mask_ne(outStart[oLen - DES_BLOCK_SIZE + i], pad);
             invalid |= check;
         }
-        *outLen = oLen - pad - 1 - DES_BLOCK_SIZE;
         ok = invalid == 0;
+        if (ok) {
+            *outLen = oLen - pad - 1 - DES_BLOCK_SIZE;
+        }
+        else {
+            *outLen = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
