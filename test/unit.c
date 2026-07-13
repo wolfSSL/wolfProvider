@@ -570,8 +570,8 @@ static void usage(void)
     printf("  <num>           Run this test case, but not all\n");
 #if defined(WP_TEST_SECCOMP_SANDBOX) && defined(WP_HAVE_SEED_SRC) && \
     defined(WP_HAVE_RANDOM)
-    printf("  --seccomp-sandbox-helper <single|leak|multi> [provider-dir] "
-                              "[provider-name]\n");
+    printf("  --seccomp-sandbox-helper <single|leak|multi|reuse> "
+                              "[provider-dir] [provider-name]\n");
     printf("                  INTERNAL: seccomp re-exec protocol, not for "
                               "direct use.\n");
 #endif
@@ -797,7 +797,8 @@ int main(int argc, char* argv[])
     defined(WP_HAVE_RANDOM)
     /*
      * Internal re-exec protocol: the seccomp test re-execs this binary as
-     *   --seccomp-sandbox-helper <single|leak|multi> [provider-dir] [name]
+     *   --seccomp-sandbox-helper <single|leak|multi|reuse>
+     *       [provider-dir] [name]
      * to run a helper mode in a fresh process. See test_seccomp_sandbox.c.
      */
     if (argc >= 2 && strcmp(argv[1], "--seccomp-sandbox-helper") == 0) {

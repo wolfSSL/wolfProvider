@@ -27,6 +27,13 @@
  * rewinding fread read-ahead. The SEED-SRC path now uses a raw /dev/urandom fd
  * (open/read/close, no stdio buffering), so libc exit performs no lseek(). The
  * tests here would catch a reintroduction of the buffered-stream SIGSYS bug.
+ *
+ * T4 covers a second, distinct bug: SEED-SRC caches a /dev/urandom fd by number,
+ * and OpenSSH's inetd-mode privsep setup reuses low fd numbers (dup2's its own
+ * descriptors over them). If the cached fd number is reused, a later read hits
+ * the wrong descriptor. T4 reproduces this by dup2'ing a non-blocking pipe over
+ * the cached fd, then verifying SEED-SRC detects the reuse (via fstat) and
+ * reopens /dev/urandom, so a sandboxed child still reseeds from a valid fd.
  */
 
 #include "unit.h"
@@ -45,8 +52,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include <limits.h>
 #include <endian.h>
+#include <fcntl.h>
+#include <dirent.h>
 #include <openssl/crypto.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfprovider/wp_wolfprov.h>
@@ -829,8 +840,154 @@ static int seccomp_helper_multi_context_lifecycle(const char *providerDir,
 }
 
 /*
+ * Simulate a host application (e.g. OpenSSH privsep) reusing the fd number that
+ * SEED-SRC cached for /dev/urandom: dup2 an empty non-blocking pipe over every
+ * /dev/urandom fd this process holds. A later read of the cached fd would then
+ * return EAGAIN unless SEED-SRC re-fstats it, detects the reuse, and reopens.
+ *
+ * Returns the number of fds clobbered, or -1 on setup failure. The pipe is left
+ * open for the lifetime of the (short-lived) helper process on purpose.
+ */
+static int clobber_urandom_fds(void)
+{
+    int pfd[2];
+    DIR *d;
+    struct dirent *ent;
+    int dfd;
+    int clobbered = 0;
+
+    if (pipe(pfd) != 0) {
+        PRINT_ERR_MSG("clobber_urandom_fds: pipe() failed: %s",
+            strerror(errno));
+        return -1;
+    }
+    /* Non-blocking so a read of the clobbered fd fails with EAGAIN rather than
+     * blocking forever - matching OpenSSH's non-blocking socket/pipe fds. */
+    if (fcntl(pfd[0], F_SETFL, O_NONBLOCK) == -1) {
+        PRINT_ERR_MSG("clobber_urandom_fds: fcntl(O_NONBLOCK) failed: %s",
+            strerror(errno));
+        close(pfd[0]);
+        close(pfd[1]);
+        return -1;
+    }
+
+    d = opendir("/proc/self/fd");
+    if (d == NULL) {
+        PRINT_ERR_MSG("clobber_urandom_fds: opendir failed: %s",
+            strerror(errno));
+        close(pfd[0]);
+        close(pfd[1]);
+        return -1;
+    }
+    dfd = dirfd(d);
+
+    while ((ent = readdir(d)) != NULL) {
+        char path[64];
+        char target[64];
+        ssize_t n;
+        int fd;
+
+        if (ent->d_name[0] < '0' || ent->d_name[0] > '9') {
+            continue;
+        }
+        fd = atoi(ent->d_name);
+        if (fd == pfd[0] || fd == pfd[1] || fd == dfd) {
+            continue;
+        }
+        n = snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+        if (n < 0 || (size_t)n >= sizeof(path)) {
+            continue;
+        }
+        n = readlink(path, target, sizeof(target) - 1);
+        if (n <= 0) {
+            continue;
+        }
+        target[n] = '\0';
+        if (strcmp(target, "/dev/urandom") == 0 && dup2(pfd[0], fd) == fd) {
+            clobbered++;
+        }
+    }
+
+    closedir(d);
+    return clobbered;
+}
+
+static int seccomp_helper_fd_reuse(const char *providerDir,
+    const char *providerName)
+{
+    OSSL_LIB_CTX *ctx = NULL;
+    OSSL_PROVIDER *provider = NULL;
+    unsigned char buf[32];
+    int clobbered = 0;
+    int err = 0;
+
+    ctx = OSSL_LIB_CTX_new();
+    if (ctx == NULL) {
+        PRINT_ERR_MSG("fd-reuse OSSL_LIB_CTX_new failed");
+        err = 1;
+    }
+
+    if (err == 0) {
+        err = load_provider_into_ctx(ctx, providerDir, providerName, &provider);
+    }
+
+    /* Draw entropy so SEED-SRC opens and caches its /dev/urandom fd. */
+    if (err == 0 && RAND_bytes_ex(ctx, buf, sizeof(buf), 0) != 1) {
+        PRINT_ERR_MSG("fd-reuse initial RAND_bytes_ex failed");
+        err = 1;
+    }
+
+    /* Reuse the cached fd number, as OpenSSH's privsep fd shuffle would. */
+    if (err == 0) {
+        clobbered = clobber_urandom_fds();
+        if (clobbered < 0) {
+            err = 1;
+        }
+        else if (clobbered == 0) {
+            PRINT_ERR_MSG("fd-reuse: no cached /dev/urandom fd found to clobber");
+            err = 1;
+        }
+        else {
+            PRINT_MSG("fd-reuse: clobbered %d cached /dev/urandom fd(s)",
+                clobbered);
+        }
+    }
+
+    /* Force a fresh seed draw in the parent, as OpenSSH's post-shuffle
+     * reseed_prngs does. This reads /dev/urandom, so SEED-SRC detects the reused
+     * fd (via fstat) and reopens; without the fix it reads the clobbered
+     * non-blocking pipe and fails with EAGAIN. Prediction resistance forces the
+     * DRBG down to the entropy source rather than reusing cached state. */
+    if (err == 0) {
+        EVP_RAND_CTX *rctx = RAND_get0_public(ctx);
+        if (rctx == NULL ||
+            EVP_RAND_reseed(rctx, 1, NULL, 0, NULL, 0) != 1) {
+            PRINT_ERR_MSG("fd-reuse parent reseed after clobber failed "
+                "(cached fd not revalidated/reopened)");
+            err = 1;
+        }
+    }
+    if (err == 0 && RAND_bytes_ex(ctx, buf, sizeof(buf), 0) != 1) {
+        PRINT_ERR_MSG("fd-reuse RAND_bytes_ex after clobber failed");
+        err = 1;
+    }
+
+    /* Full flow: the reopened fd must be valid when inherited by a sandboxed
+     * child that reseeds under OpenSSH's preauth filter. */
+    if (err == 0) {
+        err = run_multi_context_survivor_child(ctx,
+            "T4 SEED-SRC fd-reuse survivor after fd clobber");
+    }
+
+    OSSL_PROVIDER_unload(provider);
+    OSSL_LIB_CTX_free(ctx);
+
+    return err;
+}
+
+/*
  * Re-exec entry point for the seccomp helper child: dispatches to the
- * single/leak/multi sub-case by mode. Returns 0 on success, non-zero on
+ * single/leak/multi/reuse sub-case by mode. Returns 0 on success, non-zero on
  * failure (2 on bad arguments or unknown mode).
  */
 int test_seccomp_sandbox_helper(const char *mode, const char *providerDir,
@@ -852,6 +1009,9 @@ int test_seccomp_sandbox_helper(const char *mode, const char *providerDir,
     else if (strcmp(mode, "multi") == 0) {
         err = seccomp_helper_multi_context_lifecycle(providerDir,
             providerName);
+    }
+    else if (strcmp(mode, "reuse") == 0) {
+        err = seccomp_helper_fd_reuse(providerDir, providerName);
     }
     else {
         PRINT_ERR_MSG("unknown seccomp helper mode: %s", mode);
@@ -1063,6 +1223,11 @@ int test_seccomp_sandbox(void *data)
 
     if (run_seccomp_helper_case("multi",
         "T3 multi-context survivor after one unload") != 0) {
+        err = 1;
+    }
+
+    if (run_seccomp_helper_case("reuse",
+        "T4 SEED-SRC fd-reuse survivor after fd clobber") != 0) {
         err = 1;
     }
 

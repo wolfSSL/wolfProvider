@@ -26,6 +26,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
@@ -68,6 +70,16 @@
  * seccomp sandbox that blocks open()/openat(). */
 static int g_urandom_fd = XBADFD;
 
+/* Identity of the device behind g_urandom_fd, captured by fstat at open time.
+ * A host application (e.g. OpenSSH's privsep setup) may dup2 its own descriptor
+ * onto our cached fd number; before reading we re-fstat and confirm the fd still
+ * refers to the same /dev/urandom, reopening if it was reused. */
+static int    g_urandom_id_valid = 0;
+static dev_t  g_urandom_dev;
+static ino_t  g_urandom_ino;
+static mode_t g_urandom_mode;
+static dev_t  g_urandom_rdev;
+
 /* Live provider contexts referencing the shared fd/callback; mutex-guarded. */
 static int g_urandom_ref_count = 0;
 
@@ -76,8 +88,9 @@ static int g_seed_cb_registered = 0;
 #endif
 
 /**
- * Open the cached /dev/urandom fd if not already open. Idempotent; caller must
- * hold the urandom mutex.
+ * Open the cached /dev/urandom fd if not already open, capturing its device
+ * identity (via fstat) so later reads can detect fd-number reuse. Idempotent;
+ * caller must hold the urandom mutex.
  *
  * @return  0 on success.
  * @return  -1 if /dev/urandom cannot be opened.
@@ -94,11 +107,63 @@ static int wp_urandom_open_locked(void)
                 "wp_urandom_open: failed to open " URANDOM_PATH);
             return -1;
         }
+
+        /* Record the device identity so a later read can detect fd reuse. Uses
+         * a raw fstat(): wolfSSL exposes XSTAT (path-based) but no fd-based
+         * XFSTAT, and stat-ing the path cannot tell us our fd was reused. This
+         * matches the raw open() above (there is likewise no XOPEN). */
+        {
+            struct stat st;
+            if (fstat(g_urandom_fd, &st) == 0) {
+                g_urandom_dev = st.st_dev;
+                g_urandom_ino = st.st_ino;
+                g_urandom_mode = st.st_mode;
+                g_urandom_rdev = st.st_rdev;
+                g_urandom_id_valid = 1;
+            }
+            else {
+                g_urandom_id_valid = 0;
+            }
+        }
+
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "wp_urandom_open: opened " URANDOM_PATH);
     }
 
     return 0;
+}
+
+/**
+ * Return 1 if the cached fd should be reopened - either its number was reused by
+ * another subsystem, or the fd was closed (fstat reports EBADF). Return 0
+ * otherwise. Caller must hold the urandom mutex.
+ *
+ * Compares the current fstat against the identity captured at open. If fstat
+ * fails with anything other than EBADF - notably EACCES from a seccomp sandbox
+ * that denies fstat - we cannot tell, so we keep the fd rather than tearing down
+ * a possibly-good inherited descriptor.
+ */
+static int wp_urandom_fd_reused_locked(void)
+{
+    struct stat st;
+
+    if (g_urandom_fd == XBADFD || !g_urandom_id_valid) {
+        return 0;
+    }
+    if (fstat(g_urandom_fd, &st) != 0) {
+        /* EBADF: our fd was closed - reopen. Any other error (e.g. a sandbox
+         * denying fstat with EACCES) is inconclusive, so keep the fd. */
+        return (errno == EBADF);
+    }
+    /* Same identity check OpenSSL uses (check_random_device): ignore the low
+     * permission bits, require everything else to match. */
+    if (st.st_dev == g_urandom_dev && st.st_ino == g_urandom_ino &&
+        st.st_rdev == g_urandom_rdev &&
+        ((st.st_mode ^ g_urandom_mode) &
+            ~(mode_t)(S_IRWXU | S_IRWXG | S_IRWXO)) == 0) {
+        return 0;
+    }
+    return 1;
 }
 
 /**
@@ -118,6 +183,16 @@ static int wp_urandom_read_locked(unsigned char* buf, size_t len)
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "wp_urandom_read: requested length too large");
         return -1;
+    }
+
+    /* If our cached fd number was reused by another subsystem, abandon it
+     * (do NOT close - the descriptor belongs to them now) and reopen a fresh
+     * /dev/urandom before reading. */
+    if (wp_urandom_fd_reused_locked()) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+            "wp_urandom_read: cached fd reused, reopening " URANDOM_PATH);
+        g_urandom_fd = XBADFD;
+        g_urandom_id_valid = 0;
     }
 
     if (wp_urandom_open_locked() != 0) {
@@ -260,10 +335,16 @@ void wp_urandom_cleanup(void)
 #endif
 
     if (g_urandom_fd != XBADFD) {
-        XCLOSE(g_urandom_fd);
+        /* Only close if the fd is still ours: if its number was reused by the
+         * host, closing would clobber their descriptor. Mirrors OpenSSL's
+         * close_random_device(). */
+        if (!wp_urandom_fd_reused_locked()) {
+            XCLOSE(g_urandom_fd);
+        }
         g_urandom_fd = XBADFD;
+        g_urandom_id_valid = 0;
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
-            "wp_urandom_cleanup: closed " URANDOM_PATH);
+            "wp_urandom_cleanup: released " URANDOM_PATH);
     }
 
     WP_URANDOM_UNLOCK();
