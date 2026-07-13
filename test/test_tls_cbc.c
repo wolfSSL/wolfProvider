@@ -385,8 +385,10 @@ static int test_aes_tls_cbc_split_helper(OSSL_LIB_CTX *libCtx,
         err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
     }
     if (err == 0) {
+        /* Only the second update completes the split record and must succeed. */
         (void)EVP_CipherUpdate(ctx, out, &l1, buf, split);
-        (void)EVP_CipherUpdate(ctx, out, &l2, buf + split, encLen - split);
+        err = EVP_CipherUpdate(ctx, out + l1, &l2, buf + split,
+                               encLen - split) != 1;
     }
 
     OPENSSL_free(out);
