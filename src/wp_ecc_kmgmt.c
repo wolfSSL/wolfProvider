@@ -1160,6 +1160,7 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
         int idx = wc_ecc_get_curve_idx(ecc->curveId);
         const ecc_set_type* dp = (idx >= 0) ? wc_ecc_get_curve_params(idx) :
             NULL;
+        int orderInit = 0;
         mp_int order;
 #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
         mp_int* d = wc_ecc_key_get_priv(&ecc->key);
@@ -1167,12 +1168,25 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
         mp_int* d = &(ecc->key.k);
 #endif
 
-        /* Reject a private scalar >= group order n (FIPS 186-4); d == 0 is caught by the private-key gate below. */
-        if ((dp != NULL) && (mp_init(&order) == MP_OKAY)) {
-            if ((mp_read_radix(&order, dp->order, 16) == MP_OKAY) &&
-                (mp_cmp(d, &order) != MP_LT)) {
+        /* Reject a private scalar >= group order n (FIPS 186-4); d == 0 is caught by the private-key gate below. Fail closed if the order is unavailable. */
+        if (dp == NULL) {
+            ok = 0;
+        }
+        if (ok) {
+            if (mp_init(&order) != MP_OKAY) {
                 ok = 0;
             }
+            else {
+                orderInit = 1;
+            }
+        }
+        if (ok && (mp_read_radix(&order, dp->order, 16) != MP_OKAY)) {
+            ok = 0;
+        }
+        if (ok && (mp_cmp(d, &order) != MP_LT)) {
+            ok = 0;
+        }
+        if (orderInit) {
             mp_clear(&order);
         }
     }
