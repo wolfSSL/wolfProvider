@@ -1844,6 +1844,7 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
     }
     if (ok) {
         ctx->enc = enc;
+        ctx->tlsAadLen = UNINITIALISED_SIZET;
         ok = wp_aead_set_ctx_params(ctx, params);
     }
 
@@ -1969,6 +1970,7 @@ static int wp_aesccm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
     }
 
     *outLen = olen;
+    ctx->tlsAadLen = UNINITIALISED_SIZET;
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

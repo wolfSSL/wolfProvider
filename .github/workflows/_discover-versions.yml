@@ -50,16 +50,31 @@ jobs:
       openssl_latest_ref_array: ${{ steps.resolve.outputs.openssl_latest_ref_array }}
       openssl_all_releases_array: ${{ steps.resolve.outputs.openssl_all_releases_array }}
     steps:
-      - name: Install ORAS
+      - name: Install ORAS (best-effort)
         run: |
-          set -euo pipefail
+          set -uo pipefail
           ORAS_VERSION="1.2.2"
           ORAS_CHECKSUM="bff970346470e5ef888e9f2c0bf7f8ee47283f5a45207d6e7a037da1fb0eae0d"
-          curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
-          echo "${ORAS_CHECKSUM}  oras_${ORAS_VERSION}_linux_amd64.tar.gz" | sha256sum -c -
-          tar xzf "oras_${ORAS_VERSION}_linux_amd64.tar.gz" oras
+          tgz="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          ok=""
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/${tgz}"; then ok=1; break; fi
+            echo "ORAS download attempt $attempt failed; retrying..."
+            sleep $((attempt * 5))
+          done
+          # Best-effort: if oras can't be fetched/verified, the .deb probe below
+          # simply misses and falls back to the upstream latest tag.
+          if [ -z "$ok" ]; then
+            echo "::warning::ORAS download failed after retries; version probe falls back to upstream latest"
+            exit 0
+          fi
+          if ! echo "${ORAS_CHECKSUM}  ${tgz}" | sha256sum -c -; then
+            echo "::warning::ORAS checksum mismatch; skipping install"
+            rm -f "$tgz"; exit 0
+          fi
+          tar xzf "$tgz" oras
           sudo mv oras /usr/local/bin/oras
-          rm -f "oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          rm -f "$tgz"
           oras version
 
       - name: Login to ghcr.io (best-effort)
@@ -72,6 +87,38 @@ jobs:
         id: resolve
         run: |
           set -euo pipefail
+
+          # Retry wrapper for flaky external calls (git ls-remote, Docker Hub)
+          # so a single network blip does not fail the whole shared job. Echoes
+          # the first non-empty result from up to 3 attempts.
+          retry_out() {
+            local out attempt
+            for attempt in 1 2 3; do
+              if out=$("$@" 2>/dev/null) && [ -n "$out" ]; then
+                printf '%s' "$out"
+                return 0
+              fi
+              echo "retry $attempt/3: '$*' failed; retrying..." >&2
+              sleep $((attempt * 5))
+            done
+            return 1
+          }
+          ls_wolfssl_stable() {
+            git ls-remote --tags --refs https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
+              | awk -F/ '{print $NF}' | sort -V | tail -n 1
+          }
+          probe_ossl_bookworm() {
+            docker run --rm debian:bookworm sh -c \
+              'apt-get update -qq >/dev/null 2>&1 && apt-cache madison openssl | head -1' \
+              | awk '{print $3}'
+          }
+          ls_openssl_all() {
+            git ls-remote --tags --refs https://github.com/openssl/openssl.git 'openssl-3.*' \
+              | awk -F/ '{print $NF}' \
+              | grep -E '^openssl-3\.[0-9]+\.[0-9]+$' \
+              | sort -V \
+              | awk -v floor="$OSSL_FLOOR" '$0 == floor {p=1} p'
+          }
 
           # wolfSSL: probe the .deb on ghcr.io.
           WOLFSSL_DEB_REF=""
@@ -91,10 +138,9 @@ jobs:
           rm -rf "$PROBE_DIR"
 
           # wolfSSL: latest upstream -stable tag.
-          WOLFSSL_LATEST=$(git ls-remote --tags --refs https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
-                            | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+          WOLFSSL_LATEST=$(retry_out ls_wolfssl_stable) || true
           if [ -z "${WOLFSSL_LATEST:-}" ]; then
-            echo "::error::Could not resolve latest wolfSSL -stable tag"
+            echo "::error::Could not resolve latest wolfSSL -stable tag after retries"
             exit 1
           fi
 
@@ -105,11 +151,9 @@ jobs:
           fi
 
           # OpenSSL: Bookworm stock (matches the wolfprov .deb).
-          OSSL_RAW=$(docker run --rm debian:bookworm sh -c \
-            'apt-get update -qq >/dev/null 2>&1 && apt-cache madison openssl | head -1' \
-            | awk '{print $3}')
+          OSSL_RAW=$(retry_out probe_ossl_bookworm) || true
           if [ -z "${OSSL_RAW:-}" ]; then
-            echo "::error::Could not resolve Bookworm OpenSSL version"
+            echo "::error::Could not resolve Bookworm OpenSSL version after retries"
             exit 1
           fi
           OSSL=$(echo "$OSSL_RAW" | sed 's/-.*//')
@@ -117,13 +161,9 @@ jobs:
           # OpenSSL: all upstream release tags >= floor.
           # Floor 3.0.6 -- 3.0.3-3.0.5 have an ECX EVP_PKEY_cmp bug.
           OSSL_FLOOR="openssl-3.0.6"
-          OSSL_ALL=$(git ls-remote --tags --refs https://github.com/openssl/openssl.git 'openssl-3.*' \
-                     | awk -F/ '{print $NF}' \
-                     | grep -E '^openssl-3\.[0-9]+\.[0-9]+$' \
-                     | sort -V \
-                     | awk -v floor="$OSSL_FLOOR" '$0 == floor {p=1} p')
+          OSSL_ALL=$(retry_out ls_openssl_all) || true
           if [ -z "${OSSL_ALL:-}" ]; then
-            echo "::error::Could not resolve upstream OpenSSL release tags (floor=$OSSL_FLOOR)"
+            echo "::error::Could not resolve upstream OpenSSL release tags (floor=$OSSL_FLOOR) after retries"
             exit 1
           fi
           OSSL_ALL_JSON=$(printf '%s\n' "$OSSL_ALL" | jq -R . | jq -s -c .)

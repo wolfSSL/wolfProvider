@@ -205,6 +205,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_digest_multi_update, NULL),
 #ifdef WP_HAVE_HMAC
     TEST_DECL(test_hmac_create, NULL),
+    TEST_DECL(test_hmac_key_no_digest, NULL),
     TEST_DECL(test_hmac_multi_update, NULL),
     TEST_DECL(test_hmac_dup, NULL),
     TEST_DECL(test_mac_key_match, NULL),
@@ -318,6 +319,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_x963_kdf, NULL),
 #endif
     TEST_DECL(test_dh_fromdata_oversize, NULL),
+    TEST_DECL(test_dh_param_check_explicit, NULL),
+    TEST_DECL(test_dh_import_group_no_nul, NULL),
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif
@@ -401,8 +404,10 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_ecdsa_p256, NULL),
         TEST_DECL(test_ecdsa_verify_undersized_hash, NULL),
         TEST_DECL(test_ecdsa_verify_md_len_mismatch, NULL),
+        TEST_DECL(test_ecdsa_setup_md_reject_atomic, NULL),
     #endif
     TEST_DECL(test_ec_decode, NULL),
+    TEST_DECL(test_ec_decode_short_pem, NULL),
     TEST_DECL(test_ec_import, NULL),
     TEST_DECL(test_ec_auto_derive_pubkey, NULL),
     TEST_DECL(test_ec_null_init, NULL),
@@ -487,6 +492,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_null_init, NULL),
 #ifdef WP_HAVE_X25519
     TEST_DECL(test_ecx_x25519_raw_priv_roundtrip, NULL),
+    TEST_DECL(test_ecx_import_zero_priv, NULL),
 #endif
     TEST_DECL(test_ecx_dup, NULL),
 #endif
@@ -502,10 +508,12 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_tls12_cbc_ossl, NULL),
     TEST_DECL(test_tls12_cbc, NULL),
     TEST_DECL(test_aes_tls_cbc_bad_pad, NULL),
+    TEST_DECL(test_aes_tls_cbc_split, NULL),
 #endif
 #ifdef WP_HAVE_DES3CBC
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_des3_tls_cbc_bad_pad, NULL),
+        TEST_DECL(test_des3_tls_cbc_dec, NULL),
     #endif
 #endif
 

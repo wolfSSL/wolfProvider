@@ -1054,7 +1054,34 @@ static int wp_dh_validate(const wp_Dh* dh, int selection, int checkType)
 
     if (((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) &&
         (dh->id == 0)) {
-        /* TODO: check explicit parameters. */
+        int isPrime = 0;
+        int pm1Init = 0;
+        mp_int* p = (mp_int*)&dh->key.p;
+        mp_int* g = (mp_int*)&dh->key.g;
+        mp_int pm1;
+
+        /* Explicit domain parameters: p must be prime and g in [2, p-1). */
+        if (mp_init(&pm1) != 0) {
+            ok = 0;
+        }
+        else {
+            pm1Init = 1;
+        }
+        if (ok) {
+            rc = mp_prime_is_prime(p, 8, &isPrime);
+            if ((rc != 0) || (!isPrime)) {
+                ok = 0;
+            }
+        }
+        if (ok && (mp_sub_d(p, 1, &pm1) != 0)) {
+            ok = 0;
+        }
+        if (ok && ((mp_cmp_d(g, 2) == MP_LT) || (mp_cmp(g, &pm1) != MP_LT))) {
+            ok = 0;
+        }
+        if (pm1Init) {
+            mp_clear(&pm1);
+        }
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
@@ -1099,13 +1126,23 @@ static int wp_dh_import_group(wp_Dh* dh, const OSSL_PARAM params[])
     int ok = 1;
     const OSSL_PARAM* p;
     const char* name = NULL;
+    char nameBuf[WP_MAX_DH_GROUP_NAME_SZ];
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_import_group");
 
     /* Look for the group name first. */
-    if (!wp_params_get_utf8_string_ptr(params, OSSL_PKEY_PARAM_GROUP_NAME,
-            &name)) {
-        ok = 0;
+    p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_GROUP_NAME);
+    if (p != NULL) {
+        /* p->data may not be NUL-terminated; copy into a bounded buffer. */
+        if ((p->data_type != OSSL_PARAM_UTF8_STRING) || (p->data == NULL) ||
+                (p->data_size >= sizeof(nameBuf))) {
+            ok = 0;
+        }
+        else {
+            XMEMCPY(nameBuf, p->data, p->data_size);
+            nameBuf[p->data_size] = '\0';
+            name = nameBuf;
+        }
     }
     /* When name was found, set the parameters based on the mapping. */
     if (ok && (name != NULL) && (!wp_dh_map_group_name(dh, name))) {

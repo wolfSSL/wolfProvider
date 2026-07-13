@@ -39,6 +39,9 @@ jobs:
     needs: discover_versions
     name: Smoke build (${{ matrix.name }})
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -57,6 +60,15 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: smoke
+          openssl_ref: ${{ needs.discover_versions.outputs.openssl_latest_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref || needs.discover_versions.outputs.wolfssl_latest_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and test wolfProvider
         run: |
           # Resolve "stable" matrix row to the discovered latest tag.
@@ -64,6 +76,15 @@ jobs:
           OPENSSL_TAG=${{ needs.discover_versions.outputs.openssl_latest_ref }} \
           WOLFSSL_TAG="$WOLFSSL_TAG" \
             ./scripts/build-wolfprovider.sh
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Print errors
         if: ${{ failure() }}

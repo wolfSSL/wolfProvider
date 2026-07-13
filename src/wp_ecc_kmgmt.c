@@ -1113,11 +1113,17 @@ static int wp_ecc_import_group(wp_Ecc* ecc, const OSSL_PARAM params[])
     p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_GROUP_NAME);
     if (p != NULL) {
         const char* name = NULL;
+        char nameBuf[WP_MAX_EC_GROUP_NAME_SZ];
 
         if (p->data_type == OSSL_PARAM_UTF8_STRING) {
-            name = (const char*)p->data;
-            if (name == NULL) {
+            /* p->data may not be NUL-terminated; copy into a bounded buffer. */
+            if ((p->data == NULL) || (p->data_size >= sizeof(nameBuf))) {
                 ok = 0;
+            }
+            else {
+                XMEMCPY(nameBuf, p->data, p->data_size);
+                nameBuf[p->data_size] = '\0';
+                name = nameBuf;
             }
         }
         else if (p->data_type == OSSL_PARAM_UTF8_PTR) {
@@ -1161,6 +1167,40 @@ static int wp_ecc_import_keypair(wp_Ecc* ecc, const OSSL_PARAM params[],
 #endif
             NULL))) {
         ok = 0;
+    }
+    if (ok && priv) {
+        int idx = wc_ecc_get_curve_idx(ecc->curveId);
+        const ecc_set_type* dp = (idx >= 0) ? wc_ecc_get_curve_params(idx) :
+            NULL;
+        int orderInit = 0;
+        mp_int order;
+#if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002
+        mp_int* d = wc_ecc_key_get_priv(&ecc->key);
+#else
+        mp_int* d = &(ecc->key.k);
+#endif
+
+        /* Reject scalar >= order n (FIPS 186-4); fail closed if n missing. */
+        if (dp == NULL) {
+            ok = 0;
+        }
+        if (ok) {
+            if (mp_init(&order) != MP_OKAY) {
+                ok = 0;
+            }
+            else {
+                orderInit = 1;
+            }
+        }
+        if (ok && (mp_read_radix(&order, dp->order, 16) != MP_OKAY)) {
+            ok = 0;
+        }
+        if (ok && (mp_cmp(d, &order) != MP_LT)) {
+            ok = 0;
+        }
+        if (orderInit) {
+            mp_clear(&order);
+        }
     }
     if (ok &&
 #if (!defined(HAVE_FIPS) || FIPS_VERSION_GE(5,3)) && LIBWOLFSSL_VERSION_HEX >= 0x05006002

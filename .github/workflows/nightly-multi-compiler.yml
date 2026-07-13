@@ -20,6 +20,9 @@ jobs:
   build_wolfprovider:
     name: Nightly build ${{ matrix.CC }} on ${{ matrix.OS }}, wolfssl ${{ matrix.wolfssl_ref }}, OpenSSL ${{ matrix.openssl_ref }}
     runs-on: ${{ matrix.OS }}
+    permissions:
+      contents: read
+      packages: write
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -110,37 +113,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Get OpenSSL commit hash
-        id: openssl-ref
-        run: |
-          sha=$(./scripts/resolve-ref.sh "${{ matrix.openssl_ref }}" "openssl/openssl")
-          echo "ref=$sha" >> "$GITHUB_OUTPUT"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get WolfSSL commit hash
-        id: wolfssl-ref
-        run: |
-          sha=$(./scripts/resolve-ref.sh "${{ matrix.wolfssl_ref }}" "wolfssl/wolfssl")
-          echo "ref=$sha" >> "$GITHUB_OUTPUT"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Checking OpenSSL in cache
-        uses: actions/cache@v4
-        id: openssl-cache
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
         with:
-          path: openssl-install
-          key: openssl-depends-${{ matrix.CC }}-${{ steps.openssl-ref.outputs.ref }}
-          lookup-only: false
-
-      - name: Checking WolfSSL in cache
-        uses: actions/cache@v4
-        id: wolfssl-cache
-        with:
-          path: wolfssl-install
-          key: wolfssl-depends-${{ matrix.CC }}-${{ steps.wolfssl-ref.outputs.ref }}
-          lookup-only: false
+          variant: ${{ matrix.CC }}-${{ matrix.OS }}
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wolfProvider
         env:
@@ -148,6 +128,15 @@ jobs:
           CXX: ${{ matrix.CXX }}
         run: |
           OPENSSL_TAG=${{ matrix.openssl_ref }} WOLFSSL_TAG=${{ matrix.wolfssl_ref }} ./scripts/build-wolfprovider.sh
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Print errors
         if: ${{ failure() }}

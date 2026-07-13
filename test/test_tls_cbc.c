@@ -327,6 +327,92 @@ static int test_aes_tls_cbc_bad_pad_helper(OSSL_LIB_CTX *libCtx,
     return err;
 }
 
+/*
+ * Decrypt a TLS 1.2 CBC record split across two EVP_CipherUpdate calls so the
+ * second completes a buffered block. Exercises the buffered-block path that
+ * advanced the output pointer before the record's IV/padding processing.
+ */
+static int test_aes_tls_cbc_split_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen, int macSize)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM params[3];
+    unsigned int tlsVer = TLS1_2_VERSION;
+    size_t macSz = (size_t)macSize;
+    unsigned char key[32];
+    unsigned char iv[BS];
+    unsigned char mac[48];
+    unsigned char buf[BS + sizeof(testPlain) + 48 + BS];
+    unsigned char *out = NULL;
+    int encLen = 0;
+    int l1 = 0;
+    int l2 = 0;
+    int split = BS + 1; /* leave one byte buffered after the first update */
+
+    memset(key, 0xAA, keyLen);
+    memset(iv, 0xBB, BS);
+    memset(mac, 0xCC, macSize);
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = test_tls_cbc_enc(cipher, key, iv, testPlain, sizeof(testPlain),
+                               mac, macSize, buf, &encLen);
+    }
+    /* Output buffer sized to the produced plaintext so an overread past the
+     * written region is caught. */
+    if (err == 0) {
+        out = OPENSSL_malloc((size_t)(encLen - BS));
+        err = out == NULL;
+    }
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 0) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
+                                              &tlsVer);
+        params[1] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_TLS_MAC_SIZE,
+                                                &macSz);
+        params[2] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        /* Only the second update completes the split record and must succeed. */
+        (void)EVP_CipherUpdate(ctx, out, &l1, buf, split);
+        err = EVP_CipherUpdate(ctx, out + l1, &l2, buf + split,
+                               encLen - split) != 1;
+    }
+
+    OPENSSL_free(out);
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_tls_cbc_split(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("TLS 1.2 AES-256-CBC split-record decrypt (wolfProvider)");
+    err = test_aes_tls_cbc_split_helper(wpLibCtx, "AES-256-CBC", 32, 48);
+    if (err == 0) {
+        PRINT_MSG("TLS 1.2 AES-128-CBC split-record decrypt (wolfProvider)");
+        err = test_aes_tls_cbc_split_helper(wpLibCtx, "AES-128-CBC", 16, 32);
+    }
+
+    return err;
+}
+
 int test_aes_tls_cbc_bad_pad(void *data)
 {
     int err = 0;
@@ -445,6 +531,100 @@ int test_des3_tls_cbc_bad_pad(void *data)
 
     PRINT_MSG("DES3 TLS 1.2 CBC negative padding (wolfProvider)");
     return test_des3_tls_cbc_bad_pad_helper(wpLibCtx);
+}
+
+/*
+ * Positive DES3 TLS 1.2 CBC decrypt of a valid record split across two
+ * EVP_CipherUpdate calls, so the second update completes a buffered block and
+ * advances the output pointer past the record base. This exercises the
+ * record-base-pointer padding strip; a valid record must decrypt successfully.
+ */
+int test_des3_tls_cbc_dec(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+    unsigned int tlsVer = TLS1_2_VERSION;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    /* 37 bytes: not block-aligned, so padding is non-trivial. */
+    unsigned char pt[37];
+    unsigned char buf[64];
+    unsigned char *out = NULL;
+    int ptLen = (int)sizeof(pt);
+    int encLen = 0;
+    int l1 = 0;
+    int l2 = 0;
+    int split = DES3_BS + 1; /* one byte left buffered after update 1 */
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(pt, 0x42, sizeof(pt));
+
+    PRINT_MSG("DES3 TLS 1.2 CBC split-record decrypt (wolfProvider)");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt the record [explicit_IV][plaintext] in TLS mode. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 1) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
+                                              &tlsVer);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        memcpy(buf, iv, DES3_BS);
+        memcpy(buf + DES3_BS, pt, ptLen);
+        err = EVP_CipherUpdate(ctx, buf, &encLen, buf, DES3_BS + ptLen) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    /* Output buffer sized to the produced plaintext so an overread past the
+     * written region is caught under sanitizers. */
+    if (err == 0) {
+        out = OPENSSL_malloc((size_t)(encLen - DES3_BS));
+        err = out == NULL;
+    }
+
+    /* Decrypt in TLS mode split across two updates. */
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 0) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
+                                              &tlsVer);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        /* Only the second update completes the record; must succeed. */
+        (void)EVP_CipherUpdate(ctx, out, &l1, buf, split);
+        err = EVP_CipherUpdate(ctx, out + l1, &l2, buf + split,
+                               encLen - split) != 1;
+    }
+
+    OPENSSL_free(out);
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
 }
 
 #undef DES3_BS

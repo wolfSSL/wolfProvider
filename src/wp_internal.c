@@ -39,8 +39,20 @@
 #ifndef WP_SINGLE_THREADED
 
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+#include <pthread.h>
+#endif
 /* Global mutex for urandom file access (used by seed callback) */
 static wolfSSL_Mutex urandomMutex;
+
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+/* Re-init the mutex in a forked child so an inherited locked mutex cannot
+ * deadlock entropy reads. */
+static void wolfprov_urandom_atfork_child(void)
+{
+    wc_InitMutex(&urandomMutex);
+}
+#endif
 
 /**
  * Initialize the urandom mutex on library load.
@@ -52,6 +64,9 @@ __attribute__((constructor))
 static void wolfprov_init_urandom_mutex(void)
 {
     wc_InitMutex(&urandomMutex);
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+    (void)pthread_atfork(NULL, NULL, wolfprov_urandom_atfork_child);
+#endif
 }
 
 /**
@@ -1075,6 +1090,9 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
     if (!pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
         ok = 0;
     }
+    if (ok && (passwordSz > sizeof(password))) {
+        ok = 0;
+    }
     if (ok) {
         XMEMSET(info, 0, sizeof(info));
         XSTRNCPY(info->name, cipherName, NAME_SZ-1);
@@ -1192,6 +1210,10 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
         readLen = BIO_read(bio, buf, sizeof(buf));
         if (readLen < -1) {
             WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_read error (%d) in %s:%d", readLen, __FILE__, __LINE__);
+            ok = 0;
+        }
+        if (ok && (readLen > 0) &&
+                ((uint64_t)*len + (uint64_t)readLen > (uint64_t)UINT32_MAX)) {
             ok = 0;
         }
         if (ok && (readLen > 0)) {

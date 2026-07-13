@@ -18,6 +18,7 @@
  * along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <limits.h>
 #include <string.h>
 
 #include <openssl/core_dispatch.h>
@@ -297,11 +298,12 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     }
     /* wc_PBKDF2_ex fails when ctx->iterations is 0. */
 
-    if (ok && (ctx->iterations > 0x7FFFFFFFU)) {
+    /* Reject values that would truncate in the int casts below. */
+    if (ok && (ctx->iterations > (uint64_t)INT_MAX)) {
         ok = 0;
     }
-    if (ok && ((ctx->passwordSz > 0x7FFFFFFFU) ||
-            (ctx->saltSz > 0x7FFFFFFFU) || (keyLen > 0x7FFFFFFFU))) {
+    if (ok && ((ctx->passwordSz > (size_t)INT_MAX) ||
+            (ctx->saltSz > (size_t)INT_MAX) || (keyLen > (size_t)INT_MAX))) {
         ok = 0;
     }
 
@@ -431,6 +433,14 @@ static int wp_kdf_pkcs12_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
         ok = 0;
     }
     if (ok && (keyLen == 0)) {
+        ok = 0;
+    }
+    /* RFC 7292 diversifier id is 1 (key), 2 (IV) or 3 (MAC). */
+    if (ok && ((ctx->keyUse < 1) || (ctx->keyUse > 3))) {
+        ok = 0;
+    }
+    /* Reject iteration counts that would truncate in the int cast below. */
+    if (ok && (ctx->iterations > (uint64_t)INT_MAX)) {
         ok = 0;
     }
 

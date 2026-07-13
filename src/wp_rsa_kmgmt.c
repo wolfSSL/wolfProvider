@@ -2774,6 +2774,9 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     if (ok && !pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
         ok = 0;
     }
+    if (ok && (passwordSz > sizeof(password))) {
+        ok = 0;
+    }
     if (ok) {
         /* Decrypt to encoded private key. */
         int ret = wc_DecryptPKCS8Key(data, len, password, (int)passwordSz);
@@ -3092,8 +3095,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
         else {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, saltLenDer2, sizeof(saltLenDer2));
-                pssAlgId[i + sizeof(saltLenDer2)] = 0;
-                pssAlgId[i + sizeof(saltLenDer2) + 1] = saltLen;
+                pssAlgId[i + sizeof(saltLenDer2)] = (byte)(saltLen >> 8);
+                pssAlgId[i + sizeof(saltLenDer2) + 1] = (byte)(saltLen & 0xff);
                 pssAlgId[seq1LenIdx] += sizeof(saltLenDer2) + 2;
                 pssAlgId[seq2LenIdx] += sizeof(saltLenDer2) + 2;
             }

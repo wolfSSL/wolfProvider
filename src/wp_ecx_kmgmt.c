@@ -983,6 +983,9 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             &privData, &len)) {
             ok = 0;
         }
+        if (ok && (privData != NULL) && (len == 0)) {
+            ok = 0;
+        }
         if (ok && (privData != NULL)) {
             ecx->unclamped[0] = privData[0];
             ecx->unclamped[1] = privData[len - 1];

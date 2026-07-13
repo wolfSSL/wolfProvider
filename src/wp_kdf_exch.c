@@ -119,28 +119,10 @@ static void wp_kdf_ctx_free(wp_KdfCtx* ctx)
  */
 static wp_KdfCtx* wp_kdf_ctx_dup(wp_KdfCtx* src)
 {
-    wp_KdfCtx* dst = NULL;
-
-    if (wolfssl_prov_is_running()) {
-        dst = wp_kdf_ctx_new(src->provCtx, src->name);
-    }
-    if (dst != NULL) {
-        int ok = 1;
-
-        if ((src->key != NULL) && (!wp_kdf_up_ref(src->key))) {
-            ok = 0;
-        }
-        if (ok) {
-            dst->key = src->key;
-        }
-
-        if (!ok) {
-            wp_kdf_ctx_free(dst);
-            dst = NULL;
-        }
-    }
-
-    return dst;
+    /* The inner EVP_KDF_CTX state cannot be duplicated faithfully, so report
+     * that duplication is unsupported rather than return an empty context. */
+    (void)src;
+    return NULL;
 }
 
 /**

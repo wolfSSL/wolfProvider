@@ -38,6 +38,19 @@ else
 fi
 set -e
 
+# Run FIPS status test
+echo ""
+echo "Running FIPS status test..."
+set +e
+"$ROOT_DIR/test/standalone/tests/fips_status/run.sh"
+if [ $? -eq 0 ]; then
+    echo "FIPS status test: PASSED"
+else
+    echo "FIPS status test: FAILED"
+    TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+fi
+set -e
+
 echo ""
 echo "================================"
 if [ $TOTAL_FAILURES -eq 0 ]; then

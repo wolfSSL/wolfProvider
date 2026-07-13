@@ -1331,4 +1331,101 @@ int test_dh_fromdata_oversize(void *data)
     return err;
 }
 
+/*
+ * Explicit FFC domain parameters with a composite modulus must be rejected by
+ * EVP_PKEY_param_check (the explicit-parameter path was previously a no-op).
+ */
+int test_dh_param_check_explicit(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY_CTX *checkCtx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM params[3];
+    unsigned char p_composite[256];
+    unsigned char g_buf[1] = { 0x02 };
+
+    (void)data;
+
+    /* Even modulus (byte 0 = LSB, FFC_P parsed little-endian): composite. */
+    memset(p_composite, 0xFF, sizeof(p_composite));
+    p_composite[0] = 0xFE;
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_FFC_P,
+                                            p_composite, sizeof(p_composite));
+        params[1] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_FFC_G,
+                                            g_buf, sizeof(g_buf));
+        params[2] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS,
+                                params) != 1;
+    }
+    if (err == 0) {
+        checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL);
+        err = checkCtx == NULL;
+    }
+    if (err == 0 && EVP_PKEY_param_check(checkCtx) == 1) {
+        PRINT_ERR_MSG("param_check accepted a composite DH modulus");
+        err = 1;
+    }
+
+    EVP_PKEY_CTX_free(checkCtx);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/*
+ * A non-NUL-terminated GROUP_NAME param must not cause an out-of-bounds read
+ * in the DH group-name comparison.
+ */
+int test_dh_import_group_no_nul(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM params[2];
+    char *name = NULL;
+
+    (void)data;
+
+    name = OPENSSL_malloc(9);
+    if (name == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        memcpy(name, "ffdhe2048", 9);
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0].key = OSSL_PKEY_PARAM_GROUP_NAME;
+        params[0].data_type = OSSL_PARAM_UTF8_STRING;
+        params[0].data = name;
+        params[0].data_size = 9;
+        params[0].return_size = 0;
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS,
+                params) != 1) {
+            PRINT_ERR_MSG("DH group import failed for valid group name");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OPENSSL_free(name);
+    return err;
+}
+
 #endif /* WP_HAVE_DH */
