@@ -298,6 +298,11 @@ static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
     wc_FreeMutex(&ctx->rng_mutex);
 #endif
     wc_FreeRng(&ctx->rng);
+#if defined(FP_ECC) && defined(HAVE_THREAD_LS)
+    /* wolfCrypt_Cleanup() frees only the last teardown thread's cache. Without
+     * THREAD_LS the cache is shared by all instances; leave it to cleanup. */
+    wc_ecc_fp_free();
+#endif
     OPENSSL_free(ctx);
 }
 
