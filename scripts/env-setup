@@ -58,6 +58,8 @@ WOLFPROV_LIB_PATH="$REPO_ROOT/wolfprov-install/lib"
 # Always reconstruct LD_LIBRARY_PATH with correctly detected OPENSSL_LIB_PATH
 # ${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} expands to :$LD_LIBRARY_PATH only if LD_LIBRARY_PATH was already set
 export LD_LIBRARY_PATH="$WOLFPROV_LIB_PATH:$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# macOS loader honors DYLD_LIBRARY_PATH, not LD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH="$WOLFPROV_LIB_PATH:$WOLFSSL_LIB_PATH:$OPENSSL_LIB_PATH${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
 # Set OPENSSL_BIN - use existing if set, otherwise use local build
 if [ -z "${OPENSSL_BIN:-}" ]; then
