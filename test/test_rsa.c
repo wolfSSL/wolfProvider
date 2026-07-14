@@ -1580,6 +1580,79 @@ int test_rsa_load_cert(void* data)
     return err;
 }
 
+/**
+ * Load the RSA private key from the file store with a caller property query.
+ *
+ * @param [in] props  Property query passed as OSSL_STORE_PARAM_PROPERTIES.
+ * @return  1 when a key was loaded, 0 otherwise.
+ */
+static int test_rsa_store_load_props(const char* props)
+{
+    int loaded = 0;
+    OSSL_PARAM params[2];
+    OSSL_STORE_CTX* ctx = NULL;
+    OSSL_STORE_INFO* info = NULL;
+    EVP_PKEY* pkey = NULL;
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_STORE_PARAM_PROPERTIES,
+        (char *)props, 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    ctx = OSSL_STORE_open_ex(CERTS_DIR "/server-key.pem", wpLibCtx, NULL, NULL,
+        NULL, params, NULL, NULL);
+    if (ctx != NULL) {
+        info = OSSL_STORE_load(ctx);
+    }
+    if (info != NULL) {
+        pkey = OSSL_STORE_INFO_get1_PKEY(info);
+        loaded = pkey != NULL;
+    }
+
+    EVP_PKEY_free(pkey);
+    OSSL_STORE_INFO_free(info);
+    OSSL_STORE_close(ctx);
+    return loaded;
+}
+
+int test_rsa_load_key_prop_query(void* data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("Load RSA private key within the wolfProvider boundary");
+    if (!test_rsa_store_load_props("provider=wolfprov")) {
+        PRINT_ERR_MSG("Store load with provider=wolfprov failed");
+        err = 1;
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Load RSA private key with an empty property query");
+        if (!test_rsa_store_load_props("")) {
+            PRINT_ERR_MSG("Store load with an empty property query failed");
+            err = 1;
+        }
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Load RSA private key with an optional provider clause");
+        if (!test_rsa_store_load_props("?provider=wp_no_such_provider")) {
+            PRINT_ERR_MSG("Store load with an optional clause failed");
+            err = 1;
+        }
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Load RSA private key with an unavailable provider");
+        if (test_rsa_store_load_props("provider=wp_no_such_provider")) {
+            PRINT_ERR_MSG("Store load ignored the caller's property query");
+            err = 1;
+        }
+    }
+
+    return err;
+}
+
 int test_rsa_fromdata(void* data)
 {
     (void)data;
