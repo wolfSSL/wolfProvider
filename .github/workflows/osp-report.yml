@@ -23,6 +23,8 @@ on:
 permissions:
   actions: write
   contents: read
+  # issues: write because the comment upsert goes through the issues endpoint.
+  issues: write
   pull-requests: write
 
 jobs:

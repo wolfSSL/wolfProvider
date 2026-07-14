@@ -28,6 +28,9 @@ jobs:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
 
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
       - name: Check concurrency in reusable workflows
         run: |
           python3 - <<'EOF'
@@ -41,7 +44,7 @@ jobs:
                   with open(path) as f:
                       wf = yaml.safe_load(f)
               except yaml.YAMLError as e:
-                  print(f'{path}: unparseable: {e}')
+                  print(f'{path}: unparsable: {e}')
                   sys.exit(1)
               if not isinstance(wf, dict):
                   continue
