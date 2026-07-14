@@ -165,6 +165,11 @@ static int wp_urandom_read_locked(unsigned char* buf, size_t len)
 {
     size_t total = 0;
 
+    /* After teardown (refcount 0) the fd is closed; reopening it would leak. */
+    if (g_urandom_ref_count < 1) {
+        return -1;
+    }
+
     if (len > (size_t)INT_MAX) {
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "wp_urandom_read: requested length too large");
