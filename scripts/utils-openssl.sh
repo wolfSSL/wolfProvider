@@ -425,7 +425,9 @@ install_openssl() {
             CONFIG_CMD+=" no-external-tests no-tests"
         fi
 
-        $CONFIG_CMD >>$LOG_FILE 2>&1
+        # Scope flags to ./config: OpenSSL bakes LDFLAGS (rpath) in at configure time.
+        CFLAGS="${OPENSSL_CFLAGS}" CXXFLAGS="${OPENSSL_CXXFLAGS}" LDFLAGS="${OPENSSL_LDFLAGS}" \
+            $CONFIG_CMD >>$LOG_FILE 2>&1
         RET=$?
         if [ $RET != 0 ]; then
             printf "ERROR.\n"
@@ -434,10 +436,6 @@ install_openssl() {
             exit 1
         fi
         printf "Done.\n"
-
-        export CFLAGS="${OPENSSL_CFLAGS}"
-        export CXXFLAGS="${OPENSSL_CXXFLAGS}"
-        export LDFLAGS="${OPENSSL_LDFLAGS}"
 
         printf "\tBuild OpenSSL ${OPENSSL_TAG} ... "
         make -j$NUMCPU >>$LOG_FILE 2>&1
