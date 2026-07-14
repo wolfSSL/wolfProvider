@@ -28,12 +28,10 @@
  * (open/read/close, no stdio buffering), so libc exit performs no lseek(). The
  * tests here would catch a reintroduction of the buffered-stream SIGSYS bug.
  *
- * T4 covers a second, distinct bug: SEED-SRC caches a /dev/urandom fd by number,
- * and OpenSSH's inetd-mode privsep setup reuses low fd numbers (dup2's its own
- * descriptors over them). If the cached fd number is reused, a later read hits
- * the wrong descriptor. T4 reproduces this by dup2'ing a non-blocking pipe over
- * the cached fd, then verifying SEED-SRC detects the reuse (via fstat) and
- * reopens /dev/urandom, so a sandboxed child still reseeds from a valid fd.
+ * T4 covers a second bug: SEED-SRC caches the /dev/urandom fd by number, and
+ * OpenSSH's inetd-mode privsep reuses low fd numbers (dup2's over them). T4
+ * dup2's a non-blocking pipe over the cached fd and checks SEED-SRC detects the
+ * reuse (via fstat) and reopens, so a sandboxed child still reseeds cleanly.
  */
 
 #include "unit.h"
@@ -840,13 +838,10 @@ static int seccomp_helper_multi_context_lifecycle(const char *providerDir,
 }
 
 /*
- * Simulate a host application (e.g. OpenSSH privsep) reusing the fd number that
- * SEED-SRC cached for /dev/urandom: dup2 an empty non-blocking pipe over every
- * /dev/urandom fd this process holds. A later read of the cached fd would then
- * return EAGAIN unless SEED-SRC re-fstats it, detects the reuse, and reopens.
- *
- * Returns the number of fds clobbered, or -1 on setup failure. The pipe is left
- * open for the lifetime of the (short-lived) helper process on purpose.
+ * Simulate a host (e.g. OpenSSH privsep) reusing SEED-SRC's cached fd number:
+ * dup2 an empty non-blocking pipe over every /dev/urandom fd this process holds.
+ * Returns the count clobbered, or -1 on setup failure; the pipe is intentionally
+ * left open for the (short-lived) helper's lifetime.
  */
 static int clobber_urandom_fds(void)
 {
@@ -953,11 +948,9 @@ static int seccomp_helper_fd_reuse(const char *providerDir,
         }
     }
 
-    /* Force a fresh seed draw in the parent, as OpenSSH's post-shuffle
-     * reseed_prngs does. This reads /dev/urandom, so SEED-SRC detects the reused
-     * fd (via fstat) and reopens; without the fix it reads the clobbered
-     * non-blocking pipe and fails with EAGAIN. Prediction resistance forces the
-     * DRBG down to the entropy source rather than reusing cached state. */
+    /* Force a source draw (prediction resistance), as OpenSSH's post-shuffle
+     * reseed does, so SEED-SRC re-fstats and reopens. Without the fix this reads
+     * the clobbered pipe and fails with EAGAIN. */
     if (err == 0) {
         EVP_RAND_CTX *rctx = RAND_get0_public(ctx);
         if (rctx == NULL ||
