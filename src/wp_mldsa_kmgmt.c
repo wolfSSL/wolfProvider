@@ -284,9 +284,13 @@ void wp_mldsa_free(wp_MlDsa* mldsa)
         int rc;
 
         rc = wc_LockMutex(&mldsa->mutex);
-        cnt = --mldsa->refCnt;
         if (rc == 0) {
+            cnt = --mldsa->refCnt;
             wc_UnLockMutex(&mldsa->mutex);
+        }
+        else {
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = mldsa->refCnt;
         }
     #else
         cnt = --mldsa->refCnt;
@@ -456,6 +460,7 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
     word32 lenB;
     word32 allocA = 0;
     word32 allocB = 0;
+    int checked = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_match");
 
@@ -467,7 +472,14 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
+    /* Presence mismatch fails; both-present compares; neither-present skips. */
+    if (((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) &&
+            (a->hasPub != b->hasPub)) {
+        ok = 0;
+    }
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) &&
+            a->hasPub && b->hasPub) {
+        checked = 1;
         lenA = a->data->pubKeySize;
         lenB = b->data->pubKeySize;
         bufA = (unsigned char*)OPENSSL_malloc(lenA);
@@ -495,7 +507,13 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
         bufA = NULL;
         bufB = NULL;
     }
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+            (a->hasPriv != b->hasPriv)) {
+        ok = 0;
+    }
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+            a->hasPriv && b->hasPriv) {
+        checked = 1;
         allocA = a->data->privKeySize;
         allocB = b->data->privKeySize;
         lenA = allocA;
@@ -517,12 +535,18 @@ static int wp_mldsa_match(const wp_MlDsa* a, const wp_MlDsa* b, int selection)
                 ok = 0;
             }
         }
-        if (ok && ((lenA != lenB) || (XMEMCMP(bufA, bufB, lenA) != 0))) {
+        if (ok && ((lenA != lenB) || (CRYPTO_memcmp(bufA, bufB, lenA) != 0))) {
             ok = 0;
         }
         /* Zero full allocations even if export truncated the out lengths. */
         OPENSSL_clear_free(bufA, allocA);
         OPENSSL_clear_free(bufB, allocB);
+    }
+    /* A public/private selection with no component present in both is not a match. */
+    if (ok && !checked &&
+            ((selection & (OSSL_KEYMGMT_SELECT_PUBLIC_KEY |
+                           OSSL_KEYMGMT_SELECT_PRIVATE_KEY)) != 0)) {
+        ok = 0;
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -1554,6 +1578,7 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         OPENSSL_free(pemData);
     }
     OPENSSL_free(cipherInfo);
+    BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

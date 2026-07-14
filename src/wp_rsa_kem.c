@@ -51,6 +51,9 @@ typedef struct wp_RsaKemCtx {
 
     /** Type of pperation being performed. */
     int op;
+
+    /** EVP operation (encapsulate/decapsulate) this ctx was initialized for. */
+    int operation;
 } wp_RsaKemCtx;
 
 
@@ -127,6 +130,7 @@ static wp_RsaKemCtx* wp_rsakem_ctx_dup(wp_RsaKemCtx* srcCtx)
         if (ok) {
             dstCtx->rsa          = srcCtx->rsa;
             dstCtx->op           = srcCtx->op;
+            dstCtx->operation    = srcCtx->operation;
         }
 
         if (!ok) {
@@ -153,8 +157,7 @@ static int wp_rsakem_init(wp_RsaKemCtx* ctx, wp_Rsa* rsa,
 {
     int ok = 1;
 
-    /* TODO: check key type and size with operation. */
-    (void)operation;
+    ctx->operation = operation;
 
     WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_RSA);
 
@@ -391,6 +394,10 @@ static int wp_rsakem_encapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsakem_encapsulate");
 
+    if (ctx->operation != EVP_PKEY_OP_ENCAPSULATE) {
+        return 0;
+    }
+
     switch (ctx->op) {
         case WP_RSA_KEM_OP_RSASVE:
             ok = wp_rsasve_generate(ctx, out, outlen, secret, secretlen);
@@ -485,6 +492,10 @@ static int wp_rsakem_decapsulate(wp_RsaKemCtx* ctx, unsigned char* out,
     int ok;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsakem_decapsulate");
+
+    if (ctx->operation != EVP_PKEY_OP_DECAPSULATE) {
+        return 0;
+    }
 
     switch (ctx->op) {
         case WP_RSA_KEM_OP_RSASVE:

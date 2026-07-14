@@ -323,12 +323,14 @@ void wp_ecx_free(wp_Ecx* ecx)
         int rc;
 
         rc = wc_LockMutex(&ecx->mutex);
-        if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
-        }
-        cnt = --ecx->refCnt;
         if (rc == 0) {
+            cnt = --ecx->refCnt;
             wc_UnLockMutex(&ecx->mutex);
+        }
+        else {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = ecx->refCnt;
         }
     #else
         cnt = --ecx->refCnt;
@@ -513,11 +515,15 @@ static int wp_ecx_get_security_bits(wp_Ecx* ecx)
 {
     int bits = 0;
 
-    if (ecx->data->bits >= 456) {
-        bits = 224;
-    }
-    else if (ecx->data->bits >= 256) {
-        bits = 128;
+    switch (ecx->data->keyType) {
+        case WP_KEY_TYPE_X448:
+        case WP_KEY_TYPE_ED448:
+            bits = 224;
+            break;
+        case WP_KEY_TYPE_X25519:
+        case WP_KEY_TYPE_ED25519:
+            bits = 128;
+            break;
     }
 
     return bits;
@@ -735,7 +741,7 @@ static int wp_ecx_match_priv_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     if (ok && (len1 != len2)) {
         ok = 0;
     }
-    if (ok && (XMEMCMP(key1, key2, len1) != 0)) {
+    if (ok && (CRYPTO_memcmp(key1, key2, len1) != 0)) {
         ok = 0;
     }
 
@@ -977,6 +983,9 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             &privData, &len)) {
             ok = 0;
         }
+        if (ok && (privData != NULL) && (len == 0)) {
+            ok = 0;
+        }
         if (ok && (privData != NULL)) {
             ecx->unclamped[0] = privData[0];
             ecx->unclamped[1] = privData[len - 1];
@@ -1020,7 +1029,7 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
 
 /** ECX private key parameters. */
 #define WP_ECX_PRIVATE_KEY_PARAMS                                              \
-    OSSL_PARAM_BN(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0)
+    OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0)
 /** ECX public key parameters. */
 #define WP_ECX_PUBLIC_KEY_PARAMS                                               \
     OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0)
@@ -1150,6 +1159,7 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
             }
             wp_param_set_octet_string_ptr(&params[i++],
                 OSSL_PKEY_PARAM_PRIV_KEY, data + *idx, outLen);
+            *idx += outLen;
         }
     }
 
@@ -2235,6 +2245,7 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         OPENSSL_free(pemData);
     }
     OPENSSL_free(cipherInfo);
+    BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_COMP_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

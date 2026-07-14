@@ -34,6 +34,9 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: FIPS Ready Bundle Test
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -46,6 +49,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: fips-ready
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_fixed_key: wolfssl-fips-${{ matrix.wolfssl_bundle_ref }}-${{ matrix.openssl_ref }}
+          # The build below sets WOLFPROV_FIPS_FORCE_FAIL, which adds
+          # -DHAVE_FORCE_FIPS_FAILURE to the wolfSSL build; key the cached
+          # install on it so a wolfSSL built without the define is never reused.
+          extra_key: forcefail
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download FIPS Ready Bundle
         run: |
@@ -68,8 +84,21 @@ jobs:
 
       - name: Build wolfProvider with FIPS Ready Bundle
         run: |
+          # WOLFPROV_FIPS_FORCE_FAIL is an internal, test-only knob (no CLI
+          # flag) that enables HAVE_FORCE_FIPS_FAILURE for the fips_status test.
+          OPENSSL_TAG=${{ matrix.openssl_ref }} \
+          WOLFPROV_FIPS_FORCE_FAIL=1 \
           ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
           --fips-check=ready --wolfssl-ver=v${{matrix.wolfssl_bundle_ref}}-stable
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Run FIPS Command Tests
         run: |
@@ -82,3 +111,12 @@ jobs:
 
           # --- force-fail mode ---
           WOLFPROV_FORCE_FAIL=1 ./scripts/cmd_test/do-cmd-tests.sh
+
+      - name: Run FIPS Status Test
+        run: |
+          # Exercises the FIPS-status gate in wolfssl_prov_is_running(). In a
+          # FIPS build the test fails unless the forced-failure branch actually
+          # ran, so the exit status is the whole check.
+          export WOLFSSL_ISFIPS=1
+          source scripts/env-setup
+          ./test/standalone/tests/fips_status/run.sh

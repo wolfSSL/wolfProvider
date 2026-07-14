@@ -296,6 +296,9 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
     }
     if (ok && (iv == NULL) && ctx->ivSet && (ctx->mode == EVP_CIPH_CBC_MODE)) {
         XMEMCPY(ctx->iv, ctx->oiv, ctx->ivLen);
+        if (wc_Des3_SetIV(&ctx->des3, ctx->iv) != 0) {
+            ok = 0;
+        }
     }
 
     if (ok && (key != NULL)) {
@@ -420,6 +423,7 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
     int ok = 1;
     size_t oLen = 0;
     size_t nextBlocks;
+    unsigned char *outStart = out;
 
     WOLFPROV_ENTER(WP_LOG_COMP_DES, "wp_des3_block_update");
 
@@ -489,19 +493,28 @@ static int wp_des3_block_update(wp_Des3BlockCtx *ctx, unsigned char *out,
         }
         *outLen = oLen;
     }
+    if (ok && (ctx->tls_version > 0) && (!ctx->enc) &&
+            (oLen < (size_t)(2 * DES_BLOCK_SIZE))) {
+        ok = 0;
+    }
     if (ok && (ctx->tls_version > 0) && (!ctx->enc)) {
-        unsigned char pad = out[oLen-1];
+        unsigned char pad = outStart[oLen-1];
         int padStart = DES_BLOCK_SIZE - pad - 1;
         unsigned char invalid = (pad < DES_BLOCK_SIZE) - 1;
         int i;
 
         for (i = DES_BLOCK_SIZE - 1; i >= 0; i--) {
             byte check = wp_ct_int_mask_gte(i, padStart);
-            check &= wp_ct_byte_mask_ne(out[oLen - DES_BLOCK_SIZE + i], pad);
+            check &= wp_ct_byte_mask_ne(outStart[oLen - DES_BLOCK_SIZE + i], pad);
             invalid |= check;
         }
-        *outLen = oLen - pad - 1 - DES_BLOCK_SIZE;
         ok = invalid == 0;
+        if (ok) {
+            *outLen = oLen - pad - 1 - DES_BLOCK_SIZE;
+        }
+        else {
+            *outLen = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

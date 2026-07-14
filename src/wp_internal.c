@@ -39,8 +39,20 @@
 #ifndef WP_SINGLE_THREADED
 
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+#include <pthread.h>
+#endif
 /* Global mutex for urandom file access (used by seed callback) */
 static wolfSSL_Mutex urandomMutex;
+
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+/* Re-init the mutex in a forked child so an inherited locked mutex cannot
+ * deadlock entropy reads. */
+static void wolfprov_urandom_atfork_child(void)
+{
+    wc_InitMutex(&urandomMutex);
+}
+#endif
 
 /**
  * Initialize the urandom mutex on library load.
@@ -52,6 +64,9 @@ __attribute__((constructor))
 static void wolfprov_init_urandom_mutex(void)
 {
     wc_InitMutex(&urandomMutex);
+#if !defined(WP_SINGLE_THREADED) && !defined(_WIN32)
+    (void)pthread_atfork(NULL, NULL, wolfprov_urandom_atfork_child);
+#endif
 }
 
 /**
@@ -885,8 +900,9 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
             size_t i;
 
             for (i = 0; i < WP_CIPHER_NAMES_LEN; i++) {
-                if (XSTRNCMP(p->data, wp_cipher_names[i].name,
-                        p->data_size) == 0) {
+                if ((XSTRLEN(wp_cipher_names[i].name) == p->data_size) &&
+                        (XSTRNCMP(p->data, wp_cipher_names[i].name,
+                        p->data_size) == 0)) {
                     *cipher = wp_cipher_names[i].id;
                     if (cipherName != NULL) {
                         *cipherName = wp_cipher_names[i].canonName;
@@ -1003,6 +1019,7 @@ static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
 #ifndef NO_PWDBASED
     if ((ret = wc_PBKDF1(key, password, passwordSz, info->iv, PKCS5_SALT_SZ, 1,
                                         info->keySz, hashType)) != 0) {
+        ForceZero(key, WC_MAX_SYM_KEY_SIZE);
 #ifdef WOLFSSL_SMALL_STACK
         XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
 #endif
@@ -1022,6 +1039,7 @@ static int wp_BufferKeyEncrypt(wp_EncryptedInfo* info, byte* der, word32 derSz,
             info->iv);
 #endif /* !NO_AES && HAVE_AES_CBC */
 
+    ForceZero(key, WC_MAX_SYM_KEY_SIZE);
 #ifdef WOLFSSL_SMALL_STACK
     XFREE(key, NULL, DYNAMIC_TYPE_SYMMETRIC_KEY);
 #endif
@@ -1070,6 +1088,9 @@ int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
 
     /* Get password. */
     if (!pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
+        ok = 0;
+    }
+    if (ok && (passwordSz > sizeof(password))) {
         ok = 0;
     }
     if (ok) {
@@ -1189,6 +1210,10 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
         readLen = BIO_read(bio, buf, sizeof(buf));
         if (readLen < -1) {
             WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_read error (%d) in %s:%d", readLen, __FILE__, __LINE__);
+            ok = 0;
+        }
+        if (ok && (readLen > 0) &&
+                ((uint64_t)*len + (uint64_t)readLen > (uint64_t)UINT32_MAX)) {
             ok = 0;
         }
         if (ok && (readLen > 0)) {

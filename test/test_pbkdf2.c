@@ -275,6 +275,78 @@ static int test_pbkdf2_bounds(void)
     return err;
 }
 
+/*
+ * A PBKDF2 iteration count above INT_MAX must not silently truncate to a small
+ * value. iter = 2^32 + 1 collapses to 1 in a plain (int) cast, which would
+ * derive the same key as a single iteration.
+ */
+static int test_pbkdf2_iter_truncation(void)
+{
+    int err = 0;
+    int retHuge = 0;
+    int ret1 = 0;
+    unsigned char keyHuge[32];
+    unsigned char key1[32];
+    static const unsigned char salt16[16] = {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+    };
+    uint64_t hugeIter = ((uint64_t)1 << 32) + 1;
+
+    memset(keyHuge, 0, sizeof(keyHuge));
+    memset(key1, 0, sizeof(key1));
+
+    err = pbkdf2_derive(wpLibCtx, hugeIter, salt16, sizeof(salt16), 0, 0,
+        keyHuge, sizeof(keyHuge), &retHuge);
+    if (err == 0) {
+        err = pbkdf2_derive(wpLibCtx, 1, salt16, sizeof(salt16), 0, 0,
+            key1, sizeof(key1), &ret1);
+    }
+    if ((err == 0) && (ret1 <= 0)) {
+        PRINT_MSG("PBKDF2 baseline iter=1 derive failed");
+        err = 1;
+    }
+    if ((err == 0) && (retHuge > 0) &&
+            (memcmp(keyHuge, key1, sizeof(key1)) == 0)) {
+        PRINT_MSG("PBKDF2 iteration count above INT_MAX truncated to 1");
+        err = 1;
+    }
+
+    return err;
+}
+
+/* PKCS12KDF must reject a diversifier id outside the RFC 7292 {1,2,3} range. */
+static int test_pkcs12_bad_id(void)
+{
+    int err = 0;
+    int deriveRet = 0;
+    unsigned char out[24];
+    static unsigned char pass[] = "password";
+    static unsigned char salt[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    uint64_t iter = 2048;
+    int id = 4;
+    char digest[] = "SHA256";
+    OSSL_PARAM params[6];
+    OSSL_PARAM* p = params;
+
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_PASSWORD,
+        pass, sizeof(pass) - 1);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
+        salt, sizeof(salt));
+    *p++ = OSSL_PARAM_construct_uint64(OSSL_KDF_PARAM_ITER, &iter);
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digest, 0);
+    *p++ = OSSL_PARAM_construct_int(OSSL_KDF_PARAM_PKCS12_ID, &id);
+    *p = OSSL_PARAM_construct_end();
+
+    err = test_kdf_derive(wpLibCtx, "PKCS12KDF", params, out, sizeof(out),
+        &deriveRet);
+    if (err == 0 && deriveRet > 0) {
+        PRINT_MSG("PKCS12KDF accepted invalid diversifier id");
+        err = 1;
+    }
+
+    return err;
+}
+
 int test_pbkdf2(void *data)
 {
     int err = 0;
@@ -285,8 +357,18 @@ int test_pbkdf2(void *data)
     err = test_pkcs12_kdf();
 
     if (err == 0) {
+        PRINT_MSG("PKCS12KDF invalid diversifier id");
+        err = test_pkcs12_bad_id();
+    }
+
+    if (err == 0) {
         PRINT_MSG("PBKDF2 OpenSSL vs wolfProvider");
         err = test_pbkdf2_bounds();
+    }
+
+    if (err == 0) {
+        PRINT_MSG("PBKDF2 iteration count truncation");
+        err = test_pbkdf2_iter_truncation();
     }
 
     return err;

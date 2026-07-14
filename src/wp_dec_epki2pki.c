@@ -118,9 +118,15 @@ static int wp_DecryptPKCS8Key(byte* input, word32 sz, const char* password,
     EncryptedInfo info;
     int algoId;
 
-    pem = OPENSSL_malloc(sz * 2);
-    if (pem == NULL) {
-        ret = MEMORY_E;
+    /* sz * 2 must not overflow word32 before allocating and encoding. */
+    if (sz > (0xFFFFFFFFU / 2)) {
+        ret = BAD_FUNC_ARG;
+    }
+    if (ret == 0) {
+        pem = OPENSSL_malloc((size_t)sz * 2);
+        if (pem == NULL) {
+            ret = MEMORY_E;
+        }
     }
     if (ret == 0) {
         ret = wc_DerToPem(input, sz, pem, sz * 2, PKCS8_ENC_PRIVATEKEY_TYPE);
@@ -145,7 +151,8 @@ static int wp_DecryptPKCS8Key(byte* input, word32 sz, const char* password,
             ret = 0;
         }
         if (ret == 0) {
-            ret = wc_AllocDer(&pkcs8Der, pkcs8Sz, DYNAMIC_TYPE_KEY, NULL);
+            /* PRIVATEKEY_TYPE so wc_FreeDer zeroizes the decrypted key. */
+            ret = wc_AllocDer(&pkcs8Der, pkcs8Sz, PRIVATEKEY_TYPE, NULL);
         }
         if (ret == 0) {
             ret = wc_CreatePKCS8Key(pkcs8Der->buffer, &pkcs8Der->length,
@@ -231,6 +238,9 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     if ((!done) && ok && (!pwCb(password, sizeof(password), &passwordLen, NULL,
             pwCbArg))) {
         done = 1;
+    }
+    if ((!done) && ok && (passwordLen > sizeof(password))) {
+        ok = 0;
     }
     if ((!done) && ok) {
     #if LIBWOLFSSL_VERSION_HEX >= 0x05000000

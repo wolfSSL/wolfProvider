@@ -102,7 +102,7 @@ static void wp_hmac_free(wp_HmacCtx* macCtx)
     if (macCtx != NULL) {
         wc_HmacFree(&macCtx->hmac);
         OPENSSL_secure_clear_free(macCtx->key, macCtx->keyLen);
-        OPENSSL_free(macCtx);
+        OPENSSL_clear_free(macCtx, sizeof(*macCtx));
     }
 }
 
@@ -122,17 +122,30 @@ static int wp_hmac_set_key(wp_HmacCtx* macCtx, const unsigned char* key,
     size_t keyLen, int restart)
 {
     int ok = 1;
-    word32 blockSize = wc_HashGetBlockSize(macCtx->type);
+    int blockSizeRet = wc_HashGetBlockSize(macCtx->type);
+    word32 blockSize = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_hmac_set_key");
 
     WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_HMAC);
 
-    if (macCtx->keyLen > 0) {
+    /* wc_HashGetBlockSize returns a negative error when no digest is set. */
+    if (blockSizeRet <= 0) {
+        ok = 0;
+    }
+    else {
+        blockSize = (word32)blockSizeRet;
+    }
+
+    if (ok && !WP_FITS_WORD32(keyLen)) {
+        ok = 0;
+    }
+
+    if (ok && (macCtx->keyLen > 0)) {
         OPENSSL_secure_clear_free(macCtx->key, macCtx->keyLen);
     }
 
-    if (keyLen < blockSize) {
+    if (ok && (keyLen < blockSize)) {
         /* wolfSSL FIPS needs a key that is at least block size in length with
          * the unused parts zeroed out.
          */
@@ -145,7 +158,7 @@ static int wp_hmac_set_key(wp_HmacCtx* macCtx, const unsigned char* key,
             ok = 0;
         }
     }
-    else {
+    else if (ok) {
         macCtx->keyLen = keyLen;
         macCtx->key = OPENSSL_secure_malloc(keyLen);
         if (macCtx->key == NULL) {
@@ -262,7 +275,8 @@ static int wp_hmac_update(wp_HmacCtx* macCtx, const unsigned char* data,
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_hmac_update");
 
     while (ok && (dataLen > 0)) {
-        word32 chunk = (dataLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)dataLen;
+        word32 chunk = (!WP_FITS_WORD32(dataLen)) ?
+            0xFFFFFFFFU : (word32)dataLen;
         int rc = wc_HmacUpdate(&macCtx->hmac, data, chunk);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HmacUpdate",

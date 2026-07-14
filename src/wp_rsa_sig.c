@@ -647,7 +647,10 @@ static int wp_rsa_sign_pkcs1(wp_RsaSigCtx* ctx, unsigned char* sig,
         }
     }
     if (ok) {
-        if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
+        if ((!WP_FITS_WORD32(tbsLen)) || (!WP_FITS_WORD32(sigSize))) {
+            ok = 0;
+        }
+        if (ok && (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1)) {
             ok = 0;
         }
         if (ok) {
@@ -703,7 +706,10 @@ static int wp_rsa_sign_pss(wp_RsaSigCtx* ctx, unsigned char* sig,
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_sign_pss");
 
     if (ok) {
-        if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
+        if ((!WP_FITS_WORD32(tbsLen)) || (!WP_FITS_WORD32(sigSize))) {
+            ok = 0;
+        }
+        if (ok && (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1)) {
             ok = 0;
         }
         if (ok) {
@@ -880,6 +886,9 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
     if (paddedSz <= 0) {
         ok = 0;
     }
+    if (ok && (tbsLen >= (size_t)paddedSz)) {
+        ok = 0;
+    }
     if (ok) {
         tbuf = (unsigned char *)OPENSSL_malloc(paddedSz);
         if (tbuf == NULL) {
@@ -906,6 +915,9 @@ static int wp_rsa_sign_x931(wp_RsaSigCtx* ctx, unsigned char* sig,
         if (wp_add_x931_padding(padded, paddedSz, tbuf, tbsLen + 1) != 1) {
             ok = 0;
         }
+    }
+    if (ok && (!WP_FITS_WORD32(sigSize))) {
+        ok = 0;
     }
     if (ok) {
         word32 len = (word32)sigSize;
@@ -1078,6 +1090,10 @@ static int wp_rsa_verify_pkcs1(wp_RsaSigCtx* ctx, const unsigned char* sig,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_verify_pkcs1");
 
+    if (!WP_FITS_WORD32(sigLen)) {
+        return 0;
+    }
+
     rc = wc_RsaSSL_Verify(sig, (word32)sigLen, decryptedSig, (word32)sigLen,
         wp_rsa_get_key(ctx->rsa));
     if (rc < 0) {
@@ -1141,10 +1157,14 @@ static int wp_rsa_verify_pss(wp_RsaSigCtx* ctx, const unsigned char* sig,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_verify_pss");
 
+    if (!WP_FITS_WORD32(sigLen)) {
+        ok = 0;
+    }
+
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
-    if (ctx->hash.type == WC_HASH_TYPE_NONE)
+    if (ok && (ctx->hash.type == WC_HASH_TYPE_NONE))
 #else
-    if (ctx->hashType == WC_HASH_TYPE_NONE)
+    if (ok && (ctx->hashType == WC_HASH_TYPE_NONE))
 #endif
     {
         ok = wp_rsa_setup_md(ctx, WP_RSA_DEFAULT_MD, NULL, EVP_PKEY_OP_VERIFY);
@@ -1512,6 +1532,9 @@ static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, unsigned char* rout,
         ok = 0;
     }
 
+    if (ok && ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(routsize)))) {
+        ok = 0;
+    }
     if (ok) {
         rc = wc_RsaSSL_Verify(sig, (word32)sigLen, rout, (word32)routsize,
             wp_rsa_get_key(ctx->rsa));
@@ -1570,6 +1593,10 @@ static int wp_rsa_digest_signverify_update(wp_RsaSigCtx* ctx,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_digest_signverify_update");
+
+    if (!WP_FITS_WORD32(dataLen)) {
+        return 0;
+    }
 
     int rc = wc_HashUpdate(&ctx->hash,
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
@@ -1949,7 +1976,10 @@ static int wp_rsa_get_ctx_params(wp_RsaSigCtx* ctx, OSSL_PARAM* params)
     if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
         if (p != NULL) {
-            ok = wp_rsa_get_alg_id(ctx, p);
+            /* An unencodable digest must not fail the whole get; mark it empty. */
+            if (!wp_rsa_get_alg_id(ctx, p)) {
+                p->return_size = 0;
+            }
         }
     }
 

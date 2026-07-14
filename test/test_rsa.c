@@ -20,6 +20,7 @@
 
 #include "unit.h"
 #include <wolfprovider/wp_fips.h>
+#include <wolfprovider/alg_funcs.h>
 #include <wolfssl/wolfcrypt/asn.h>
 
 #include <openssl/store.h>
@@ -967,6 +968,49 @@ static int test_rsa_pss_restrict_params(OSSL_LIB_CTX *libCtx)
     return err;
 }
 
+/*
+ * A salt length >= 256 must encode both bytes of the 2-byte DER INTEGER in the
+ * RSA-PSS AlgorithmIdentifier. saltLen 300 (0x012C) needs the high byte 0x01;
+ * a dropped high byte decodes as 44. rsa is unused for an explicit salt length.
+ */
+static int test_rsa_pss_saltlen_encode(void)
+{
+    int err = 0;
+    int ok;
+    int saltLen = 300;
+    byte algId[128];
+    word32 len = 0;
+    word32 i;
+    int found = 0;
+    static const byte saltMarker[] = { 0xa2, 0x04, 0x02, 0x02 };
+
+    ok = wp_rsa_pss_encode_alg_id(NULL, "SHA256", "SHA256", saltLen, algId,
+        &len);
+    if (ok != 1) {
+        PRINT_ERR_MSG("PSS AlgId encode failed");
+        err = 1;
+    }
+    for (i = 0; (err == 0) && (i + sizeof(saltMarker) + 1 < len); i++) {
+        if (memcmp(algId + i, saltMarker, sizeof(saltMarker)) == 0) {
+            int encoded = (algId[i + sizeof(saltMarker)] << 8) |
+                algId[i + sizeof(saltMarker) + 1];
+            found = 1;
+            if (encoded != saltLen) {
+                PRINT_ERR_MSG("PSS salt length encoded as %d, expected %d",
+                    encoded, saltLen);
+                err = 1;
+            }
+            break;
+        }
+    }
+    if ((err == 0) && !found) {
+        PRINT_ERR_MSG("PSS 2-byte salt length marker not found");
+        err = 1;
+    }
+
+    return err;
+}
+
 int test_rsa_pss_restrictions(void *data)
 {
     int err;
@@ -978,6 +1022,10 @@ int test_rsa_pss_restrictions(void *data)
     if (err == 0) {
         PRINT_MSG("Test WolfProvider");
         err = test_rsa_pss_restrict_params(wpLibCtx) == 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("PSS salt length >= 256 encoding");
+        err = test_rsa_pss_saltlen_encode();
     }
 
     return err;
@@ -3036,6 +3084,95 @@ int test_rsa_key_integrity(void* data)
     BN_free(u);
     BN_free(num);
     PKCS8_PRIV_KEY_INFO_free(p8inf);
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
+static int test_rsa_alg_id_get(EVP_PKEY* pkey, OSSL_LIB_CTX* libCtx,
+    const char* mdName, unsigned char* aid, size_t aidSize, size_t* aidLen,
+    int* initRet, int* getRet)
+{
+    int err;
+    EVP_MD_CTX* mdCtx = NULL;
+    EVP_PKEY_CTX* pkeyCtx = NULL;
+    OSSL_PARAM params[2];
+
+    *aidLen = 0;
+    *initRet = 0;
+    *getRet = 0;
+
+    err = (mdCtx = EVP_MD_CTX_new()) == NULL;
+    if (err == 0) {
+        *initRet = EVP_DigestSignInit_ex(mdCtx, &pkeyCtx, mdName, libCtx, NULL,
+            pkey, NULL);
+    }
+    if ((err == 0) && (*initRet == 1)) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_ALGORITHM_ID, aid, aidSize);
+        params[1] = OSSL_PARAM_construct_end();
+        *getRet = EVP_PKEY_CTX_get_params(pkeyCtx, params);
+        if (*getRet == 1) {
+            *aidLen = params[0].return_size;
+        }
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    return err;
+}
+
+int test_rsa_sig_alg_id(void *data)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    const unsigned char *p = rsa_key_der_2048;
+    const char* mds[] = { "SHA256", "SHA384", "SHA512" };
+    unsigned char wpAid[64];
+    unsigned char osslAid[64];
+    size_t wpLen = 0;
+    size_t osslLen = 0;
+    int wpInit = 0;
+    int osslInit = 0;
+    int wpGet = 0;
+    int osslGet = 0;
+    size_t i;
+
+    (void)data;
+
+    pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
+    err = pkey == NULL;
+
+    for (i = 0; (err == 0) && (i < sizeof(mds) / sizeof(mds[0])); i++) {
+        PRINT_MSG("RSA PKCS#1 alg-id A/B against OpenSSL");
+        err = test_rsa_alg_id_get(pkey, wpLibCtx, mds[i], wpAid, sizeof(wpAid),
+            &wpLen, &wpInit, &wpGet);
+        if (err == 0) {
+            err = test_rsa_alg_id_get(pkey, osslLibCtx, mds[i], osslAid,
+                sizeof(osslAid), &osslLen, &osslInit, &osslGet);
+        }
+        if ((err == 0) && ((wpInit != 1) || (osslInit != 1) ||
+                (wpGet != 1) || (osslGet != 1))) {
+            err = 1;
+        }
+        if ((err == 0) && ((wpLen == 0) || (wpLen != osslLen) ||
+                (memcmp(wpAid, osslAid, wpLen) != 0))) {
+            err = 1;
+        }
+    }
+
+    /* An unencodable digest must leave the alg-id empty without failing the
+     * whole get_ctx_params call. Skip when the digest is unavailable. */
+    if (err == 0) {
+        err = test_rsa_alg_id_get(pkey, wpLibCtx, "SHA-1", wpAid,
+            sizeof(wpAid), &wpLen, &wpInit, &wpGet);
+    }
+    if ((err == 0) && (wpInit == 1)) {
+        PRINT_MSG("RSA PKCS#1 unencodable alg-id stays empty");
+        if ((wpGet != 1) || (wpLen != 0)) {
+            err = 1;
+        }
+    }
+
     EVP_PKEY_free(pkey);
 
     return err;

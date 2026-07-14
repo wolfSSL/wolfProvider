@@ -215,6 +215,14 @@ install_wolfssl() {
                 printf "with FIPS ${fips_tag} ... "
             fi
             CONF_ARGS+=" --enable-fips=$fips_configure_arg"
+
+            # Internal test-only knob: expose wolfCrypt_SetStatus_fips for the
+            # fips_status test. The define reaches the provider and test builds
+            # automatically via the generated wolfssl options.h.
+            if [ "${WOLFPROV_FIPS_FORCE_FAIL:-}" = "1" ]; then
+                WOLFSSL_FIPS_CONFIG_CFLAGS="${WOLFSSL_FIPS_CONFIG_CFLAGS} -DHAVE_FORCE_FIPS_FAILURE"
+            fi
+
             WOLFSSL_CONFIG_OPTS=$WOLFSSL_FIPS_CONFIG_OPTS
             WOLFSSL_CONFIG_CFLAGS=$WOLFSSL_FIPS_CONFIG_CFLAGS
             # Only run fips-check if not using a bundle

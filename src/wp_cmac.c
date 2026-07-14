@@ -120,6 +120,9 @@ static int wp_cmac_set_key(wp_CmacCtx* macCtx, const unsigned char* key,
     if (keyLen > AES_256_KEY_SIZE) {
         ok = 0;
     }
+    if (ok && (macCtx->expKeySize != 0) && (keyLen != macCtx->expKeySize)) {
+        ok = 0;
+    }
     if (ok) {
         if (macCtx->keyLen > 0) {
             OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
@@ -234,7 +237,8 @@ static int wp_cmac_update(wp_CmacCtx* macCtx, const unsigned char* data,
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_cmac_update");
 
     while (ok && (dataLen > 0)) {
-        word32 chunk = (dataLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)dataLen;
+        word32 chunk = (!WP_FITS_WORD32(dataLen)) ?
+            0xFFFFFFFFU : (word32)dataLen;
         int rc = wc_CmacUpdate(&macCtx->cmac, data, chunk);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_CmacUpdate",
@@ -419,8 +423,9 @@ static int wp_cmac_setup_cipher(wp_CmacCtx* macCtx, const OSSL_PARAM params[])
             macCtx->size = AES_BLOCK_SIZE;
 
             for (i = 0; i < WP_CMAC_CIPHER_NAMES_LEN; i++) {
-                if (XSTRNCMP(p->data, wp_cmac_cipher_names[i].name,
-                        p->data_size) == 0) {
+                if ((XSTRLEN(wp_cmac_cipher_names[i].name) == p->data_size) &&
+                        (XSTRNCMP(p->data, wp_cmac_cipher_names[i].name,
+                        p->data_size) == 0)) {
                     macCtx->expKeySize = wp_cmac_cipher_names[i].keySize;
                     break;
                 }

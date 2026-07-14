@@ -247,7 +247,13 @@ int wp_params_get_digest(const OSSL_PARAM* params, char* name,
         const char* mdProps = NULL;
 
         if (name != NULL) {
-            XMEMCPY(name, mdName, XSTRLEN(mdName) + 1);
+            size_t nameLen = XSTRLEN(mdName);
+
+            if (nameLen >= WP_MAX_MD_NAME_SIZE) {
+                nameLen = WP_MAX_MD_NAME_SIZE - 1;
+            }
+            XMEMCPY(name, mdName, nameLen);
+            name[nameLen] = '\0';
         }
         if (ok && (type != NULL) && (!wp_params_get_utf8_string_ptr(params,
                     OSSL_ALG_PARAM_PROPERTIES, &mdProps))) {
@@ -464,11 +470,12 @@ int wp_params_get_utf8_string(const OSSL_PARAM* params, const char* key,
     if ((p != NULL) && (p->data_type != OSSL_PARAM_UTF8_STRING)) {
         ok = 0;
     }
-    if ((p != NULL) && ok && (p->data_size > len)) {
+    if ((p != NULL) && ok && (p->data_size >= len)) {
         ok = 0;
     }
     if ((p != NULL) && ok) {
-        XSTRNCPY(str, p->data, len);
+        XMEMCPY(str, p->data, p->data_size);
+        str[p->data_size] = '\0';
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

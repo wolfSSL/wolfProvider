@@ -17,8 +17,8 @@ noinst_HEADERS += test/standalone/test_common.h \
 # Standalone test programs
 # Each test compiles to its own binary for isolated execution
 # Note: These are NOT in check_PROGRAMS because they must be run through scripts, not directly
-noinst_PROGRAMS += test/sha256_simple.test test/hardload.test test/fips_baseline.test test/pqc_interop.test
-DISTCLEANFILES += test/.libs/sha256_simple.test test/.libs/hardload.test test/.libs/fips_baseline.test test/.libs/pqc_interop.test
+noinst_PROGRAMS += test/sha256_simple.test test/hardload.test test/fips_baseline.test test/pqc_interop.test test/fips_status.test
+DISTCLEANFILES += test/.libs/sha256_simple.test test/.libs/hardload.test test/.libs/fips_baseline.test test/.libs/pqc_interop.test test/.libs/fips_status.test
 
 # Common flags for all standalone tests
 STANDALONE_COMMON_CPPFLAGS = -DCERTS_DIR='"$(abs_top_srcdir)/certs"' \
@@ -59,6 +59,13 @@ test_decode_oid_precheck_test_LDADD = $(STANDALONE_COMMON_LDADD)
 test_pqc_interop_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
 test_pqc_interop_test_SOURCES = test/standalone/tests/pqc_interop/test_pqc_interop.c
 test_pqc_interop_test_LDADD = $(STANDALONE_COMMON_LDADD)
+
+test_fips_status_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
+test_fips_status_test_SOURCES = test/standalone/tests/fips_status/test_fips_status.c
+test_fips_status_test_LDADD = $(STANDALONE_COMMON_LDADD)
+# Export the executable's dynamic symbols so libwolfprov resolves
+# wolfCrypt_GetStatus_fips to this binary on the interposition path.
+test_fips_status_test_LDFLAGS = -export-dynamic
 
 # Common test utilities are built automatically by automake
 

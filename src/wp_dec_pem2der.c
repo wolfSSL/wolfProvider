@@ -124,6 +124,9 @@ static int wp_pem_password_cb(char* passwd, int sz, int rw, void* userdata)
     if (!osslCb->cb(passwd, sz, &len, NULL, osslCb->cbArg)) {
         ret = -1;
     }
+    else if (len > (size_t)sz) {
+        ret = -1;
+    }
     else {
         ret = (int)len;
     }
@@ -157,12 +160,18 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
     WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_pem2der_convert");
 
     /* Skip '-----BEGIN <name>-----\n'. */
-    base64Data = data + 16 + nameLen + 1;
-    base64Len = len - (16 + nameLen + 1);
-    footer = XSTRSTR(base64Data, "-----END ");
-    if (footer == NULL) {
+    if (len <= (word32)(16 + nameLen + 1)) {
         info->consumed = len;
         ok = 0;
+    }
+    if (ok) {
+        base64Data = data + 16 + nameLen + 1;
+        base64Len = len - (16 + nameLen + 1);
+        footer = XSTRSTR(base64Data, "-----END ");
+        if (footer == NULL) {
+            info->consumed = len;
+            ok = 0;
+        }
     }
     if (ok) {
         /* Include footer and '\n'. */
@@ -230,7 +239,11 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
 
     /* Identify the type of object by looking at the header. */
     /* TODO: support more PEM headers. */
-    if (XMEMCMP(data, "-----BEGIN CERTIFICATE-----", 27) == 0) {
+    /* Header detection reads fixed-length prefixes; reject short input. */
+    if (len < 41) {
+        ok = 0;
+    }
+    else if (XMEMCMP(data, "-----BEGIN CERTIFICATE-----", 27) == 0) {
         type = CERT_TYPE;
         obj = OSSL_OBJECT_CERT;
     }

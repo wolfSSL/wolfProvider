@@ -301,8 +301,11 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
             if (sigSize == (size_t)-1) {
                 sigSize = *sigLen;
             }
+            if ((!WP_FITS_WORD32(sigSize)) || (!WP_FITS_WORD32(tbsLen))) {
+                ok = 0;
+            }
             len = (word32)sigSize;
-            if (wp_lock(wp_ecc_get_mutex(ctx->ecc)) != 1) {
+            if (ok && (wp_lock(wp_ecc_get_mutex(ctx->ecc)) != 1)) {
                 ok = 0;
             }
             if (ok) {
@@ -389,6 +392,9 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
         }
         else if ((hashType == WC_HASH_TYPE_NONE) &&
                  (tbsLen < WC_MIN_DIGEST_SIZE)) {
+            ok = 0;
+        }
+        else if ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(tbsLen))) {
             ok = 0;
         }
         else {
@@ -487,42 +493,33 @@ static int wp_ecdsa_setup_md(wp_EcdsaSigCtx *ctx, const char *mdName,
 
     if (mdName != NULL) {
         int rc;
+        enum wc_HashType hashType;
 
-#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
-        ctx->hash.type = wp_name_to_wc_hash_type(ctx->libCtx, mdName, mdProps);
-        if ((ctx->hash.type == WC_HASH_TYPE_NONE) ||
-            (ctx->hash.type == WC_HASH_TYPE_MD5))
-#else
-        ctx->hashType = wp_name_to_wc_hash_type(ctx->libCtx, mdName, mdProps);
-        if ((ctx->hashType == WC_HASH_TYPE_NONE) ||
-            (ctx->hashType == WC_HASH_TYPE_MD5))
-#endif
-        {
+        hashType = wp_name_to_wc_hash_type(ctx->libCtx, mdName, mdProps);
+        if ((hashType == WC_HASH_TYPE_NONE) ||
+            (hashType == WC_HASH_TYPE_MD5)) {
             ok = 0;
         }
 #ifdef HAVE_FIPS
-#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
-        if ((ctx->hash.type == WC_HASH_TYPE_SHA) && (op == EVP_PKEY_OP_SIGN))
-#else
-        if ((ctx->hashType == WC_HASH_TYPE_SHA) && (op == EVP_PKEY_OP_SIGN))
-#endif
-        {
+        if (ok && (hashType == WC_HASH_TYPE_SHA) &&
+            (op == EVP_PKEY_OP_SIGN)) {
             ok = 0;
         }
 #endif
 
         if (ok) {
-#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
-            rc = wc_HashInit_ex(&ctx->hash, ctx->hash.type, NULL, INVALID_DEVID);
-#else
-            rc = wc_HashInit_ex(&ctx->hash, ctx->hashType, NULL, INVALID_DEVID);
-#endif
+            rc = wc_HashInit_ex(&ctx->hash, hashType, NULL, INVALID_DEVID);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HashInit_ex", rc);
                 ok = 0;
             }
         }
         if (ok) {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+            ctx->hash.type = hashType;
+#else
+            ctx->hashType = hashType;
+#endif
             OPENSSL_strlcpy(ctx->mdName, mdName, sizeof(ctx->mdName));
         }
     }
@@ -576,6 +573,10 @@ static int wp_ecdsa_digest_signverify_update(wp_EcdsaSigCtx *ctx,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDSA, "wp_ecdsa_digest_signverify_update");
+
+    if (!WP_FITS_WORD32(dataLen)) {
+        return 0;
+    }
 
     int rc = wc_HashUpdate(&ctx->hash,
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
@@ -770,14 +771,14 @@ static int wp_ecdsa_digest_verify_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
          };
          ok = OSSL_PARAM_set_octet_string(p, ecdsa_sha256, sizeof(ecdsa_sha256));
      }
-     if ((XMEMCMP(ctx->mdName, "SHA384", 7) == 0) ||
+     else if ((XMEMCMP(ctx->mdName, "SHA384", 7) == 0) ||
          (XMEMCMP(ctx->mdName, "sha384", 7) == 0)) {
          static const unsigned char ecdsa_sha384[] = {
              0x30, 0x0a, 0x06, 0x08, 42, 134, 72, 206, 61, 4, 3, 3
          };
          ok = OSSL_PARAM_set_octet_string(p, ecdsa_sha384, sizeof(ecdsa_sha384));
      }
-     if ((XMEMCMP(ctx->mdName, "SHA512", 7) == 0) ||
+     else if ((XMEMCMP(ctx->mdName, "SHA512", 7) == 0) ||
          (XMEMCMP(ctx->mdName, "sha512", 7) == 0)) {
          static const unsigned char ecdsa_sha512[] = {
              0x30, 0x0a, 0x06, 0x08, 42, 134, 72, 206, 61, 4, 3, 4

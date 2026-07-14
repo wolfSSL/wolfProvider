@@ -38,7 +38,12 @@ else
         exit 1
     fi
 
-    sha=$(echo "$body" | jq -r .sha)
+    # OSP container images (e.g. sssd) ship without jq; fall back to grep.
+    if command -v jq >/dev/null 2>&1; then
+        sha=$(printf '%s' "$body" | jq -r .sha)
+    else
+        sha=$(printf '%s' "$body" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]\{40\}"' | head -n1 | grep -o '[0-9a-f]\{40\}')
+    fi
     if [[ -z "$sha" || "$sha" == "null" ]]; then
         echo "resolve-ref: no sha for $REF in $REPO" >&2
         exit 1

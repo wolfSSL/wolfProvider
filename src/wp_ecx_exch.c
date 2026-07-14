@@ -230,7 +230,10 @@ static int wp_x25519_derive(wp_EcxCtx* ctx, unsigned char* secret,
 
     WOLFPROV_ENTER(WP_LOG_COMP_X25519, "wp_x25519_derive");
 
-    if (!wolfssl_prov_is_running()) {
+    if (!WP_FITS_WORD32(secSize)) {
+        ok = 0;
+    }
+    if (ok && !wolfssl_prov_is_running()) {
         ok = 0;
     }
 
@@ -330,7 +333,10 @@ static int wp_x448_derive(wp_EcxCtx* ctx, unsigned char* secret,
 
     WOLFPROV_ENTER(WP_LOG_COMP_X448, "wp_x448_derive");
 
-    if (!wolfssl_prov_is_running()) {
+    if (!WP_FITS_WORD32(secSize)) {
+        ok = 0;
+    }
+    if (ok && !wolfssl_prov_is_running()) {
         ok = 0;
     }
 

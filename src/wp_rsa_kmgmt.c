@@ -530,9 +530,13 @@ void wp_rsa_free(wp_Rsa* rsa)
         int rc;
 
         rc = wc_LockMutex(&rsa->mutex);
-        cnt = --rsa->refCnt;
         if (rc == 0) {
+            cnt = --rsa->refCnt;
             wc_UnLockMutex(&rsa->mutex);
+        }
+        else {
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = rsa->refCnt;
         }
     #else
         cnt = --rsa->refCnt;
@@ -915,7 +919,7 @@ static int wp_rsa_get_params_key_data(wp_Rsa* rsa,  OSSL_PARAM params[])
             size_t oLen;
             mp_int* mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[i]);
             oLen = mp_unsigned_bin_size(mp);
-            if (oLen > p->data_size) {
+            if ((p->data != NULL) && (oLen > p->data_size)) {
                 ok = 0;
             }
             if (ok && (p->data != NULL) &&
@@ -1605,7 +1609,7 @@ static int wp_rsa_import(wp_Rsa* rsa, int selection, const OSSL_PARAM params[])
     if (ok) {
         rsa->bits    = mp_count_bits(&rsa->key.n);
         rsa->hasPub  = importPub;
-        rsa->hasPriv = importPriv;
+        rsa->hasPriv = importPriv && !mp_iszero((mp_int*)&rsa->key.d);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -2770,6 +2774,9 @@ static int wp_rsa_decode_enc_pki(wp_Rsa* rsa, unsigned char* data, word32 len,
     if (ok && !pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg)) {
         ok = 0;
     }
+    if (ok && (passwordSz > sizeof(password))) {
+        ok = 0;
+    }
     if (ok) {
         /* Decrypt to encoded private key. */
         int ret = wc_DecryptPKCS8Key(data, len, password, (int)passwordSz);
@@ -3088,8 +3095,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
         else {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, saltLenDer2, sizeof(saltLenDer2));
-                pssAlgId[i + sizeof(saltLenDer2)] = 0;
-                pssAlgId[i + sizeof(saltLenDer2) + 1] = saltLen;
+                pssAlgId[i + sizeof(saltLenDer2)] = (byte)(saltLen >> 8);
+                pssAlgId[i + sizeof(saltLenDer2) + 1] = (byte)(saltLen & 0xff);
                 pssAlgId[seq1LenIdx] += sizeof(saltLenDer2) + 2;
                 pssAlgId[seq2LenIdx] += sizeof(saltLenDer2) + 2;
             }

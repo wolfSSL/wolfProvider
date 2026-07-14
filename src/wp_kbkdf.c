@@ -255,6 +255,18 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         }
 
         if (ok) {
+            p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_LABEL);
+            if ((p != NULL) && (p->data != NULL)) {
+                OPENSSL_free(ctx->label);
+                ctx->label = NULL;
+                if (!OSSL_PARAM_get_octet_string(p, (void**)&ctx->label, 0,
+                        &ctx->labelLen)) {
+                    ok = 0;
+                }
+            }
+        }
+
+        if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_INFO);
             if ((p != NULL) && (p->data != NULL)) {
                 OPENSSL_free(ctx->context);
@@ -419,6 +431,10 @@ static int wp_kbkdf_init_mac(wp_KbkdfCtx* ctx, unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kbkdf_init_mac");
 
+    if (!WP_FITS_WORD32(keyLen)) {
+        return 0;
+    }
+
     switch(ctx->mac) {
 #ifdef WP_HAVE_HMAC
         case WP_MAC_TYPE_HMAC:
@@ -478,6 +494,10 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
     int rc = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kbkdf_mac_update");
+
+    if (!WP_FITS_WORD32(dataLen)) {
+        return 0;
+    }
 
     switch(ctx->mac) {
 #ifdef WP_HAVE_HMAC
@@ -594,6 +614,11 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
     unsigned char zero = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_KDF, "wp_kdf_kbkdf_derive");
+
+    /* SP800-108 L is a 32-bit bit-length, so cap output at what it can hold. */
+    if (keyLen > 0x1FFFFFFFU) {
+        return 0;
+    }
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;

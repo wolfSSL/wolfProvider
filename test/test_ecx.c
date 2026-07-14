@@ -26,11 +26,11 @@
 #include <wolfssl/wolfcrypt/ed25519.h>
 #include <wolfssl/wolfcrypt/ed448.h>
 
-#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ECD448)
-
 #ifndef ARRAY_SIZE
     #define ARRAY_SIZE(a)   ((sizeof(a)/sizeof(a[0])))
 #endif
+
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
 
 #ifndef MAX
     #define MAX(a,b)       ((a) > (b) ? (a) : (b))
@@ -656,7 +656,6 @@ static int test_ecx_null_sign_init_ex(OSSL_LIB_CTX *libCtx)
 
 #ifndef WP_HAVE_ED25519
     (void)libCtx;
-    (void)provider_name;
     PRINT_MSG("Skipping test - WP_HAVE_ED25519 not defined");
     return 0;
 #endif
@@ -756,6 +755,45 @@ int test_ecx_x25519_raw_priv_roundtrip(void *data)
     }
 
     EVP_PKEY_free(pkey);
+    return err;
+}
+
+/* A zero-length private key octet string must be rejected without an
+ * out-of-bounds read (privData[len-1] with len==0). */
+int test_ecx_import_zero_priv(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    unsigned char *buf = NULL;
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    buf = OPENSSL_malloc(1);
+    if (buf == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "X25519", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PRIV_KEY,
+            buf, 0);
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) == 1) {
+            PRINT_ERR_MSG("X25519 import accepted zero-length private key");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OPENSSL_free(buf);
     return err;
 }
 #endif /* WP_HAVE_X25519 */
@@ -895,5 +933,89 @@ int test_ecx_dup(void *data)
     return err;
 }
 
-#endif /* defined(WP_HAVE_ED25519) || defined(WP_HAVE_ECD444) */
+#endif /* defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448) */
+
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
+
+/*
+ * Check that the correct security bits are provided for x25519 and x448
+ */
+int test_ecx_x_security_bits(void *data)
+{
+    int err = 0;
+    (void)data;
+
+    EVP_PKEY *pkey_ossl = NULL;
+    EVP_PKEY *pkey_wolf = NULL;
+    EVP_PKEY_CTX *ctx_ossl = NULL;
+    EVP_PKEY_CTX *ctx_wolf = NULL;
+
+    struct {
+        const char *name;
+        int expectedBits;
+    } types[] = {
+#ifdef WP_HAVE_X25519
+        { "X25519", 128 },
+#endif
+#ifdef WP_HAVE_X448
+        { "X448", 224 },
+#endif
+    };
+
+    for (unsigned i = 0; i < ARRAY_SIZE(types) && err == 0; i++) {
+        if (err == 0) {
+            ctx_ossl = EVP_PKEY_CTX_new_from_name(osslLibCtx, types[i].name,
+                NULL);
+            err = ctx_ossl == NULL;
+        }
+        if (err == 0) {
+            ctx_wolf = EVP_PKEY_CTX_new_from_name(wpLibCtx, types[i].name,
+                NULL);
+            err = ctx_wolf == NULL;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx_ossl) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx_wolf) != 1;
+        }
+        if (err == 0) {
+            pkey_ossl = NULL;
+            err = EVP_PKEY_generate(ctx_ossl, &pkey_ossl) != 1;
+        }
+        if (err == 0) {
+            pkey_wolf = NULL;
+            err = EVP_PKEY_generate(ctx_wolf, &pkey_wolf) != 1;
+        }
+        if (err == 0) {
+            int sec_ossl = EVP_PKEY_get_security_bits(pkey_ossl);
+            int sec_wolf = EVP_PKEY_get_security_bits(pkey_wolf);
+            if (sec_ossl != sec_wolf) {
+                PRINT_MSG("EVP_PKEY_get_security_bits mismatch for %s:"
+                    " OpenSSL %d, wolfProvider %d", types[i].name, sec_ossl,
+                    sec_wolf);
+                err = 1;
+            }
+            else if (sec_wolf != types[i].expectedBits) {
+                PRINT_MSG("EVP_PKEY_get_security_bits failed for %s:"
+                    " expected %d, got %d", types[i].name,
+                    types[i].expectedBits, sec_wolf);
+                err = 1;
+            }
+        }
+
+        EVP_PKEY_free(pkey_ossl);
+        EVP_PKEY_free(pkey_wolf);
+        EVP_PKEY_CTX_free(ctx_ossl);
+        EVP_PKEY_CTX_free(ctx_wolf);
+        pkey_ossl = NULL;
+        pkey_wolf = NULL;
+        ctx_ossl = NULL;
+        ctx_wolf = NULL;
+    }
+
+    return err;
+}
+
+#endif /* defined(WP_HAVE_X25519) || defined(WP_HAVE_X448) */
 

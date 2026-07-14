@@ -295,6 +295,39 @@ int test_hmac_create(void *data)
     return ret;
 }
 
+/* HMAC init with a key but no digest must fail cleanly, not size the key
+ * buffer from a negative wc_HashGetBlockSize() (~4 GiB allocation). */
+int test_hmac_key_no_digest(void *data)
+{
+    int err = 0;
+    EVP_MAC *emac = NULL;
+    EVP_MAC_CTX *mctx = NULL;
+    unsigned char key[16];
+
+    (void)data;
+
+    memset(key, 0x0B, sizeof(key));
+
+    emac = EVP_MAC_fetch(wpLibCtx, "HMAC", NULL);
+    if (emac == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        mctx = EVP_MAC_CTX_new(emac);
+        err = mctx == NULL;
+    }
+    if (err == 0) {
+        if (EVP_MAC_init(mctx, key, sizeof(key), NULL) == 1) {
+            PRINT_ERR_MSG("HMAC init succeeded without a digest");
+            err = 1;
+        }
+    }
+
+    EVP_MAC_CTX_free(mctx);
+    EVP_MAC_free(emac);
+    return err;
+}
+
 /******************************************************************************/
 
 /**

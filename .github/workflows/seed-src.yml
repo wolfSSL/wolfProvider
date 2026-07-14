@@ -34,6 +34,9 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: SEED-SRC Test
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -49,6 +52,16 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache build dependencies
+        id: deps
+        uses: ./.github/actions/oras-build-deps
+        with:
+          variant: seed-src
+          openssl_ref: ${{ matrix.openssl_ref }}
+          wolfssl_ref: ${{ matrix.wolfssl_ref }}
+          extra_key: ${{ hashFiles('.github/workflows/seed-src.yml') }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and test wolfProvider with SEED-SRC
         run: |
              # ac_cv_func_getrandom=no forces wolfSSL onto /dev/urandom, the
@@ -62,6 +75,15 @@ jobs:
              OPENSSL_TAG=${{ matrix.openssl_ref }} \
              WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \
              ./scripts/build-wolfprovider.sh --enable-seed-src
+
+      - name: Push build dependencies
+        uses: ./.github/actions/oras-build-deps-push
+        with:
+          registry: ${{ steps.deps.outputs.registry }}
+          openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
+          wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
+          wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       - name: Print errors
         if: ${{ failure() }}

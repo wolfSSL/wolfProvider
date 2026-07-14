@@ -36,6 +36,10 @@
 
 #include "wolfssl/wolfcrypt/logging.h"
 
+#ifdef HAVE_FIPS
+#include <wolfssl/wolfcrypt/fips_test.h>
+#endif
+
 const char* wolfprovider_id = "libwolfprov";
 
 /* Core function that gets the table of parameters. */
@@ -72,10 +76,11 @@ static const OSSL_PARAM* wolfprov_gettable_params(void* provCtx)
 /*
  * Returns whether the provider is running/usable.
  *
- * In FIPS, if there is an issue with the integrity check, then this can return
- * 0 to indicate provider is unusable.
+ * In FIPS builds the live wolfCrypt FIPS status is queried; a non-zero status
+ * (integrity/POST or continuous-test failure) returns 0 so a status-polling
+ * caller can observe the failure.
  *
- * @return  1 indicating provider is running.
+ * @return  1 indicating provider is running, 0 otherwise.
  */
 int wolfssl_prov_is_running(void)
 {
@@ -87,7 +92,12 @@ int wolfssl_prov_is_running(void)
       return 0;
     }
 #endif
-    /* Always running. */
+#ifdef HAVE_FIPS
+    if (wolfCrypt_GetStatus_fips() != 0) {
+        WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
+        return 0;
+    }
+#endif
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
 }
@@ -637,11 +647,11 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
 
 #ifdef WP_HAVE_ED25519
     { WP_NAMES_ED25519, WOLFPROV_PROPERTIES, wp_ed25519_keymgmt_functions,
-      "X25519" },
+      "ED25519" },
 #endif
 #ifdef WP_HAVE_ED448
     { WP_NAMES_ED448, WOLFPROV_PROPERTIES, wp_ed448_keymgmt_functions,
-      "X448" },
+      "ED448" },
 #endif
 
 #ifdef WP_HAVE_DH
@@ -1354,8 +1364,6 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
 };
 
 #ifdef HAVE_FIPS
-    #include <wolfssl/wolfcrypt/fips_test.h>
-
     static void wp_fipsCb(int ok, int err, const char* hash)
     {
         (void)ok;
@@ -1395,6 +1403,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
     const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
 {
     int ok = 1;
+    const OSSL_DISPATCH* origIn = in;
 
     wolfProv_LogInit();
 
@@ -1488,7 +1497,7 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
          * uninitialized libctx in certain init flows. Instead create
          * a new child libctx. The child libctx being NULL is allowed. */
         wolfssl_prov_ctx_set0_lib_ctx(*provCtx,
-            OSSL_LIB_CTX_new_child(handle, in));
+            OSSL_LIB_CTX_new_child(handle, origIn));
         /* Cache the handle in provider context. */
         wolfssl_prov_ctx_set0_handle(*provCtx, handle);
 

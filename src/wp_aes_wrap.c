@@ -345,7 +345,10 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aes_wrap_update");
 
-    if (!wolfssl_prov_is_running()) {
+    if ((!WP_FITS_WORD32(inLen)) || (!WP_FITS_WORD32(outSize))) {
+        ok = 0;
+    }
+    if (ok && !wolfssl_prov_is_running()) {
         ok = 0;
     }
 

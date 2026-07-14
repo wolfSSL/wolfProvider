@@ -290,9 +290,14 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_cache_aad");
 
     if (inLen > 0) {
-        p = (unsigned char*)OPENSSL_realloc(ctx->aad, ctx->aadLen + inLen);
-        if (p == NULL) {
+        if (inLen > 0xFFFFFFFFU - ctx->aadLen) {
             ok = 0;
+        }
+        if (ok) {
+            p = (unsigned char*)OPENSSL_realloc(ctx->aad, ctx->aadLen + inLen);
+            if (p == NULL) {
+                ok = 0;
+            }
         }
         if (ok) {
             ctx->aad = p;
@@ -352,6 +357,47 @@ static int wp_aead_cache_in(wp_AeadCtx *ctx, const unsigned char *in,
     return ok;
 }
 #endif
+
+/**
+ * Check whether a tag length is one of the algorithm's allowed sizes.
+ *
+ * GCM tags must be 4, 8, 12, 13, 14, 15 or 16 bytes (NIST SP 800-38D).
+ * CCM tags must be 4, 6, 8, 10, 12, 14 or 16 bytes (NIST SP 800-38C /
+ * RFC 3610).
+ *
+ * Note: for GCM this is intentionally stricter than OpenSSL's default
+ * provider, which accepts any non-zero tag length up to 16 on
+ * EVP_CTRL_AEAD_SET_TAG and EVP_CTRL_AEAD_GET_TAG. wolfProvider enforces the
+ * NIST SP 800-38D set on both the set path (decrypt/verify) and the get path
+ * (encrypt/tag retrieval), so tag lengths such as 5, 6, 7, 9, 10 or 11 that
+ * stock OpenSSL would accept are rejected here.
+ *
+ * @param [in] mode  Cipher mode: EVP_CIPH_GCM_MODE or EVP_CIPH_CCM_MODE.
+ * @param [in] sz    Tag length in bytes to check.
+ * @return  1 if sz is an allowed length for mode.
+ * @return  0 otherwise.
+ */
+static int wp_aead_tag_len_valid(int mode, size_t sz)
+{
+    int ok;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_tag_len_valid");
+
+    if (mode == EVP_CIPH_GCM_MODE) {
+        ok = (sz == 4) || (sz == 8) || (sz == 12) || (sz == 13) ||
+             (sz == 14) || (sz == 15) || (sz == 16);
+    }
+    else if (mode == EVP_CIPH_CCM_MODE) {
+        ok = (sz == 4) || (sz == 6) || (sz == 8) || (sz == 10) ||
+             (sz == 12) || (sz == 14) || (sz == 16);
+    }
+    else {
+        ok = 0;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
 
 /**
  * Get the AEAD context parameters.
@@ -432,7 +478,8 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
         if (p != NULL) {
             size_t sz = p->data_size;
             if ((!ctx->enc) || (ctx->tagLen == UNINITIALISED_SIZET) ||
-                (sz == 0) || (sz > ctx->tagLen)) {
+                (sz == 0) || (sz > ctx->tagLen) ||
+                (!wp_aead_tag_len_valid(ctx->mode, sz))) {
                 ok = 0;
             }
             if (ok && (!OSSL_PARAM_set_octet_string(p, ctx->buf, sz))) {
@@ -486,6 +533,9 @@ static int wp_aead_set_param_tag(wp_AeadCtx* ctx,
         sz = p->data_size;
     }
     if (ok && ((sz == 0) || ((p->data != NULL) && ctx->enc))) {
+        ok = 0;
+    }
+    if (ok && !wp_aead_tag_len_valid(ctx->mode, sz)) {
         ok = 0;
     }
     if (ok) {
@@ -959,9 +1009,10 @@ static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
     }
     else {
         /* Fixed field must be at least 4 bytes and invocation field at least 8
-         */
-        if ((len < EVP_GCM_TLS_FIXED_IV_LEN) ||
-            (ctx->ivLen - (int)len) < EVP_GCM_TLS_EXPLICIT_IV_LEN) {
+         * bytes */
+        if ((len < EVP_GCM_TLS_FIXED_IV_LEN) || (len > ctx->ivLen) ||
+            (len > sizeof(ctx->iv)) ||
+            (ctx->ivLen - len) < EVP_GCM_TLS_EXPLICIT_IV_LEN) {
                 return 0;
         }
         if (ctx->enc) {
@@ -1414,6 +1465,10 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_encdec");
 
+    if ((!WP_FITS_WORD32(ctx->inLen)) || (!WP_FITS_WORD32(ctx->aadLen))) {
+        return 0;
+    }
+
     if (ctx->tagLen == UNINITIALISED_SIZET) {
         ctx->tagLen = EVP_GCM_TLS_TAG_LEN;
     }
@@ -1494,7 +1549,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
             XMEMCPY(out, tmp + offset, (ctx->inLen - offset));
             *outLen = (ctx->inLen - offset);
         }
-        OPENSSL_free(tmp);
+        OPENSSL_clear_free(tmp, ctx->inLen);
     }
     else {
         *outLen = 0;
@@ -1504,7 +1559,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
         ctx->aad = NULL;
         ctx->aadLen = 0;
         ctx->aadSet = 0;
-        OPENSSL_free(ctx->in);
+        OPENSSL_clear_free(ctx->in, ctx->inLen);
         ctx->bufSize = 0;
         ctx->in = NULL;
         ctx->inLen = 0;
@@ -1789,6 +1844,7 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
     }
     if (ok) {
         ctx->enc = enc;
+        ctx->tlsAadLen = UNINITIALISED_SIZET;
         ok = wp_aead_set_ctx_params(ctx, params);
     }
 
@@ -1914,6 +1970,7 @@ static int wp_aesccm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
     }
 
     *outLen = olen;
+    ctx->tlsAadLen = UNINITIALISED_SIZET;
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -1935,6 +1992,10 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
     int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesccm_encdec");
+
+    if ((!WP_FITS_WORD32(inLen)) || (!WP_FITS_WORD32(ctx->aadLen))) {
+        return 0;
+    }
 
     if (ctx->tagLen == UNINITIALISED_SIZET) {
         ctx->tagLen = EVP_CCM_TLS_TAG_LEN;
