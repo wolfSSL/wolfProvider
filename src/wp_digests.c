@@ -154,7 +154,7 @@ static int name##_update(void* ctx, const unsigned char* in, size_t inLen)     \
     int ok = 1;                                                                \
     WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_update");                           \
     while (ok && (inLen > 0)) {                                                \
-        word32 chunk = (inLen > 0xFFFFFFFFU) ? 0xFFFFFFFFU : (word32)inLen;    \
+        word32 chunk = (!WP_FITS_WORD32(inLen)) ? 0xFFFFFFFFU : (word32)inLen; \
         int rc = upd(ctx, in, chunk);                                          \
         if (rc != 0) {                                                         \
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #upd, rc);        \
@@ -640,7 +640,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
-    if (ok && (outSize < ctx->outLen)) {                                       \
+    if (ok && ((outSize < ctx->outLen) || (!WP_FITS_WORD32(ctx->outLen)))) {   \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \

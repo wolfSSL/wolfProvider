@@ -296,6 +296,9 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
     }
     if (ok && (iv == NULL) && ctx->ivSet && (ctx->mode == EVP_CIPH_CBC_MODE)) {
         XMEMCPY(ctx->iv, ctx->oiv, ctx->ivLen);
+        if (wc_Des3_SetIV(&ctx->des3, ctx->iv) != 0) {
+            ok = 0;
+        }
     }
 
     if (ok && (key != NULL)) {

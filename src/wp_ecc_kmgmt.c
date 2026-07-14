@@ -406,12 +406,14 @@ void wp_ecc_free(wp_Ecc* ecc)
         int rc;
 
         rc = wc_LockMutex(&ecc->mutex);
-        if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
-        }
-        cnt = --ecc->refCnt;
         if (rc == 0) {
+            cnt = --ecc->refCnt;
             wc_UnLockMutex(&ecc->mutex);
+        }
+        else {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_LockMutex", rc);
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = ecc->refCnt;
         }
     #else
         cnt = --ecc->refCnt;
@@ -688,6 +690,8 @@ static const OSSL_PARAM *wp_ecc_gettable_params(WOLFPROV_CTX* provCtx)
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_EC_PUB_Y, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_USE_COFACTOR_ECDH, NULL),
         OSSL_PARAM_END
     };
     (void)provCtx;
@@ -1054,16 +1058,24 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
        (void)checkType;
     #endif
         {
-            /* We may have a private key inside that does not match the public
-             * key that has been set, which is OK. Override the internal type
-             * to force a public key only check */
-            origType = ecc->key.type;
-            ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
-            rc = wc_ecc_check_key((ecc_key*)&ecc->key);
-            ((wp_Ecc*)ecc)->key.type = origType;
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_check_key", rc);
+            /* Fail closed if the key mutex can't be held for the check. */
+            if (wp_lock(wp_ecc_get_mutex((wp_Ecc*)ecc)) != 1) {
                 ok = 0;
+            }
+            if (ok) {
+                /* We may have a private key inside that does not match the
+                 * public key that has been set, which is OK. Override the
+                 * internal type to force a public key only check */
+                origType = ecc->key.type;
+                ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
+                rc = wc_ecc_check_key((ecc_key*)&ecc->key);
+                ((wp_Ecc*)ecc)->key.type = origType;
+                wp_unlock(wp_ecc_get_mutex((wp_Ecc*)ecc));
+                if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                        "wc_ecc_check_key", rc);
+                    ok = 0;
+                }
             }
         }
     }

@@ -158,7 +158,7 @@ static void wp_kdf_hkdf_clear(wp_HkdfCtx* ctx)
     }
     OPENSSL_free(ctx->label);
     OPENSSL_free(ctx->prefix);
-    OPENSSL_free(ctx->salt);
+    OPENSSL_clear_free(ctx->salt, ctx->saltSz);
     OPENSSL_cleanse(ctx->info, ctx->infoSz);
 }
 
@@ -209,6 +209,11 @@ static int wp_kdf_hkdf_derive(wp_HkdfCtx* ctx, unsigned char* key,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_kdf_hkdf_derive");
+
+    if ((!WP_FITS_WORD32(keyLen)) || (!WP_FITS_WORD32(ctx->keySz)) ||
+            (!WP_FITS_WORD32(ctx->saltSz)) || (!WP_FITS_WORD32(ctx->infoSz))) {
+        return 0;
+    }
     WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "HKDF derive: keyLen=%zu, mode=%d", keyLen, ctx->mode);
     WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF, "HKDF derive: keySz=%zu, saltSz=%zu, infoSz=%zu", 
                        ctx->keySz, ctx->saltSz, ctx->infoSz);
@@ -368,7 +373,7 @@ static int wp_hkdf_base_set_ctx_params(wp_HkdfCtx* ctx,
 #else
             if (p != NULL) {
 #endif
-                OPENSSL_free(ctx->salt);
+                OPENSSL_clear_free(ctx->salt, ctx->saltSz);
                 ctx->salt = NULL;
                 if (!OSSL_PARAM_get_octet_string(
                         p, (void**)&ctx->salt, 0, &ctx->saltSz)) {
@@ -575,6 +580,12 @@ static int wp_tls13_hkdf_expand(wp_HkdfCtx* ctx, unsigned char* inKey,
     int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_HKDF, "wp_tls13_hkdf_expand");
+
+    if ((!WP_FITS_WORD32(keyLen)) || (!WP_FITS_WORD32(inKeyLen)) ||
+            (!WP_FITS_WORD32(dataLen)) || (!WP_FITS_WORD32(ctx->prefixLen)) ||
+            (!WP_FITS_WORD32(ctx->labelLen))) {
+        return 0;
+    }
     WOLFPROV_MSG_DEBUG(WP_LOG_COMP_HKDF,
         "TLS1.3 HKDF expand: inKeyLen=%zu, dataLen=%zu, keyLen=%zu",
         inKeyLen, dataLen, keyLen);

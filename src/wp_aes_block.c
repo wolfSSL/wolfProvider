@@ -117,7 +117,7 @@ static void *wp_aes_block_dupctx(wp_AesBlockCtx *src)
         if (src->tlsmacAlloced && src->tlsmac != NULL) {
             dst->tlsmac = OPENSSL_malloc(src->tlsmacsize);
             if (dst->tlsmac == NULL) {
-                OPENSSL_free(dst);
+                OPENSSL_clear_free(dst, sizeof(*dst));
                 return NULL;
             }
             XMEMCPY(dst->tlsmac, src->tlsmac, src->tlsmacsize);

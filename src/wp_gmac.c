@@ -123,6 +123,9 @@ static int wp_gmac_set_key(wp_GmacCtx* macCtx, const unsigned char *key,
     if (keyLen > AES_256_KEY_SIZE) {
         ok = 0;
     }
+    if (ok && (macCtx->expKeySize != 0) && (keyLen != macCtx->expKeySize)) {
+        ok = 0;
+    }
     if (ok) {
         if (macCtx->keyLen > 0) {
             OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
@@ -244,6 +247,9 @@ static int wp_gmac_update(wp_GmacCtx* macCtx, const unsigned char* data,
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_gmac_update");
 
     /* Data cached as wolfSSL doesn't have a streaming API. */
+    if (dataLen > 0xFFFFFFFFU - macCtx->dataLen) {
+        return 0;
+    }
     p = OPENSSL_realloc(macCtx->data, macCtx->dataLen + dataLen);
     if (p == NULL) {
         ok = 0;
@@ -276,7 +282,10 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_gmac_final");
 
-    if (!wolfssl_prov_is_running()) {
+    if ((!WP_FITS_WORD32(macCtx->dataLen)) || (!WP_FITS_WORD32(outSize))) {
+        ok = 0;
+    }
+    if (ok && !wolfssl_prov_is_running()) {
         ok = 0;
     }
     if (ok && (outSize < AES_BLOCK_SIZE)) {
@@ -414,8 +423,9 @@ static int wp_gmac_setup_cipher(wp_GmacCtx* macCtx, const OSSL_PARAM params[])
             size_t i;
 
             for (i = 0; i < WP_GMAC_CIPHER_NAMES_LEN; i++) {
-                if (XSTRNCMP(p->data, wp_gmac_cipher_names[i].name,
-                        p->data_size) == 0) {
+                if ((XSTRLEN(wp_gmac_cipher_names[i].name) == p->data_size) &&
+                        (XSTRNCMP(p->data, wp_gmac_cipher_names[i].name,
+                        p->data_size) == 0)) {
                     macCtx->expKeySize = wp_gmac_cipher_names[i].keySize;
                     break;
                 }

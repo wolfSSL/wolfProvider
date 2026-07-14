@@ -290,9 +290,14 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_cache_aad");
 
     if (inLen > 0) {
-        p = (unsigned char*)OPENSSL_realloc(ctx->aad, ctx->aadLen + inLen);
-        if (p == NULL) {
+        if (inLen > 0xFFFFFFFFU - ctx->aadLen) {
             ok = 0;
+        }
+        if (ok) {
+            p = (unsigned char*)OPENSSL_realloc(ctx->aad, ctx->aadLen + inLen);
+            if (p == NULL) {
+                ok = 0;
+            }
         }
         if (ok) {
             ctx->aad = p;
@@ -1460,6 +1465,10 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_encdec");
 
+    if ((!WP_FITS_WORD32(ctx->inLen)) || (!WP_FITS_WORD32(ctx->aadLen))) {
+        return 0;
+    }
+
     if (ctx->tagLen == UNINITIALISED_SIZET) {
         ctx->tagLen = EVP_GCM_TLS_TAG_LEN;
     }
@@ -1540,7 +1549,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
             XMEMCPY(out, tmp + offset, (ctx->inLen - offset));
             *outLen = (ctx->inLen - offset);
         }
-        OPENSSL_free(tmp);
+        OPENSSL_clear_free(tmp, ctx->inLen);
     }
     else {
         *outLen = 0;
@@ -1550,7 +1559,7 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
         ctx->aad = NULL;
         ctx->aadLen = 0;
         ctx->aadSet = 0;
-        OPENSSL_free(ctx->in);
+        OPENSSL_clear_free(ctx->in, ctx->inLen);
         ctx->bufSize = 0;
         ctx->in = NULL;
         ctx->inLen = 0;
@@ -1983,6 +1992,10 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
     int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesccm_encdec");
+
+    if ((!WP_FITS_WORD32(inLen)) || (!WP_FITS_WORD32(ctx->aadLen))) {
+        return 0;
+    }
 
     if (ctx->tagLen == UNINITIALISED_SIZET) {
         ctx->tagLen = EVP_CCM_TLS_TAG_LEN;

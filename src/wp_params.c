@@ -247,7 +247,13 @@ int wp_params_get_digest(const OSSL_PARAM* params, char* name,
         const char* mdProps = NULL;
 
         if (name != NULL) {
-            XMEMCPY(name, mdName, XSTRLEN(mdName) + 1);
+            size_t nameLen = XSTRLEN(mdName);
+
+            if (nameLen >= WP_MAX_MD_NAME_SIZE) {
+                nameLen = WP_MAX_MD_NAME_SIZE - 1;
+            }
+            XMEMCPY(name, mdName, nameLen);
+            name[nameLen] = '\0';
         }
         if (ok && (type != NULL) && (!wp_params_get_utf8_string_ptr(params,
                     OSSL_ALG_PARAM_PROPERTIES, &mdProps))) {

@@ -293,7 +293,14 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsaa_encrypt");
 
-    if (!wolfssl_prov_is_running()) {
+    if ((!WP_FITS_WORD32(inLen)) ||
+            ((outSize != (size_t)-1) && (!WP_FITS_WORD32(outSize)))) {
+        ok = 0;
+    }
+    if (!ok) {
+        /* Length guard already failed; skip the operation. */
+    }
+    else if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
     else if (!wp_rsa_check_key_size(ctx->rsa, 1)) {
@@ -403,7 +410,14 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsaa_decrypt");
 
-    if (!wolfssl_prov_is_running()) {
+    if ((!WP_FITS_WORD32(inLen)) ||
+            ((outSize != (size_t)-1) && (!WP_FITS_WORD32(outSize)))) {
+        ok = 0;
+    }
+    if (!ok) {
+        /* Length guard already failed; skip the operation. */
+    }
+    else if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
     else if (!wp_rsa_check_key_size(ctx->rsa, 1)) {
@@ -419,16 +433,25 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
     }
     else {
         int rc = 0;
+#ifdef WC_RSA_BLINDING
+        int locked = 0;
+#endif
 
         if (outSize == (size_t)-1) {
             outSize = *outLen;
         }
 #ifdef WC_RSA_BLINDING
-        /* TODO: not thread safe */
-        rc = wc_RsaSetRNG(wp_rsa_get_key(ctx->rsa), &ctx->rng);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaSetRNG", rc);
+        /* Fail closed if the key mutex can't be held for the shared-key RNG. */
+        if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
             ok = 0;
+        }
+        else {
+            locked = 1;
+            rc = wc_RsaSetRNG(wp_rsa_get_key(ctx->rsa), &ctx->rng);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaSetRNG", rc);
+                ok = 0;
+            }
         }
         if (!ok) {
         }
@@ -524,7 +547,10 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
             ok = 0;
         }
 #ifdef WC_RSA_BLINDING
-        wc_RsaSetRNG(wp_rsa_get_key(ctx->rsa), NULL);
+        if (locked) {
+            wc_RsaSetRNG(wp_rsa_get_key(ctx->rsa), NULL);
+            wp_unlock(wp_rsa_get_mutex(ctx->rsa));
+        }
 #endif
         if (ok) {
             *outLen = rc;

@@ -454,7 +454,7 @@ void WOLFPROV_BUFFER(int component, const unsigned char* buffer,
             }
         }
 
-        wolfprovider_msg(component, WP_LOG_LEVEL_VERBOSE, line);
+        wolfprovider_msg(component, WP_LOG_LEVEL_VERBOSE, "%s", line);
         buffer += WOLFPROV_LINE_LEN;
         buflen -= WOLFPROV_LINE_LEN;
     }

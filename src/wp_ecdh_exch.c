@@ -154,6 +154,7 @@ static wp_EcdhCtx* wp_ecdh_dup(wp_EcdhCtx* src)
             dst->cofactor = src->cofactor;
             dst->kdfType  = src->kdfType;
             dst->kdfMd    = src->kdfMd;
+            XMEMCPY(dst->kdfMdName, src->kdfMdName, sizeof(dst->kdfMdName));
             dst->ukmLen   = src->ukmLen;
             dst->keyLen   = src->keyLen;
         }
@@ -227,6 +228,11 @@ static int wp_ecdh_kdf_derive(wp_EcdhCtx* ctx, unsigned char* key,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDH, "wp_ecdh_kdf_derive");
+
+    if ((!WP_FITS_WORD32(secLen)) || (!WP_FITS_WORD32(ctx->ukmLen)) ||
+            (!WP_FITS_WORD32(ctx->keyLen))) {
+        return 0;
+    }
 
     if (keySize < ctx->keyLen) {
         ok = 0;

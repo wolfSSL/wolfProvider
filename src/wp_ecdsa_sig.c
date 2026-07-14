@@ -301,8 +301,11 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
             if (sigSize == (size_t)-1) {
                 sigSize = *sigLen;
             }
+            if ((!WP_FITS_WORD32(sigSize)) || (!WP_FITS_WORD32(tbsLen))) {
+                ok = 0;
+            }
             len = (word32)sigSize;
-            if (wp_lock(wp_ecc_get_mutex(ctx->ecc)) != 1) {
+            if (ok && (wp_lock(wp_ecc_get_mutex(ctx->ecc)) != 1)) {
                 ok = 0;
             }
             if (ok) {
@@ -389,6 +392,9 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
         }
         else if ((hashType == WC_HASH_TYPE_NONE) &&
                  (tbsLen < WC_MIN_DIGEST_SIZE)) {
+            ok = 0;
+        }
+        else if ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(tbsLen))) {
             ok = 0;
         }
         else {
@@ -567,6 +573,10 @@ static int wp_ecdsa_digest_signverify_update(wp_EcdsaSigCtx *ctx,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDSA, "wp_ecdsa_digest_signverify_update");
+
+    if (!WP_FITS_WORD32(dataLen)) {
+        return 0;
+    }
 
     int rc = wc_HashUpdate(&ctx->hash,
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
@@ -761,14 +771,14 @@ static int wp_ecdsa_digest_verify_final(wp_EcdsaSigCtx *ctx, unsigned char *sig,
          };
          ok = OSSL_PARAM_set_octet_string(p, ecdsa_sha256, sizeof(ecdsa_sha256));
      }
-     if ((XMEMCMP(ctx->mdName, "SHA384", 7) == 0) ||
+     else if ((XMEMCMP(ctx->mdName, "SHA384", 7) == 0) ||
          (XMEMCMP(ctx->mdName, "sha384", 7) == 0)) {
          static const unsigned char ecdsa_sha384[] = {
              0x30, 0x0a, 0x06, 0x08, 42, 134, 72, 206, 61, 4, 3, 3
          };
          ok = OSSL_PARAM_set_octet_string(p, ecdsa_sha384, sizeof(ecdsa_sha384));
      }
-     if ((XMEMCMP(ctx->mdName, "SHA512", 7) == 0) ||
+     else if ((XMEMCMP(ctx->mdName, "SHA512", 7) == 0) ||
          (XMEMCMP(ctx->mdName, "sha512", 7) == 0)) {
          static const unsigned char ecdsa_sha512[] = {
              0x30, 0x0a, 0x06, 0x08, 42, 134, 72, 206, 61, 4, 3, 4

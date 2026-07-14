@@ -442,7 +442,7 @@ static int wp_mldsa_sign(wp_MlDsaSigCtx* ctx, unsigned char* sig,
     }
     /* wolfSSL's ML-DSA API takes a 32-bit message length. Reject >4 GiB
      * messages explicitly rather than silently truncating. */
-    if (ok && (msgLen > 0xFFFFFFFFU)) {
+    if (ok && (!WP_FITS_WORD32(msgLen))) {
         ok = 0;
     }
     if (ok) {
@@ -530,7 +530,7 @@ static int wp_mldsa_verify(wp_MlDsaSigCtx* ctx, const unsigned char* sig,
     }
     /* wolfSSL's ML-DSA API takes 32-bit lengths. Reject oversize inputs
      * explicitly rather than silently truncating. */
-    if ((sigLen > 0xFFFFFFFFU) || (msgLen > 0xFFFFFFFFU)) {
+    if ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(msgLen))) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
@@ -744,7 +744,7 @@ static int wp_mldsa_stream_verify_final(wp_MlDsaSigCtx* ctx,
     int res = 0;
     unsigned char mu[MLDSA_MU_SZ];
 
-    if ((ctx->mldsa == NULL) || (sig == NULL) || (sigLen > 0xFFFFFFFFU)) {
+    if ((ctx->mldsa == NULL) || (sig == NULL) || (!WP_FITS_WORD32(sigLen))) {
         return 0;
     }
     if (!wp_mldsa_mu_ensure(ctx)) {
@@ -888,7 +888,7 @@ static int wp_mldsa_verify_prehash(wp_MlDsaSigCtx* ctx,
     int digestLen;
     unsigned char digest[WC_MAX_DIGEST_SIZE];
 
-    if ((ctx->mldsa == NULL) || (sig == NULL) || (sigLen > 0xFFFFFFFFU)) {
+    if ((ctx->mldsa == NULL) || (sig == NULL) || (!WP_FITS_WORD32(sigLen))) {
         return 0;
     }
     digestLen = wc_HashGetDigestSize(ctx->hashType);
@@ -985,7 +985,7 @@ static int wp_mldsa_digest_signverify_update(wp_MlDsaSigCtx* ctx,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
-    if (dataLen > 0xFFFFFFFFU) {
+    if (!WP_FITS_WORD32(dataLen)) {
         ok = 0;
     }
     else if (ctx->hashType != WC_HASH_TYPE_NONE) {

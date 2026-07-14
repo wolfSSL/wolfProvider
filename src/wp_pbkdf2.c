@@ -298,8 +298,12 @@ static int wp_kdf_pbkdf2_derive(wp_Pbkdf2Ctx* ctx, unsigned char* key,
     }
     /* wc_PBKDF2_ex fails when ctx->iterations is 0. */
 
-    /* Reject iteration counts that would truncate in the int cast below. */
+    /* Reject values that would truncate in the int casts below. */
     if (ok && (ctx->iterations > (uint64_t)INT_MAX)) {
+        ok = 0;
+    }
+    if (ok && ((ctx->passwordSz > (size_t)INT_MAX) ||
+            (ctx->saltSz > (size_t)INT_MAX) || (keyLen > (size_t)INT_MAX))) {
         ok = 0;
     }
 

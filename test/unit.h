@@ -300,6 +300,7 @@ int test_rsa_enc_dec_nopad(void *data);
 int test_rsa_pkey_keygen(void *data);
 int test_rsa_pkey_invalid_key_size(void *data);
 int test_rsa_get_params(void *data);
+int test_rsa_sig_alg_id(void *data);
 int test_rsa_pss_salt(void *date);
 int test_rsa_pss_restrictions(void *data);
 

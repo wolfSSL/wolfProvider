@@ -530,9 +530,13 @@ void wp_rsa_free(wp_Rsa* rsa)
         int rc;
 
         rc = wc_LockMutex(&rsa->mutex);
-        cnt = --rsa->refCnt;
         if (rc == 0) {
+            cnt = --rsa->refCnt;
             wc_UnLockMutex(&rsa->mutex);
+        }
+        else {
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = rsa->refCnt;
         }
     #else
         cnt = --rsa->refCnt;
@@ -915,7 +919,7 @@ static int wp_rsa_get_params_key_data(wp_Rsa* rsa,  OSSL_PARAM params[])
             size_t oLen;
             mp_int* mp = (mp_int*)(((byte*)&rsa->key) + wp_rsa_offset[i]);
             oLen = mp_unsigned_bin_size(mp);
-            if (oLen > p->data_size) {
+            if ((p->data != NULL) && (oLen > p->data_size)) {
                 ok = 0;
             }
             if (ok && (p->data != NULL) &&
@@ -1605,7 +1609,7 @@ static int wp_rsa_import(wp_Rsa* rsa, int selection, const OSSL_PARAM params[])
     if (ok) {
         rsa->bits    = mp_count_bits(&rsa->key.n);
         rsa->hasPub  = importPub;
-        rsa->hasPriv = importPriv;
+        rsa->hasPriv = importPriv && !mp_iszero((mp_int*)&rsa->key.d);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
