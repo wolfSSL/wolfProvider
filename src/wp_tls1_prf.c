@@ -157,6 +157,13 @@ static int wp_kdf_tls1_prf_derive(wp_Tls1Prf_Ctx* ctx, unsigned char* key,
     if (ok && (ctx->mdType == WC_HASH_TYPE_NONE)) {
         ok = 0;
     }
+    /* Only MD5-SHA1 (TLS 1.0/1.1), SHA-256 and SHA-384 (TLS 1.2)
+     * are supported. */
+    if (ok && (ctx->mdType != WC_HASH_TYPE_MD5_SHA) &&
+            (ctx->mdType != WC_HASH_TYPE_SHA256) &&
+            (ctx->mdType != WC_HASH_TYPE_SHA384)) {
+        ok = 0;
+    }
     if (ok && (ctx->secret == NULL)) {
         ok = 0;
     }
