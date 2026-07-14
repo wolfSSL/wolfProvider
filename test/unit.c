@@ -316,6 +316,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_decode, NULL),
     TEST_DECL(test_dh_krb5_keygen, NULL),
     TEST_DECL(test_dh_pad, NULL),
+    TEST_DECL(test_dh_derive_small_buffer, NULL),
 #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
     TEST_DECL(test_dh_x963_kdf, NULL),
 #endif

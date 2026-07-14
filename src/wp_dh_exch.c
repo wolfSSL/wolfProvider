@@ -302,13 +302,19 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
         }
         else {
             /* Front pad with zeros if required. */
-            if (ctx->pad && (len != maxLen)) {
+            if (ctx->pad && ((size_t)len < maxLen)) {
                 XMEMMOVE(secret + maxLen - len, secret, len);
                 XMEMSET(secret, 0, maxLen - len);
                 len = (word32)maxLen;
             }
-            /* Return length of data in buffer. */
-            *secLen = len;
+            else if ((size_t)len > maxLen) {
+                ok = 0;
+            }
+
+            if (ok) {
+                /* Return length of data in buffer. */
+                *secLen = len;
+            }
         }
     }
 
@@ -350,7 +356,7 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
             *secLen = wp_dh_get_size(ctx->key);
         }
         else {
-            *secLen = ctx->keyLen;;
+            *secLen = ctx->keyLen;
         }
         done = 1;
     }
@@ -360,9 +366,14 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
         maxLen = wp_dh_get_size(ctx->key);
 
         if (ctx->kdfType == WP_KDF_NONE) {
-            /* Output of DH key exchange directly into secret. */
-            out = secret;
-            outLen = secSize;
+            /* Output of DH key exchange directly into caller's buffer. */
+            if (secSize < maxLen) {
+                ok = 0;
+            }
+            else {
+                out = secret;
+                outLen = secSize;
+            }
         }
         else if (ctx->kdfType == WP_KDF_X963) {
             /* Output of DH key exchange goes into temporary buffer. */
