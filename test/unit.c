@@ -31,6 +31,15 @@ OSSL_LIB_CTX* wpLibCtx = NULL;
 OSSL_LIB_CTX* osslLibCtx = NULL;
 OSSL_PROVIDER* wpProv = NULL;
 int noKeyLimits = 0;
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+/*
+ * Provider dir/name from the command line, so tests that load wolfProvider into
+ * their own library contexts (SEED-SRC refcount, seccomp helpers) pick up the
+ * same --dir/--provider location as the main suite.
+ */
+const char *wpUnitProviderDir = ".libs";
+const char *wpUnitProviderName = NULL;
+#endif
 
 #ifdef WOLFPROV_DEBUG
 void print_buffer(const char *desc, const unsigned char *buffer, size_t len)
@@ -308,6 +317,8 @@ TEST_CASE test_case[] = {
 #endif
     TEST_DECL(test_rand_seed, NULL),
     TEST_DECL(test_drbg_reseed, NULL),
+    TEST_DECL(test_seed_src_refcount, NULL),
+    TEST_DECL(test_seed_src_reload, NULL),
     TEST_DECL(test_seccomp_sandbox, NULL),
 #ifdef WP_HAVE_DH
     TEST_DECL(test_dh_pgen_pkey, NULL),
@@ -579,6 +590,18 @@ static void usage(void)
     printf("  --valgrind      Run wolfSSL only tests for Valgrind where OpenSSL "
                               "has issues\n");
     printf("  <num>           Run this test case, but not all\n");
+#if defined(WP_TEST_SECCOMP_SANDBOX) && defined(WP_HAVE_SEED_SRC) && \
+    defined(WP_HAVE_RANDOM)
+    printf("  --seccomp-sandbox-helper <single|leak|multi|reuse> "
+                              "[provider-dir] [provider-name]\n");
+    printf("                  INTERNAL: seccomp re-exec protocol, not for "
+                              "direct use.\n");
+#endif
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+    printf("  --seed-src-reload-helper [provider-dir] [provider-name]\n");
+    printf("                  INTERNAL: SEED-SRC reload re-exec protocol, not "
+                              "for direct use.\n");
+#endif
 }
 
 #ifdef TEST_MULTITHREADED
@@ -791,6 +814,38 @@ int main(int argc, char* argv[])
     int runAll = 1;
     int runTests = 1;
 
+#if defined(WP_TEST_SECCOMP_SANDBOX) && defined(WP_HAVE_SEED_SRC) && \
+    defined(WP_HAVE_RANDOM)
+    /*
+     * Internal re-exec protocol: the seccomp test re-execs this binary as
+     *   --seccomp-sandbox-helper <single|leak|multi|reuse>
+     *       [provider-dir] [name]
+     * to run a helper mode in a fresh process. See test_seccomp_sandbox.c.
+     */
+    if (argc >= 2 && strcmp(argv[1], "--seccomp-sandbox-helper") == 0) {
+        const char *mode = (argc >= 3) ? argv[2] : NULL;
+        const char *helperDir = (argc >= 4) ? argv[3] : ".libs";
+        const char *helperName = (argc >= 5) ? argv[4] : wolfprovider_id;
+
+        return test_seccomp_sandbox_helper(mode, helperDir, helperName);
+    }
+#endif
+
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+    /*
+     * Internal re-exec protocol: the SEED-SRC reload test re-execs this binary
+     * as --seed-src-reload-helper [provider-dir] [name] to exercise the shared
+     * fd/callback teardown-to-zero and reload in a fresh process (refcount starts
+     * at zero). See test_rand_seed.c.
+     */
+    if (argc >= 2 && strcmp(argv[1], "--seed-src-reload-helper") == 0) {
+        wpUnitProviderDir = (argc >= 3) ? argv[2] : ".libs";
+        wpUnitProviderName = (argc >= 4) ? argv[3] : wolfprovider_id;
+
+        return test_seed_src_reload_helper();
+    }
+#endif
+
     for (--argc, ++argv; argc > 0; argc--, argv++) {
         if (strncmp(*argv, "--help", 6) == 0) {
             usage();
@@ -875,6 +930,11 @@ int main(int argc, char* argv[])
             break;
         }
     }
+
+#if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+    wpUnitProviderDir = dir;
+    wpUnitProviderName = name;
+#endif
 
     OpenSSL_add_all_ciphers();
     OpenSSL_add_all_digests();

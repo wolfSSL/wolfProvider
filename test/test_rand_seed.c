@@ -33,11 +33,27 @@
 
 #include "unit.h"
 
+/* test_seed_src_refcount / test_seed_src_reload are declared in unit.h and
+ * defined in both configurations below (real tests when SEED-SRC is enabled,
+ * otherwise skip stubs). */
+
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
+
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <errno.h>
+#include <limits.h>
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/core_names.h>
+
+#include <wolfssl/wolfcrypt/random.h>
+#include <wolfprovider/wp_wolfprov.h>
+
+/* wpUnitProviderDir/wpUnitProviderName are declared in unit.h for every
+ * SEED-SRC build (see the WP_HAVE_SEED_SRC && WP_HAVE_RANDOM block there). */
 
 /**
  * Test that we can fetch a SEED-SRC and generate random bytes from it.
@@ -721,6 +737,368 @@ cleanup:
     return err;
 }
 
+/**
+ * Non-seccomp coverage for reference counting of the shared /dev/urandom fd and
+ * wolfSSL seed callback: load wolfProvider into two library contexts, draw
+ * entropy from both, unload the first, and confirm the survivor still gets
+ * entropy via both the OpenSSL RAND path and the wolfSSL seed callback. The main
+ * suite holds a wolfProvider reference throughout, so the fd is not closed here;
+ * the seccomp T3 test covers the decrement-to-zero close path.
+ */
+int test_seed_src_refcount(void *data)
+{
+    int err = 0;
+    const char *providerDir = wpUnitProviderDir;
+    const char *providerName = wpUnitProviderName;
+    OSSL_LIB_CTX *ctx1 = NULL;
+    OSSL_LIB_CTX *ctx2 = NULL;
+    OSSL_PROVIDER *provider1 = NULL;
+    OSSL_PROVIDER *provider2 = NULL;
+    EVP_RAND_CTX *rctx = NULL;
+    unsigned char buf[32];
+    WC_RNG rng;
+    int rngInit = 0;
+
+    (void)data;
+
+    if (providerDir == NULL) {
+        providerDir = ".libs";
+    }
+    if (providerName == NULL) {
+        providerName = wolfprovider_id;
+    }
+
+    PRINT_MSG("Testing SEED-SRC shared urandom fd/callback refcount lifecycle");
+
+    /* First provider context: forces wp_urandom_init (refcount increments). */
+    ctx1 = OSSL_LIB_CTX_new();
+    if (ctx1 == NULL) {
+        PRINT_ERR_MSG("Failed to create first library context");
+        err = 1;
+        goto cleanup;
+    }
+    if (OSSL_PROVIDER_set_default_search_path(ctx1, providerDir) != 1) {
+        PRINT_ERR_MSG("Failed to set search path for first context: %s",
+                      providerDir);
+        err = 1;
+        goto cleanup;
+    }
+    provider1 = OSSL_PROVIDER_load(ctx1, providerName);
+    if (provider1 == NULL) {
+        PRINT_ERR_MSG("Failed to load provider %s into first context",
+                      providerName);
+        err = 1;
+        goto cleanup;
+    }
+    if (RAND_bytes_ex(ctx1, buf, sizeof(buf), 0) != 1) {
+        PRINT_ERR_MSG("First-context RAND_bytes_ex failed");
+        err = 1;
+        goto cleanup;
+    }
+
+    /* Second provider context: shares the fd/callback (refcount increments). */
+    ctx2 = OSSL_LIB_CTX_new();
+    if (ctx2 == NULL) {
+        PRINT_ERR_MSG("Failed to create second library context");
+        err = 1;
+        goto cleanup;
+    }
+    if (OSSL_PROVIDER_set_default_search_path(ctx2, providerDir) != 1) {
+        PRINT_ERR_MSG("Failed to set search path for second context: %s",
+                      providerDir);
+        err = 1;
+        goto cleanup;
+    }
+    provider2 = OSSL_PROVIDER_load(ctx2, providerName);
+    if (provider2 == NULL) {
+        PRINT_ERR_MSG("Failed to load provider %s into second context",
+                      providerName);
+        err = 1;
+        goto cleanup;
+    }
+    if (RAND_bytes_ex(ctx2, buf, sizeof(buf), 0) != 1) {
+        PRINT_ERR_MSG("Second-context RAND_bytes_ex failed");
+        err = 1;
+        goto cleanup;
+    }
+
+    /* Unload the first context (one cleanup, one decrement). The second context
+     * and the main suite still hold references, so the fd/callback must survive. */
+    OSSL_PROVIDER_unload(provider1);
+    provider1 = NULL;
+    OSSL_LIB_CTX_free(ctx1);
+    ctx1 = NULL;
+
+    /* Survivor must still draw entropy; force a fresh seed pull so an fd wrongly
+     * closed on the first teardown would surface here. */
+    rctx = RAND_get0_public(ctx2);
+    if (rctx == NULL) {
+        PRINT_ERR_MSG("Survivor RAND_get0_public failed after first unload");
+        err = 1;
+        goto cleanup;
+    }
+    if (EVP_RAND_reseed(rctx, 0, NULL, 0, NULL, 0) != 1) {
+        PRINT_ERR_MSG("Survivor EVP_RAND_reseed failed after first unload");
+        err = 1;
+        goto cleanup;
+    }
+    if (RAND_bytes_ex(ctx2, buf, sizeof(buf), 0) != 1) {
+        PRINT_ERR_MSG("Survivor RAND_bytes_ex failed after first unload");
+        err = 1;
+        goto cleanup;
+    }
+
+    /* The wolfSSL seed callback must also still be registered for the survivor. */
+    if (wc_InitRng(&rng) != 0) {
+        PRINT_ERR_MSG("wc_InitRng failed after first unload");
+        err = 1;
+        goto cleanup;
+    }
+    rngInit = 1;
+    if (wc_RNG_GenerateBlock(&rng, buf, sizeof(buf)) != 0) {
+        PRINT_ERR_MSG("wc_RNG_GenerateBlock failed after first unload");
+        err = 1;
+        goto cleanup;
+    }
+
+    PRINT_MSG("Survivor context still produces entropy after first unload");
+
+cleanup:
+    if (rngInit) {
+        wc_FreeRng(&rng);
+    }
+    /* Unload the second context too. The main suite's reference keeps the count
+     * above zero, so the fd stays open for the remaining tests. */
+    OSSL_PROVIDER_unload(provider2);
+    OSSL_LIB_CTX_free(ctx2);
+    OSSL_PROVIDER_unload(provider1);
+    OSSL_LIB_CTX_free(ctx1);
+
+    return err;
+}
+
+/**
+ * Fresh-process worker for the SEED-SRC full teardown -> reload cycle. Runs
+ * after a re-exec (see test_seed_src_reload) so the refcount starts at zero and
+ * can be driven to zero and back: load reopens the shared fd and registers
+ * wp_wolfssl_seed_cb; a full unload closes the fd and restores the seed callback
+ * to wc_GenerateSeed (not NULL, which would yield DRBG_NO_SEED_CB); reload must
+ * reopen and re-register.
+ *
+ * Returns 0 on success, non-zero on failure.
+ */
+int test_seed_src_reload_helper(void)
+{
+    int err = 0;
+    const char *providerDir = wpUnitProviderDir;
+    const char *providerName = wpUnitProviderName;
+    OSSL_LIB_CTX *ctx1 = NULL;
+    OSSL_LIB_CTX *ctx2 = NULL;
+    OSSL_PROVIDER *provider1 = NULL;
+    OSSL_PROVIDER *provider2 = NULL;
+    unsigned char buf[32];
+    WC_RNG rng;
+
+    if (providerDir == NULL) {
+        providerDir = ".libs";
+    }
+    if (providerName == NULL) {
+        providerName = wolfprovider_id;
+    }
+
+    PRINT_MSG("Testing SEED-SRC teardown-to-zero then reload in fresh process");
+
+    /*
+     * Load wolfProvider into the first context. This is the first reference, so
+     * wp_urandom_init lazily opens the shared /dev/urandom fd (refcount 0 -> 1)
+     * and registers wp_wolfssl_seed_cb.
+     */
+    ctx1 = OSSL_LIB_CTX_new();
+    if (ctx1 == NULL) {
+        PRINT_ERR_MSG("Failed to create first library context");
+        err = 1;
+    }
+    if (err == 0 &&
+            OSSL_PROVIDER_set_default_search_path(ctx1, providerDir) != 1) {
+        PRINT_ERR_MSG("Failed to set search path for first context: %s",
+                      providerDir);
+        err = 1;
+    }
+    if (err == 0) {
+        provider1 = OSSL_PROVIDER_load(ctx1, providerName);
+        if (provider1 == NULL) {
+            PRINT_ERR_MSG("Failed to load provider %s into first context",
+                          providerName);
+            err = 1;
+        }
+    }
+
+    /* Draw entropy so the shared fd is actually opened. */
+    if (err == 0 && RAND_bytes_ex(ctx1, buf, sizeof(buf), 0) != 1) {
+        PRINT_ERR_MSG("First-context RAND_bytes_ex failed");
+        err = 1;
+    }
+
+    /* Fully unload: releases the last reference, so cleanup decrements to zero,
+     * closes the fd, and restores the seed callback to wc_GenerateSeed. */
+    if (provider1 != NULL) {
+        OSSL_PROVIDER_unload(provider1);
+        provider1 = NULL;
+    }
+    OSSL_LIB_CTX_free(ctx1);
+    ctx1 = NULL;
+
+    /* With the callback restored (not NULL), a direct wolfCrypt RNG must still
+     * seed and generate; a NULL callback would surface as DRBG_NO_SEED_CB. */
+    if (err == 0) {
+        if (wc_InitRng(&rng) != 0) {
+            PRINT_ERR_MSG("wc_InitRng failed after teardown to zero");
+            err = 1;
+        }
+        else {
+            if (wc_RNG_GenerateBlock(&rng, buf, sizeof(buf)) != 0) {
+                PRINT_ERR_MSG(
+                    "wc_RNG_GenerateBlock failed after teardown to zero");
+                err = 1;
+            }
+            wc_FreeRng(&rng);
+        }
+    }
+
+    /* Reload into a second context (refcount 0 -> 1): the fd must lazily reopen
+     * and wp_wolfssl_seed_cb must re-register. */
+    if (err == 0) {
+        ctx2 = OSSL_LIB_CTX_new();
+        if (ctx2 == NULL) {
+            PRINT_ERR_MSG("Failed to create second library context");
+            err = 1;
+        }
+    }
+    if (err == 0 &&
+            OSSL_PROVIDER_set_default_search_path(ctx2, providerDir) != 1) {
+        PRINT_ERR_MSG("Failed to set search path for second context: %s",
+                      providerDir);
+        err = 1;
+    }
+    if (err == 0) {
+        provider2 = OSSL_PROVIDER_load(ctx2, providerName);
+        if (provider2 == NULL) {
+            PRINT_ERR_MSG("Failed to load provider %s into second context",
+                          providerName);
+            err = 1;
+        }
+    }
+
+    /* Entropy through the reopened fd must succeed. */
+    if (err == 0 && RAND_bytes_ex(ctx2, buf, sizeof(buf), 0) != 1) {
+        PRINT_ERR_MSG("Second-context RAND_bytes_ex failed after reload");
+        err = 1;
+    }
+
+    /* The wolfSSL seed callback path must work after reload too. */
+    if (err == 0) {
+        if (wc_InitRng(&rng) != 0) {
+            PRINT_ERR_MSG("wc_InitRng failed after reload");
+            err = 1;
+        }
+        else {
+            if (wc_RNG_GenerateBlock(&rng, buf, sizeof(buf)) != 0) {
+                PRINT_ERR_MSG("wc_RNG_GenerateBlock failed after reload");
+                err = 1;
+            }
+            wc_FreeRng(&rng);
+        }
+    }
+
+    if (err == 0) {
+        PRINT_MSG("SEED-SRC reload after full teardown succeeded");
+    }
+
+    OSSL_PROVIDER_unload(provider2);
+    OSSL_LIB_CTX_free(ctx2);
+    OSSL_PROVIDER_unload(provider1);
+    OSSL_LIB_CTX_free(ctx1);
+
+    return err;
+}
+
+/**
+ * Non-seccomp coverage for the SEED-SRC shared fd/seed callback being fully torn
+ * down (refcount to zero) and reloaded. The main suite always holds a
+ * wolfProvider reference, so this re-execs a fresh unit.test as
+ * --seed-src-reload-helper (refcount starts at zero) and passes iff that child
+ * completes the teardown-then-reload sequence and exits 0.
+ */
+int test_seed_src_reload(void *data)
+{
+    const char *providerDir = wpUnitProviderDir;
+    const char *providerName = wpUnitProviderName;
+    char exePath[PATH_MAX];
+    ssize_t exeLen;
+    pid_t pid;
+    int status;
+    int err = 0;
+
+    (void)data;
+
+    if (providerDir == NULL) {
+        providerDir = ".libs";
+    }
+    if (providerName == NULL) {
+        providerName = wolfprovider_id;
+    }
+
+    PRINT_MSG("Testing SEED-SRC full teardown then reload via re-exec");
+
+    /* This test re-execs the unit binary via /proc/self/exe to get a fresh,
+     * zero-based refcount. On platforms without /proc/self/exe (non-Linux)
+     * there is no portable way to re-exec, so skip rather than hard-fail. */
+    exeLen = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+    if (exeLen < 0 || exeLen >= (ssize_t)sizeof(exePath) - 1) {
+        PRINT_MSG("SEED-SRC reload test skipped - /proc/self/exe unavailable");
+        return 0;
+    }
+    exePath[exeLen] = '\0';
+
+    pid = fork();
+    if (pid == -1) {
+        PRINT_ERR_MSG("fork() failed: %s", strerror(errno));
+        return 1;
+    }
+
+    if (pid == 0) {
+        execl(exePath, exePath, "--seed-src-reload-helper", providerDir,
+            providerName, (char *)NULL);
+        PRINT_ERR_MSG("execl reload helper failed: %s", strerror(errno));
+        _exit(127);
+    }
+
+    if (waitpid(pid, &status, 0) == -1) {
+        PRINT_ERR_MSG("waitpid(reload helper) failed: %s", strerror(errno));
+        return 1;
+    }
+
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        PRINT_MSG("SEED-SRC reload helper passed");
+    }
+    else if (WIFEXITED(status)) {
+        PRINT_ERR_MSG("SEED-SRC reload helper exited with status %d",
+            WEXITSTATUS(status));
+        err = 1;
+    }
+    else if (WIFSIGNALED(status)) {
+        PRINT_ERR_MSG("SEED-SRC reload helper killed by signal %d",
+            WTERMSIG(status));
+        err = 1;
+    }
+    else {
+        PRINT_ERR_MSG("SEED-SRC reload helper exited abnormally");
+        err = 1;
+    }
+
+    return err;
+}
+
 #else /* !(WP_HAVE_SEED_SRC && WP_HAVE_RANDOM) */
 
 int test_rand_seed(void *data)
@@ -728,6 +1106,20 @@ int test_rand_seed(void *data)
     (void)data;
     PRINT_MSG("SEED-SRC test skipped - not enabled");
     PRINT_MSG("Enable with: ./configure --enable-seed-src");
+    return 0;
+}
+
+int test_seed_src_refcount(void *data)
+{
+    (void)data;
+    PRINT_MSG("SEED-SRC refcount lifecycle test skipped - not enabled");
+    return 0;
+}
+
+int test_seed_src_reload(void *data)
+{
+    (void)data;
+    PRINT_MSG("SEED-SRC reload lifecycle test skipped - not enabled");
     return 0;
 }
 

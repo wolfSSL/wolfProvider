@@ -64,9 +64,13 @@ jobs:
 
       - name: Build and test wolfProvider with SEED-SRC
         run: |
-             # Force wolfSSL to not use getrandom syscall via ac_cv_func_getrandom=no.
-             # This ensures /dev/urandom is used as the entropy source, which is
-             # required to test the SEED-SRC feature's fork-safe caching behavior.
+             # ac_cv_func_getrandom=no forces wolfSSL onto /dev/urandom, the
+             # entropy path the SEED-SRC fork-safe caching test needs.
+             # WOLFPROV_CONFIG_CFLAGS reaches the unit.test compile via configure
+             # CFLAGS; -DWP_TEST_SECCOMP_SANDBOX compiles in the OpenSSH preauth
+             # seccomp suite (else it builds to a skip stub). ubuntu-22.04 runners
+             # are full VMs where PR_SET_SECCOMP works.
+             WOLFPROV_CONFIG_CFLAGS="-DWP_TEST_SECCOMP_SANDBOX" \
              WOLFSSL_CONFIG_OPTS="--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha ac_cv_func_getrandom=no" \
              OPENSSL_TAG=${{ matrix.openssl_ref }} \
              WOLFSSL_TAG=${{ matrix.wolfssl_ref }} \

@@ -24,6 +24,10 @@
 
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
@@ -33,25 +37,26 @@
 #include <wolfprovider/alg_funcs.h>
 #include <wolfprovider/internal.h>
 
-/* Include wolfSSL port header for XFOPEN/XFREAD/XFCLOSE macros */
+/* Include wolfSSL port header for XREAD/XCLOSE macros. */
 #include <wolfssl/wolfcrypt/wc_port.h>
 
-/*
- * /dev/urandom file caching for fork-safe entropy.
- *
- * These functions manage a cached file handle to /dev/urandom that is
- * opened lazily on first entropy request and kept open. This matches
- * OpenSSL's default provider behavior. The file stays open so child
- * processes after fork() can inherit the underlying fd and read from it
- * without needing to call openat(), which may be blocked by seccomp sandboxes.
- */
+/* SEED-SRC reads /dev/urandom through wolfSSL's XREAD/XCLOSE, which wc_port.h
+ * only defines when file/directory support is enabled. NO_WOLFSSL_DIR builds
+ * are intentionally unsupported for SEED-SRC: fail with a clear message here
+ * rather than a cryptic "XREAD undefined" later. */
+#if defined(NO_WOLFSSL_DIR)
+    #error "wolfProvider SEED-SRC requires wolfSSL file support; NO_WOLFSSL_DIR builds are unsupported. Rebuild wolfSSL without NO_WOLFSSL_DIR, or disable SEED-SRC."
+#endif
+
+#ifndef XBADFD
+    #define XBADFD -1
+#endif
+#ifndef O_CLOEXEC
+    #define O_CLOEXEC 0
+#endif
 
 #define URANDOM_PATH "/dev/urandom"
 
-/*
- * Helper macros for thread-safe urandom access.
- * These expand to no-ops when WP_SINGLE_THREADED is defined.
- */
 #ifndef WP_SINGLE_THREADED
     #define WP_URANDOM_LOCK()   wc_LockMutex(wp_get_urandom_mutex())
     #define WP_URANDOM_UNLOCK() wc_UnLockMutex(wp_get_urandom_mutex())
@@ -60,115 +65,223 @@
     #define WP_URANDOM_UNLOCK() (void)0
 #endif
 
-/*
- * Global cached /dev/urandom file handle.
- * Opened lazily on first entropy request, kept open for the lifetime of the
- * provider. This matches OpenSSL's model where random devices are opened
- * on-demand and cached.
- */
-static XFILE g_urandom_file = XBADFILE;
+/* Cached /dev/urandom fd, shared across provider contexts and reference
+ * counted. Kept open so forked children inherit it and can read under a
+ * seccomp sandbox that blocks open()/openat(). */
+static int g_urandom_fd = XBADFD;
 
-/*
- * Flag indicating whether the seed callback has been registered.
- */
+/* Device identity of g_urandom_fd, captured by fstat at open, so a later read
+ * can detect when another subsystem has reused (dup2'd over) our fd number. */
+static int    g_urandom_id_valid = 0;
+static dev_t  g_urandom_dev;
+static ino_t  g_urandom_ino;
+static mode_t g_urandom_mode;
+static dev_t  g_urandom_rdev;
+
+/* Live provider contexts referencing the shared fd/callback; mutex-guarded. */
+static int g_urandom_ref_count = 0;
+
 #ifdef WC_RNG_SEED_CB
 static int g_seed_cb_registered = 0;
 #endif
 
 /**
- * wolfSSL seed callback that uses the cached /dev/urandom file.
+ * Open the cached /dev/urandom fd if not already open, capturing its device
+ * identity (via fstat) so later reads can detect fd-number reuse. Idempotent;
+ * caller must hold the urandom mutex.
  *
- * This callback is registered with wc_SetSeed_Cb() and is called by wolfSSL's
- * DRBG when it needs entropy (including after fork detection).
+ * @return  0 on success.
+ * @return  -1 if /dev/urandom cannot be opened.
+ */
+static int wp_urandom_open_locked(void)
+{
+    if (g_urandom_fd == XBADFD) {
+        do {
+            g_urandom_fd = open(URANDOM_PATH, O_RDONLY | O_CLOEXEC);
+        } while (g_urandom_fd == XBADFD && errno == EINTR);
+
+        if (g_urandom_fd == XBADFD) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                "wp_urandom_open: failed to open " URANDOM_PATH);
+            return -1;
+        }
+
+        {
+            struct stat st;
+            if (fstat(g_urandom_fd, &st) == 0) {
+                g_urandom_dev = st.st_dev;
+                g_urandom_ino = st.st_ino;
+                g_urandom_mode = st.st_mode;
+                g_urandom_rdev = st.st_rdev;
+                g_urandom_id_valid = 1;
+            }
+            else {
+                g_urandom_id_valid = 0;
+            }
+        }
+
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+            "wp_urandom_open: opened " URANDOM_PATH);
+    }
+
+    return 0;
+}
+
+/**
+ * Return 1 if the cached fd must be reopened: its number was reused by another
+ * subsystem, or it was closed (fstat EBADF). Any other fstat failure (e.g. a
+ * sandbox denying fstat with EACCES) is inconclusive, so keep the fd. Identity
+ * match mirrors OpenSSL's check_random_device(). Caller holds the urandom mutex.
+ */
+static int wp_urandom_fd_reused_locked(void)
+{
+    struct stat st;
+
+    if (g_urandom_fd == XBADFD || !g_urandom_id_valid) {
+        return 0;
+    }
+    if (fstat(g_urandom_fd, &st) != 0) {
+        return (errno == EBADF);
+    }
+    if (st.st_dev == g_urandom_dev && st.st_ino == g_urandom_ino &&
+        st.st_rdev == g_urandom_rdev &&
+        ((st.st_mode ^ g_urandom_mode) &
+            ~(mode_t)(S_IRWXU | S_IRWXG | S_IRWXO)) == 0) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * Read exactly len bytes from the cached /dev/urandom fd, retrying on EINTR.
+ * Caller must hold the urandom mutex.
  *
- * @param [in]  os    OS_Seed structure (unused)
- * @param [out] seed  Buffer to fill with seed data
- * @param [in]  sz    Number of bytes to generate
- * @return  0 on success
- * @return  -1 on failure
+ * @param [out] buf  Buffer to fill.
+ * @param [in]  len  Number of bytes to read; must not exceed INT_MAX.
+ * @return  len on success.
+ * @return  -1 on failure, or if len exceeds INT_MAX.
+ */
+static int wp_urandom_read_locked(unsigned char* buf, size_t len)
+{
+    size_t total = 0;
+
+    /* After teardown (refcount 0) the fd is closed; reopening it would leak. */
+    if (g_urandom_ref_count < 1) {
+        return -1;
+    }
+
+    if (len > (size_t)INT_MAX) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+            "wp_urandom_read: requested length too large");
+        return -1;
+    }
+
+    /* Reused fd number: drop it (do NOT close - it is theirs now) and reopen. */
+    if (wp_urandom_fd_reused_locked()) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+            "wp_urandom_read: cached fd reused, reopening " URANDOM_PATH);
+        g_urandom_fd = XBADFD;
+        g_urandom_id_valid = 0;
+    }
+
+    if (wp_urandom_open_locked() != 0) {
+        return -1;
+    }
+
+    while (total < len) {
+        size_t toRead = len - total;
+        ssize_t bytesRead;
+
+        bytesRead = XREAD(g_urandom_fd, buf + total, toRead);
+
+        if (bytesRead > 0) {
+            total += (size_t)bytesRead;
+        }
+        else if (bytesRead < 0 && errno == EINTR) {
+            continue;
+        }
+        else {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                "wp_urandom_read: XREAD failed");
+            return -1;
+        }
+    }
+
+    return (int)total;
+}
+
+/**
+ * wolfSSL seed callback: fills seed from the cached /dev/urandom fd. Called by
+ * wolfSSL's DRBG when it needs entropy (including after fork).
+ *
+ * @param [in]  os    Unused.
+ * @param [out] seed  Buffer to fill.
+ * @param [in]  sz    Number of bytes to generate.
+ * @return  0 on success.
+ * @return  -1 on failure.
  */
 #ifdef WC_RNG_SEED_CB
 static int wp_wolfssl_seed_cb(OS_Seed* os, byte* seed, word32 sz)
 {
-    size_t bytesRead;
-    size_t total = 0;
+    int rc;
 
     (void)os;
 
-    /* Lock before checking/opening file to prevent race conditions.
-     * The urandom mutex is initialized via constructor at library load,
-     * so it's guaranteed to be ready for use here.
-     */
     if (WP_URANDOM_LOCK() != 0) {
         return -1;
     }
 
-    /* Lazy open: open file on first entropy request */
-    if (g_urandom_file == XBADFILE) {
-        g_urandom_file = XFOPEN(URANDOM_PATH, "rb");
-        if (g_urandom_file == XBADFILE) {
-            WP_URANDOM_UNLOCK();
-            return -1;
-        }
-    }
-
-    /* Read until we have all the bytes we need */
-    while (total < sz) {
-        bytesRead = XFREAD(seed + total, 1, sz - total, g_urandom_file);
-        if (bytesRead > 0) {
-            total += bytesRead;
-        }
-        else {
-            /* EOF or error */
-            WP_URANDOM_UNLOCK();
-            return -1;
-        }
-    }
+    rc = wp_urandom_read_locked(seed, sz);
 
     WP_URANDOM_UNLOCK();
 
-    return 0;
+    return (rc >= 0 && (size_t)rc == (size_t)sz) ? 0 : -1;
 }
 #endif /* WC_RNG_SEED_CB */
 
 /**
- * Initialize the urandom subsystem.
- *
- * This performs lazy initialization - the file handle is not opened until
- * first entropy request. This matches OpenSSL's default provider behavior.
- * The seed callback is registered here so wolfSSL can use our entropy source.
+ * Take one reference on the shared urandom subsystem. The seed callback is
+ * re-registered on every call because provider init resets wolfSSL's global
+ * callback. Balance each successful call with one wp_urandom_cleanup().
  *
  * @return  0 on success.
  * @return  -1 on failure.
  */
 int wp_urandom_init(void)
 {
-    /* Lock to ensure thread-safe initialization.
-     * The urandom mutex is initialized via constructor at library load.
-     */
+#ifdef WC_RNG_SEED_CB
+    int firstRef;
+#endif
+
     if (WP_URANDOM_LOCK() != 0) {
         return -1;
     }
 
-    /* Initialize global file handle to invalid - will be opened lazily */
-    g_urandom_file = XBADFILE;
+    if (g_urandom_ref_count == INT_MAX) {
+        WP_URANDOM_UNLOCK();
+        return -1;
+    }
 
 #ifdef WC_RNG_SEED_CB
-    /* Register our seed callback with wolfSSL.
-     * This is critical for fork safety - wolfSSL will call this callback
-     * instead of wc_GenerateSeed() when it needs to reseed after fork.
-     * The callback will open the file lazily on first use.
-     */
-    if (!g_seed_cb_registered) {
-        if (wc_SetSeed_Cb(wp_wolfssl_seed_cb) != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
-                "wc_SetSeed_Cb failed", -1);
-            /* Non-fatal - continue without callback */
+    firstRef = (g_urandom_ref_count == 0);
+#endif
+    g_urandom_ref_count++;
+
+#ifdef WC_RNG_SEED_CB
+    if (wc_SetSeed_Cb(wp_wolfssl_seed_cb) != 0) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+            "wc_SetSeed_Cb failed to register seed callback");
+        /* Non-fatal - continue without callback */
+    }
+    else {
+        g_seed_cb_registered = 1;
+        if (firstRef) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                "wp_urandom_init: registered wolfSSL seed callback");
         }
         else {
-            g_seed_cb_registered = 1;
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
-                "wp_urandom_init: registered wolfSSL seed callback", 0);
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                "wp_urandom_init: re-registered wolfSSL seed callback");
         }
     }
 #endif
@@ -179,57 +292,62 @@ int wp_urandom_init(void)
 }
 
 /**
- * Clean up the urandom subsystem.
- *
- * Closes the cached file handle if it was opened, and unregisters
- * the seed callback.
+ * Release one reference taken by wp_urandom_init(). On the last reference,
+ * close the cached fd and restore wolfSSL's default seed callback. No-op if the
+ * reference count is already zero.
  */
 void wp_urandom_cleanup(void)
 {
-    /* Lock to ensure thread-safe cleanup.
-     * The urandom mutex is initialized via constructor at library load.
-     */
     if (WP_URANDOM_LOCK() != 0) {
         return;
     }
 
+    if (g_urandom_ref_count == 0) {
+        WP_URANDOM_UNLOCK();
+        return;
+    }
+
+    g_urandom_ref_count--;
+    if (g_urandom_ref_count > 0) {
+        WP_URANDOM_UNLOCK();
+        return;
+    }
+
 #ifdef WC_RNG_SEED_CB
-    /* Unregister seed callback */
+    /* Restore wolfSSL's default seed callback rather than NULL: a later
+     * wc_InitRng() in the same process would otherwise fail with
+     * DRBG_NO_SEED_CB. wc_GenerateSeed is the baseline provider init installs. */
     if (g_seed_cb_registered) {
-        wc_SetSeed_Cb(NULL);
+        wc_SetSeed_Cb(wc_GenerateSeed);
         g_seed_cb_registered = 0;
     }
 #endif
 
-    /* Close global file if it was opened */
-    if (g_urandom_file != XBADFILE) {
-        XFCLOSE(g_urandom_file);
-        g_urandom_file = XBADFILE;
-        WOLFPROV_MSG_DEBUG(WP_LOG_LEVEL_DEBUG,
-            "wp_urandom_cleanup: closed " URANDOM_PATH);
+    if (g_urandom_fd != XBADFD) {
+        /* Close only if still ours - a reused fd number is the host's now. */
+        if (!wp_urandom_fd_reused_locked()) {
+            XCLOSE(g_urandom_fd);
+        }
+        g_urandom_fd = XBADFD;
+        g_urandom_id_valid = 0;
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+            "wp_urandom_cleanup: released " URANDOM_PATH);
     }
 
     WP_URANDOM_UNLOCK();
-
-    /* Note: global urandom mutex is managed via constructor/destructor */
 }
 
 /**
- * Read random bytes from /dev/urandom.
+ * Read random bytes from /dev/urandom (public entry; takes the urandom mutex).
  *
- * Opens /dev/urandom lazily on first call, then keeps it open for subsequent
- * reads. This matches OpenSSL's default provider behavior. The file stays open
- * so child processes can inherit it and read even in sandboxed environments.
- *
- * @param [out] buf      Buffer to fill with random bytes.
- * @param [in]  len      Number of bytes to read.
+ * @param [out] buf  Buffer to fill.
+ * @param [in]  len  Number of bytes to read.
  * @return  Number of bytes read on success.
  * @return  -1 on failure.
  */
 int wp_urandom_read(unsigned char* buf, size_t len)
 {
-    size_t bytesRead;
-    size_t total = 0;
+    int rc;
 
     if (buf == NULL || len == 0) {
         return -1;
@@ -239,37 +357,11 @@ int wp_urandom_read(unsigned char* buf, size_t len)
         return -1;
     }
 
-    /* Lazy open: open file on first entropy request */
-    if (g_urandom_file == XBADFILE) {
-        g_urandom_file = XFOPEN(URANDOM_PATH, "rb");
-        if (g_urandom_file == XBADFILE) {
-            WOLFPROV_MSG_DEBUG(WP_LOG_LEVEL_DEBUG,
-                "wp_urandom_read: failed to open " URANDOM_PATH);
-            WP_URANDOM_UNLOCK();
-            return -1;
-        }
-        WOLFPROV_MSG_DEBUG(WP_LOG_LEVEL_DEBUG,
-            "wp_urandom_read: opened " URANDOM_PATH);
-    }
-
-    /* Read until we have all the bytes we need */
-    while (total < len) {
-        bytesRead = XFREAD(buf + total, 1, len - total, g_urandom_file);
-        if (bytesRead > 0) {
-            total += bytesRead;
-        }
-        else {
-            /* EOF or error - shouldn't happen with /dev/urandom */
-            WOLFPROV_MSG_DEBUG(WP_LOG_LEVEL_DEBUG,
-                "wp_urandom_read: XFREAD failed");
-            WP_URANDOM_UNLOCK();
-            return -1;
-        }
-    }
+    rc = wp_urandom_read_locked(buf, len);
 
     WP_URANDOM_UNLOCK();
 
-    return (int)total;
+    return rc;
 }
 
 
@@ -467,8 +559,8 @@ static int wp_seed_src_generate(wp_SeedSrcCtx* ctx, unsigned char* out,
          * processes can inherit the fd and read even in seccomp sandboxes.
          */
         rc = wp_urandom_read(buf, outLen);
-        if (rc != (int)outLen) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+        if (rc < 0 || (size_t)rc != outLen) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG,
                 "wp_urandom_read failed", rc);
             ok = 0;
         }
@@ -654,8 +746,8 @@ static size_t wp_seed_src_get_seed(wp_SeedSrcCtx* ctx, unsigned char** pSeed,
      * processes can inherit the fd and read even in seccomp sandboxes.
      */
     rc = wp_urandom_read(buffer, minLen);
-    if (rc != (int)minLen) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+    if (rc < 0 || (size_t)rc != minLen) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG,
             "wp_urandom_read failed", rc);
         OPENSSL_clear_free(buffer, minLen);
         buffer = NULL;

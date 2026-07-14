@@ -265,8 +265,11 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
     if (ctx != NULL) {
         if (wp_urandom_init() != 0) {
             /* Non-fatal - fall back to normal RNG on platforms without urandom */
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
-                "wp_urandom_init failed, will use WC_RNG instead", 0);
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_PROVIDER,
+                "wp_urandom_init failed, will use WC_RNG instead");
+        }
+        else {
+            ctx->urandomInitialized = 1;
         }
     }
 #endif
@@ -282,8 +285,11 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
 static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
 {
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
-    /* Clean up urandom subsystem */
-    wp_urandom_cleanup();
+    /* Release a reference only if this context took one; pairing a failed init
+     * with a cleanup would tear down the shared subsystem other contexts use. */
+    if (ctx->urandomInitialized) {
+        wp_urandom_cleanup();
+    }
 #endif
 
     BIO_meth_free(ctx->coreBioMethod);
@@ -1472,6 +1478,8 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 
     if (ok) {
 #ifdef WC_RNG_SEED_CB
+        /* Required under FIPS: the global seedCb defaults to NULL, so the
+         * wc_InitRng() in wolfssl_prov_ctx_new() would fail DRBG_NO_SEED_CB. */
         wc_SetSeed_Cb(wc_GenerateSeed);
 #endif
         /* FIPS CAST tests are now run lazily per-algorithm via wp_init_cast() */
