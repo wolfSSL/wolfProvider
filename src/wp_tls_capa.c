@@ -135,8 +135,11 @@ static const wp_tls_group_consts wp_group_const_list[35] = {
 
 /** List of parameters for TLS groups. */
 static const OSSL_PARAM wp_param_group_list[][11] = {
+#if defined(WP_HAVE_EC_P192) && !defined(HAVE_FIPS) && \
+    !defined(HAVE_FIPS_VERSION)
     WP_TLS_GROUP_ENTRY_EC(    "secp192r1"      , "prime192v1"     , 0 ),
     WP_TLS_GROUP_ENTRY_EC(    "P-192"          , "prime192v1"     , 0 ),
+#endif
     WP_TLS_GROUP_ENTRY_EC(    "secp224r1"      , "secp224r1"      , 1 ),
     WP_TLS_GROUP_ENTRY_EC(    "P-224"          , "secp224r1"      , 1 ),
     WP_TLS_GROUP_ENTRY_EC(    "secp256r1"      , "prime256v1"     , 2 ),

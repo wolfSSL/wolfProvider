@@ -29,6 +29,7 @@
 
 OSSL_LIB_CTX* wpLibCtx = NULL;
 OSSL_LIB_CTX* osslLibCtx = NULL;
+OSSL_PROVIDER* wpProv = NULL;
 int noKeyLimits = 0;
 
 #ifdef WOLFPROV_DEBUG
@@ -476,6 +477,10 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ec_load_cert, NULL),
 #endif /* WP_HAVE_ECDSA */
 
+#ifdef WP_HAVE_ECC
+    TEST_DECL(test_ec_tls_group_p192, NULL),
+#endif /* WP_HAVE_ECC */
+
 #ifdef WP_HAVE_PBE
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_pbe, NULL),
@@ -778,7 +783,6 @@ int main(int argc, char* argv[])
 {
     int err = 0;
     OSSL_PROVIDER* osslProv = NULL;
-    OSSL_PROVIDER* wpProv = NULL;
     int staticTest = 0;
     const char *name = wolfprovider_id;
     const char *dir = ".libs";
