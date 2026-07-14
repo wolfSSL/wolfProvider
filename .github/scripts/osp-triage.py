@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triage an OSP run: Slack health report for the nightly, PR comment for ci:* runs.
+"""Triage a nightly-osp run and post one clean Slack health report.
 
 Classification is by RETRY OUTCOME, not guesswork: every job that did not
 succeed is retried once. Cleared on retry = flake; failed twice = a real
@@ -16,7 +16,6 @@ Env:
   ANTHROPIC_API_KEY  optional; without it survivors report without notes
   CLAUDE_MODEL       optional; default claude-sonnet-4-6
   AUTO_RETRY         "true" to rerun non-passing jobs once before reporting
-  PR_NUMBER          optional; report to this PR as a comment instead of Slack
   DRY_RUN            "true" to print the payload instead of posting
   ANALYZE_ATTEMPT    optional; report a specific past attempt as-is
 """
@@ -37,14 +36,8 @@ SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL", "")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
 AUTO_RETRY = os.environ.get("AUTO_RETRY", "false").lower() == "true"
-PR_NUMBER = os.environ.get("PR_NUMBER", "").strip()
-DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true" or not (
-    PR_NUMBER or SLACK_WEBHOOK)
+DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true" or not SLACK_WEBHOOK
 FORCE_ATTEMPT = os.environ.get("ANALYZE_ATTEMPT")
-PR_MARKER = "<!-- osp-triage -->"
-COMMENT_LIMIT = 65536
-SUITE_DESC = ("wolfProvider OSP CI suite, run on a pull request via a ci:* label"
-              if PR_NUMBER else "wolfProvider nightly OSP CI suite")
 
 LOG_TAIL_LINES = 300
 AI_LOG_CHARS = 4000
@@ -183,11 +176,6 @@ def prefix_of(name):
     return name.split(" / ")[0].strip()
 
 
-def is_suite(job):
-    """A called-workflow job; the bare `select` orchestrator is not one."""
-    return " / " in job.get("name", "")
-
-
 def suite_of(prefix):
     return WAVE_SUFFIX.sub("", prefix)
 
@@ -212,7 +200,7 @@ def ai_triage(failures):
                      f"failing steps: {', '.join(f['steps']) or 'n/a'}\n"
                      f"log tail:\n{f['log'][-AI_LOG_CHARS:]}\n")
     prompt = (
-        f"You are triaging failures in the {SUITE_DESC}. "
+        "You are triaging failures in the wolfProvider nightly OSP CI suite. "
         "Each job below failed twice (an auto-retry did not clear it). Infra "
         "setup failures are already filtered out.\n"
         "Judge each job ONLY from its own log; do not speculate about outages "
@@ -293,70 +281,6 @@ def render_text(blocks):
         elif t == "context":
             out.append(" ".join(e["text"] for e in b["elements"]))
     return "\n".join(out)
-
-
-def mrkdwn_to_gfm(text):
-    text = re.sub(r"<(https?://[^|>]+)\|([^>]+)>", r"[\2](\1)", text)
-    text = re.sub(r"<(https?://[^>]+)>", r"\1", text)
-    # Anchored on non-space: log text like "rm -f *.o *.a" is not bold.
-    return re.sub(r"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])",
-                  r"**\1**", text)
-
-
-def render_gfm(blocks):
-    out = []
-    for b in blocks:
-        t = b.get("type")
-        if t == "header":
-            out.append("### " + b["text"]["text"])
-        elif t == "divider":
-            out.append("---")
-        elif t == "section" and "fields" in b:
-            out.append("\n".join("- " + f["text"].replace("\n", " ")
-                                 for f in b["fields"]))
-        elif t == "section":
-            # Two-space hard breaks: a bare \n collapses in GFM.
-            out.append(b["text"]["text"].replace("\n", "  \n"))
-        elif t == "context":
-            out.append(" ".join(e["text"] for e in b["elements"]))
-    return mrkdwn_to_gfm("\n\n".join(out))
-
-
-def find_prior_comment():
-    page = 1
-    while page <= 20:
-        batch = gh(f"/repos/{REPO}/issues/{PR_NUMBER}/comments"
-                   f"?per_page=100&page={page}")
-        if not batch:
-            return None
-        for c in batch:
-            # Our bot only: the marker survives a human quoting the report.
-            if (c.get("user", {}).get("login") == "github-actions[bot]"
-                    and PR_MARKER in (c.get("body") or "")):
-                return c
-        if len(batch) < 100:
-            return None
-        page += 1
-    return None
-
-
-def post_pr_comment(blocks):
-    body = PR_MARKER + "\n" + render_gfm(blocks)
-    if len(body) > COMMENT_LIMIT:
-        body = body[:COMMENT_LIMIT - 40].rstrip() + "\n\n_(report truncated)_"
-    if DRY_RUN:
-        print("=== DRY RUN (no PR comment) ===\n")
-        print(body)
-        return
-    mine = find_prior_comment()
-    if mine:
-        # PATCH sets an absolute body, so retrying is safe.
-        gh(f"/repos/{REPO}/issues/comments/{mine['id']}",
-           method="PATCH", data={"body": body})
-    else:
-        # POST is not idempotent: a 5xx retry would duplicate the comment.
-        gh(f"/repos/{REPO}/issues/{PR_NUMBER}/comments",
-           method="POST", data={"body": body}, retry=False)
 
 
 def section(text):
@@ -448,14 +372,6 @@ def main():
             return
 
     jobs = merged_jobs(attempt)
-
-    # Any label starts a PR OSP run; with no ci:* label only `select` runs, and "healthy 1/1" reads as OSP-green.
-    if PR_NUMBER:
-        jobs = [j for j in jobs if is_suite(j)]
-        if not jobs:
-            print("no OSP suite jobs in this run - nothing to report")
-            return
-
     failed = [j for j in jobs if j.get("conclusion") == "failure"]
     n_success = sum(1 for j in jobs if j.get("conclusion") == "success")
     n_cancelled = sum(1 for j in jobs if j.get("conclusion") == "cancelled")
@@ -464,8 +380,7 @@ def main():
     recovered = []
     if attempt >= 2:
         prev = {prefix_of(j["name"]) for j in all_jobs(RUN_ID, attempt=1)
-                if j.get("conclusion") in ("failure", "cancelled")
-                and (not PR_NUMBER or is_suite(j))}
+                if j.get("conclusion") in ("failure", "cancelled")}
         recovered = sorted(prev - {prefix_of(j["name"]) for j in failed})
 
     # Group failed jobs per suite. Infra-setup failures are obvious flakes and
@@ -524,8 +439,8 @@ def main():
 
     date_str = (run.get("created_at") or "")[:10] or datetime.date.today().isoformat()
 
-    # Trend vs prior nightlies (best-effort). Meaningless on a PR branch.
-    hist = [] if PR_NUMBER else history()
+    # Trend vs prior nightlies (best-effort).
+    hist = history()
     trend = ""
     if hist:
         spark = sparkline(list(reversed(hist)) + [n_success / total_pf if total_pf else 1])
@@ -538,20 +453,16 @@ def main():
         {"type": "mrkdwn", "text": f"*Status:*\n{status}"},
         {"type": "mrkdwn",
          "text": f"*Pass rate:*\n{n_success} / {total_pf} jobs  ({pct}%)"},
+        {"type": "mrkdwn", "text": f"*Trend:*\n{trend or 'building history'}"},
     ]
-    if not PR_NUMBER:
-        fields.append({"type": "mrkdwn",
-                       "text": f"*Trend:*\n{trend or 'building history'}"})
     breakdown = (f"\U0001F7E2 {n_success} passed"
                  + (f" ({len(recovered)} recovered)" if recovered else "")
                  + f"     \U0001F7E1 {flake_jobs} flaked"
                  f"     \U0001F534 {real_jobs} real"
                  f"     ⚪ {n_cancelled} cancelled")
-    title = ("wolfProvider OSP — PR checks" if PR_NUMBER
-             else "wolfProvider Nightly OSP")
     blocks = [
         {"type": "header", "text": {"type": "plain_text",
-                                    "text": title, "emoji": True}},
+                                    "text": "wolfProvider Nightly OSP", "emoji": True}},
         {"type": "section", "fields": fields},
         section(breakdown),
     ]
@@ -584,14 +495,9 @@ def main():
         for chunk in chunk_lines(flake_lines):
             blocks.append(section(chunk))
 
-    scope = "" if PR_NUMBER else "wolfSSL v5.9.1 (Wave 1) + v5.8.4 (Wave 2)  ·  "
     blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
-        "text": f"{scope}attempt {attempt}  ·  {total_all} jobs  ·  "
-                f"<{run_url()}|View run>"}]})
-
-    if PR_NUMBER:
-        post_pr_comment(blocks)
-        return
+        "text": f"wolfSSL v5.9.1 (Wave 1) + v5.8.4 (Wave 2)  ·  "
+                f"attempt {attempt}  ·  {total_all} jobs  ·  <{run_url()}|View run>"}]})
 
     fallback = f"wolfProvider Nightly OSP: {status} ({n_success}/{total_pf} passed)"
     post_slack(color, fallback, blocks)

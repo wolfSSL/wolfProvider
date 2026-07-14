@@ -2,19 +2,14 @@ name: OSP Triage Report
 
 on:
   workflow_run:
-    workflows: ["Nightly OSP Suite", "PR OSP (label-selected)"]
+    workflows: ["Nightly OSP Suite"]
     types: [completed]
   workflow_dispatch:
     inputs:
       run_id:
-        description: "run ID to analyze (nightly-osp, or a PR OSP run)"
+        description: "nightly-osp run ID to analyze"
         required: true
         type: string
-      pr_number:
-        description: "comment on this PR instead of Slack (blank = nightly Slack report)"
-        required: false
-        type: string
-        default: ""
       auto_retry:
         description: "rerun failed jobs once before reporting"
         type: boolean
@@ -23,85 +18,25 @@ on:
 permissions:
   actions: write
   contents: read
-  # issues: write because the comment upsert goes through the issues endpoint.
-  issues: write
-  pull-requests: write
 
 jobs:
   report:
     runs-on: ubuntu-latest
-    # A fork controls workflow_run's NAME, so the nightly path (which carries SLACK_WEBHOOK_URL) must also match head_repository.
+    # Skip untrusted fork-PR runs; only analyze canonical-repo runs.
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.name == 'PR OSP (label-selected)' &&
-       github.event.workflow_run.conclusion != 'cancelled') ||
-      (github.event.workflow_run.name == 'Nightly OSP Suite' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+      github.event.workflow_run.head_repository.full_name == github.repository
     steps:
-      # PR OSP only: the nightly is already gated on head_repository, and its scheduled actor is not a collaborator.
-      - name: Verify trigger is trusted
-        if: github.event.workflow_run.name == 'PR OSP (label-selected)'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          ACTOR: ${{ github.event.workflow_run.actor.login }}
-          WF_PATH: ${{ github.event.workflow_run.path }}
-        run: |
-          # A fork controls both the workflow name and a new file's path, so pin the path.
-          if [ "$WF_PATH" != ".github/workflows/pr-osp-select.yml" ]; then
-            echo "::error::untrusted triggering workflow: $WF_PATH"
-            exit 1
-          fi
-          # Distinguish "not a collaborator" (404) from an API failure; never conflate them.
-          if ! body=$(gh api "/repos/$REPO/collaborators/$ACTOR/permission" 2>&1); then
-            case "$body" in
-              *"Not Found"*) echo "::error::actor $ACTOR is not a collaborator"; exit 1 ;;
-              *) echo "::error::could not verify $ACTOR: $body"; exit 1 ;;
-            esac
-          fi
-          perm=$(printf '%s' "$body" | jq -r '.permission')
-          # triage can add labels, so it can legitimately start a PR OSP run.
-          case "$perm" in
-            admin|write|maintain|triage) echo "actor $ACTOR ok ($perm)" ;;
-            *) echo "::error::actor $ACTOR cannot label ($perm)"; exit 1 ;;
-          esac
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Resolve PR number
-        id: pr
-        if: github.event.workflow_run.name == 'PR OSP (label-selected)'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: |
-          # pull_requests[] is empty for fork PRs; -f percent-encodes, since '&' is legal in a ref and would forge the query.
-          if ! raw=$(gh api -X GET "/repos/$REPO/pulls" -f head="$OWNER:$BRANCH" -f state=open 2>&1); then
-            echo "::error::pulls lookup failed for $OWNER:$BRANCH: $raw"
-            exit 1
-          fi
-          n=$(printf '%s' "$raw" | jq -r --arg o "$OWNER" --arg b "$BRANCH" \
-                '[.[] | select(.head.repo.owner.login == $o and .head.ref == $b)][0].number // empty')
-          # Empty here is legitimate (PR merged/closed mid-run); the triage step then skips.
-          [ -n "$n" ] || echo "no open PR for $OWNER:$BRANCH - skipping report"
-          echo "number=$n" >> "$GITHUB_OUTPUT"
-
       - name: Triage and report
-        # A PR OSP run with no resolved PR has nowhere to report; never fall back to Slack.
-        if: >
-          github.event.workflow_run.name != 'PR OSP (label-selected)' ||
-          steps.pr.outputs.number != ''
         env:
           GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || steps.pr.outputs.number }}
-          # Slack only for a nightly-shaped report; a PR-targeted run must never reach the channel.
-          SLACK_WEBHOOK_URL: ${{ (github.event_name == 'workflow_dispatch' && inputs.pr_number == '' && secrets.SLACK_WEBHOOK_URL) || (github.event_name == 'workflow_run' && github.event.workflow_run.name != 'PR OSP (label-selected)' && secrets.SLACK_WEBHOOK_URL) || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AUTO_RETRY: ${{ github.event_name == 'workflow_run' && 'true' || github.event_name == 'workflow_dispatch' && inputs.auto_retry && 'true' || 'false' }}
         run: python3 .github/scripts/osp-triage.py
