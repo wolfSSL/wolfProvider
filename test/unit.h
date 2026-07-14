@@ -147,6 +147,7 @@ int test_hmac_create(void *data);
 int test_hmac_key_no_digest(void *data);
 int test_hmac_multi_update(void *data);
 int test_hmac_dup(void *data);
+int test_hmac_size_query(void *data);
 int test_mac_key_match(void *data);
 int test_mac_sig_dup(void *data);
 #endif /* WP_HAVE_HMAC */
@@ -155,6 +156,7 @@ int test_mac_sig_dup(void *data);
 int test_cmac_create(void *data);
 int test_cmac_multi_update(void *data);
 int test_cmac_dup(void *data);
+int test_cmac_size_query(void *data);
 #endif /* WP_HAVE_CMAC */
 
 #ifdef WP_HAVE_GMAC
@@ -164,10 +166,12 @@ int test_gmac_dup(void *data);
 
 #ifdef WP_HAVE_TLS1_PRF
 int test_tls1_prf(void *data);
+int test_tls1_prf_dup(void *data);
 #endif
 
 #ifdef WP_HAVE_HKDF
 int test_hkdf(void *data);
+int test_hkdf_dup(void *data);
 #endif
 
 #ifdef WP_HAVE_KBKDF

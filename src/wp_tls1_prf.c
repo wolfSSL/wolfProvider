@@ -132,6 +132,44 @@ static void wp_kdf_tls1_prf_reset(wp_Tls1Prf_Ctx* ctx)
 }
 
 /**
+ * Duplicate the TLS1 PRF context object.
+ *
+ * Deep copies the configured secret so the copy derives identically.
+ *
+ * @param [in] src  TLS1 PRF context object.
+ * @return  New TLS1 PRF context object on success.
+ * @return  NULL on failure.
+ */
+static wp_Tls1Prf_Ctx* wp_kdf_tls1_prf_dup(wp_Tls1Prf_Ctx* src)
+{
+    wp_Tls1Prf_Ctx* dst = NULL;
+
+    if (wolfssl_prov_is_running()) {
+        dst = wp_kdf_tls1_prf_new(src->provCtx);
+    }
+    if (dst != NULL) {
+        int ok = 1;
+
+        dst->mdType = src->mdType;
+        dst->secretSz = src->secretSz;
+        dst->seedSz = src->seedSz;
+        XMEMCPY(dst->seed, src->seed, src->seedSz);
+
+        if (ok && (src->secret != NULL)) {
+            dst->secret = wp_octet_dup(src->secret, src->secretSz);
+            ok = dst->secret != NULL;
+        }
+
+        if (!ok) {
+            wp_kdf_tls1_prf_free(dst);
+            dst = NULL;
+        }
+    }
+
+    return dst;
+}
+
+/**
  * Derive key using TLS1 PRF algorithm.
  *
  * @param [in, out] ctx     TLS1 PRF context object.
@@ -358,6 +396,7 @@ static const OSSL_PARAM* wp_kdf_tls1_prf_gettable_ctx_params(
 /** Dispatch table for TLS1 PRF functions implemented using wolfSSL. */
 const OSSL_DISPATCH wp_kdf_tls1_prf_functions[] = {
     { OSSL_FUNC_KDF_NEWCTX,         (DFUNC)wp_kdf_tls1_prf_new                },
+    { OSSL_FUNC_KDF_DUPCTX,         (DFUNC)wp_kdf_tls1_prf_dup                },
     { OSSL_FUNC_KDF_FREECTX,        (DFUNC)wp_kdf_tls1_prf_free               },
     { OSSL_FUNC_KDF_RESET,          (DFUNC)wp_kdf_tls1_prf_reset              },
     { OSSL_FUNC_KDF_DERIVE,         (DFUNC)wp_kdf_tls1_prf_derive             },

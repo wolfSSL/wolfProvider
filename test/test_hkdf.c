@@ -614,40 +614,186 @@ static int test_hkdf_extract_only_bad_len(OSSL_LIB_CTX *libCtx)
 #define NUM_MODES     3
 
 #ifdef WP_HAVE_SHA256
-/* HKDF ctx dup is unsupported: it must return NULL, not a broken context. */
-static int test_hkdf_dup_unsupported(void)
+/* Configure an HKDF keyexch (saltLen-byte salt), dup it, and confirm both
+ * derive the same key so the dup preserved config. saltLen == 0 exercises
+ * the empty-salt boundary. */
+static int test_hkdf_dup_calc(int saltLen)
 {
     int err = 0;
     EVP_PKEY_CTX *ctx = NULL;
     EVP_PKEY_CTX *dupCtx = NULL;
-    unsigned char inKey[32] = { 0, };
+    unsigned char inKey[32];
+    unsigned char salt[16];
+    unsigned char info[8];
+    unsigned char keyA[42];
+    unsigned char keyB[42];
+    size_t lenA = sizeof(keyA);
+    size_t lenB = sizeof(keyB);
+
+    memset(inKey, 0x11, sizeof(inKey));
+    memset(salt, 0x22, sizeof(salt));
+    memset(info, 0x33, sizeof(info));
 
     ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "HKDF", NULL);
     if (ctx == NULL) {
         err = 1;
     }
-    if (err == 0) {
-        err = EVP_PKEY_derive_init(ctx) != 1;
+    if (err == 0 && EVP_PKEY_derive_init(ctx) != 1) {
+        err = 1;
     }
-    if (err == 0) {
-        err = EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) != 1;
+    if (err == 0 && EVP_PKEY_CTX_hkdf_mode(ctx,
+            EVP_PKEY_HKDEF_MODE_EXTRACT_AND_EXPAND) != 1) {
+        err = 1;
     }
-    if (err == 0) {
-        err = EVP_PKEY_CTX_set1_hkdf_key(ctx, inKey, sizeof(inKey)) != 1;
+    if (err == 0 && EVP_PKEY_CTX_set_hkdf_md(ctx, EVP_sha256()) != 1) {
+        err = 1;
     }
+    if (err == 0 && EVP_PKEY_CTX_set1_hkdf_key(ctx, inKey, sizeof(inKey)) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_CTX_set1_hkdf_salt(ctx, salt, saltLen) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_CTX_add1_hkdf_info(ctx, info, sizeof(info)) != 1) {
+        err = 1;
+    }
+
+    /* Duplicate after configuring - the path that must deep-copy state. */
     if (err == 0) {
         dupCtx = EVP_PKEY_CTX_dup(ctx);
-        if (dupCtx != NULL) {
-            PRINT_ERR_MSG("HKDF ctx dup unexpectedly returned a context");
+        if (dupCtx == NULL) {
+            PRINT_MSG("Failed to duplicate HKDF context");
             err = 1;
         }
+    }
+
+    if (err == 0 && EVP_PKEY_derive(ctx, keyA, &lenA) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_PKEY_derive(dupCtx, keyB, &lenB) != 1) {
+        PRINT_MSG("Duplicated HKDF context failed to derive");
+        err = 1;
+    }
+    if (err == 0 && ((lenA != lenB) || (memcmp(keyA, keyB, lenA) != 0))) {
+        PRINT_MSG("Duplicated HKDF context derived a different key");
+        err = 1;
     }
 
     EVP_PKEY_CTX_free(dupCtx);
     EVP_PKEY_CTX_free(ctx);
     return err;
 }
+
+/* Configure a TLS 1.3 KDF context (extract uses salt, expand uses data), dup
+ * it, and confirm both derive the same key - exercises the salt/prefix/label/
+ * data copy branches and the TLS13-KDF DUPCTX entry. */
+static int test_tls13_kdf_dup_calc(const char* mode, int extract)
+{
+    int err = 0;
+    EVP_KDF *kdf = NULL;
+    EVP_KDF_CTX *ctx = NULL;
+    EVP_KDF_CTX *dupCtx = NULL;
+    unsigned char secret[32];
+    unsigned char octet[32];
+    unsigned char keyA[32];
+    unsigned char keyB[32];
+    unsigned char prefix[] = "tls13 ";
+    unsigned char label[] = "derived";
+    char digest[] = "SHA256";
+    OSSL_PARAM params[7];
+    OSSL_PARAM *p = params;
+
+    memset(secret, 0x11, sizeof(secret));
+    memset(octet, 0x33, sizeof(octet));
+
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_MODE, (char*)mode, 0);
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, digest, 0);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, secret,
+        sizeof(secret));
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_PREFIX, prefix,
+        sizeof(prefix) - 1);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_LABEL, label,
+        sizeof(label) - 1);
+    if (extract) {
+        *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT, octet,
+            sizeof(octet));
+    }
+    else {
+        *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_DATA, octet,
+            sizeof(octet));
+    }
+    *p = OSSL_PARAM_construct_end();
+
+    kdf = EVP_KDF_fetch(wpLibCtx, "TLS13-KDF", NULL);
+    if (kdf == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        ctx = EVP_KDF_CTX_new(kdf);
+        if (ctx == NULL) {
+            err = 1;
+        }
+    }
+    /* Set params before dup so the state is copied, not applied post-dup. */
+    if (err == 0 && EVP_KDF_CTX_set_params(ctx, params) != 1) {
+        err = 1;
+    }
+    if (err == 0) {
+        dupCtx = EVP_KDF_CTX_dup(ctx);
+        if (dupCtx == NULL) {
+            PRINT_MSG("Failed to duplicate TLS13-KDF context");
+            err = 1;
+        }
+    }
+
+    if (err == 0 && EVP_KDF_derive(ctx, keyA, sizeof(keyA), NULL) != 1) {
+        err = 1;
+    }
+    if (err == 0 && EVP_KDF_derive(dupCtx, keyB, sizeof(keyB), NULL) != 1) {
+        PRINT_MSG("Duplicated TLS13-KDF context failed to derive");
+        err = 1;
+    }
+    if (err == 0 && (memcmp(keyA, keyB, sizeof(keyA)) != 0)) {
+        PRINT_MSG("Duplicated TLS13-KDF context derived a different key");
+        err = 1;
+    }
+
+    EVP_KDF_CTX_free(dupCtx);
+    EVP_KDF_CTX_free(ctx);
+    EVP_KDF_free(kdf);
+    return err;
+}
 #endif /* WP_HAVE_SHA256 */
+
+int test_hkdf_dup(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("Testing HKDF context dup preserves configuration");
+#ifdef WP_HAVE_SHA256
+    err = test_hkdf_dup_calc(16);
+#ifndef HAVE_FIPS
+    /* FIPS enforces a minimum HMAC key length, so an empty salt is not a
+     * valid FIPS configuration - only exercise it in non-FIPS builds. */
+    if (err == 0) {
+        PRINT_MSG("Testing HKDF context dup with empty salt");
+        err = test_hkdf_dup_calc(0);
+    }
+#endif
+    if (err == 0) {
+        PRINT_MSG("Testing TLS13-KDF dup (expand) preserves prefix/label/data");
+        err = test_tls13_kdf_dup_calc("EXPAND_ONLY", 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("Testing TLS13-KDF dup (extract) preserves salt/prefix/label");
+        err = test_tls13_kdf_dup_calc("EXTRACT_ONLY", 1);
+    }
+#endif
+
+    return err;
+}
 
 int test_hkdf(void *data)
 {
@@ -689,11 +835,6 @@ int test_hkdf(void *data)
     if (err == 0) {
         err = test_hkdf_extract_only_bad_len(wpLibCtx);
     }
-#ifdef WP_HAVE_SHA256
-    if (err == 0) {
-        err = test_hkdf_dup_unsupported();
-    }
-#endif
 
     return err;
 }

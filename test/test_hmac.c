@@ -699,5 +699,74 @@ int test_mac_sig_dup(void *data)
     return ret;
 }
 
+/* The two-pass EVP_DigestSignFinal() contract: a NULL signature buffer is a
+ * size query that reports the MAC length without finalizing, so the same
+ * context can then produce the MAC into the allocated buffer. */
+int test_hmac_size_query(void *data)
+{
+    int ret = 0;
+    EVP_MD_CTX* ctx = NULL;
+    EVP_PKEY* pkey = NULL;
+    unsigned char key[32];
+    unsigned char msg[32];
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    size_t macSz = 0;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(msg, 0x41, sizeof(msg));
+
+    PRINT_MSG("Testing HMAC EVP_DigestSignFinal size query (NULL buffer)");
+
+    pkey = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "HMAC", NULL, key,
+        sizeof(key));
+    if (pkey == NULL) {
+        ret = 1;
+    }
+    if (ret == 0) {
+        ctx = EVP_MD_CTX_new();
+        if (ctx == NULL) {
+            ret = 1;
+        }
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignInit_ex(ctx, NULL, "SHA-256", wpLibCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignUpdate(ctx, msg, sizeof(msg)) != 1;
+    }
+
+    /* First pass - NULL buffer must report the MAC size. */
+    if (ret == 0) {
+        if (EVP_DigestSignFinal(ctx, NULL, &macSz) != 1) {
+            PRINT_MSG("HMAC size query failed");
+            ret = 1;
+        }
+        else if (macSz != (size_t)EVP_MD_get_size(EVP_sha256())) {
+            PRINT_ERR_MSG("HMAC size query reported %zu, expected %d", macSz,
+                EVP_MD_get_size(EVP_sha256()));
+            ret = 1;
+        }
+    }
+
+    /* Second pass - the same context must still produce the MAC. */
+    if (ret == 0) {
+        if (EVP_DigestSignFinal(ctx, mac, &macSz) != 1) {
+            PRINT_MSG("HMAC sign after size query failed");
+            ret = 1;
+        }
+    }
+    if (ret == 0) {
+        PRINT_BUFFER("MAC", mac, (int)macSz);
+    }
+
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+
+    return ret;
+}
+
 #endif /* WP_HAVE_HMAC */
 

@@ -467,5 +467,90 @@ int test_cmac_dup(void *data)
     return ret;
 }
 
+/* The two-pass EVP_DigestSignFinal() contract: a NULL signature buffer is a
+ * size query that reports the MAC length without finalizing, so the same
+ * context can then produce the MAC into the allocated buffer. */
+int test_cmac_size_query(void *data)
+{
+    int err = 0;
+    EVP_MD_CTX* ctx = NULL;
+    EVP_PKEY_CTX* pctx = NULL;
+    EVP_PKEY_CTX* psctx = NULL;
+    EVP_PKEY* pkey = NULL;
+    unsigned char key[32];
+    unsigned char msg[32];
+    unsigned char mac[AES_BLOCK_SIZE];
+    size_t macSz = 0;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(msg, 0x41, sizeof(msg));
+
+    PRINT_MSG("Testing CMAC EVP_DigestSignFinal size query (NULL buffer)");
+
+    ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        pctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "CMAC", NULL);
+        if (pctx == NULL) {
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(pctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_ctrl(pctx, -1, EVP_PKEY_OP_KEYGEN,
+            EVP_PKEY_CTRL_CIPHER, 0, (void*)EVP_aes_256_cbc()) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_ctrl(pctx, -1, EVP_PKEY_OP_KEYGEN,
+            EVP_PKEY_CTRL_SET_MAC_KEY, (int)sizeof(key), key) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(pctx, &pkey) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(ctx, &psctx, NULL, wpLibCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignUpdate(ctx, msg, sizeof(msg)) != 1;
+    }
+
+    /* First pass - NULL buffer must report the MAC size. */
+    if (err == 0) {
+        if (EVP_DigestSignFinal(ctx, NULL, &macSz) != 1) {
+            PRINT_MSG("CMAC size query failed");
+            err = 1;
+        }
+        else if (macSz != AES_BLOCK_SIZE) {
+            PRINT_ERR_MSG("CMAC size query reported %zu, expected %d", macSz,
+                AES_BLOCK_SIZE);
+            err = 1;
+        }
+    }
+
+    /* Second pass - the same context must still produce the MAC. */
+    if (err == 0) {
+        if (EVP_DigestSignFinal(ctx, mac, &macSz) != 1) {
+            PRINT_MSG("CMAC sign after size query failed");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        PRINT_BUFFER("CMAC", mac, (int)macSz);
+    }
+
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_CTX_free(pctx);
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
 #endif /* WP_HAVE_CMAC */
 

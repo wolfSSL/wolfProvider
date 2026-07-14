@@ -23,7 +23,6 @@
 #include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
 #include <openssl/params.h>
-#include <openssl/evp.h>
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
@@ -38,20 +37,33 @@
 typedef struct wp_MacSigCtx {
     /* wolfProvider context object. */
     WOLFPROV_CTX *provCtx;
-    /* Library context object. */
-    OSSL_LIB_CTX *libCtx;
 
     /* MAC key. */
     wp_Mac* mac;
-    /* wolfProvider MAC object. */
-    EVP_MAC_CTX* macCtx;
+
+    /* wolfProvider MAC dispatch table - useful for duplication. */
+    const OSSL_DISPATCH* macDisp;
+    /* wolfProvider MAC implementation context object. */
+    void* macCtx;
+    /* Free the wolfProvider MAC context. */
+    OSSL_FUNC_mac_freectx_fn* freeCtx;
+    /* Duplicate the wolfProvider MAC context. */
+    OSSL_FUNC_mac_dupctx_fn* dupCtx;
+    /* Initialize the wolfProvider MAC context. */
+    OSSL_FUNC_mac_init_fn* init;
+    /* Update the wolfProvider MAC context with data. */
+    OSSL_FUNC_mac_update_fn* update;
+    /* Finalize the wolfProvider MAC and output the result. */
+    OSSL_FUNC_mac_final_fn* final;
+    /* Set parameters into the wolfProvider MAC context. */
+    OSSL_FUNC_mac_set_ctx_params_fn* setParams;
+    /* Get parameters from the wolfProvider MAC context. */
+    OSSL_FUNC_mac_get_ctx_params_fn* getParams;
+
     /* MAC name */
     char name[WP_MAX_MAC_NAME_SIZE];
     /* MAC type */
     int type;
-
-    /* Property query string. */
-    char* propQuery;
 } wp_MacSigCtx;
 
 
@@ -59,15 +71,89 @@ typedef struct wp_MacSigCtx {
 static int wp_mac_set_ctx_params(wp_MacSigCtx *ctx, const OSSL_PARAM params[]);
 
 /**
+ * Resolve the wolfProvider MAC implementation from its dispatch table.
+ *
+ * Creates the backing MAC context so the MAC is always computed by
+ * wolfProvider.
+ *
+ * @param [in, out] ctx      MAC signature context object.
+ * @param [in]      macDisp  wolfProvider MAC dispatch table.
+ * @return  1 on success.
+ * @return  0 when a required function is missing or context creation fails.
+ */
+static int wp_mac_ctx_load(wp_MacSigCtx* ctx, const OSSL_DISPATCH* macDisp)
+{
+    int ok = 1;
+    OSSL_FUNC_mac_newctx_fn* newCtx = NULL;
+    const OSSL_DISPATCH* d;
+
+    for (d = macDisp; d->function_id != 0; d++) {
+        switch (d->function_id) {
+            case OSSL_FUNC_MAC_NEWCTX:
+                newCtx = OSSL_FUNC_mac_newctx(d);
+                break;
+            case OSSL_FUNC_MAC_FREECTX:
+                ctx->freeCtx = OSSL_FUNC_mac_freectx(d);
+                break;
+            case OSSL_FUNC_MAC_DUPCTX:
+                ctx->dupCtx = OSSL_FUNC_mac_dupctx(d);
+                break;
+            case OSSL_FUNC_MAC_INIT:
+                ctx->init = OSSL_FUNC_mac_init(d);
+                break;
+            case OSSL_FUNC_MAC_UPDATE:
+                ctx->update = OSSL_FUNC_mac_update(d);
+                break;
+            case OSSL_FUNC_MAC_FINAL:
+                ctx->final = OSSL_FUNC_mac_final(d);
+                break;
+            case OSSL_FUNC_MAC_SET_CTX_PARAMS:
+                ctx->setParams = OSSL_FUNC_mac_set_ctx_params(d);
+                break;
+            case OSSL_FUNC_MAC_GET_CTX_PARAMS:
+                ctx->getParams = OSSL_FUNC_mac_get_ctx_params(d);
+                break;
+            default:
+                break;
+        }
+    }
+
+    if ((newCtx == NULL) || (ctx->freeCtx == NULL) || (ctx->dupCtx == NULL) ||
+            (ctx->init == NULL) || (ctx->update == NULL) ||
+            (ctx->final == NULL) || (ctx->setParams == NULL) ||
+            (ctx->getParams == NULL)) {
+        WOLFPROV_MSG_DEBUG(WP_LOG_COMP_MAC,
+            "wolfProvider MAC dispatch is missing a required function");
+        ok = 0;
+    }
+    if (ok) {
+        ctx->macDisp = macDisp;
+        ctx->macCtx = newCtx(ctx->provCtx);
+        if (ctx->macCtx == NULL) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_MAC,
+                "Failed to create wolfProvider MAC context");
+            ok = 0;
+        }
+    }
+
+    return ok;
+}
+
+/**
  * Create a new MAC signature context object.
  *
+ * The MAC is always wolfProvider's own implementation (bound via macDisp), so
+ * a caller property query does not affect selection and is not retained.
+ *
  * @param [in] provCtx    wolfProvider context object.
- * @param [in] propQuery  Property query.
+ * @param [in] macName    Name of MAC algorithm.
+ * @param [in] type       MAC key type.
+ * @param [in] macDisp    wolfProvider MAC dispatch table for macName.
  * @return  NULL on failure.
  * @return  MAC signature context object on success.
  */
 static wp_MacSigCtx* wp_mac_ctx_new(WOLFPROV_CTX* provCtx,
-    const char* propQuery, const char* macName, int type)
+    const char* macName, int type, const OSSL_DISPATCH* macDisp)
 {
     wp_MacSigCtx* ctx = NULL;
 
@@ -76,44 +162,22 @@ static wp_MacSigCtx* wp_mac_ctx_new(WOLFPROV_CTX* provCtx,
     }
     if (ctx != NULL) {
         int ok = 1;
-        char* p = NULL;
-        EVP_MAC* mac = NULL;
 
-        if (propQuery != NULL) {
-            p = OPENSSL_strdup(propQuery);
-            if (p == NULL) {
-                OPENSSL_free(ctx);
-                ctx = NULL;
-                ok = 0;
-            }
+        ctx->provCtx = provCtx;
+        if (!wp_mac_ctx_load(ctx, macDisp)) {
+            ok = 0;
         }
         if (ok) {
-            mac = EVP_MAC_fetch(provCtx->libCtx, macName, propQuery);
-            if (mac == NULL) {
-                ok = 0;
-            }
-        }
-        if (ok) {
-            ctx->macCtx = EVP_MAC_CTX_new(mac);
-            if (ctx->macCtx == NULL) {
-                ok = 0;
-            }
-        }
-        if (ok) {
-            ctx->propQuery = p;
-            ctx->provCtx = provCtx;
-            ctx->libCtx = provCtx->libCtx;
             XSTRNCPY(ctx->name, macName, WP_MAX_MAC_NAME_SIZE);
             ctx->name[WP_MAX_MAC_NAME_SIZE - 1] = '\0';
             ctx->type = type;
         }
 
+        /* On load failure macCtx is always NULL, so there is nothing to free. */
         if (!ok) {
-            OPENSSL_free(p);
             OPENSSL_free(ctx);
             ctx = NULL;
         }
-        EVP_MAC_free(mac);
     }
 
     return ctx;
@@ -127,9 +191,10 @@ static wp_MacSigCtx* wp_mac_ctx_new(WOLFPROV_CTX* provCtx,
 static void wp_mac_ctx_free(wp_MacSigCtx* ctx)
 {
     if (ctx != NULL) {
-        EVP_MAC_CTX_free(ctx->macCtx);
+        if ((ctx->freeCtx != NULL) && (ctx->macCtx != NULL)) {
+            ctx->freeCtx(ctx->macCtx);
+        }
         wp_mac_free(ctx->mac);
-        OPENSSL_free(ctx->propQuery);
         OPENSSL_free(ctx);
     }
 }
@@ -149,14 +214,14 @@ static wp_MacSigCtx* wp_mac_ctx_dup(wp_MacSigCtx* srcCtx)
     if (wolfssl_prov_is_running()) {
         int ok = 1;
 
-        dstCtx = wp_mac_ctx_new(srcCtx->provCtx, srcCtx->propQuery,
-             srcCtx->name, srcCtx->type);
+        dstCtx = wp_mac_ctx_new(srcCtx->provCtx, srcCtx->name, srcCtx->type,
+             srcCtx->macDisp);
         if (dstCtx == NULL) {
             ok = 0;
         }
         if (ok) {
-            EVP_MAC_CTX_free(dstCtx->macCtx);
-            dstCtx->macCtx = EVP_MAC_CTX_dup(srcCtx->macCtx);
+            dstCtx->freeCtx(dstCtx->macCtx);
+            dstCtx->macCtx = dstCtx->dupCtx(srcCtx->macCtx);
             if (dstCtx->macCtx == NULL) {
                 ok = 0;
             }
@@ -217,7 +282,9 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
         }
     }
     if (ok) {
-        EVP_MAC_CTX_set_params(ctx->macCtx, params);
+        if (!ctx->setParams(ctx->macCtx, params)) {
+            ok = 0;
+        }
     }
     if (ok && (ctx->type == WP_MAC_TYPE_CMAC)) {
         cipherName = wp_mac_get_ciphername(ctx->mac);
@@ -253,7 +320,7 @@ static int wp_mac_digest_sign_init(wp_MacSigCtx *ctx, const char *mdName,
     }
     if (ok) {
         lParams[lParamSz++] = OSSL_PARAM_construct_end();
-        if (!EVP_MAC_init(ctx->macCtx, priv, privLen, lParams)) {
+        if (!ctx->init(ctx->macCtx, priv, privLen, lParams)) {
             ok = 0;
         }
     }
@@ -278,7 +345,7 @@ static int wp_mac_digest_sign_update(wp_MacSigCtx *ctx,
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_digest_sign_update");
 
-    if (!EVP_MAC_update(ctx->macCtx, data, dataLen)) {
+    if (!ctx->update(ctx->macCtx, data, dataLen)) {
         ok = 0;
     }
 
@@ -303,17 +370,33 @@ static int wp_mac_digest_sign_final(wp_MacSigCtx *ctx, unsigned char *sig,
     size_t *sigLen, size_t sigSize)
 {
     int ok = 1;
+    OSSL_PARAM params[2];
+    size_t macSize = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_mac_digest_sign_final");
 
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
-    if (ok && (sigSize == MAX_SIZE_T) && (ctx->type == WP_MAC_TYPE_CMAC)) {
-        sigSize = AES_BLOCK_SIZE;
+    else if (sig == NULL) {
+        /* Size query - report the MAC length and leave the context
+         * unfinalized so the caller can sign with the allocated buffer. */
+        params[0] = OSSL_PARAM_construct_size_t(OSSL_MAC_PARAM_SIZE, &macSize);
+        params[1] = OSSL_PARAM_construct_end();
+        if (!ctx->getParams(ctx->macCtx, params)) {
+            ok = 0;
+        }
+        else {
+            *sigLen = macSize;
+        }
     }
-    if (ok && (!EVP_MAC_final(ctx->macCtx, sig, sigLen, sigSize))) {
-        ok = 0;
+    else {
+        if ((sigSize == MAX_SIZE_T) && (ctx->type == WP_MAC_TYPE_CMAC)) {
+            sigSize = AES_BLOCK_SIZE;
+        }
+        if (!ctx->final(ctx->macCtx, sig, sigLen, sigSize)) {
+            ok = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -330,7 +413,7 @@ static int wp_mac_digest_sign_final(wp_MacSigCtx *ctx, unsigned char *sig,
  */
 static int wp_mac_set_ctx_params(wp_MacSigCtx *ctx, const OSSL_PARAM params[])
 {
-     return EVP_MAC_CTX_set_params(ctx->macCtx, params);
+     return ctx->setParams(ctx->macCtx, params);
 }
 
 /**
@@ -366,7 +449,9 @@ static const OSSL_PARAM *wp_mac_settable_ctx_params(wp_MacSigCtx *ctx,
 static wp_MacSigCtx* wp_hmac_ctx_new(WOLFPROV_CTX* provCtx,
     const char* propQuery)
 {
-    return wp_mac_ctx_new(provCtx, propQuery, WP_NAMES_HMAC, WP_MAC_TYPE_HMAC);
+    (void)propQuery;
+    return wp_mac_ctx_new(provCtx, WP_NAMES_HMAC, WP_MAC_TYPE_HMAC,
+        wp_hmac_functions);
 }
 
 /** Dspatch table for HMAC signing. */
@@ -395,7 +480,9 @@ const OSSL_DISPATCH wp_hmac_signature_functions[] = {
 static wp_MacSigCtx* wp_cmac_ctx_new(WOLFPROV_CTX* provCtx,
     const char* propQuery)
 {
-    return wp_mac_ctx_new(provCtx, propQuery, WP_NAMES_CMAC, WP_MAC_TYPE_CMAC);
+    (void)propQuery;
+    return wp_mac_ctx_new(provCtx, WP_NAMES_CMAC, WP_MAC_TYPE_CMAC,
+        wp_cmac_functions);
 }
 
 /** Dspatch table for HMAC signing. */

@@ -485,6 +485,34 @@ int wp_unlock(wolfSSL_Mutex* mutex)
 
 
 /**
+ * Duplicate a configured octet buffer.
+ *
+ * OPENSSL_memdup() returns NULL for a zero length, so a 1-byte buffer is
+ * allocated for the empty case. This preserves the non-NULL, zero-length
+ * state that consumers may distinguish from a NULL (absent) buffer.
+ *
+ * @param [in] data  Buffer to duplicate. May be NULL.
+ * @param [in] len   Length of buffer in bytes.
+ * @return  Allocated copy on success.
+ * @return  NULL when data is NULL, or on allocation failure.
+ */
+unsigned char* wp_octet_dup(const unsigned char* data, size_t len)
+{
+    unsigned char* ret;
+
+    if (data == NULL) {
+        ret = NULL;
+    }
+    else if (len == 0) {
+        ret = OPENSSL_zalloc(1);
+    }
+    else {
+        ret = OPENSSL_memdup(data, len);
+    }
+    return ret;
+}
+
+/**
  * Convert the string name of an object to an OpenSSL Numeric ID (NID).
  *
  * @param [in] libCtx  Library context to lookup string.

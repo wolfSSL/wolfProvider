@@ -727,8 +727,10 @@ static const OSSL_ALGORITHM wolfprov_keyexch[] = {
 
     { WP_NAMES_HKDF, WOLFPROV_PROPERTIES, wp_hkdf_keyexch_functions,
       "" },
+#ifdef WP_HAVE_TLS1_PRF
     { WP_NAMES_TLS1_PRF, WOLFPROV_PROPERTIES, wp_tls1_prf_keyexch_functions,
       "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
