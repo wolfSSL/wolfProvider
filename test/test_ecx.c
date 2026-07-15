@@ -758,6 +758,109 @@ int test_ecx_x25519_raw_priv_roundtrip(void *data)
     return err;
 }
 
+/* get_params must size the export buffer from the caller's data_size, not
+ * return_size. A reused param can carry a stale/zero return_size from a prior
+ * size query; using it would truncate or fail the export. */
+int test_ecx_x25519_get_params_stale_ret(void *data)
+{
+    int err = 0;
+    EVP_PKEY *pkey = NULL;
+    static const unsigned char privKey[] = {
+        0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d,
+        0x3c, 0x16, 0xc1, 0x72, 0x51, 0xb2, 0x66, 0x45,
+        0xdf, 0x4c, 0x2f, 0x87, 0xeb, 0xc0, 0x99, 0x2a,
+        0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9, 0x2c, 0x2a
+    };
+    /* RFC 7748 Section 6.1 Alice public key, derived from privKey above. */
+    static const unsigned char pubKey[] = {
+        0x85, 0x20, 0xf0, 0x09, 0x89, 0x30, 0xa7, 0x54,
+        0x74, 0x8b, 0x7d, 0xdc, 0xb4, 0x3e, 0xf7, 0x5a,
+        0x0d, 0xbf, 0x3a, 0x0d, 0x26, 0x38, 0x1a, 0xf4,
+        0xeb, 0xa4, 0xa9, 0x8e, 0xaa, 0x9b, 0x4e, 0x6a
+    };
+    unsigned char readback[32];
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    PRINT_MSG("X25519 get_params with stale (zero) return_size");
+
+    pkey = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "X25519", NULL,
+        privKey, sizeof(privKey));
+    if (pkey == NULL) {
+        PRINT_ERR_MSG("Failed to import X25519 private key");
+        err = 1;
+    }
+
+    /* Private key: full 32-byte buffer but return_size forced to 0. */
+    if (err == 0) {
+        memset(readback, 0, sizeof(readback));
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_PRIV_KEY, readback, sizeof(readback));
+        params[0].return_size = 0;
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_get_params(pkey, params) != 1) {
+            PRINT_ERR_MSG("priv key get_params failed with stale return_size");
+            err = 1;
+        }
+    }
+    if (err == 0 && params[0].return_size != sizeof(privKey)) {
+        PRINT_ERR_MSG("priv key return_size wrong: %zu", params[0].return_size);
+        err = 1;
+    }
+    if (err == 0 && memcmp(readback, privKey, sizeof(privKey)) != 0) {
+        PRINT_ERR_MSG("priv key bytes not returned correctly");
+        err = 1;
+    }
+
+    /* Public key: same stale-return_size condition on the export path. */
+    if (err == 0) {
+        memset(readback, 0, sizeof(readback));
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_PUB_KEY, readback, sizeof(readback));
+        params[0].return_size = 0;
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_get_params(pkey, params) != 1) {
+            PRINT_ERR_MSG("pub key get_params failed with stale return_size");
+            err = 1;
+        }
+    }
+    if (err == 0 && params[0].return_size != sizeof(pubKey)) {
+        PRINT_ERR_MSG("pub key return_size wrong: %zu", params[0].return_size);
+        err = 1;
+    }
+    if (err == 0 && memcmp(readback, pubKey, sizeof(pubKey)) != 0) {
+        PRINT_ERR_MSG("pub key bytes not returned correctly");
+        err = 1;
+    }
+
+    /* Encoded public key: same helper, exercised via its own key string. */
+    if (err == 0) {
+        memset(readback, 0, sizeof(readback));
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, readback, sizeof(readback));
+        params[0].return_size = 0;
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_get_params(pkey, params) != 1) {
+            PRINT_ERR_MSG("enc pub key get_params failed with stale "
+                          "return_size");
+            err = 1;
+        }
+    }
+    if (err == 0 && params[0].return_size != sizeof(pubKey)) {
+        PRINT_ERR_MSG("enc pub key return_size wrong: %zu",
+                      params[0].return_size);
+        err = 1;
+    }
+    if (err == 0 && memcmp(readback, pubKey, sizeof(pubKey)) != 0) {
+        PRINT_ERR_MSG("enc pub key bytes not returned correctly");
+        err = 1;
+    }
+
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
 /* A zero-length private key octet string must be rejected without an
  * out-of-bounds read (privData[len-1] with len==0). */
 int test_ecx_import_zero_priv(void *data)

@@ -747,7 +747,7 @@ static int wp_ecc_get_params_enc_pub_key(wp_Ecc* ecc, OSSL_PARAM params[],
     p = OSSL_PARAM_locate(params, key);
     if (p != NULL) {
         int rc;
-        word32 outLen = (word32)p->return_size;
+        word32 outLen = (word32)p->data_size;
 
         if (ecc->hasPub == 0) {
             ok = 0;

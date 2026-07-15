@@ -547,7 +547,7 @@ static int wp_ecx_get_params_enc_pub_key(wp_Ecx* ecx, OSSL_PARAM params[],
 
     p = OSSL_PARAM_locate(params, key);
     if (p != NULL) {
-        word32 outLen = (word32)p->return_size;
+        word32 outLen = (word32)p->data_size;
 
         if (p->data == NULL) {
             outLen = ecx->data->len;
@@ -584,7 +584,7 @@ static int wp_ecx_get_params_priv_key(wp_Ecx* ecx, OSSL_PARAM params[])
 
     p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_PRIV_KEY);
     if (p != NULL) {
-        word32 outLen = (word32)p->return_size;
+        word32 outLen = (word32)p->data_size;
 
         if (p->data == NULL) {
             outLen = ecx->data->len;
