@@ -250,9 +250,14 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType);
 int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     const char** cipherName);
 
-int wp_encrypt_key(WOLFPROV_CTX* provCtx, const char* cipherName,
-    unsigned char* keyData, size_t* keyLen, word32 pkcs8Len,
-    OSSL_PASSPHRASE_CALLBACK *pwCb, void *pwCbArg, byte** cipherInfo);
+int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
+    word32 plainLen, size_t* outLen);
+int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
+    const unsigned char* plain, word32 plainLen,
+    unsigned char* out, size_t* outLen,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg);
+int wp_decrypt_key_pkcs8(unsigned char* data, word32* len,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg);
 
 int wp_read_der_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len);
 int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,

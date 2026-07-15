@@ -1356,6 +1356,46 @@ static int wp_mldsa_dec_send_params(wp_MlDsa* mldsa, const char* dataType,
     return ok;
 }
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
+/**
+ * Decode an encrypted PKCS#8 DER ML-DSA private key into the ML-DSA key object.
+ *
+ * @param [in]      ctx      ML-DSA encoder/decoder context object.
+ * @param [in, out] mldsa    ML-DSA key object.
+ * @param [in]      data     DER encoding (decrypted in place).
+ * @param [in]      len      Length, in bytes, of DER encoding.
+ * @param [in]      pwCb     Password callback.
+ * @param [in]      pwCbArg  Argument to pass to password callback.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_mldsa_decode_enc_pki(wp_MlDsaEncDecCtx* ctx, wp_MlDsa* mldsa,
+    unsigned char* data, word32 len, OSSL_PASSPHRASE_CALLBACK* pwCb,
+    void* pwCbArg)
+{
+    int ok = 1;
+    word32 idx = 0;
+
+    WOLFPROV_ENTER_SILENT(WP_LOG_COMP_PQC, WOLFPROV_FUNC_NAME);
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+    /* Decrypt the PBES2 EncryptedPrivateKeyInfo in place. */
+    if (ok && (!wp_decrypt_key_pkcs8(data, &len, pwCb, pwCbArg))) {
+        ok = 0;
+    }
+    /* Decode the recovered plaintext private key. */
+    if (ok && (ctx->decode(data, &idx, (void*)&mldsa->key, len) != 0)) {
+        ok = 0;
+    }
+
+    WOLFPROV_LEAVE_SILENT(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
+    return ok;
+}
+#endif
+
 /**
  * Decode the data in the core BIO.
  *
@@ -1407,9 +1447,17 @@ static int wp_mldsa_decode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (ok) {
         rc = ctx->decode(data, &idx, (void*)&mldsa->key, len);
         if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "decode", rc);
-            ok = 0;
-            decoded = 0;
+#ifdef WOLFSSL_ENCRYPTED_KEYS
+            /* May be an encrypted PKCS#8 key - decrypt and retry. */
+            if ((ctx->format != WP_ENC_FORMAT_PKI) ||
+                    (!wp_mldsa_decode_enc_pki(ctx, mldsa, data, len, pwCb,
+                        pwCbArg)))
+#endif
+            {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "decode", rc);
+                ok = 0;
+                decoded = 0;
+            }
         }
     }
     if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
@@ -1468,13 +1516,16 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     unsigned char* derData = NULL;
     word32 derAllocLen = 0;
     size_t derLen = 0;
+    unsigned char* encData = NULL;
+    size_t encLen = 0;
+    unsigned char* srcData;
+    size_t srcLen;
     unsigned char* pemData = NULL;
     size_t pemLen = 0;
     int pemType = (ctx->format == WP_ENC_FORMAT_SPKI) ? PUBLICKEY_TYPE :
                                                         PKCS8_PRIVATEKEY_TYPE;
     int private = (ctx->format == WP_ENC_FORMAT_PKI) ||
                   (ctx->format == WP_ENC_FORMAT_EPKI);
-    byte* cipherInfo = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_mldsa_encode");
 
@@ -1494,15 +1545,9 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             ok = 0;
         }
         else {
-            derAllocLen = (word32)rc;
-            /* EPKI encrypts in place: round up to the AES block size so the
-             * buffer has room for the padded ciphertext. */
-            if (ctx->format == WP_ENC_FORMAT_EPKI) {
-                derAllocLen = ((derAllocLen + 15) / 16) * 16;
-            }
-            else {
-                derAllocLen += WP_MLDSA_DER_SLACK;
-            }
+            /* Buffer holds the plaintext PKCS #8 encoding; EPKI encrypts into
+             * a separate buffer allocated later. */
+            derAllocLen = (word32)rc + WP_MLDSA_DER_SLACK;
         }
     }
     if (ok) {
@@ -1520,23 +1565,39 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             derLen = (size_t)rc;
         }
     }
+    /* By default the plaintext DER is the source for the output encoding. */
+    srcData = derData;
+    srcLen = derLen;
     if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
-        size_t encLen = derAllocLen;
-        if (!wp_encrypt_key(ctx->provCtx, ctx->cipherName, derData, &encLen,
-                (word32)derLen, pwCb, pwCbArg, &cipherInfo)) {
+        pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
+        /* The PBES2 output is larger than the plaintext and must use a
+         * separate buffer, so size it and encrypt into fresh memory. */
+        if (!wp_encrypt_key_pkcs8_size(ctx->provCtx, ctx->cipher,
+                (word32)derLen, &encLen)) {
             ok = 0;
         }
-        else {
-            derLen = encLen;
+        if (ok) {
+            encData = (unsigned char*)OPENSSL_malloc(encLen);
+            if (encData == NULL) {
+                ok = 0;
+            }
+        }
+        if (ok && (!wp_encrypt_key_pkcs8(ctx->provCtx, ctx->cipher, derData,
+                (word32)derLen, encData, &encLen, pwCb, pwCbArg))) {
+            ok = 0;
+        }
+        if (ok) {
+            srcData = encData;
+            srcLen = encLen;
         }
     }
 
     if (ok && (ctx->encoding == WP_FORMAT_DER)) {
-        keyData = derData;
-        keyLen = derLen;
+        keyData = srcData;
+        keyLen = srcLen;
     }
     else if (ok && (ctx->encoding == WP_FORMAT_PEM)) {
-        rc = wc_DerToPemEx(derData, (word32)derLen, NULL, 0, cipherInfo,
+        rc = wc_DerToPemEx(srcData, (word32)srcLen, NULL, 0, NULL,
             pemType);
         if (rc <= 0) {
             ok = 0;
@@ -1549,8 +1610,8 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             }
         }
         if (ok) {
-            rc = wc_DerToPemEx(derData, (word32)derLen, pemData, (word32)pemLen,
-                cipherInfo, pemType);
+            rc = wc_DerToPemEx(srcData, (word32)srcLen, pemData, (word32)pemLen,
+                NULL, pemType);
             if (rc <= 0) {
                 ok = 0;
             }
@@ -1577,7 +1638,7 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         OPENSSL_free(derData);
         OPENSSL_free(pemData);
     }
-    OPENSSL_free(cipherInfo);
+    OPENSSL_clear_free(encData, encLen);
     BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;

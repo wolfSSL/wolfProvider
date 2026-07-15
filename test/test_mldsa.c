@@ -1220,4 +1220,36 @@ int test_mldsa_pubonly_sign_fails(void* data)
     return err;
 }
 
+#ifdef WP_HAVE_EPKI_TEST
+int test_mldsa_encode_epki(void* data)
+{
+    int err = 0;
+    EVP_PKEY* pkey = NULL;
+
+    (void)data;
+
+    /* Generate an ML-DSA-44 key via wolfProvider. */
+    err = mldsa_keygen("ML-DSA-44", &pkey);
+
+    /* wolfProvider self round-trip (DER and PEM): the encoder output is decoded
+     * back by wolfProvider and must match. Stock-OpenSSL interop for ML-DSA
+     * encrypted keys depends on separate ML-DSA/PQC work and is not asserted
+     * here. */
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx);
+    }
+
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+#endif /* WP_HAVE_EPKI_TEST */
+
 #endif /* WP_HAVE_MLDSA */

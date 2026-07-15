@@ -361,6 +361,47 @@ int test_dh_pkey(void *data)
     return err;
 }
 
+#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST)
+int test_dh_encode_epki(void *data)
+{
+    int err = 0;
+    const unsigned char* p = dh_der;
+    EVP_PKEY* pkey = NULL;
+
+    (void)data;
+
+    /* Load a DH key into a wolfProvider-backed EVP_PKEY. */
+    pkey = d2i_PrivateKey_ex(EVP_PKEY_DH, NULL, &p, sizeof(dh_der), wpLibCtx,
+        NULL);
+    err = (pkey == NULL);
+
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx);
+    }
+
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+#endif /* WOLFSSL_DH_EXTRA && WP_HAVE_EPKI_TEST */
+
 int test_dh_invalid_kdf_strings(void *data)
 {
     int err = 0;

@@ -860,6 +860,67 @@ static int test_ecdh(const unsigned char *privKey, size_t len,
 }
 
 #ifdef WP_HAVE_EC_P256
+#ifdef WP_HAVE_EPKI_TEST
+int test_ecc_encode_epki(void *data)
+{
+    int err = 0;
+    const unsigned char* p = ecc_key_der_256;
+    const unsigned char* op = ecc_key_der_256;
+    EVP_PKEY* pkey = NULL;
+    EVP_PKEY* osslKey = NULL;
+
+    (void)data;
+
+    /* Load a P-256 key into a wolfProvider-backed EVP_PKEY. */
+    pkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
+        wpLibCtx, NULL);
+    err = (pkey == NULL);
+
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> wolfProvider");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx);
+    }
+
+    /* Decode an OpenSSL-produced blob (foreign PBES2 params). */
+    if (err == 0) {
+        osslKey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &op,
+            sizeof(ecc_key_der_256), osslLibCtx, NULL);
+        err = (osslKey == NULL);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: OpenSSL -> wolfProvider");
+        err = test_epki_encode_decode(osslKey, "DER", "provider=default",
+            wpLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: OpenSSL -> wolfProvider");
+        err = test_epki_encode_decode(osslKey, "PEM", "provider=default",
+            wpLibCtx);
+    }
+
+    EVP_PKEY_free(osslKey);
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+#endif /* WP_HAVE_EPKI_TEST */
+
 int test_ecdh_invalid_kdf_strings(void *data)
 {
     int err = 0;
