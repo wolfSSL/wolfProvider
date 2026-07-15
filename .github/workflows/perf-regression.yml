@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
   workflow_call:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# No concurrency group: github.workflow is the caller's here, so any group collides with sibling calls.
 
 jobs:
   discover_versions:

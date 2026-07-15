@@ -1,0 +1,82 @@
+name: Workflow lint
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# END OF COMMON SECTION
+
+permissions:
+  contents: read
+
+jobs:
+  reusable-concurrency:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Reusable workflows must not self-cancel
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Check concurrency in reusable workflows
+        run: |
+          python3 - <<'EOF'
+          import glob, sys, yaml
+
+          paths = sorted(glob.glob('.github/workflows/*.yml')
+                         + glob.glob('.github/workflows/*.yaml'))
+          bad = []
+          for path in paths:
+              try:
+                  with open(path) as f:
+                      wf = yaml.safe_load(f)
+              except yaml.YAMLError as e:
+                  print(f'{path}: unparsable: {e}')
+                  sys.exit(1)
+              if not isinstance(wf, dict):
+                  continue
+              # YAML 1.1 parses a bare `on:` key as the boolean True.
+              triggers = wf.get('on', wf.get(True)) or {}
+              # `on:` is legal as a mapping, a list, or a bare string.
+              if isinstance(triggers, str):
+                  names = {triggers}
+              elif isinstance(triggers, list):
+                  names = set(triggers)
+              elif isinstance(triggers, dict):
+                  names = set(triggers)
+              else:
+                  names = set()
+              if 'workflow_call' not in names:
+                  continue
+              conc = wf.get('concurrency') or {}
+              if not isinstance(conc, dict):
+                  continue
+              # Anything not literally false counts: "true"/${{ }} still cancel.
+              cip = conc.get('cancel-in-progress', False)
+              if cip is not False and str(cip).strip().lower() != 'false':
+                  bad.append(f"{path}: cancel-in-progress={cip!r} "
+                             f"group={conc.get('group')!r}")
+
+          if bad:
+              print('Reusable workflow sets cancel-in-progress to something other')
+              print('than false. github.workflow resolves to the CALLER, so sibling')
+              print('calls in one run share a group and cancel each other. Set')
+              print('cancel-in-progress: false, or drop the concurrency block.')
+              for b in bad:
+                  print('  ' + b)
+              sys.exit(1)
+          print('ok: no reusable workflow sets cancel-in-progress')
+          EOF
