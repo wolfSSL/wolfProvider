@@ -297,6 +297,10 @@ static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
     wc_FreeMutex(&ctx->rng_mutex);
 #endif
     wc_FreeRng(&ctx->rng);
+#ifdef FP_ECC
+    /* Free this thread's FP ECC cache; wc_ecc_free() doesn't. */
+    wc_ecc_fp_free();
+#endif
     OPENSSL_free(ctx);
 }
 
