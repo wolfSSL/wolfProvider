@@ -167,5 +167,6 @@ jobs:
   xmlsec-584:          { needs: wave1-done, if: always(), uses: ./.github/workflows/xmlsec.yml,          with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
 
   # === Out-of-wave: not wolfssl-version-split ===
+  big-endian:      { uses: ./.github/workflows/big-endian.yml }
   static-analysis: { uses: ./.github/workflows/static-analysis.yml }
   multi-compiler:  { uses: ./.github/workflows/nightly-multi-compiler.yml }
