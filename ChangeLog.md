@@ -1,3 +1,36 @@
+# wolfProvider version 1.2.1 (July 16, 2026)
+
+Release 1.2.1 has been developed according to wolfSSL's development and QA
+process and successfully passed the quality criteria.
+
+PR stands for Pull Request, and PR <NUMBER> references a GitHub pull request
+number where the code change was added.
+
+## New Feature Additions
+* Add ML-KEM (FIPS 203) and ML-DSA (FIPS 204) post-quantum support via `--enable-pqc` (PR 399)
+
+## Enhancements and Optimizations
+* Route KDF key-exchange and MAC-signature operations through wolfProvider directly (PR 429)
+* Strengthen RSA key import and CRT validation (PR 339)
+* Enforce DH minimum prime size on the parameters-only generation path
+* Add bounds checks on OSSL_PARAMS for EC, DH, and RSA (PR 398)
+* Add input validation, memory-safety, and key zeroization hardening (PR 420, PR 438, PR 441)
+* Add nightly OpenSSL command performance regression testing (PR 411)
+
+## Bug Fixes
+* Fix FIPS decode performance regression where decoders ran self-tests on non-matching keys before checking the key type, and serialize the RSA self-test to close a concurrent decode race (PR 413)
+* Fix EncryptedPrivateKeyInfo (PBES2) encode and decode across all key types (PR 426)
+* Fix AES-GCM TLS IV length check and AEAD tag length validation (PR 416)
+* Fix integer overflow in DH derive (PR 439)
+* Fix TLS1 PRF to reject unsupported digests instead of defaulting to SHA-384, and report FIPS module failures through the provider running check (PR 431)
+* Fix ECX security-bits reporting for X25519 and X448 (PR 417)
+* Constrain file store decoders to the caller's provider boundary (PR 430)
+* Gate secp192r1/P-192 TLS group advertisement on curve availability (PR 432)
+* Gate DRBG reseed on FIPS version (PR 408)
+* Fix DH FFC_Q export for PKCS#3 keys for OpenSSL 3.6.3 interop (PR 406)
+* Fix seed-src to read /dev/urandom via a raw fd, avoiding seccomp failures in restrictive sandboxes (PR 440)
+* Fix macOS library path handling in build scripts (PR 443, PR 444)
+
 # wolfProvider version 1.2.0 (June 08, 2026)
 
 Release 1.2.0 has been developed according to wolfSSL's development and QA
@@ -44,7 +77,6 @@ PR stands for Pull Request, and PR <NUMBER> references a GitHub pull request
 number where the code change was added.
 
 ## New Feature Additions
-* Add ML-KEM (FIPS 203) and ML-DSA (FIPS 204) post-quantum algorithm support via `--enable-pqc` (PR 399)
 * Add OpenSSL FIPS baseline process implementation (PR 357)
 * Add seed-src handling for wolfProvider (PR 350)
 * Add EC public key auto derivation from private key (PR 338)
