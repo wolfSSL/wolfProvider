@@ -1,0 +1,211 @@
+name: SBOM Test
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+    inputs:
+      wolfssl_ref:
+        description: 'wolfssl git ref that provides scripts/gen-sbom'
+        # TODO: switch back to 'master' once wolfSSL/wolfssl#10343 merges.
+        default: 'refs/pull/10343/head'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# This workflow only reads the repo and uploads artefacts; no API writes.
+permissions:
+  contents: read
+
+jobs:
+  sbom:
+    name: wolfProvider SBOM generation (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout wolfprovider
+        uses: actions/checkout@v4
+        with:
+          path: wolfprovider
+
+      # wolfProvider links both wolfSSL and OpenSSL, so its SBOM records both as
+      # dependencies.  gen-sbom lives in wolfssl and is not yet on master, so
+      # default to the open PR head that carries it (wolfSSL/wolfssl#10343) so CI
+      # actually exercises `make sbom` (with --dep-wolfssl / --dep-openssl)
+      # instead of silently skipping.  TODO: switch the fallback back to
+      # 'master' once #10343 merges.  Note: this checkout only supplies gen-sbom
+      # (and its wolfssl version.h); the wolfSSL that wolfProvider actually links
+      # is the one built from source by build-wolfprovider.sh below.
+      - name: Checkout wolfssl (gen-sbom source)
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/wolfssl
+          ref: ${{ github.event.inputs.wolfssl_ref || 'refs/pull/10343/head' }}
+          path: wolfssl-gensbom
+
+      - name: Install build tooling and SBOM validator (pyspdxtools)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool \
+              pkg-config
+          python3 -m pip install --user 'spdx-tools==0.8.*'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Build the full stack (OpenSSL + wolfSSL + wolfProvider) from source using
+      # the project's maintained script.  WOLFPROV_SKIP_TEST keeps it a
+      # build-only run (the SBOM only needs the built libwolfprov artifact).
+      # This also runs autogen + ./configure in-tree, so `make sbom` picks up the
+      # AC_PATH_PROG(PYTHON3/PYSPDXTOOLS/GIT) substitutions.
+      - name: Build wolfProvider stack (openssl + wolfssl + wolfprovider)
+        working-directory: wolfprovider
+        run: WOLFPROV_SKIP_TEST=1 ./scripts/build-wolfprovider.sh
+
+      # gen-sbom lives in wolfssl and may not be on the checked-out ref yet (the
+      # wolfSSL SBOM change can land separately).  Gate on its presence and on
+      # the --dep-wolfssl / --dep-openssl capabilities so this workflow is safe
+      # even against a gen-sbom that predates them.
+      - name: Detect gen-sbom availability and capabilities
+        id: gate
+        run: |
+          GS="$GITHUB_WORKSPACE/wolfssl-gensbom/scripts/gen-sbom"
+          if [ ! -f "$GS" ]; then
+            echo "have=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::wolfssl scripts/gen-sbom not present on this ref; skipping SBOM generation."
+            exit 0
+          fi
+          echo "have=yes" >> "$GITHUB_OUTPUT"
+          HELP="$(python3 "$GS" --help 2>/dev/null)"
+          if echo "$HELP" | grep -q -- '--dep-wolfssl'; then
+            echo "dep_wolfssl=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "dep_wolfssl=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::gen-sbom on this ref has no --dep-wolfssl; the wolfssl dependency + name-derived identity assertions will be skipped."
+          fi
+          if echo "$HELP" | grep -q -- '--dep-openssl'; then
+            echo "dep_openssl=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "dep_openssl=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::gen-sbom on this ref has no --dep-openssl; the openssl dependency assertion will be skipped."
+          fi
+
+      # Record the versions of the wolfSSL that was actually linked (built from
+      # source by the script, not the gen-sbom checkout) and of the built
+      # OpenSSL, so the SBOM's dependency versions match the deployed binaries.
+      - name: Resolve linked wolfSSL / OpenSSL versions
+        if: steps.gate.outputs.have == 'yes'
+        id: vers
+        working-directory: wolfprovider
+        run: |
+          wv=""
+          if [ -f wolfssl-source/wolfssl/version.h ]; then
+            wv=$(sed -n 's/.*LIBWOLFSSL_VERSION_STRING[ \t]*"\([^"]*\)".*/\1/p' \
+                 wolfssl-source/wolfssl/version.h)
+          fi
+          ov=""
+          if [ -x openssl-install/bin/openssl ]; then
+            ov=$(openssl-install/bin/openssl version | awk '{print $2}')
+          fi
+          echo "wolfssl=$wv" >> "$GITHUB_OUTPUT"
+          echo "openssl=$ov" >> "$GITHUB_OUTPUT"
+          echo "linked wolfSSL=$wv openssl=$ov"
+
+      - name: Generate SBOM
+        if: steps.gate.outputs.have == 'yes'
+        working-directory: wolfprovider
+        run: |
+          make sbom \
+              WOLFSSL_DIR="$GITHUB_WORKSPACE/wolfssl-gensbom" \
+              SBOM_WOLFSSL_VERSION="${{ steps.vers.outputs.wolfssl }}" \
+              SBOM_OPENSSL_VERSION="${{ steps.vers.outputs.openssl }}"
+
+      - name: Outputs exist and SPDX validates
+        if: steps.gate.outputs.have == 'yes'
+        working-directory: wolfprovider
+        run: |
+          ls wolfprovider-*.cdx.json wolfprovider-*.spdx.json wolfprovider-*.spdx
+          pyspdxtools --infile wolfprovider-*.spdx.json
+
+      - name: CycloneDX identity and licence
+        if: steps.gate.outputs.have == 'yes'
+        working-directory: wolfprovider
+        run: |
+          python3 - <<'PY'
+          import glob, json
+          cdx = json.load(open(glob.glob('wolfprovider-*.cdx.json')[0]))
+          assert cdx['bomFormat'] == 'CycloneDX', cdx.get('bomFormat')
+          assert cdx['specVersion'] == '1.6', cdx.get('specVersion')
+          m = cdx['metadata']['component']
+          assert m['name'] == 'wolfprovider', m['name']
+          assert m['purl'].startswith('pkg:github/wolfSSL/wolfprovider@'), m['purl']
+          # Default override must land as GPL-3.0-or-later (matches source headers).
+          ids = [l.get('license', {}).get('id') for l in m.get('licenses', [])]
+          assert 'GPL-3.0-or-later' in ids, ids
+          # Identity is the hashed library artifact.
+          assert {h['alg'] for h in m.get('hashes', [])}, 'no component hash'
+          print('CDX ok:', m['name'], m['purl'], ids)
+          PY
+
+      - name: Reproducible across two runs (SOURCE_DATE_EPOCH)
+        if: steps.gate.outputs.have == 'yes'
+        working-directory: wolfprovider
+        run: |
+          rm -f wolfprovider-*.cdx.json wolfprovider-*.spdx.json wolfprovider-*.spdx
+          SOURCE_DATE_EPOCH=1700000000 make sbom \
+              WOLFSSL_DIR="$GITHUB_WORKSPACE/wolfssl-gensbom" \
+              SBOM_WOLFSSL_VERSION="${{ steps.vers.outputs.wolfssl }}" \
+              SBOM_OPENSSL_VERSION="${{ steps.vers.outputs.openssl }}"
+          sha256sum wolfprovider-*.cdx.json wolfprovider-*.spdx.json > /tmp/a.sums
+          rm -f wolfprovider-*.cdx.json wolfprovider-*.spdx.json wolfprovider-*.spdx
+          SOURCE_DATE_EPOCH=1700000000 make sbom \
+              WOLFSSL_DIR="$GITHUB_WORKSPACE/wolfssl-gensbom" \
+              SBOM_WOLFSSL_VERSION="${{ steps.vers.outputs.wolfssl }}" \
+              SBOM_OPENSSL_VERSION="${{ steps.vers.outputs.openssl }}"
+          sha256sum wolfprovider-*.cdx.json wolfprovider-*.spdx.json > /tmp/b.sums
+          diff /tmp/a.sums /tmp/b.sums
+
+      - name: wolfssl recorded as a dependency
+        if: steps.gate.outputs.have == 'yes' && steps.gate.outputs.dep_wolfssl == 'yes'
+        working-directory: wolfprovider
+        run: |
+          python3 - <<'PY'
+          import glob, json
+          d = json.load(open(glob.glob('wolfprovider-*.spdx.json')[0]))
+          assert 'wolfssl' in {p['name'] for p in d['packages']}, \
+              [p['name'] for p in d['packages']]
+          rels = [(r['spdxElementId'], r['relationshipType'],
+                   r['relatedSpdxElement']) for r in d['relationships']]
+          assert ('SPDXRef-Package-wolfprovider', 'DEPENDS_ON',
+                  'SPDXRef-Package-wolfssl') in rels, rels
+          print('wolfssl dependency ok')
+          PY
+
+      - name: openssl recorded as a dependency
+        if: steps.gate.outputs.have == 'yes' && steps.gate.outputs.dep_openssl == 'yes'
+        working-directory: wolfprovider
+        run: |
+          python3 - <<'PY'
+          import glob, json
+          d = json.load(open(glob.glob('wolfprovider-*.spdx.json')[0]))
+          assert 'openssl' in {p['name'] for p in d['packages']}, \
+              [p['name'] for p in d['packages']]
+          rels = [(r['spdxElementId'], r['relationshipType'],
+                   r['relatedSpdxElement']) for r in d['relationships']]
+          assert ('SPDXRef-Package-wolfprovider', 'DEPENDS_ON',
+                  'SPDXRef-Package-openssl') in rels, rels
+          print('openssl dependency ok')
+          PY
+
+      - name: Upload SBOM artefacts
+        if: always() && steps.gate.outputs.have == 'yes'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfprovider-sbom-${{ github.sha }}
+          path: |
+            wolfprovider/wolfprovider-*.cdx.json
+            wolfprovider/wolfprovider-*.spdx.json
+            wolfprovider/wolfprovider-*.spdx
+          if-no-files-found: warn
+          retention-days: 90
