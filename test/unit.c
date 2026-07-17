@@ -305,6 +305,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes_gcm_bad_tag, NULL),
     TEST_DECL(test_aes_gcm_tls_iv_fixed_oversized, NULL),
     TEST_DECL(test_aes_gcm_tag_len_undersized, NULL),
+    TEST_DECL(test_aes_gcm_key_no_iv, NULL),
+    TEST_DECL(test_aes_gcm_stream_key_no_iv, NULL),
+    TEST_DECL(test_aes_gcm_final_no_update_no_iv, NULL),
 #endif
 #ifdef WP_HAVE_AESCCM
     TEST_DECL(test_aes128_ccm, NULL),
@@ -314,6 +317,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_ccm_tls, NULL),
     TEST_DECL(test_aes_ccm_bad_tag, NULL),
     TEST_DECL(test_aes_ccm_tag_len_undersized, NULL),
+    TEST_DECL(test_aes_ccm_key_no_iv, NULL),
 #endif
 #endif
 #ifdef WP_HAVE_RANDOM

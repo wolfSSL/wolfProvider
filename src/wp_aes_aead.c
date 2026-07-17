@@ -1331,6 +1331,12 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
         ok = 0;
     }
 
+    /* Reject encryption and decryption when no IV has been supplied by the
+     * caller. */
+    if (!done && ok && (ctx->ivState == IV_STATE_UNINITIALISED)) {
+        ok = 0;
+    }
+
     if ((!done) && ok) {
         if (ctx->ivState == IV_STATE_BUFFERED) {
             rc = wc_AesGcmInit(&ctx->aes, NULL, 0, ctx->iv, (word32)ctx->ivLen);
@@ -1413,6 +1419,13 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
         ok = 0;
     }
 
+    /*
+     * Reject encryption and decryption when no IV has been supplied.
+     */
+    if ((!done) && ok && (ctx->ivState == IV_STATE_UNINITIALISED)) {
+        ok = 0;
+    }
+
     if ((!done) && ok) {
         if (outSize == 0) {
             outSize = (ctx->tagLen != UNINITIALISED_SIZET) ? ctx->tagLen :
@@ -1480,6 +1493,10 @@ static int wp_aesgcm_encdec(wp_AeadCtx *ctx, unsigned char *out, size_t* outLen,
             if (tmp == NULL) {
                 ok = 0;
             }
+        }
+        /* Reject encryption and decryption when no IV has been supplied by the caller. */
+        if (ok && ctx->ivState == IV_STATE_UNINITIALISED) {
+            ok = 0;
         }
         /* Once loaded, always use original IV */
         iv = ctx->iv;
@@ -2001,7 +2018,15 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
         ctx->tagLen = EVP_CCM_TLS_TAG_LEN;
     }
 
-    if (ctx->enc) {
+    /*
+     * Reject encryption and decryption when no IV/nonce has been supplied by
+     * the caller.
+     */
+    if (ctx->ivState == IV_STATE_UNINITIALISED) {
+        ok = 0;
+    }
+
+    if (ok && ctx->enc) {
         if (!ctx->ivSet) {
             rc = wc_AesCcmSetNonce(&ctx->aes, ctx->iv, (word32)ctx->ivLen);
             if (rc != 0) {
@@ -2021,7 +2046,7 @@ static int wp_aesccm_encdec(wp_AeadCtx *ctx, unsigned char *out,
             }
         }
     }
-    else {
+    else if (ok) {
         rc = wc_AesCcmDecrypt(&ctx->aes, out, in, (word32)inLen,
             ctx->iv, (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
             ctx->aad, (word32)ctx->aadLen);
