@@ -39,12 +39,26 @@ jobs:
             debian:bookworm \
             /bin/bash /wolfprov/.github/scripts/big-endian-test.sh
 
-      - name: Print errors
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          if [ -f be-logs/summary.txt ] ; then
+            cat be-logs/summary.txt >> "$GITHUB_STEP_SUMMARY"
+            cat be-logs/summary.txt
+          fi
+
+      - name: Print build log on failure
         if: ${{ failure() }}
         run: |
-          if [ -f test-suite.log ] ; then
-            cat test-suite.log
-          fi
           if [ -f scripts/build-release.log ] ; then
             tail -200 scripts/build-release.log
           fi
+
+      # The full run is far too long for the console; backtraces live here.
+      - name: Upload logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: big-endian-logs
+          path: be-logs/
+          if-no-files-found: warn
