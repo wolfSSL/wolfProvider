@@ -416,6 +416,7 @@ TEST_CASE test_case[] = {
     #endif
     #ifdef WP_HAVE_ECKEYGEN
         TEST_DECL(test_eckeygen_p256, NULL),
+        TEST_DECL(test_ecc_p256_get_params_stale_ret, NULL),
     #endif
     #ifdef WP_HAVE_ECDH
     #ifdef WP_HAVE_ECKEYGEN
@@ -527,6 +528,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_null_init, NULL),
 #ifdef WP_HAVE_X25519
     TEST_DECL(test_ecx_x25519_raw_priv_roundtrip, NULL),
+    TEST_DECL(test_ecx_x25519_get_params_stale_ret, NULL),
     TEST_DECL(test_ecx_import_zero_priv, NULL),
 #endif
     TEST_DECL(test_ecx_dup, NULL),

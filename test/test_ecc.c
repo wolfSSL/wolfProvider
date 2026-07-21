@@ -519,6 +519,83 @@ int test_eckeygen_p256(void *data)
 
     return err;
 }
+
+/* get_params for the ECC encoded public key must size the export buffer from
+ * data_size, not a stale/zero return_size. Compare a stale-return_size export
+ * against a known-good fresh export of the same key. */
+int test_ecc_p256_get_params_stale_ret(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *key = NULL;
+    unsigned char ref[128];
+    unsigned char readback[128];
+    size_t refLen = 0;
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    PRINT_MSG("P-256 encoded pub key get_params with stale return_size");
+
+    err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL)) == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx,
+                                                     NID_X9_62_prime256v1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(ctx, &key) != 1;
+    }
+
+    /* Reference export via a fresh param. Its return_size defaults to
+     * OSSL_PARAM_UNMODIFIED, so this block succeeds even with the bug; the
+     * stale-return_size query below is the actual regression check. */
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, ref, sizeof(ref));
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_get_params(key, params) != 1) {
+            PRINT_ERR_MSG("reference encoded pub key get_params failed");
+            err = 1;
+        }
+        else {
+            refLen = params[0].return_size;
+        }
+    }
+    if (err == 0 && (refLen == 0 || refLen > sizeof(ref))) {
+        PRINT_ERR_MSG("unexpected encoded pub key length: %zu", refLen);
+        err = 1;
+    }
+
+    /* Same query with return_size forced to 0 to mimic a reused param. */
+    if (err == 0) {
+        memset(readback, 0, sizeof(readback));
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, readback, sizeof(readback));
+        params[0].return_size = 0;
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_get_params(key, params) != 1) {
+            PRINT_ERR_MSG("encoded pub key get_params failed with stale "
+                          "return_size");
+            err = 1;
+        }
+    }
+    if (err == 0 && params[0].return_size != refLen) {
+        PRINT_ERR_MSG("encoded pub key return_size wrong: %zu vs %zu",
+                      params[0].return_size, refLen);
+        err = 1;
+    }
+    if (err == 0 && memcmp(readback, ref, refLen) != 0) {
+        PRINT_ERR_MSG("encoded pub key bytes not returned correctly");
+        err = 1;
+    }
+
+    EVP_PKEY_free(key);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
 #endif /* WP_HAVE_EC_P256 */
 
 #ifdef WP_HAVE_EC_P384

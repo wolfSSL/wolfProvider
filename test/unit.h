@@ -395,6 +395,7 @@ int test_eckeygen_p224(void *data);
 
 #ifdef WP_HAVE_EC_P256
 int test_eckeygen_p256(void *data);
+int test_ecc_p256_get_params_stale_ret(void *data);
 #endif /* WP_HAVE_EC_P256 */
 
 #ifdef WP_HAVE_EC_P384
@@ -543,6 +544,7 @@ int test_ecx_misc(void *data);
 int test_ecx_null_init(void *data);
 #ifdef WP_HAVE_X25519
 int test_ecx_x25519_raw_priv_roundtrip(void *data);
+int test_ecx_x25519_get_params_stale_ret(void *data);
 int test_ecx_import_zero_priv(void *data);
 #endif /* WP_HAVE_X25519 */
 int test_ecx_dup(void *data);
