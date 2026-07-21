@@ -96,7 +96,7 @@ gh workflow run pr-osp-select.yml --ref <branch> -f jobs="all"
 
 ### What runs in the nightly fan-out
 
-43 workflows total: 40 third-party OSS integrations, 2 internal
+44 workflows total: 40 third-party OSS integrations, 3 internal
 validations, and the static-analysis suite. Every one of these patches
 the upstream project (where needed) via `osp/wolfProvider/<app>/*.patch`
 from [wolfssl/osp](https://github.com/wolfssl/osp), builds it against
@@ -176,6 +176,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `debian-package.yml` | End-to-end check: builds the wolfprov `.deb`s and confirms they install cleanly on a fresh container and the provider loads. |
 | `openssl-version.yml` | Sweeps every upstream `openssl-3.X.Y` release tag — catches breakage from OpenSSL point releases before they hit our matrix defaults. |
 | `static-analysis.yml` | cppcheck, clang scan-build, Facebook Infer. Heavy enough that it lives in the nightly fan-out rather than per-PR. |
+| `big-endian.yml` | Builds and runs the unit tests on s390x (big-endian) under qemu emulation. Guards the `#ifdef LITTLE_ENDIAN_ORDER` byte-order paths, which no other job exercises. |
 
 Sanitizers (ASan+UBSan, TSan) run on every PR/push — see the PR table
 above. They're fast enough with caching to gate merges, so they don't
@@ -263,6 +264,35 @@ binary.
 The scan-build and infer thresholds are baseline-based, not strict —
 they let pre-existing issues slide but flag obvious regressions.
 Bringing them to 0 is a future cleanup.
+
+## Big-endian coverage
+
+`big-endian.yml` runs nightly (and via `ci:big-endian` / `ci:all`). Every
+other job in this repo runs on x86-64, so the `#else` half of each
+`#ifdef LITTLE_ENDIAN_ORDER` block in `src/wp_params.c` is otherwise never
+compiled or executed. This job closes that gap.
+
+GitHub offers no big-endian runners, so it emulates s390x with qemu
+binfmt (`docker/setup-qemu-action`) and builds inside a `debian:bookworm`
+s390x container. Emulation is roughly an order of magnitude slower than
+native, which is why it is nightly-only rather than a PR gate.
+
+`.github/scripts/big-endian-test.sh` installs a toolchain — the test-deps
+image is amd64-only, so it cannot be reused here — asserts the target
+really is big-endian, then hands off to `scripts/build-wolfprovider.sh`
+with no arguments. That is the same entry point `simple.yml` uses, at its
+default OpenSSL + wolfSSL refs, and it runs `make test` itself. The
+endian assert means a qemu or platform regression fails the job instead
+of silently retesting x86-64.
+
+Everything after the emulation setup is therefore the stock build. The
+job is slow because every instruction is emulated, including the full
+OpenSSL and wolfSSL source builds, not because it does anything special.
+
+No big-endian-specific test case exists or is needed: `test_rsa_fromdata`
+already compares a wolfProvider `EVP_PKEY_fromdata` import against
+OpenSSL's via `EVP_PKEY_cmp`, which is exactly the comparison a byte-order
+mistake in the `OSSL_PARAM` import path breaks.
 
 ## Overhead regression testing
 

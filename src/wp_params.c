@@ -27,10 +27,10 @@
 
 
 /**
- * Read little-endian array of bytes representing a large number.
+ * Read local endian array of bytes representing a large number.
  *
  * @param [in, out] mp    Multi-precision number.
- * @param [in]      data  Little-endian array of bytes.
+ * @param [in]      data  Local endian array of bytes.
  * @param [in]      len   Length of array in bytes.
  * @return  1 on success.
  * @return  0 on failure.
@@ -39,12 +39,15 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
     size_t len)
 {
     int ok = 1;
+    int rc;
+#ifdef LITTLE_ENDIAN_ORDER
     unsigned char rdata[1024];
     size_t i;
-    int rc;
+#endif
 
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_mp_read_unsigned_bin_le");
 
+#ifdef LITTLE_ENDIAN_ORDER
     if (len > sizeof(rdata)) {
         ok = 0;
     }
@@ -65,6 +68,13 @@ int wp_mp_read_unsigned_bin_le(mp_int* mp, const unsigned char* data,
 
     /* rdata may hold private key material (RSA d/p/q, EC/DH private). */
     OPENSSL_cleanse(rdata, sizeof(rdata));
+#else
+    rc = mp_read_unsigned_bin(mp, data, (word32)len);
+    if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "mp_read_unsigned_bin", rc);
+        ok = 0;
+    }
+#endif
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -100,6 +110,9 @@ int wp_mp_to_unsigned_bin_le(mp_int* mp, unsigned char* data, size_t len)
             data[len - 1 - i] = t;
         }
     }
+#else
+    (void)i;
+    (void)len;
 #endif
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

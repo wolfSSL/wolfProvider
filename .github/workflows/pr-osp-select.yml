@@ -219,6 +219,10 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' xmlsec ')
     uses: ./.github/workflows/xmlsec.yml
+  big-endian:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' big-endian ')
+    uses: ./.github/workflows/big-endian.yml
   multi-compiler:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' multi-compiler ')
