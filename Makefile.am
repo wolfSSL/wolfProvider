@@ -6,6 +6,7 @@ noinst_HEADERS =
 check_PROGRAMS =
 dist_noinst_SCRIPTS =
 DISTCLEANFILES =
+CLEANFILES =
 pkginclude_HEADERS =
 EXTRA_DIST =
 
@@ -50,3 +51,27 @@ test: check
 # The '--with-wolfssl' doesn't get propagated during a distcheck either, but it
 # is necessary when they are installed somewhere other than /usr/local.
 AM_DISTCHECK_CONFIGURE_FLAGS=CPPFLAGS="-I@abs_top_srcdir@/include" --with-openssl=@OPENSSL_INSTALL_DIR@ --with-wolfssl=@WOLFSSL_INSTALL_DIR@
+
+# SBOM generation (CRA compliance).  The recipe is shared across the wolfSSL
+# stack's autotools products in scripts/sbom.am; wolfProvider just declares what
+# it is (a shared library that links both wolfSSL and OpenSSL) and includes it.
+# WOLFSSL_DIR must point to a wolfssl source tree containing scripts/gen-sbom;
+# it defaults to the --with-wolfssl location, which is an install prefix, so for
+# `make sbom` pass a source tree: make sbom WOLFSSL_DIR=/path/to/wolfssl.
+SBOM_PKGNAME      = wolfprovider
+SBOM_LICENSE_FILE = $(srcdir)/COPYING
+SBOM_LIB_STEM     = libwolfprov
+SBOM_DEP_WOLFSSL  = yes
+SBOM_DEP_OPENSSL  = yes
+
+# wolfProvider is GPLv3-or-later (per the per-file source headers: "either
+# version 3 of the License, or (at your option) any later version") or
+# commercial.  Pin the header-accurate SPDX id here so the SBOM is correct
+# regardless of the gen-sbom version's licence detection; commercial licensees
+# can override it (e.g. LicenseRef-wolfSSL-Commercial).
+SBOM_LICENSE_OVERRIDE ?= GPL-3.0-or-later
+
+EXTRA_DIST += scripts/sbom.am
+
+include scripts/sbom.am
+

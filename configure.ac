@@ -26,6 +26,16 @@ USER_CFLAGS="$CFLAGS"
 AC_PROG_CC
 AC_LANG(C)
 
+# Tools used by the SBOM targets (see scripts/sbom.am `make sbom`).  GIT is used
+# only to derive SOURCE_DATE_EPOCH for reproducible SBOM output; all three are
+# optional and the target reports a clear error when a required one is missing.
+AC_PATH_PROG([PYTHON3], [python3])
+AC_PATH_PROG([PYSPDXTOOLS], [pyspdxtools])
+AC_PATH_PROG([GIT], [git])
+AC_SUBST([PYTHON3])
+AC_SUBST([PYSPDXTOOLS])
+AC_SUBST([GIT])
+
 # wolfSSL - check first so its -I/-L paths take precedence over OpenSSL prefix
 # which may contain stale wolfSSL headers from a different version
 AX_CHECK_WOLFSSL(
