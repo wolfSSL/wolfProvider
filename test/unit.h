@@ -569,6 +569,14 @@ int test_aes_tls_cbc_split(void *data);
 #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
 int test_des3_tls_cbc_bad_pad(void *data);
 int test_des3_tls_cbc_dec(void *data);
+int test_des3_tls_cbc_mte(void *data);
+int test_des3_tls_cbc_etm(void *data);
+int test_des3_tls_cbc_etm_bad_pad(void *data);
+int test_des3_tls_cbc_dup(void *data);
+int test_des3_tls_cbc_bad_len(void *data);
+int test_des3_tls_cbc_empty_pt(void *data);
+int test_des3_tls_cbc_macsize_change(void *data);
+int test_des3_tls_cbc_old_version(void *data);
 #endif
 #endif
 

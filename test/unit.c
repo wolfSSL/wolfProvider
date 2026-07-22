@@ -551,6 +551,14 @@ TEST_CASE test_case[] = {
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_des3_tls_cbc_bad_pad, NULL),
         TEST_DECL(test_des3_tls_cbc_dec, NULL),
+        TEST_DECL(test_des3_tls_cbc_mte, NULL),
+        TEST_DECL(test_des3_tls_cbc_etm, NULL),
+        TEST_DECL(test_des3_tls_cbc_etm_bad_pad, NULL),
+        TEST_DECL(test_des3_tls_cbc_dup, NULL),
+        TEST_DECL(test_des3_tls_cbc_bad_len, NULL),
+        TEST_DECL(test_des3_tls_cbc_empty_pt, NULL),
+        TEST_DECL(test_des3_tls_cbc_macsize_change, NULL),
+        TEST_DECL(test_des3_tls_cbc_old_version, NULL),
     #endif
 #endif
 

@@ -436,28 +436,98 @@ int test_aes_tls_cbc_bad_pad(void *data)
 
 #define DES3_BS 8
 
-/*
- * DES3 TLS CBC negative padding test.
- * Exercises wp_ct_byte_mask_ne in the DES3 TLS constant-time padding path.
- * DES3 TLS does not use TLS_MAC_SIZE/TLS_MAC -- it only validates padding.
- */
+/* New DES3 TLS cipher ctx at tlsVer. A NULL macLen omits TLS_MAC_SIZE
+ * entirely, as an ETM/no-MAC record layer does; passing it exercises the MtE
+ * path. Returns NULL on failure. */
+static EVP_CIPHER_CTX *des3_tls_ctx(EVP_CIPHER *cipher,
+    const unsigned char *key, const unsigned char *iv, unsigned int tlsVer,
+    const size_t *macLen, int enc)
+{
+    int err = 0;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM params[3];
+    size_t macSz = 0;
+    int n = 0;
+
+    ctx = EVP_CIPHER_CTX_new();
+    err = ctx == NULL;
+
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, enc) != 1;
+    }
+    if (err == 0) {
+        params[n++] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
+                                                &tlsVer);
+        if (macLen != NULL) {
+            macSz = *macLen;
+            params[n++] = OSSL_PARAM_construct_size_t(
+                OSSL_CIPHER_PARAM_TLS_MAC_SIZE, &macSz);
+        }
+        params[n] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err != 0) {
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    return ctx;
+}
+
+/* Encrypt a TLS 1.2 record [explicit_IV][pt][mac] into buf. A NULL mac builds
+ * an ETM/no-MAC record. Returns 0 on success with encLen set. */
+static int des3_tls_record(EVP_CIPHER *cipher, const unsigned char *key,
+    const unsigned char *iv, const unsigned char *pt, size_t ptLen,
+    const unsigned char *mac, size_t macLen, unsigned char *buf, int *encLen)
+{
+    int err = 0;
+    EVP_CIPHER_CTX *ctx = NULL;
+    int inLen = DES3_BS + (int)ptLen;
+
+    ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION,
+                       mac != NULL ? &macLen : NULL, 1);
+    err = ctx == NULL;
+
+    if (err == 0) {
+        memcpy(buf, iv, DES3_BS);
+        if (ptLen > 0) {
+            memcpy(buf + DES3_BS, pt, ptLen);
+        }
+        if (mac != NULL) {
+            memcpy(buf + DES3_BS + ptLen, mac, macLen);
+            inLen += (int)macLen;
+        }
+        err = EVP_CipherUpdate(ctx, buf, encLen, buf, inLen) != 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return err;
+}
+
+/* DES3 TLS CBC bad padding: MtE (macSize>0) must return success and substitute
+ * a random MAC (padding oracle defense), so the extracted TLS_MAC must not
+ * match the original. */
 static int test_des3_tls_cbc_bad_pad_helper(OSSL_LIB_CTX *libCtx)
 {
     int err = 0;
     EVP_CIPHER *cipher = NULL;
     EVP_CIPHER_CTX *ctx = NULL;
-    OSSL_PARAM params[2];
-    unsigned int tlsVer = TLS1_2_VERSION;
+    OSSL_PARAM getParams[2];
+    int macSize = 20;
+    size_t macSz = (size_t)macSize;
     unsigned char key[24];
     unsigned char iv[DES3_BS];
-    /* 10 bytes of plaintext. Padding: off=10%8=2, pad=8-2-1=5, padded=16. */
-    unsigned char pt[10];
+    unsigned char mac[20];
+    /* 16 bytes plaintext: record is [IV(8)][pt(16)][MAC(20)] = 44, pads to 48. */
+    unsigned char pt[16];
     unsigned char buf[64];
     int encLen = 0;
     int decLen = 0;
+    unsigned char *tlsMac = NULL;
 
     memset(key, 0xAA, sizeof(key));
     memset(iv, 0xBB, sizeof(iv));
+    memset(mac, 0xCC, sizeof(mac));
     memset(pt, 0x42, sizeof(pt));
 
     cipher = EVP_CIPHER_fetch(libCtx, "DES-EDE3-CBC", "");
@@ -465,29 +535,11 @@ static int test_des3_tls_cbc_bad_pad_helper(OSSL_LIB_CTX *libCtx)
         err = 1;
     }
 
-    /* Encrypt in TLS mode. */
+    /* Encrypt a valid TLS record: [explicit_IV][plaintext][MAC]. */
     if (err == 0) {
-        ctx = EVP_CIPHER_CTX_new();
-        if (ctx == NULL) {
-            err = 1;
-        }
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), mac, sizeof(mac),
+                              buf, &encLen);
     }
-    if (err == 0) {
-        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 1) != 1;
-    }
-    if (err == 0) {
-        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
-                                              &tlsVer);
-        params[1] = OSSL_PARAM_construct_end();
-        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
-    }
-    if (err == 0) {
-        /* Copy plaintext into buf; the provider pads in-place in the output. */
-        memcpy(buf, pt, sizeof(pt));
-        err = EVP_CipherUpdate(ctx, buf, &encLen, buf, (int)sizeof(pt)) != 1;
-    }
-    EVP_CIPHER_CTX_free(ctx);
-    ctx = NULL;
 
     /* CBC bit-flip: corrupt a padding byte in the last plaintext block
      * without touching the pad-length byte at the final position. */
@@ -495,27 +547,35 @@ static int test_des3_tls_cbc_bad_pad_helper(OSSL_LIB_CTX *libCtx)
         buf[encLen - DES3_BS - 2] ^= 0x01;
     }
 
-    /* Decrypt -- should fail due to bad padding. */
+    /* Decrypt -- MtE TLS returns success but substitutes a random MAC. */
     if (err == 0) {
-        ctx = EVP_CIPHER_CTX_new();
-        if (ctx == NULL) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        if (EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1) {
+            PRINT_ERR_MSG("DES3 TLS CBC bad-pad: decryption should have "
+                          "succeeded with a randomized MAC but failed");
             err = 1;
         }
     }
+
+    /* Bad padding should have triggered random MAC substitution. */
     if (err == 0) {
-        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 0) != 1;
+        getParams[0] = OSSL_PARAM_construct_octet_ptr(
+            OSSL_CIPHER_PARAM_TLS_MAC, (void **)&tlsMac, macSize);
+        getParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_get_params(ctx, getParams) != 1;
     }
     if (err == 0) {
-        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
-                                              &tlsVer);
-        params[1] = OSSL_PARAM_construct_end();
-        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
-    }
-    if (err == 0) {
-        int ret = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen);
-        if (ret == 1) {
-            PRINT_ERR_MSG("DES3 TLS CBC bad-pad: decryption should have failed "
-                          "but succeeded");
+        if (tlsMac == NULL) {
+            PRINT_ERR_MSG("DES3 TLS CBC bad-pad: TLS_MAC must be a non-NULL "
+                          "randomized MAC");
+            err = 1;
+        }
+        else if (memcmp(tlsMac, mac, macSize) == 0) {
+            PRINT_ERR_MSG("DES3 TLS CBC bad-pad: MAC should have been "
+                          "randomized but matches original");
             err = 1;
         }
     }
@@ -544,15 +604,12 @@ int test_des3_tls_cbc_dec(void *data)
     int err = 0;
     EVP_CIPHER *cipher = NULL;
     EVP_CIPHER_CTX *ctx = NULL;
-    OSSL_PARAM params[2];
-    unsigned int tlsVer = TLS1_2_VERSION;
     unsigned char key[24];
     unsigned char iv[DES3_BS];
     /* 37 bytes: not block-aligned, so padding is non-trivial. */
     unsigned char pt[37];
     unsigned char buf[64];
     unsigned char *out = NULL;
-    int ptLen = (int)sizeof(pt);
     int encLen = 0;
     int l1 = 0;
     int l2 = 0;
@@ -573,25 +630,9 @@ int test_des3_tls_cbc_dec(void *data)
 
     /* Encrypt the record [explicit_IV][plaintext] in TLS mode. */
     if (err == 0) {
-        ctx = EVP_CIPHER_CTX_new();
-        err = ctx == NULL;
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), NULL, 0, buf,
+                              &encLen);
     }
-    if (err == 0) {
-        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 1) != 1;
-    }
-    if (err == 0) {
-        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
-                                              &tlsVer);
-        params[1] = OSSL_PARAM_construct_end();
-        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
-    }
-    if (err == 0) {
-        memcpy(buf, iv, DES3_BS);
-        memcpy(buf + DES3_BS, pt, ptLen);
-        err = EVP_CipherUpdate(ctx, buf, &encLen, buf, DES3_BS + ptLen) != 1;
-    }
-    EVP_CIPHER_CTX_free(ctx);
-    ctx = NULL;
 
     /* Output buffer sized to the produced plaintext so an overread past the
      * written region is caught under sanitizers. */
@@ -602,17 +643,8 @@ int test_des3_tls_cbc_dec(void *data)
 
     /* Decrypt in TLS mode split across two updates. */
     if (err == 0) {
-        ctx = EVP_CIPHER_CTX_new();
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, NULL, 0);
         err = ctx == NULL;
-    }
-    if (err == 0) {
-        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, 0) != 1;
-    }
-    if (err == 0) {
-        params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_TLS_VERSION,
-                                              &tlsVer);
-        params[1] = OSSL_PARAM_construct_end();
-        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
     }
     if (err == 0) {
         /* Only the second update completes the record; must succeed. */
@@ -622,6 +654,563 @@ int test_des3_tls_cbc_dec(void *data)
     }
 
     OPENSSL_free(out);
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* DES3 MtE (macSize>0) TLS 1.2 CBC decrypt of a valid record: verifies the
+ * recovered plaintext, its length, and that the extracted TLS_MAC equals the
+ * original MAC. */
+int test_des3_tls_cbc_mte(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM getParams[2];
+    int macSize = 20;
+    size_t macSz = (size_t)macSize;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    unsigned char mac[20];
+    unsigned char pt[16];
+    unsigned char buf[64];
+    unsigned char *tlsMac = NULL;
+    int encLen = 0;
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(mac, 0xCC, sizeof(mac));
+    memset(pt, 0x42, sizeof(pt));
+
+    PRINT_MSG("DES3 TLS 1.2 CBC MtE decrypt (wolfProvider)");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt a valid record: [explicit_IV][plaintext][MAC]. */
+    if (err == 0) {
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), mac, sizeof(mac),
+                              buf, &encLen);
+    }
+
+    /* Decrypt the whole record in one update; must succeed. */
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1;
+    }
+
+    /* Length excludes the explicit IV, MAC and padding. */
+    if (err == 0 && decLen != (int)sizeof(pt)) {
+        PRINT_ERR_MSG("DES3 TLS CBC MtE: unexpected plaintext length %d",
+                      decLen);
+        err = 1;
+    }
+    /* Recovered plaintext sits after the explicit IV block. */
+    if (err == 0 && memcmp(buf + DES3_BS, pt, sizeof(pt)) != 0) {
+        PRINT_ERR_MSG("DES3 TLS CBC MtE: recovered plaintext mismatch");
+        err = 1;
+    }
+
+    /* Valid padding: extracted MAC must equal the original. */
+    if (err == 0) {
+        getParams[0] = OSSL_PARAM_construct_octet_ptr(
+            OSSL_CIPHER_PARAM_TLS_MAC, (void **)&tlsMac, macSize);
+        getParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_get_params(ctx, getParams) != 1;
+    }
+    if (err == 0) {
+        if (tlsMac == NULL || memcmp(tlsMac, mac, macSize) != 0) {
+            PRINT_ERR_MSG("DES3 TLS CBC MtE: extracted MAC does not match "
+                          "original");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* DES3 ETM/no-MAC (macSize==0) TLS 1.2 CBC decrypt of a valid record in a
+ * single update: asserts the recovered payload length and content once the
+ * explicit IV is stripped and padding removed. */
+int test_des3_tls_cbc_etm(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    /* 37 bytes: not block-aligned, so padding is non-trivial. */
+    unsigned char pt[37];
+    unsigned char buf[64];
+    int ptLen = (int)sizeof(pt);
+    int encLen = 0;
+    int decLen = 0;
+    int i;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    /* Distinct bytes so a wrong recovery offset is caught, not just a length. */
+    for (i = 0; i < ptLen; i++) {
+        pt[i] = (unsigned char)(i + 1);
+    }
+
+    PRINT_MSG("DES3 TLS 1.2 CBC ETM/no-MAC decrypt (wolfProvider)");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt the record [explicit_IV][plaintext] in TLS mode with no MAC. */
+    if (err == 0) {
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), NULL, 0, buf,
+                              &encLen);
+    }
+
+    /* Decrypt the whole record in one update; must succeed. */
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, NULL, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1;
+    }
+
+    /* Length excludes the explicit IV and padding (no MAC in ETM mode). */
+    if (err == 0 && decLen != ptLen) {
+        PRINT_ERR_MSG("DES3 TLS CBC ETM: unexpected plaintext length %d",
+                      decLen);
+        err = 1;
+    }
+    /* Recovered plaintext sits after the explicit IV block. */
+    if (err == 0 && memcmp(buf + DES3_BS, pt, ptLen) != 0) {
+        PRINT_ERR_MSG("DES3 TLS CBC ETM: recovered plaintext mismatch");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* DES3 ETM/no-MAC (macSize==0) TLS 1.2 CBC decrypt with corrupted padding:
+ * unlike MtE (random-MAC substitution), no-MAC mode has no padding-oracle
+ * concern, so bad padding must make decryption fail. */
+int test_des3_tls_cbc_etm_bad_pad(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    /* 37 bytes: not block-aligned, matching the positive ETM test's record. */
+    unsigned char pt[37];
+    unsigned char buf[64];
+    int encLen = 0;
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(pt, 0x42, sizeof(pt));
+
+    PRINT_MSG("DES3 TLS 1.2 CBC ETM/no-MAC bad padding (wolfProvider)");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+
+    /* Encrypt a valid record [explicit_IV][plaintext] with no MAC. */
+    if (err == 0) {
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), NULL, 0, buf,
+                              &encLen);
+    }
+
+    /* CBC bit-flip: corrupt a padding byte in the last plaintext block
+     * without touching the pad-length byte at the final position. */
+    if (err == 0) {
+        buf[encLen - DES3_BS - 2] ^= 0x01;
+    }
+
+    /* Decrypt in ETM mode: bad padding must fail, not substitute a MAC. */
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, NULL, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        if (EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) == 1) {
+            PRINT_ERR_MSG("DES3 TLS CBC ETM bad-pad: decryption should have "
+                          "failed but succeeded");
+            err = 1;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* Copying a DES3 TLS ctx after an MtE decrypt must deep-copy the extracted
+ * MAC: a shallow copy would share one buffer and double-free on cleanup. */
+int test_des3_tls_cbc_dup(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    EVP_CIPHER_CTX *dup = NULL;
+    OSSL_PARAM getParams[2];
+    int macSize = 20;
+    size_t macSz = (size_t)macSize;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    unsigned char mac[20];
+    unsigned char pt[16];
+    unsigned char buf[64];
+    unsigned char *srcMac = NULL;
+    unsigned char *dupMac = NULL;
+    int encLen = 0;
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(mac, 0xCC, sizeof(mac));
+    memset(pt, 0x42, sizeof(pt));
+
+    PRINT_MSG("DES3 TLS 1.2 CBC ctx copy deep-copies the extracted MAC");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), mac, sizeof(mac),
+                              buf, &encLen);
+    }
+
+    /* Decrypt so the ctx holds a heap-allocated tlsmac. */
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1;
+    }
+    if (err == 0) {
+        getParams[0] = OSSL_PARAM_construct_octet_ptr(
+            OSSL_CIPHER_PARAM_TLS_MAC, (void **)&srcMac, macSize);
+        getParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_get_params(ctx, getParams) != 1;
+    }
+    if (err == 0 && (srcMac == NULL || memcmp(srcMac, mac, macSize) != 0)) {
+        PRINT_ERR_MSG("DES3 TLS CBC dup: source MAC does not match original");
+        err = 1;
+    }
+
+    /* Copy the ctx and read the MAC back out of the copy. */
+    if (err == 0) {
+        dup = EVP_CIPHER_CTX_new();
+        err = dup == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_copy(dup, ctx) != 1;
+    }
+    if (err == 0) {
+        getParams[0] = OSSL_PARAM_construct_octet_ptr(
+            OSSL_CIPHER_PARAM_TLS_MAC, (void **)&dupMac, macSize);
+        getParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_get_params(dup, getParams) != 1;
+    }
+    if (err == 0 && (dupMac == NULL || memcmp(dupMac, mac, macSize) != 0)) {
+        PRINT_ERR_MSG("DES3 TLS CBC dup: copied MAC does not match original");
+        err = 1;
+    }
+    /* A shallow copy would hand back the source's own buffer. */
+    if (err == 0 && dupMac == srcMac) {
+        PRINT_ERR_MSG("DES3 TLS CBC dup: MAC buffer shared with source");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(dup);
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* Records the decrypt must reject up front: an oversized TLS MAC size, which
+ * would otherwise overrun the internal randMac buffer, and a record too short
+ * to hold the explicit IV, MAC and pad-length byte. */
+int test_des3_tls_cbc_bad_len(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    size_t bigMacSz = (size_t)EVP_MAX_MD_SIZE + 1;
+    size_t macSz = 20;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    unsigned char buf[64];
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(buf, 0x00, sizeof(buf));
+
+    PRINT_MSG("DES3 TLS 1.2 CBC decrypt rejects an oversized MAC size");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, &bigMacSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0 && EVP_CipherUpdate(ctx, buf, &decLen, buf, 48) == 1) {
+        PRINT_ERR_MSG("DES3 TLS CBC: oversized MAC size was accepted");
+        err = 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    PRINT_MSG("DES3 TLS 1.2 CBC decrypt rejects a too-short record");
+
+    /* The sub-test above decrypted buf in place; start from a known state. */
+    memset(buf, 0x00, sizeof(buf));
+
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    /* 24 < DES3_BS + 20 + 1: too short to hold IV, MAC and pad length. */
+    if (err == 0 && EVP_CipherUpdate(ctx, buf, &decLen, buf, 24) == 1) {
+        PRINT_ERR_MSG("DES3 TLS CBC: too-short record was accepted");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* Below TLS 1.1 there is no explicit per-record IV. The decrypt strips one
+ * unconditionally, so these versions must be rejected, not silently
+ * stripped of 8 bytes of payload. */
+int test_des3_tls_cbc_old_version(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    size_t macSz = 20;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    unsigned char mac[20];
+    unsigned char pt[16];
+    unsigned char buf[64];
+    int encLen = 0;
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(mac, 0xCC, sizeof(mac));
+    memset(pt, 0x42, sizeof(pt));
+
+    PRINT_MSG("DES3 TLS CBC decrypt rejects TLS 1.0 and SSLv3");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+    /* A well-formed record; only the version makes it unacceptable. */
+    if (err == 0) {
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), mac, sizeof(mac),
+                              buf, &encLen);
+    }
+
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0 && EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) == 1) {
+        PRINT_ERR_MSG("DES3 TLS CBC: TLS 1.0 record was accepted");
+        err = 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, SSL3_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0 && EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) == 1) {
+        PRINT_ERR_MSG("DES3 TLS CBC: SSLv3 record was accepted");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* Minimal MtE record with an empty payload, [IV 8][pt 0][MAC 20]: drives the
+ * output length to 0 and the MAC start to 0, the tightest decrypt boundary. */
+int test_des3_tls_cbc_empty_pt(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM getParams[2];
+    int macSize = 20;
+    size_t macSz = (size_t)macSize;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    unsigned char mac[20];
+    unsigned char buf[64];
+    unsigned char *tlsMac = NULL;
+    int encLen = 0;
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(mac, 0xCC, sizeof(mac));
+
+    PRINT_MSG("DES3 TLS 1.2 CBC MtE decrypt of an empty payload");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = des3_tls_record(cipher, key, iv, NULL, 0, mac, sizeof(mac), buf,
+                              &encLen);
+    }
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1;
+    }
+    if (err == 0 && decLen != 0) {
+        PRINT_ERR_MSG("DES3 TLS CBC empty payload: unexpected length %d",
+                      decLen);
+        err = 1;
+    }
+    /* The MAC must still be extracted correctly with macStart at 0. */
+    if (err == 0) {
+        getParams[0] = OSSL_PARAM_construct_octet_ptr(
+            OSSL_CIPHER_PARAM_TLS_MAC, (void **)&tlsMac, macSize);
+        getParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_get_params(ctx, getParams) != 1;
+    }
+    if (err == 0 && (tlsMac == NULL || memcmp(tlsMac, mac, macSize) != 0)) {
+        PRINT_ERR_MSG("DES3 TLS CBC empty payload: extracted MAC mismatch");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+/* Growing TLS_MAC_SIZE after a decrypt must drop the stored MAC: it was sized
+ * for the old value, so readers trusting the new size would over-read it. */
+int test_des3_tls_cbc_macsize_change(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    EVP_CIPHER_CTX *dup = NULL;
+    OSSL_PARAM params[2];
+    OSSL_PARAM getParams[2];
+    size_t macSz = 20;
+    size_t bigMacSz = 48;
+    unsigned char key[24];
+    unsigned char iv[DES3_BS];
+    unsigned char mac[20];
+    unsigned char pt[16];
+    unsigned char buf[64];
+    unsigned char sentinel = 0;
+    unsigned char *tlsMac = &sentinel;
+    int encLen = 0;
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(mac, 0xCC, sizeof(mac));
+    memset(pt, 0x42, sizeof(pt));
+
+    PRINT_MSG("DES3 TLS 1.2 CBC MAC size change drops the stale MAC");
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    if (cipher == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = des3_tls_record(cipher, key, iv, pt, sizeof(pt), mac, sizeof(mac),
+                              buf, &encLen);
+    }
+
+    /* Decrypt with a 20-byte MAC size: tlsmac is a 20-byte allocation. */
+    if (err == 0) {
+        ctx = des3_tls_ctx(cipher, key, iv, TLS1_2_VERSION, &macSz, 0);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, buf, &decLen, buf, encLen) != 1;
+    }
+
+    /* Grow the MAC size; the 20-byte MAC must not survive as a 48-byte one. */
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_TLS_MAC_SIZE,
+                                                &bigMacSz);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        getParams[0] = OSSL_PARAM_construct_octet_ptr(
+            OSSL_CIPHER_PARAM_TLS_MAC, (void **)&tlsMac, 0);
+        getParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_CIPHER_CTX_get_params(ctx, getParams) != 1;
+    }
+    if (err == 0 && tlsMac != NULL) {
+        PRINT_ERR_MSG("DES3 TLS CBC: stale MAC survived a MAC size change");
+        err = 1;
+    }
+    /* Copying now must not read the new size out of the old allocation. */
+    if (err == 0) {
+        dup = EVP_CIPHER_CTX_new();
+        err = dup == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_copy(dup, ctx) != 1;
+    }
+
+    EVP_CIPHER_CTX_free(dup);
     EVP_CIPHER_CTX_free(ctx);
     EVP_CIPHER_free(cipher);
     return err;
