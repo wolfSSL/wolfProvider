@@ -330,6 +330,7 @@ int test_aes128_cts_one_block_split_init(void *data);
 #ifdef WP_HAVE_RANDOM
 
 int test_random(void *data);
+int test_drbg_parent_locking(void *data);
 
 #endif
 

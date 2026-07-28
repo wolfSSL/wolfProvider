@@ -354,6 +354,7 @@ TEST_CASE test_case[] = {
 #endif
 #ifdef WP_HAVE_RANDOM
     TEST_DECL(test_random, NULL),
+    TEST_DECL(test_drbg_parent_locking, NULL),
 #endif
     TEST_DECL(test_rand_seed, NULL),
     TEST_DECL(test_drbg_reseed, NULL),
