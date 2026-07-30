@@ -18,6 +18,7 @@ on:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
@@ -30,6 +31,7 @@ permissions:
 jobs:
   discover-versions:
     name: Resolve wolfSSL/OpenSSL matrix
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -100,6 +102,7 @@ jobs:
   pqc-kat:
     name: ${{ matrix.name }}
     needs: discover-versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-22.04
     permissions:
       contents: read
