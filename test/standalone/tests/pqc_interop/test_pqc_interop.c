@@ -70,6 +70,9 @@
 
 #include <wolfssl/wolfcrypt/wc_mlkem.h>
 #include <wolfssl/wolfcrypt/wc_mldsa.h>
+#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+#include <wolfssl/wolfcrypt/wc_slhdsa.h>
+#endif
 #include <wolfssl/wolfcrypt/random.h>
 
 #define WP_NAME "libwolfprov"
@@ -641,6 +644,177 @@ end:
 }
 
 
+#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+
+static const char* slhdsa_msg =
+    "SLH-DSA three-way interop message (FIPS 205).";
+
+/* Map a registered SLH-DSA name to its wolfCrypt parameter set. */
+static int slhdsa_name_to_param(const char* alg, enum SlhDsaParam* param)
+{
+    static const struct {
+        const char* name;
+        enum SlhDsaParam param;
+    } map[] = {
+#ifdef WOLFSSL_SLHDSA_SHA2
+        { "SLH-DSA-SHA2-128f",  SLHDSA_SHA2_128F  },
+        { "SLH-DSA-SHA2-192f",  SLHDSA_SHA2_192F  },
+#endif
+        { "SLH-DSA-SHAKE-128f", SLHDSA_SHAKE128F  },
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
+        if (strcmp(alg, map[i].name) == 0) {
+            *param = map[i].param;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static EVP_PKEY* slhdsa_wp_keygen(const char* alg)
+{
+    EVP_PKEY* k = NULL;
+    EVP_PKEY_CTX* g = EVP_PKEY_CTX_new_from_name(wp_ctx, alg, NULL);
+    if (g && EVP_PKEY_keygen_init(g) == 1) EVP_PKEY_keygen(g, &k);
+    EVP_PKEY_CTX_free(g);
+    return k;
+}
+
+/* wolfSSL-direct sign with an empty context string (FIPS 205 pure SLH-DSA). */
+static int wc_slhdsa_sign_direct(const char* alg, const unsigned char* priv,
+    size_t privLen, const unsigned char* msg, size_t msgLen,
+    unsigned char** sig, size_t* sigLen)
+{
+    SlhDsaKey key;
+    enum SlhDsaParam param;
+    int rc;
+    int sigSz;
+    word32 outLen;
+
+    if (!slhdsa_name_to_param(alg, &param)) return 0;
+    if (wc_SlhDsaKey_Init(&key, param, NULL, INVALID_DEVID) != 0) return 0;
+    rc = wc_SlhDsaKey_ImportPrivate(&key, priv, (word32)privLen);
+    if (rc != 0) { wc_SlhDsaKey_Free(&key); return 0; }
+    sigSz = wc_SlhDsaKey_SigSize(&key);
+    if (sigSz <= 0) { wc_SlhDsaKey_Free(&key); return 0; }
+    *sig = OPENSSL_malloc(sigSz);
+    if (*sig == NULL) { wc_SlhDsaKey_Free(&key); return 0; }
+    outLen = (word32)sigSz;
+    rc = wc_SlhDsaKey_Sign(&key, NULL, 0, msg, (word32)msgLen, *sig, &outLen,
+        &g_rng);
+    wc_SlhDsaKey_Free(&key);
+    if (rc != 0) { OPENSSL_free(*sig); *sig = NULL; return 0; }
+    *sigLen = outLen;
+    return 1;
+}
+
+/* wolfSSL-direct verify. */
+static int wc_slhdsa_verify_direct(const char* alg, const unsigned char* pub,
+    size_t pubLen, const unsigned char* msg, size_t msgLen,
+    const unsigned char* sig, size_t sigLen)
+{
+    SlhDsaKey key;
+    enum SlhDsaParam param;
+    int rc;
+
+    if (!slhdsa_name_to_param(alg, &param)) return 0;
+    if (wc_SlhDsaKey_Init(&key, param, NULL, INVALID_DEVID) != 0) return 0;
+    rc = wc_SlhDsaKey_ImportPublic(&key, pub, (word32)pubLen);
+    if (rc != 0) { wc_SlhDsaKey_Free(&key); return 0; }
+    rc = wc_SlhDsaKey_Verify(&key, NULL, 0, msg, (word32)msgLen, sig,
+        (word32)sigLen);
+    wc_SlhDsaKey_Free(&key);
+    return rc == 0;
+}
+
+/* wolfProvider sign -> partner verify (partner=default OR direct). */
+static int test_slhdsa_pair_wp_to(const char* alg, const char* partner)
+{
+    int ok = 0;
+    EVP_PKEY* wp_key = slhdsa_wp_keygen(alg);
+    EVP_PKEY* part_key = NULL;
+    unsigned char* pub = NULL;
+    unsigned char* priv = NULL;
+    unsigned char* sig = NULL;
+    size_t pubLen = 0, privLen = 0, sigLen = 0;
+    size_t msgLen = strlen(slhdsa_msg);
+
+    if (!wp_key) goto end;
+    if (!evp_pkey_export_raw(wp_key, &pub, &pubLen, &priv, &privLen)) goto end;
+
+    if (!evp_sign(wp_ctx, wp_key, (const unsigned char*)slhdsa_msg, msgLen,
+            &sig, &sigLen)) goto end;
+
+    if (strcmp(partner, "default") == 0) {
+        part_key = evp_pkey_import_raw(oss_ctx, alg, pub, pubLen, NULL, 0);
+        if (!part_key) goto end;
+        ok = evp_verify(oss_ctx, part_key, (const unsigned char*)slhdsa_msg,
+            msgLen, sig, sigLen);
+    }
+    else { /* direct */
+        ok = wc_slhdsa_verify_direct(alg, pub, pubLen,
+            (const unsigned char*)slhdsa_msg, msgLen, sig, sigLen);
+    }
+
+end:
+    if (!ok) ERR_print_errors_fp(stderr);
+    printf("  %-18s wolfProv sign -> %-7s vrfy: %s\n", alg, partner,
+        ok ? "PASS" : "FAIL");
+    OPENSSL_free(pub);
+    OPENSSL_clear_free(priv, privLen);
+    OPENSSL_free(sig);
+    EVP_PKEY_free(wp_key);
+    EVP_PKEY_free(part_key);
+    return ok;
+}
+
+/* partner sign -> wolfProvider verify. */
+static int test_slhdsa_pair_to_wp(const char* alg, const char* partner)
+{
+    int ok = 0;
+    EVP_PKEY* wp_key = slhdsa_wp_keygen(alg);
+    EVP_PKEY* part_key = NULL;
+    unsigned char* pub = NULL;
+    unsigned char* priv = NULL;
+    unsigned char* sig = NULL;
+    size_t pubLen = 0, privLen = 0, sigLen = 0;
+    size_t msgLen = strlen(slhdsa_msg);
+
+    if (!wp_key) goto end;
+    if (!evp_pkey_export_raw(wp_key, &pub, &pubLen, &priv, &privLen)) goto end;
+
+    if (strcmp(partner, "default") == 0) {
+        part_key = evp_pkey_import_raw(oss_ctx, alg, pub, pubLen, priv,
+            privLen);
+        if (!part_key) goto end;
+        if (!evp_sign(oss_ctx, part_key, (const unsigned char*)slhdsa_msg,
+                msgLen, &sig, &sigLen)) goto end;
+    }
+    else { /* direct */
+        if (!wc_slhdsa_sign_direct(alg, priv, privLen,
+                (const unsigned char*)slhdsa_msg, msgLen, &sig, &sigLen))
+            goto end;
+    }
+
+    ok = evp_verify(wp_ctx, wp_key, (const unsigned char*)slhdsa_msg, msgLen,
+        sig, sigLen);
+
+end:
+    if (!ok) ERR_print_errors_fp(stderr);
+    printf("  %-18s %-7s sign  -> wolfProv vrfy: %s\n", alg, partner,
+        ok ? "PASS" : "FAIL");
+    OPENSSL_free(pub);
+    OPENSSL_clear_free(priv, privLen);
+    OPENSSL_free(sig);
+    EVP_PKEY_free(wp_key);
+    EVP_PKEY_free(part_key);
+    return ok;
+}
+
+#endif /* WP_HAVE_SLHDSA && WP_HAVE_SLHDSA_PRIVATE */
+
 /*
  * TLS 1.3 group interop - drives a real handshake over an in-memory BIO pair
  * with one peer on wolfProvider's library context and the other on OpenSSL's
@@ -834,6 +1008,14 @@ int main(int argc, char* argv[])
     };
     const char* mlkem[] = { "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024" };
     const char* mldsa[] = { "ML-DSA-44", "ML-DSA-65", "ML-DSA-87" };
+#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+    const char* slhdsa[] = {
+#ifdef WOLFSSL_SLHDSA_SHA2
+        "SLH-DSA-SHA2-128f", "SLH-DSA-SHA2-192f",
+#endif
+        "SLH-DSA-SHAKE-128f"
+    };
+#endif
     const char* wp_path = ".libs";
     const char* env_path;
     size_t i;
@@ -867,6 +1049,19 @@ int main(int argc, char* argv[])
         if (!test_mldsa_pair_wp_to(mldsa[i], "direct"))  fail++;
         if (!test_mldsa_pair_to_wp(mldsa[i], "direct"))  fail++;
     }
+
+#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+    /* Only the fast ('f') parameter sets: the small ('s') variants sign
+     * orders of magnitude slower and would dominate CI runtime. */
+    printf("\nSLH-DSA three-way interop:\n");
+    printf("  (wolfProvider) <-> (OpenSSL default) and <-> (wolfSSL direct)\n");
+    for (i = 0; i < sizeof(slhdsa) / sizeof(slhdsa[0]); i++) {
+        if (!test_slhdsa_pair_wp_to(slhdsa[i], "default")) fail++;
+        if (!test_slhdsa_pair_to_wp(slhdsa[i], "default")) fail++;
+        if (!test_slhdsa_pair_wp_to(slhdsa[i], "direct"))  fail++;
+        if (!test_slhdsa_pair_to_wp(slhdsa[i], "direct"))  fail++;
+    }
+#endif
 
     printf("\nTLS 1.3 group interop (handshake over BIO pair):\n");
     printf("  (wolfProvider) <-> (OpenSSL default), both directions\n");
