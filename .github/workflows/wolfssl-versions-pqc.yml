@@ -28,6 +28,7 @@ permissions:
 jobs:
   discover-versions:
     name: Resolve wolfSSL version matrix
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -97,6 +98,7 @@ jobs:
   pqc-build-test:
     name: ${{ matrix.name }}
     needs: discover-versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-22.04
     permissions:
       contents: read
