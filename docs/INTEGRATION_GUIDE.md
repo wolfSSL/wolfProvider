@@ -30,7 +30,8 @@ This retrieves dependencies (OpenSSL and wolfSSL) and compiles them as necessary
 | `--openssl-dir=/path` | Use existing OpenSSL installation |
 | `--replace-default` | Make wolfProvider the default provider |
 | `--enable-replace-default-testing` | Enable unit testing with replace-default |
-| `--enable-pqc` | Enable ML-KEM and ML-DSA (adds `--enable-mlkem --enable-mldsa` to wolfSSL). Requires wolfSSL v5.9.2-stable or later and OpenSSL 3.6 or later. |
+| `--enable-pqc` | Enable ML-KEM, ML-DSA and SLH-DSA (adds `--enable-mlkem --enable-mldsa --enable-slhdsa` to wolfSSL). Requires wolfSSL v5.9.2-stable or later and OpenSSL 3.6 or later. |
+| `--enable-slhdsa` | Enable SLH-DSA (FIPS 205) only. |
 | `--enable-lms` | Enable verification-only LMS support. Requires wolfSSL v5.9.2-stable or later and OpenSSL 3.6 or later. |
 
 **Examples:**
@@ -84,7 +85,7 @@ sudo make install
 | `--enable-pwdbased` | PKCS#12 support |
 | `--enable-hmac-copy` | Faster repeated HMAC with same key (wolfSSL 5.7.8+) |
 | `--enable-sp=yes,asm --enable-sp-math-all` | SP Integer maths |
-| `--enable-mlkem --enable-mldsa` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL v5.9.2-stable or later). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
+| `--enable-mlkem --enable-mldsa --enable-slhdsa` | ML-KEM, ML-DSA and SLH-DSA post-quantum algorithms (wolfSSL v5.9.2-stable or later). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
 | `--enable-lms=verify-only,sha256-192,shake256` | LMS verification with the SHA-256 and SHAKE256 parameter families used by the OpenSSL vectors. `verify-only` defines `WOLFSSL_LMS_VERIFY_ONLY` so keygen and signing are not built, matching wolfProvider's verification-only surface. The `build-wolfprovider.sh --enable-lms` flag sets this automatically. |
 
 **Optional CPPFLAGS:**
@@ -178,7 +179,7 @@ ML-DSA uses pure mode with an empty context string (FIPS 204 sec 5.2, Algorithm 
 ./scripts/build-wolfprovider.sh --enable-pqc
 ```
 
-This adds `--enable-mlkem --enable-mldsa` to the wolfSSL configure step. wolfProvider auto-detects the resulting `WOLFSSL_HAVE_MLKEM` / `WOLFSSL_HAVE_MLDSA` macros via `include/wolfprovider/settings.h` (gated on `__has_include` of `<wolfssl/wolfcrypt/wc_mlkem.h>` / `<wolfssl/wolfcrypt/wc_mldsa.h>`) and registers the six PQC algorithms.
+This adds `--enable-mlkem --enable-mldsa --enable-slhdsa` to the wolfSSL configure step. wolfProvider auto-detects the resulting `WOLFSSL_HAVE_MLKEM` / `WOLFSSL_HAVE_MLDSA` / `WOLFSSL_HAVE_SLHDSA` macros via `include/wolfprovider/settings.h` (gated on `__has_include` of `<wolfssl/wolfcrypt/wc_mlkem.h>` / `<wolfssl/wolfcrypt/wc_mldsa.h>` / `<wolfssl/wolfcrypt/wc_slhdsa.h>`) and registers the PQC algorithms.
 
 LMS is enabled separately because it is a stateful signature scheme and is
 verification-only in OpenSSL 3.6. Build it with `--enable-lms`; wolfProvider

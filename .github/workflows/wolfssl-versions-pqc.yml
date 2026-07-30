@@ -70,7 +70,7 @@ jobs:
           fi
           echo "latest-stable PQC eligible: $LATEST_PQC_ELIGIBLE"
           # Each row carries the build flag (enable) and which PQC test families
-          # must result (expect: both | mlkem | mldsa | lms | none). This
+          # must result (expect: all | mlkem | mldsa | slhdsa | lms | none). This
           # exercises the combined, per-algorithm, and opt-in-absent paths.
           MATRIX=$(jq -nc \
               --arg latest "$LATEST" \
@@ -80,15 +80,17 @@ jobs:
                "wolfssl-ref":"v5.8.0-stable","enable":"","expect":"none"},
               {"name":("latest stable (" + $latest + ")"),"wolfssl-ref":$latest,
                "enable":(if $latest_pqc then "--enable-pqc" else "" end),
-               "expect":(if $latest_pqc then "both" else "none" end)},
+               "expect":(if $latest_pqc then "all" else "none" end)},
               {"name":"master (--enable-pqc)",
-               "wolfssl-ref":"master","enable":"--enable-pqc","expect":"both"},
+               "wolfssl-ref":"master","enable":"--enable-pqc","expect":"all"},
               {"name":"master (no flag, opt-in check)",
                "wolfssl-ref":"master","enable":"","expect":"none"},
               {"name":"master (--enable-mlkem only)",
                "wolfssl-ref":"master","enable":"--enable-mlkem","expect":"mlkem"},
               {"name":"master (--enable-mldsa only)",
                "wolfssl-ref":"master","enable":"--enable-mldsa","expect":"mldsa"},
+              {"name":"master (--enable-slhdsa only)",
+               "wolfssl-ref":"master","enable":"--enable-slhdsa","expect":"slhdsa"},
               {"name":"master (--enable-lms only)",
                "wolfssl-ref":"master","enable":"--enable-lms","expect":"lms"},
               {"name":"v5.9.2-stable (--enable-lms only)",
@@ -134,6 +136,17 @@ jobs:
           WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
             ./scripts/build-wolfprovider.sh ${{ matrix.enable }}
 
+      - name: Run OpenSSL provider example
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          ./examples/openssl_example
+
+      - name: Run PQC OpenSSL example (${{ matrix.expect }})
+        if: matrix.expect != 'none'
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          ./examples/pqc_openssl_example
+
       - name: Push build dependencies
         uses: ./.github/actions/oras-build-deps-push
         with:
@@ -144,23 +157,25 @@ jobs:
           wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       # Opt-in is per-algorithm: assert exactly the expected PQC test families
-      # are present (both / mlkem / mldsa / lms / none). This catches a leaked
+      # are present (all / mlkem / mldsa / slhdsa / lms / none). This catches a leaked
       # algorithm, a missing one, or PQC dragged in without a flag.
       - name: Verify PQC test presence matches opt-in (${{ matrix.expect }})
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           tests=$(./test/unit.test --list) || exit 1
-          kem=0; dsa=0; lms=0
+          kem=0; dsa=0; slh=0; lms=0
           printf '%s\n' "$tests" | grep -q 'test_mlkem_keygen' && kem=1
           printf '%s\n' "$tests" | grep -q 'test_mldsa_sign_verify' && dsa=1
+          printf '%s\n' "$tests" | grep -q 'test_slhdsa_sign_verify' && slh=1
           printf '%s\n' "$tests" | grep -q 'test_lms_import_export' && lms=1
-          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa lms=$lms"
+          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa slhdsa=$slh lms=$lms"
           case "${{ matrix.expect }}" in
-            both)  [ "$kem" = 1 ] && [ "$dsa" = 1 ] && [ "$lms" = 0 ] ;;
-            mlkem) [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$lms" = 0 ] ;;
-            mldsa) [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$lms" = 0 ] ;;
-            lms)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$lms" = 1 ] ;;
-            none)  [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$lms" = 0 ] ;;
+            all)    [ "$kem" = 1 ] && [ "$dsa" = 1 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
+            mlkem)  [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
+            mldsa)  [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
+            slhdsa) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
+            lms)    [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 1 ] ;;
+            none)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             *) false ;;
           esac || { echo "ERROR: PQC test families do not match expect=${{ matrix.expect }}"; exit 1; }
 
@@ -173,7 +188,7 @@ jobs:
         if: matrix.expect != 'none'
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
-          idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx|lms' \
+          idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx|slhdsa|lms' \
               | grep -oE '^[0-9]+')
           if [ -z "$idxs" ]; then
             echo "::error::No PQC unit tests found"
@@ -194,7 +209,7 @@ jobs:
       # to the system libcrypto/libssl (Ubuntu 22.04 ships 3.0.2, which has
       # no ML-KEM/ML-DSA in the default provider).
       - name: Three-way PQC interop validation
-        if: matrix.expect == 'both'
+        if: matrix.expect == 'all'
         run: |
           LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64" \
             ./test/pqc_interop.test

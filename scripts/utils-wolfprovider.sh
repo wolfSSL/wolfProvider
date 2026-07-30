@@ -118,6 +118,9 @@ install_wolfprov() {
     if [ "$WOLFPROV_MLDSA" = "1" ]; then
         WOLFPROV_CONFIG_OPTS+=" --enable-mldsa"
     fi
+    if [ "$WOLFPROV_SLHDSA" = "1" ]; then
+        WOLFPROV_CONFIG_OPTS+=" --enable-slhdsa"
+    fi
     if [ "$WOLFPROV_LMS" = "1" ]; then
         WOLFPROV_CONFIG_OPTS+=" --enable-lms"
     fi

@@ -33,9 +33,10 @@ show_help() {
   echo "  --debug-silent             Debug logging compiled in but silent by default. Use WOLFPROV_LOG_LEVEL and WOLFPROV_LOG_COMPONENTS env vars to enable at runtime. Requires --debug."
   echo "  --enable-seed-src          Enable SEED-SRC entropy source with /dev/urandom caching for fork-safe entropy."
   echo "                             Note: This also enables WC_RNG_SEED_CB in wolfSSL."
-  echo "  --enable-pqc               Enable both ML-KEM and ML-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)."
+  echo "  --enable-pqc               Enable ML-KEM, ML-DSA and SLH-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)."
   echo "  --enable-mlkem             Enable ML-KEM only."
   echo "  --enable-mldsa             Enable ML-DSA only."
+  echo "  --enable-slhdsa            Enable SLH-DSA only."
   echo "  --enable-lms               Enable LMS verification only (requires OpenSSL 3.6+)."
   echo "  --enable-openssl-test      Build OpenSSL with its test suite (e.g. evp_test). For CI that runs OpenSSL's own tests."
   echo ""
@@ -57,9 +58,10 @@ show_help() {
   echo "  WOLFPROV_FIPS_BASELINE     If set to 1, applies FIPS baseline patch to OpenSSL (mutually exclusive with WOLFPROV_REPLACE_DEFAULT)"
   echo "  WOLFPROV_LEAVE_SILENT      If set to 1, suppress logging of return 0 in functions where return 0 is expected behavior sometimes."
   echo "  WOLFPROV_SEED_SRC          If set to 1, enables SEED-SRC with /dev/urandom caching (also enables WC_RNG_SEED_CB in wolfSSL)"
-  echo "  WOLFPROV_PQC               If set to 1, enables both ML-KEM and ML-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)"
+  echo "  WOLFPROV_PQC               If set to 1, enables ML-KEM, ML-DSA and SLH-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)"
   echo "  WOLFPROV_MLKEM             If set to 1, enables ML-KEM only"
   echo "  WOLFPROV_MLDSA             If set to 1, enables ML-DSA only"
+  echo "  WOLFPROV_SLHDSA            If set to 1, enables SLH-DSA only"
   echo "  WOLFPROV_LMS               If set to 1, enables LMS verification only"
   echo ""
 }
@@ -159,12 +161,16 @@ for arg in "$@"; do
         --enable-pqc)
             WOLFPROV_MLKEM=1
             WOLFPROV_MLDSA=1
+            WOLFPROV_SLHDSA=1
             ;;
         --enable-mlkem)
             WOLFPROV_MLKEM=1
             ;;
         --enable-mldsa)
             WOLFPROV_MLDSA=1
+            ;;
+        --enable-slhdsa)
+            WOLFPROV_SLHDSA=1
             ;;
         --enable-lms)
             WOLFPROV_LMS=1
@@ -222,8 +228,10 @@ fi
 if [ "$WOLFPROV_PQC" = "1" ]; then
     WOLFPROV_MLKEM=1
     WOLFPROV_MLDSA=1
+    WOLFPROV_SLHDSA=1
 fi
-if [ "$WOLFPROV_MLKEM" = "1" ] || [ "$WOLFPROV_MLDSA" = "1" ]; then
+if [ "$WOLFPROV_MLKEM" = "1" ] || [ "$WOLFPROV_MLDSA" = "1" ] || \
+   [ "$WOLFPROV_SLHDSA" = "1" ]; then
     WOLFPROV_PQC=1
 fi
 
@@ -241,7 +249,7 @@ fi
 # addition: forward the per-algorithm flags through install-wolfprov.sh and
 # debian/rules (mirroring the --debug/--fips flags).
 if [ -n "$build_debian" ] && { [ "$WOLFPROV_PQC" = "1" ] || [ "$WOLFPROV_LMS" = "1" ]; }; then
-    echo "ERROR: PQC (--enable-pqc/--enable-mlkem/--enable-mldsa/--enable-lms) is not supported with --debian; the distro OpenSSL is older than the required 3.6+."
+    echo "ERROR: PQC (--enable-pqc/--enable-mlkem/--enable-mldsa/--enable-slhdsa/--enable-lms) is not supported with --debian; the distro OpenSSL is older than the required 3.6+."
     exit 1
 fi
 

@@ -78,15 +78,17 @@ Information on how to configure, build, and test wolfProvider can be found here:
 PQC is opt-in and requires wolfSSL master/v5.9.2-stable+ and OpenSSL 3.6+.
 
 * With the script: `./scripts/build-wolfprovider.sh --enable-pqc`
-  (or `--enable-mlkem` / `--enable-mldsa` for one only)
+  (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa` for one only)
 * Building wolfProvider directly: `./configure --enable-pqc`
-  (or `--enable-mlkem` / `--enable-mldsa`); build wolfSSL with the matching
-  `--enable-mlkem` / `--enable-mldsa` and link an OpenSSL 3.6+
+  (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa`); build wolfSSL
+  with the matching `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa`
+  and link an OpenSSL 3.6+
 
 Without an enable flag no PQC code is compiled, regardless of what wolfSSL enables.
 
 * ML-KEM (FIPS 203): ML-KEM-512, ML-KEM-768, ML-KEM-1024 (key encapsulation)
 * ML-DSA (FIPS 204): ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
+* SLH-DSA (FIPS 205): all 12 parameter sets, SLH-DSA-SHA2-{128,192,256}{s,f} and SLH-DSA-SHAKE-{128,192,256}{s,f} (signatures, pure mode)
 
 ### LMS (RFC 8554 / NIST SP 800-208)
 LMS verification is independently opt-in and requires wolfSSL 5.9.2-stable or
