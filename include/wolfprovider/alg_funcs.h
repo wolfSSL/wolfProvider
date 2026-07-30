@@ -185,6 +185,32 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_ML_DSA_65      "ML-DSA-65:MLDSA65:2.16.840.1.101.3.4.3.18:id-ml-dsa-65"
 #define WP_NAMES_ML_DSA_87      "ML-DSA-87:MLDSA87:2.16.840.1.101.3.4.3.19:id-ml-dsa-87"
 
+/* SLH-DSA names (NIST FIPS 205). */
+#define WP_NAMES_SLH_DSA_SHA2_128S \
+    "SLH-DSA-SHA2-128s:2.16.840.1.101.3.4.3.20:id-slh-dsa-sha2-128s"
+#define WP_NAMES_SLH_DSA_SHA2_128F \
+    "SLH-DSA-SHA2-128f:2.16.840.1.101.3.4.3.21:id-slh-dsa-sha2-128f"
+#define WP_NAMES_SLH_DSA_SHA2_192S \
+    "SLH-DSA-SHA2-192s:2.16.840.1.101.3.4.3.22:id-slh-dsa-sha2-192s"
+#define WP_NAMES_SLH_DSA_SHA2_192F \
+    "SLH-DSA-SHA2-192f:2.16.840.1.101.3.4.3.23:id-slh-dsa-sha2-192f"
+#define WP_NAMES_SLH_DSA_SHA2_256S \
+    "SLH-DSA-SHA2-256s:2.16.840.1.101.3.4.3.24:id-slh-dsa-sha2-256s"
+#define WP_NAMES_SLH_DSA_SHA2_256F \
+    "SLH-DSA-SHA2-256f:2.16.840.1.101.3.4.3.25:id-slh-dsa-sha2-256f"
+#define WP_NAMES_SLH_DSA_SHAKE_128S \
+    "SLH-DSA-SHAKE-128s:2.16.840.1.101.3.4.3.26:id-slh-dsa-shake-128s"
+#define WP_NAMES_SLH_DSA_SHAKE_128F \
+    "SLH-DSA-SHAKE-128f:2.16.840.1.101.3.4.3.27:id-slh-dsa-shake-128f"
+#define WP_NAMES_SLH_DSA_SHAKE_192S \
+    "SLH-DSA-SHAKE-192s:2.16.840.1.101.3.4.3.28:id-slh-dsa-shake-192s"
+#define WP_NAMES_SLH_DSA_SHAKE_192F \
+    "SLH-DSA-SHAKE-192f:2.16.840.1.101.3.4.3.29:id-slh-dsa-shake-192f"
+#define WP_NAMES_SLH_DSA_SHAKE_256S \
+    "SLH-DSA-SHAKE-256s:2.16.840.1.101.3.4.3.30:id-slh-dsa-shake-256s"
+#define WP_NAMES_SLH_DSA_SHAKE_256F \
+    "SLH-DSA-SHAKE-256f:2.16.840.1.101.3.4.3.31:id-slh-dsa-shake-256f"
+
 /* LMS name (NIST SP 800-208 and RFC 8554). */
 #define WP_NAMES_LMS            "LMS"
 
@@ -305,6 +331,17 @@ int wp_mldsa_get_sig_size(const wp_MlDsa* mldsa);
 int wp_mldsa_has_private(const wp_MlDsa* mldsa);
 int wp_mldsa_get_level(wp_MlDsa* mldsa);
 
+/* Internal SLH-DSA types and functions. */
+typedef struct wp_SlhDsa wp_SlhDsa;
+
+int wp_slhdsa_up_ref(wp_SlhDsa* slhdsa);
+void wp_slhdsa_free(wp_SlhDsa* slhdsa);
+void* wp_slhdsa_get_key(wp_SlhDsa* slhdsa);
+wolfSSL_Mutex* wp_slhdsa_get_mutex(wp_SlhDsa* slhdsa);
+int wp_slhdsa_get_sig_size(const wp_SlhDsa* slhdsa);
+int wp_slhdsa_get_n(const wp_SlhDsa* slhdsa);
+int wp_slhdsa_get_param(wp_SlhDsa* slhdsa);
+
 /* Internal DH types and functions. */
 typedef struct wp_Dh wp_Dh;
 
@@ -414,6 +451,7 @@ extern const OSSL_DISPATCH wp_ed448_signature_functions[];
 extern const OSSL_DISPATCH wp_hmac_signature_functions[];
 extern const OSSL_DISPATCH wp_cmac_signature_functions[];
 extern const OSSL_DISPATCH wp_mldsa_signature_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_signature_functions[];
 extern const OSSL_DISPATCH wp_lms_signature_functions[];
 
 /* Asymmetric cipher implementations. */
@@ -446,6 +484,18 @@ extern const OSSL_DISPATCH wp_mlx_p384_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mldsa44_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mldsa65_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mldsa87_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_keymgmt_functions[];
 
 /* Key exchange implementations. */
 extern const OSSL_DISPATCH wp_ecdh_keyexch_functions[];
@@ -566,6 +616,102 @@ extern const OSSL_DISPATCH wp_mldsa87_pki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_mldsa87_pki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_mldsa87_epki_der_encoder_functions[];
 extern const OSSL_DISPATCH wp_mldsa87_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128s_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_128f_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192s_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_192f_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256s_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_shake_256f_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128s_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_128f_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192s_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_192f_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256s_epki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_spki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_spki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_spki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_pki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_pki_pem_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_epki_der_encoder_functions[];
+extern const OSSL_DISPATCH wp_slhdsa_sha2_256f_epki_pem_encoder_functions[];
 
 /* Storage implementations. */
 extern const OSSL_DISPATCH wp_file_store_functions[];
