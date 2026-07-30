@@ -2705,7 +2705,7 @@ static int wp_rsa_decode_pki(wp_Rsa* rsa, unsigned char* data, word32 len)
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 
 /**
  * Decode the encrypted DER encoded RSA private key into the RSA key object.
@@ -2836,7 +2836,7 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         if (!wp_rsa_decode_pki(rsa, data, len)) {
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
             if (!wp_rsa_decode_enc_pki(rsa, data, len, pwCb, pwCbArg))
 #endif
             {
@@ -3428,7 +3428,7 @@ static int wp_rsa_encode_priv(const wp_Rsa* rsa, unsigned char* keyData,
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 /**
  * Get the Encrypted Private Key encoding size for the key.
  *
@@ -3555,13 +3555,22 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         ok = 0;
     }
 
+    /* Traditional PEM encryption is not implemented, so refuse a cipher here
+     * rather than write the private key in the clear. */
+    if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) &&
+            (ctx->cipherName != NULL) &&
+            ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+        ok = 0;
+    }
+
     if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
         if (!wp_rsa_encode_spki_size(key, &derLen)) {
             ok = 0;
         }
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
+        /* A cipher on a PrivateKeyInfo encoder selects the encrypted form. */
         if (ctx->cipherName != NULL) {
             ok = wp_rsa_encode_enc_pki_size(ctx, key, &derLen);
         }
@@ -3571,7 +3580,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             ok = 0;
         }
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         if (!wp_rsa_encode_enc_pki_size(ctx, key, &derLen)) {
             ok = 0;
@@ -3606,7 +3615,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         private = 1;
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
         if (ctx->cipherName != NULL) {
             pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
             ok = wp_rsa_encode_enc_pki(ctx, key, derData, &derLen, pwCb,
@@ -3618,7 +3627,7 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             ok = 0;
         }
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         pemType = PKCS8_ENC_PRIVATEKEY_TYPE;

@@ -2427,6 +2427,22 @@ int test_rsa_encode_epki(void* data)
     }
 
     EVP_PKEY_free(osslKey);
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo DER with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx, 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo PEM with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx, 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo PEM with cipher set: wolfProvider -> OpenSSL");
+        err = test_pki_cipher_encrypts(pkey, "PEM", "provider=libwolfprov",
+            osslLibCtx, 0);
+    }
+
     EVP_PKEY_free(pkey);
     PKCS8_PRIV_KEY_INFO_free(p8);
 

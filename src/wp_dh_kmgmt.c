@@ -2359,7 +2359,7 @@ static int wp_dh_dec_send_params(wp_Dh* dh, OSSL_CALLBACK *dataCb,
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 /**
  * Decode an encrypted PKCS#8 DER DH private key into the DH key object.
  *
@@ -2476,7 +2476,7 @@ static int wp_dh_decode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         if (!wp_dh_decode_pki(dh, data, len)) {
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
             if (!wp_dh_decode_enc_pki(dh, data, len, pwCb, pwCbArg))
 #endif
             {
@@ -2637,6 +2637,34 @@ static int wp_dh_encode_spki(const wp_Dh *dh, unsigned char* keyData,
 }
 
 /**
+ * Copy a generated private key into the inner wolfSSL key if not already set.
+ *
+ * @param [in]  dh  DH key object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_dh_sync_priv_to_key(const wp_Dh *dh)
+{
+    int ok = 1;
+    int ret;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_sync_priv_to_key");
+
+    /* If we have a generated private key that is not set in the inner key,
+     * set it now */
+    if (mp_bitsused(&dh->key.priv) == 0 && dh->priv != NULL && dh->privSz > 0) {
+        ret = wc_DhImportKeyPair((DhKey*)&dh->key, dh->priv, (word32)dh->privSz,
+            dh->pub, (word32)dh->pubSz);
+        if (ret != 0) {
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
  * Get the PKCS#8 encoding size for the key.
  *
  * @param [in]  dh      DH key object.
@@ -2652,19 +2680,13 @@ static int wp_dh_encode_pki_size(const wp_Dh *dh, size_t* keyLen)
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_encode_pki_size");
 
-    /* If we have a generated private key that is not set in the inner key,
-     * set it now */
-    if (mp_bitsused(&dh->key.priv) == 0 && dh->priv != NULL && dh->privSz > 0) {
-        ret = wc_DhImportKeyPair((DhKey*)&dh->key, dh->priv, (word32)dh->privSz,
-            dh->pub, (word32)dh->pubSz);
-        if (ret != 0) {
+    ok = wp_dh_sync_priv_to_key(dh);
+
+    if (ok) {
+        ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &len);
+        if (ret != LENGTH_ONLY_E) {
             ok = 0;
         }
-    }
-
-    ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &len);
-    if (ret != LENGTH_ONLY_E) {
-        ok = 0;
     }
     if (ok) {
         *keyLen = len;
@@ -2684,6 +2706,14 @@ static int wp_dh_encode_pki_size(const wp_Dh *dh, size_t* keyLen)
  * @return  1 on success.
  * @return  0 on failure.
  */
+/* wolfSSL calculating it wrong. */
+static void wp_dh_fix_pki_len(unsigned char* keyData, word32 len)
+{
+    if (keyData[1] == 0x81) {
+        keyData[2] = (unsigned char)(len - 3);
+    }
+}
+
 static int wp_dh_encode_pki(const wp_Dh *dh, unsigned char* keyData,
     size_t* keyLen)
 {
@@ -2699,17 +2729,14 @@ static int wp_dh_encode_pki(const wp_Dh *dh, unsigned char* keyData,
     }
     if (ok) {
         *keyLen = len;
-        /* wolfSSL calculating it wrong. */
-        if (keyData[1] == 0x81) {
-            keyData[2] = len - 3;
-        }
+        wp_dh_fix_pki_len(keyData, len);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 /**
  * Get the Encrypted PKCS#8 encoding size for the key.
  *
@@ -2728,10 +2755,14 @@ static int wp_dh_encode_epki_size(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_encode_epki_size");
 
-    /* Get the plaintext PKCS #8 length. */
-    ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &len);
-    if (ret != LENGTH_ONLY_E) {
-        ok = 0;
+    ok = wp_dh_sync_priv_to_key(dh);
+
+    if (ok) {
+        /* Get the plaintext PKCS #8 length. */
+        ret = wc_DhPrivKeyToDer((DhKey*)&dh->key, NULL, &len);
+        if (ret != LENGTH_ONLY_E) {
+            ok = 0;
+        }
     }
     if (ok) {
         /* Get the size of the PBES2 EncryptedPrivateKeyInfo encoding. */
@@ -2784,6 +2815,11 @@ static int wp_dh_encode_epki(const wp_DhEncDecCtx* ctx, const wp_Dh *dh,
         if (rc <= 0) {
             ok = 0;
         }
+    }
+    if (ok) {
+        /* Same length correction the plaintext encoder applies, so the
+         * encrypted body wraps an identical PKCS#8. */
+        wp_dh_fix_pki_len(encodedKey, pkcs8Len);
     }
     if (ok) {
         /* Encrypt as a PBES2 EncryptedPrivateKeyInfo. */
@@ -2861,11 +2897,20 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         private = 1;
+#ifdef WP_HAVE_PKCS8_ENC
+        /* A cipher on a PrivateKeyInfo encoder selects the encrypted form. */
+        if (ctx->cipherName != NULL) {
+            if (!wp_dh_encode_epki_size(ctx, key, &derLen)) {
+                ok = 0;
+            }
+        }
+        else
+#endif
         if (!wp_dh_encode_pki_size(key, &derLen)) {
             ok = 0;
         }
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         if (!wp_dh_encode_epki_size(ctx, key, &derLen)) {
@@ -2896,11 +2941,21 @@ static int wp_dh_encode(wp_DhEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         private = 1;
+#ifdef WP_HAVE_PKCS8_ENC
+        if (ctx->cipherName != NULL) {
+            pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
+            if (!wp_dh_encode_epki(ctx, key, derData, &derLen, pwCb,
+                    pwCbArg)) {
+                ok = 0;
+            }
+        }
+        else
+#endif
         if (!wp_dh_encode_pki(key, derData, &derLen)) {
             ok = 0;
         }
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         pemType = PKCS8_ENC_PRIVATEKEY_TYPE;

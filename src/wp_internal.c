@@ -925,9 +925,18 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
         if (p->data_type != OSSL_PARAM_UTF8_STRING) {
             ok = 0;
         }
-        if (ok) {
-            size_t i;
+        else if (p->data == NULL) {
+            /* OSSL_ENCODER_CTX_set_cipher(ctx, NULL, ...) asks for the
+             * unencrypted encoding, so clear rather than fail. */
+            *cipher = 0;
+            if (cipherName != NULL) {
+                *cipherName = NULL;
+            }
+        }
+        else {
+            size_t i = WP_CIPHER_NAMES_LEN;
 
+#ifdef WP_HAVE_PKCS8_ENC
             for (i = 0; i < WP_CIPHER_NAMES_LEN; i++) {
                 if ((XSTRLEN(wp_cipher_names[i].name) == p->data_size) &&
                         (XSTRNCMP(p->data, wp_cipher_names[i].name,
@@ -939,7 +948,15 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
                     break;
                 }
             }
+#endif
+            /* Unknown cipher, or a build that cannot encrypt keys at all.
+             * Clear so a previously set cipher cannot drive a later encode,
+             * and fail rather than silently write the key in the clear. */
             if (i == WP_CIPHER_NAMES_LEN) {
+                *cipher = 0;
+                if (cipherName != NULL) {
+                    *cipherName = NULL;
+                }
                 ok = 0;
             }
         }
@@ -987,6 +1004,13 @@ int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
     if (cipher == 0) {
         ok = 0;
     }
+#ifndef WP_SINGLE_THREADED
+    /* The IV is drawn from the RNG before the length-only return, so the
+     * shared RNG needs the same lock the encrypt path takes. */
+    if (ok && (wp_provctx_lock_rng(provCtx) != 1)) {
+        ok = 0;
+    }
+#endif
     if (ok) {
         /* Passing a NULL output buffer returns the required length. The _ex
          * form (wolfSSL 5.8.2+) selects the HMAC-SHA256 PBKDF2 PRF; older
@@ -1000,6 +1024,9 @@ int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
         rc = wc_EncryptPKCS8Key(fakeData, plainLen, NULL, &outSz, "", 0,
             WP_PKCS5, WP_PBES2, cipher, fakeSalt, sizeof(fakeSalt),
             WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(provCtx), NULL);
+    #endif
+    #ifndef WP_SINGLE_THREADED
+        wp_provctx_unlock_rng(provCtx);
     #endif
         if (rc != LENGTH_ONLY_E) {
             ok = 0;
@@ -1080,10 +1107,12 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
     if (ok && (passwordSz > WP_EPKI_PASSWORD_MAX)) {
         ok = 0;
     }
-    if (ok) {
     #ifndef WP_SINGLE_THREADED
-        wp_provctx_lock_rng(provCtx);
+    if (ok && (wp_provctx_lock_rng(provCtx) != 1)) {
+        ok = 0;
+    }
     #endif
+    if (ok) {
         /* Generate the PBKDF2 salt. */
         rc = wc_RNG_GenerateBlock(rng, salt, sizeof(salt));
         if (rc == 0) {
@@ -1110,7 +1139,7 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
             ok = 0;
         }
         else {
-            *outLen = (size_t)outSz;
+            *outLen = (size_t)rc;
         }
     }
 
@@ -1505,4 +1534,3 @@ word32 wp_atoc32(const byte* c) {
     return *(const word32*)c;
 #endif
 }
-

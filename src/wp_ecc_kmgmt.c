@@ -2337,7 +2337,7 @@ static int wp_ecc_dec_send_params(wp_Ecc* ecc, OSSL_CALLBACK *dataCb,
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 /**
  * Decode an encrypted PKCS#8 DER ECC private key into the ECC key object.
  *
@@ -2451,7 +2451,7 @@ static int wp_ecc_decode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         if (!wp_ecc_decode_pki(ecc, data, len)) {
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
             if (!wp_ecc_decode_enc_pki(ecc, data, len, pwCb, pwCbArg))
 #endif
             {
@@ -2795,7 +2795,7 @@ static int wp_ecc_encode_pki(const wp_Ecc *ecc, unsigned char* keyData,
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 /**
  * Get the Encrypted PKCS#8 encoding size for the key.
  *
@@ -2931,6 +2931,15 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         ok = 0;
     }
 
+    /* Traditional PEM encryption is not implemented, so refuse a cipher here
+     * rather than write the private key in the clear. */
+    if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
+               (ctx->format == WP_ENC_FORMAT_X9_62)) &&
+            (ctx->cipherName != NULL) &&
+            ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+        ok = 0;
+    }
+
     if (ok && ((ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) ||
                (ctx->format == WP_ENC_FORMAT_X9_62))) {
         if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
@@ -2957,11 +2966,20 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         private = 1;
+#ifdef WP_HAVE_PKCS8_ENC
+        /* A cipher on a PrivateKeyInfo encoder selects the encrypted form. */
+        if (ctx->cipherName != NULL) {
+            if (!wp_ecc_encode_epki_size(ctx, key, &derLen)) {
+                ok = 0;
+            }
+        }
+        else
+#endif
         if (!wp_ecc_encode_pki_size(key, &derLen)) {
             ok = 0;
         }
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         if (!wp_ecc_encode_epki_size(ctx, key, &derLen)) {
@@ -3008,11 +3026,21 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
     else if (ok && (ctx->format == WP_ENC_FORMAT_PKI)) {
         private = 1;
+#ifdef WP_HAVE_PKCS8_ENC
+        if (ctx->cipherName != NULL) {
+            pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
+            if (!wp_ecc_encode_epki(ctx, key, derData, &derLen, pwCb,
+                    pwCbArg)) {
+                ok = 0;
+            }
+        }
+        else
+#endif
         if (!wp_ecc_encode_pki(key, derData, &derLen)) {
             ok = 0;
         }
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
     else if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
         private = 1;
         pemType = PKCS8_ENC_PRIVATEKEY_TYPE;

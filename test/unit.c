@@ -328,7 +328,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_pgen_pkey, NULL),
     TEST_DECL(test_dh_pkey, NULL),
     TEST_DECL(test_dh_invalid_kdf_strings, NULL),
-#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST)
+#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST) && \
+    !defined(HAVE_FIPS)
     TEST_DECL(test_dh_encode_epki, NULL),
 #endif
     TEST_DECL(test_dh_decode, NULL),

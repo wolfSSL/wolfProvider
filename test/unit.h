@@ -50,10 +50,10 @@
     #define AES_BLOCK_SIZE 16
 #endif
 
-/* Encrypted PKCS#8 (EncryptedPrivateKeyInfo) round-trip tests require
- * encrypted-key, PKCS#8 and PBKDF support in the linked wolfSSL. */
-#if defined(WOLFSSL_ENCRYPTED_KEYS) && defined(HAVE_PKCS8) && \
-    !defined(NO_PWDBASED)
+/* Match the capability the encoders gate on. Keying this off
+ * WOLFSSL_ENCRYPTED_KEYS compiled the tests out of FIPS builds, where the
+ * encrypted-key code is still live. */
+#ifdef WP_HAVE_PKCS8_ENC
     #define WP_HAVE_EPKI_TEST
 #endif
 
@@ -316,6 +316,12 @@ int test_pkey_dec(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *msg,
     size_t msgLen, unsigned char *ciphertext, size_t cipherLen, int padMode,
     const EVP_MD *rsaMd, const EVP_MD *rsaMgf1Md);
 
+/* Key-format helpers, used by every algorithm's tests. */
+int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
+    const char* encProp, OSSL_LIB_CTX* decLibCtx, int cmpKey);
+int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
+                  const char* encProp, OSSL_LIB_CTX* decLibCtx);
+
 #ifdef WP_HAVE_RSA
 int test_pkey_enc_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
                   unsigned char *ciphertext, size_t cipherLen, int padMode,
@@ -323,8 +329,6 @@ int test_pkey_enc_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
 int test_pkey_dec_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
                   unsigned char *ciphertext, size_t cipherLen, int padMode,
                   const EVP_MD *rsaMd, const EVP_MD *rsaMgf1Md);
-int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
-                  const char* encProp, OSSL_LIB_CTX* decLibCtx);
 int test_rsa_sign_sha1(void *data);
 int test_rsa_sign_verify_pkcs1(void *data);
 int test_rsa_sign_verify_recover_pkcs1(void *data);
@@ -362,7 +366,8 @@ int test_rsa_key_integrity(void* data);
 int test_dh_pgen_pkey(void *data);
 int test_dh_pkey(void *data);
 int test_dh_invalid_kdf_strings(void *data);
-#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST)
+#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST) && \
+    !defined(HAVE_FIPS)
 int test_dh_encode_epki(void *data);
 #endif
 int test_dh_decode(void *data);

@@ -111,9 +111,11 @@ jobs:
           mkdir -p $KEY_DIR
           cd $KEY_DIR
           # Generate RSA keys for iperf tests
+          # PBKDF2 keys HMAC with the passphrase, and FIPS modules before
+          # v6.0.0 reject HMAC keys under 14 bytes, so keep this >= 14.
           openssl genrsa -out rsa_private_unprotected.pem 2048
-          openssl rsa -in rsa_private_unprotected.pem -out rsa_private.pem -aes256 -passout 'pass:password'
-          openssl rsa -in rsa_private.pem -pubout -out rsa_public.pem -passin 'pass:password'
+          openssl rsa -in rsa_private_unprotected.pem -out rsa_private.pem -aes256 -passout 'pass:wolfprov-iperf-pass'
+          openssl rsa -in rsa_private.pem -pubout -out rsa_public.pem -passin 'pass:wolfprov-iperf-pass'
           # Create a credentials file for iperf
           # Username: mario, Password: rossi
           echo "mario,bf7a49a846d44b454a5d11e7acfaf13d138bbe0b7483aa3e050879700572709b" > credentials.csv

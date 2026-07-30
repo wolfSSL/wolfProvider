@@ -320,17 +320,20 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (XMEMCMP(data, "-----BEGIN ENCRYPTED PRIVATE KEY-----", 37) == 0) {
         type = PKCS8_ENC_PRIVATEKEY_TYPE;
         dataType = NULL;
         dataFormat = "PrivateKeyInfo";
         obj = OSSL_OBJECT_PKEY;
 
+        /* The body is base64 only; the PBES2 layer is decrypted later by the
+         * EncryptedPrivateKeyInfo decoder. The callback fields exist only when
+         * wolfSSL itself was built with encrypted-key support. */
+#ifdef WOLFSSL_ENCRYPTED_KEYS
         info.passwd_cb = wp_pem_password_cb;
         info.passwd_userdata = (void*)&wpPwCb;
-    }
 #endif
+    }
     else {
         ok = 0;
     }
