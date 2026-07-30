@@ -59,6 +59,20 @@
     #define WP_HAVE_EPKI_TEST
 #endif
 
+/* slhdsa_sets[] in test_slhdsa.c carries a curated spread of parameter sets and
+ * every test indexes element 0. A build enabling only a set outside that spread
+ * would leave the array empty, so the tests are skipped instead. */
+#ifdef WOLFPROV_QUICKTEST
+    #if defined(WP_HAVE_SLH_DSA_SHA2_128F) || defined(WP_HAVE_SLH_DSA_SHAKE_128F)
+        #define WP_SLHDSA_TEST_SETS
+    #endif
+#elif defined(WP_HAVE_SLH_DSA_SHA2_128F) || defined(WP_HAVE_SLH_DSA_SHAKE_128F) || \
+      defined(WP_HAVE_SLH_DSA_SHA2_128S) || defined(WP_HAVE_SLH_DSA_SHAKE_192F) || \
+      defined(WP_HAVE_SLH_DSA_SHAKE_256F)
+    #define WP_SLHDSA_TEST_SETS
+#endif
+
+
 #ifdef TEST_MULTITHREADED
 #define PRINT_MSG(str)
 #define PRINT_ERR_MSG(str)
@@ -642,6 +656,32 @@ int test_mldsa_empty_message(void *data);
 int test_mldsa_reinit_null_key(void *data);
 int test_mldsa_encode_decode(void *data);
 int test_mldsa_x509_sign_verify(void *data);
+#endif
+
+#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
+    defined(WP_SLHDSA_TEST_SETS)
+#ifdef WP_HAVE_EPKI_TEST
+int test_slhdsa_encode_epki(void *data);
+#endif
+int test_slhdsa_keygen(void *data);
+int test_slhdsa_import_export_roundtrip(void *data);
+int test_slhdsa_sign_verify(void *data);
+int test_slhdsa_verify_tampered_sig(void *data);
+int test_slhdsa_verify_tampered_msg(void *data);
+int test_slhdsa_verify_wrong_key(void *data);
+int test_slhdsa_dup(void *data);
+int test_slhdsa_match(void *data);
+int test_slhdsa_dupctx(void *data);
+int test_slhdsa_oneshot_sign_verify(void *data);
+int test_slhdsa_get_params(void *data);
+int test_slhdsa_pubonly_sign_fails(void *data);
+int test_slhdsa_import_mismatched_pubpriv(void *data);
+int test_slhdsa_empty_message(void *data);
+int test_slhdsa_reinit_null_key(void *data);
+int test_slhdsa_encode_decode(void *data);
+int test_slhdsa_sig_params(void *data);
+int test_slhdsa_keygen_seed(void *data);
+int test_slhdsa_x509_sign_verify(void *data);
 #endif
 
 #endif /* UNIT_H */

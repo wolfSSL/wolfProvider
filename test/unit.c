@@ -629,6 +629,32 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mldsa_encode_decode, NULL),
     TEST_DECL(test_mldsa_x509_sign_verify, NULL),
 #endif
+
+#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
+    defined(WP_SLHDSA_TEST_SETS)
+    #ifdef WP_HAVE_EPKI_TEST
+    TEST_DECL(test_slhdsa_encode_epki, NULL),
+    #endif
+    TEST_DECL(test_slhdsa_keygen, NULL),
+    TEST_DECL(test_slhdsa_import_export_roundtrip, NULL),
+    TEST_DECL(test_slhdsa_sign_verify, NULL),
+    TEST_DECL(test_slhdsa_verify_tampered_sig, NULL),
+    TEST_DECL(test_slhdsa_verify_tampered_msg, NULL),
+    TEST_DECL(test_slhdsa_verify_wrong_key, NULL),
+    TEST_DECL(test_slhdsa_dup, NULL),
+    TEST_DECL(test_slhdsa_match, NULL),
+    TEST_DECL(test_slhdsa_dupctx, NULL),
+    TEST_DECL(test_slhdsa_oneshot_sign_verify, NULL),
+    TEST_DECL(test_slhdsa_get_params, NULL),
+    TEST_DECL(test_slhdsa_pubonly_sign_fails, NULL),
+    TEST_DECL(test_slhdsa_import_mismatched_pubpriv, NULL),
+    TEST_DECL(test_slhdsa_empty_message, NULL),
+    TEST_DECL(test_slhdsa_reinit_null_key, NULL),
+    TEST_DECL(test_slhdsa_encode_decode, NULL),
+    TEST_DECL(test_slhdsa_sig_params, NULL),
+    TEST_DECL(test_slhdsa_keygen_seed, NULL),
+    TEST_DECL(test_slhdsa_x509_sign_verify, NULL),
+#endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
 
