@@ -26,7 +26,35 @@
 #include <openssl/evp.h>
 #include <openssl/provider.h>
 
+#include <wolfprovider/settings.h>
+
 #define WOLFPROV_NAME "libwolfprov"
+
+#if defined(WP_HAVE_SLH_DSA_SHAKE_128F)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHAKE-128f"
+#elif defined(WP_HAVE_SLH_DSA_SHA2_128F)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHA2-128f"
+#elif defined(WP_HAVE_SLH_DSA_SHAKE_128S)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHAKE-128s"
+#elif defined(WP_HAVE_SLH_DSA_SHA2_128S)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHA2-128s"
+#elif defined(WP_HAVE_SLH_DSA_SHAKE_192F)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHAKE-192f"
+#elif defined(WP_HAVE_SLH_DSA_SHA2_192F)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHA2-192f"
+#elif defined(WP_HAVE_SLH_DSA_SHAKE_192S)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHAKE-192s"
+#elif defined(WP_HAVE_SLH_DSA_SHA2_192S)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHA2-192s"
+#elif defined(WP_HAVE_SLH_DSA_SHAKE_256F)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHAKE-256f"
+#elif defined(WP_HAVE_SLH_DSA_SHA2_256F)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHA2-256f"
+#elif defined(WP_HAVE_SLH_DSA_SHAKE_256S)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHAKE-256s"
+#elif defined(WP_HAVE_SLH_DSA_SHA2_256S)
+    #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHA2-256s"
+#endif
 
 static EVP_PKEY* generate_key(OSSL_LIB_CTX* libCtx, const char* algorithm)
 {
@@ -116,7 +144,7 @@ static int run_mlkem(OSSL_LIB_CTX* libCtx)
 }
 #endif
 
-#if defined(WOLFPROV_HAVE_MLDSA) || defined(WOLFPROV_HAVE_SLHDSA)
+#if defined(WOLFPROV_HAVE_MLDSA) || defined(EXAMPLE_SLH_DSA_NAME)
 static int run_signature(OSSL_LIB_CTX* libCtx, const char* algorithm)
 {
     static const unsigned char message[] =
@@ -207,14 +235,13 @@ int main(void)
     }
 #endif
 
-#ifdef WOLFPROV_HAVE_SLHDSA
-    if ((rc == 0) &&
-            (run_signature(libCtx, "SLH-DSA-SHA2-128f") != 0)) {
-        fprintf(stderr, "SLH-DSA-SHA2-128f signature failed\n");
+#ifdef EXAMPLE_SLH_DSA_NAME
+    if ((rc == 0) && (run_signature(libCtx, EXAMPLE_SLH_DSA_NAME) != 0)) {
+        fprintf(stderr, "%s signature failed\n", EXAMPLE_SLH_DSA_NAME);
         rc = 1;
     }
     if (rc == 0) {
-        printf("SLH-DSA-SHA2-128f signature passed\n");
+        printf("%s signature passed\n", EXAMPLE_SLH_DSA_NAME);
     }
 #endif
 

@@ -19,13 +19,13 @@
 
 EXTRA_DIST += examples/openssl_example.c examples/pqc_openssl_example.c
 
-check_PROGRAMS += examples/openssl_example
+noinst_PROGRAMS += examples/openssl_example
 examples_openssl_example_SOURCES = examples/openssl_example.c
 examples_openssl_example_LDADD = libwolfprov.la
 DISTCLEANFILES += examples/.libs/openssl_example
 
 if BUILD_PQC_EXAMPLE
-check_PROGRAMS += examples/pqc_openssl_example
+noinst_PROGRAMS += examples/pqc_openssl_example
 examples_pqc_openssl_example_SOURCES = examples/pqc_openssl_example.c
 examples_pqc_openssl_example_LDADD = libwolfprov.la
 DISTCLEANFILES += examples/.libs/pqc_openssl_example

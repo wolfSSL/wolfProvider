@@ -949,7 +949,14 @@ int test_slhdsa_reinit_null_key(void* data)
     EVP_PKEY* key = NULL;
     EVP_MD_CTX* mdctx = NULL;
     unsigned char* sig = NULL;
+    unsigned char* sig2 = NULL;
     size_t sigLen = 0;
+    size_t sig2Len = 0;
+    unsigned char entropy[32];
+    OSSL_PARAM params[5];
+    int detOn = 1;
+    int encRaw = 0;
+    size_t n;
 
     (void)data;
 
@@ -961,10 +968,21 @@ int test_slhdsa_reinit_null_key(void* data)
         err = (mdctx == NULL);
     }
     if (err == 0) {
+        n = (size_t)(slhdsa_sets[0].pubKeySize / 2);
+        XMEMSET(entropy, 0xA5, sizeof(entropy));
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_CONTEXT_STRING, (void*)"ctx-A", 5);
+        params[1] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_TEST_ENTROPY, entropy, n);
+        params[2] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_DETERMINISTIC, &detOn);
+        params[3] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, &encRaw);
+        params[4] = OSSL_PARAM_construct_end();
         err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, key,
-            NULL) != 1;
+            params) != 1;
     }
-    /* Second init with a NULL key must reuse the first key. */
+    /* Re-init must reuse the key and reset operation-specific parameters. */
     if (err == 0) {
         err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, NULL,
             NULL) != 1;
@@ -985,8 +1003,31 @@ int test_slhdsa_reinit_null_key(void* data)
         err = !slhdsa_verify_msg(key, slhdsa_test_msg, SLHDSA_TEST_MSG_LEN,
             sig, sigLen);
     }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, NULL,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdctx, NULL, &sig2Len, slhdsa_test_msg,
+            SLHDSA_TEST_MSG_LEN) != 1;
+    }
+    if (err == 0) {
+        sig2 = (unsigned char*)OPENSSL_malloc(sig2Len);
+        err = (sig2 == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdctx, sig2, &sig2Len, slhdsa_test_msg,
+            SLHDSA_TEST_MSG_LEN) != 1;
+    }
+    if (err == 0) {
+        err = (sigLen == sig2Len) && (XMEMCMP(sig, sig2, sigLen) == 0);
+        if (err) {
+            PRINT_ERR_MSG("Reinit retained deterministic signature state");
+        }
+    }
 
     OPENSSL_free(sig);
+    OPENSSL_free(sig2);
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(key);
     return err;
@@ -1136,7 +1177,7 @@ int test_slhdsa_sig_params(void* data)
     OSSL_PARAM detParams[2];
     OSSL_PARAM entParams[2];
     OSSL_PARAM rawParams[2];
-    unsigned int detOn = 1;
+    int detOn = 1;
     int encRaw = 0;
     size_t n;
 
@@ -1171,7 +1212,7 @@ int test_slhdsa_sig_params(void* data)
     /* Deterministic: same key and message must give byte-identical output. */
     if (err == 0) {
         PRINT_MSG("Deterministic signing is reproducible");
-        detParams[0] = OSSL_PARAM_construct_uint(
+        detParams[0] = OSSL_PARAM_construct_int(
             OSSL_SIGNATURE_PARAM_DETERMINISTIC, &detOn);
         detParams[1] = OSSL_PARAM_construct_end();
         err = slhdsa_sign_with(key, detParams, &sigA, &lenA);
@@ -1314,6 +1355,46 @@ int test_slhdsa_keygen_seed(void* data)
         }
     }
 
+    EVP_PKEY_free(keyA); keyA = NULL;
+    EVP_PKEY_free(keyB); keyB = NULL;
+
+    if (err == 0) {
+        PRINT_MSG("Rejected seed does not persist in keygen context");
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_SLH_DSA_SEED, NULL, seedLen);
+    }
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        EVP_PKEY** out = (i == 0) ? &keyA : &keyB;
+
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, slhdsa_sets[0].name, NULL);
+        err = (ctx == NULL);
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_CTX_set_params(ctx, params) == 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_keygen(ctx, out) != 1;
+        }
+        EVP_PKEY_CTX_free(ctx); ctx = NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_octet_string_param(keyA, OSSL_PKEY_PARAM_PUB_KEY,
+            pubA, sizeof(pubA), &pubALen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_octet_string_param(keyB, OSSL_PKEY_PARAM_PUB_KEY,
+            pubB, sizeof(pubB), &pubBLen) != 1;
+    }
+    if (err == 0) {
+        err = (pubALen == pubBLen) &&
+            (XMEMCMP(pubA, pubB, pubALen) == 0);
+        if (err) {
+            PRINT_ERR_MSG("Rejected seed produced deterministic keys");
+        }
+    }
+
     EVP_PKEY_free(keyA);
     EVP_PKEY_free(keyB);
     return err;
@@ -1427,4 +1508,4 @@ int test_slhdsa_encode_epki(void* data)
 }
 #endif /* WP_HAVE_EPKI_TEST */
 
-#endif /* WP_HAVE_SLHDSA && WP_HAVE_SLHDSA_PRIVATE */
+#endif /* WP_HAVE_SLHDSA && WP_HAVE_SLHDSA_PRIVATE && WP_SLHDSA_TEST_SETS */

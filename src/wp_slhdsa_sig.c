@@ -282,9 +282,12 @@ static int wp_slhdsa_init(wp_SlhDsaSigCtx* ctx, wp_SlhDsa* slhdsa,
         ctx->slhdsa = slhdsa;
     }
     wp_slhdsa_buf_reset(ctx);
-    /* Pure mode is the newctx default and persists across a re-init, as do the
-     * context string, deterministic flag and test entropy. Resetting the
-     * encoding here would silently change what a raw-mode caller signs. */
+    wc_ForceZero(ctx->context, sizeof(ctx->context));
+    ctx->contextLen = 0;
+    wc_ForceZero(ctx->testEntropy, sizeof(ctx->testEntropy));
+    ctx->testEntropyLen = 0;
+    ctx->deterministic = 0;
+    ctx->rawMsg = 0;
     if (!wp_slhdsa_set_ctx_params(ctx, params)) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
@@ -336,6 +339,7 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
 {
     int ok = 1;
     int rc;
+    int locked = 0;
     word32 sigSz;
     /* FIPS 205 permits an empty message; give wolfSSL a valid pointer so a
      * NULL+0 message does not become a backend-dependent NULL deref. */
@@ -391,6 +395,9 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
         if (wp_lock(wp_slhdsa_get_mutex(ctx->slhdsa)) != 1) {
             ok = 0;
         }
+        else {
+            locked = 1;
+        }
         if (ok && ctx->rawMsg) {
             /* FIPS 205 internal interface: the message already is M', so the
              * context string is part of it and must not be applied again. */
@@ -427,7 +434,7 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
             rc = wc_SlhDsaKey_Sign(key, ctx->context, (byte)ctx->contextLen,
                 m, (word32)msgLen, sig, &outLen, &ctx->rng);
         }
-        if (ok) {
+        if (locked) {
             wp_unlock(wp_slhdsa_get_mutex(ctx->slhdsa));
         }
         if (ok && (rc != 0)) {
@@ -457,6 +464,7 @@ static int wp_slhdsa_verify(wp_SlhDsaSigCtx* ctx, const unsigned char* sig,
 {
     int ok = 1;
     int rc;
+    int locked = 0;
     /* FIPS 205 permits an empty message; give wolfSSL a valid pointer. */
     unsigned char dummy = 0;
     const unsigned char* m = msg;
@@ -487,6 +495,9 @@ static int wp_slhdsa_verify(wp_SlhDsaSigCtx* ctx, const unsigned char* sig,
     if (wp_lock(wp_slhdsa_get_mutex(ctx->slhdsa)) != 1) {
         ok = 0;
     }
+    else {
+        locked = 1;
+    }
     if (ok && ctx->rawMsg) {
         rc = wc_SlhDsaKey_VerifyMsg((SlhDsaKey*)wp_slhdsa_get_key(ctx->slhdsa),
             m, (word32)msgLen, sig, (word32)sigLen);
@@ -496,7 +507,7 @@ static int wp_slhdsa_verify(wp_SlhDsaSigCtx* ctx, const unsigned char* sig,
             ctx->context, (byte)ctx->contextLen, m, (word32)msgLen, sig,
             (word32)sigLen);
     }
-    if (ok) {
+    if (locked) {
         wp_unlock(wp_slhdsa_get_mutex(ctx->slhdsa));
     }
     if (ok && (rc != 0)) {
@@ -597,8 +608,6 @@ static int wp_slhdsa_digest_verify_final(wp_SlhDsaSigCtx* ctx,
     return ok;
 }
 
-#if defined(OPENSSL_VERSION_NUMBER) && \
-    (OPENSSL_VERSION_NUMBER >= 0x30500000L)
 /* OpenSSL 3.5+ signature message API. */
 static int wp_slhdsa_message_init(wp_SlhDsaSigCtx* ctx, wp_SlhDsa* slhdsa,
     const OSSL_PARAM params[])
@@ -638,7 +647,6 @@ static int wp_slhdsa_verify_message_final(wp_SlhDsaSigCtx* ctx)
     return wp_slhdsa_digest_verify_final(ctx, ctx->verifySig,
         ctx->verifySigLen);
 }
-#endif /* OPENSSL_VERSION_NUMBER >= 0x30500000L */
 
 /* DER AlgorithmIdentifier (SEQUENCE { OID }) for each SLH-DSA parameter set.
  * FIPS 205 signature algorithms carry no parameters, so the encoding differs
@@ -821,7 +829,6 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
             }
         }
     }
-#if OPENSSL_VERSION_NUMBER >= 0x30500000L
     if (ok) {
         p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_SIGNATURE);
         if (p != NULL) {
@@ -838,7 +845,6 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
             }
         }
     }
-#endif
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -851,9 +857,7 @@ static const OSSL_PARAM* wp_slhdsa_settable_ctx_params(wp_SlhDsaSigCtx* ctx,
         OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_TEST_ENTROPY, NULL, 0),
         OSSL_PARAM_int(OSSL_SIGNATURE_PARAM_DETERMINISTIC, NULL),
         OSSL_PARAM_int(OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, NULL),
-#if OPENSSL_VERSION_NUMBER >= 0x30500000L
         OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_SIGNATURE, NULL, 0),
-#endif
         OSSL_PARAM_END
     };
     (void)ctx;
@@ -879,7 +883,6 @@ static const OSSL_PARAM* wp_slhdsa_settable_ctx_params(wp_SlhDsaSigCtx* ctx,
 #define WP_SLHDSA_SIGN_DISPATCH
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x30500000L
 #ifdef WP_HAVE_SLHDSA_PRIVATE
 #define WP_SLHDSA_SIGN_MESSAGE_DISPATCH                                        \
     { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_INIT,                                   \
@@ -898,10 +901,6 @@ static const OSSL_PARAM* wp_slhdsa_settable_ctx_params(wp_SlhDsaSigCtx* ctx,
         (DFUNC)wp_slhdsa_digest_signverify_update             },               \
     { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_FINAL,                                \
         (DFUNC)wp_slhdsa_verify_message_final                 },
-#else
-#define WP_SLHDSA_SIGN_MESSAGE_DISPATCH
-#define WP_SLHDSA_VERIFY_MESSAGE_DISPATCH
-#endif
 
 /* Dispatch table shared by all SLH-DSA parameter sets. */
 const OSSL_DISPATCH wp_slhdsa_signature_functions[] = {
