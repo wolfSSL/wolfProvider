@@ -215,6 +215,11 @@ if test "x$ENABLED_LMS" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_LMS"
 fi
 
+AM_CONDITIONAL([BUILD_PQC_EXAMPLE],
+    [test "x$ENABLED_MLKEM" = "xyes" ||
+     test "x$ENABLED_MLDSA" = "xyes" ||
+     test "x$ENABLED_SLHDSA" = "xyes"])
+
 # Set OpenSSL lib directory for installing libdefault.so
 if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then
     if test -d "$OPENSSL_INSTALL_DIR/lib64"; then
