@@ -1613,7 +1613,8 @@ static int wp_slhdsa_decode_enc_pki(wp_SlhDsaEncDecCtx* ctx, wp_SlhDsa* slhdsa,
         ok = 0;
     }
     /* Decode the recovered plaintext private key. */
-    if (ok && (ctx->decode(data, &idx, (void*)&slhdsa->key, len) != 0)) {
+    if (ok && ((ctx->decode(data, &idx, (void*)&slhdsa->key, len) != 0) ||
+            (idx != len))) {
         ok = 0;
     }
 
@@ -1673,7 +1674,7 @@ static int wp_slhdsa_decode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     }
     if (ok) {
         rc = ctx->decode(data, &idx, (void*)&slhdsa->key, len);
-        if (rc != 0) {
+        if ((rc != 0) || (idx != len)) {
 #if defined(WP_HAVE_PKCS8_ENC) && defined(WP_HAVE_SLHDSA_PRIVATE)
             /* May be an encrypted PKCS#8 key - decrypt and retry. */
             if ((ctx->format != WP_ENC_FORMAT_PKI) ||

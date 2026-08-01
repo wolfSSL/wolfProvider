@@ -835,7 +835,9 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
             unsigned char* sig = NULL;
             size_t sigLen = 0;
 
-            if (!OSSL_PARAM_get_octet_string(p, (void**)&sig, 0, &sigLen)) {
+            /* Reject malformed signatures before allocating a copy. */
+            if ((p->data_size != (size_t)wp_slhdsa_get_sig_size(ctx->slhdsa)) ||
+                    !OSSL_PARAM_get_octet_string(p, (void**)&sig, 0, &sigLen)) {
                 ok = 0;
             }
             if (ok) {
