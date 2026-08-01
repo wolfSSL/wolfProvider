@@ -1609,7 +1609,8 @@ static int wp_slhdsa_decode_enc_pki(wp_SlhDsaEncDecCtx* ctx, wp_SlhDsa* slhdsa,
         ok = 0;
     }
     /* Decrypt the PBES2 EncryptedPrivateKeyInfo in place. */
-    if (ok && (!wp_decrypt_key_pkcs8(data, &len, pwCb, pwCbArg))) {
+    if (ok && (pwCb == NULL ||
+            !wp_decrypt_key_pkcs8(data, &len, pwCb, pwCbArg))) {
         ok = 0;
     }
     /* Decode the recovered plaintext private key. */
@@ -1837,8 +1838,9 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
                 ok = 0;
             }
         }
-        if (ok && (!wp_encrypt_key_pkcs8(ctx->provCtx, ctx->cipher, derData,
-                (word32)derLen, encData, &encLen, pwCb, pwCbArg))) {
+        if (ok && ((pwCb == NULL) ||
+                !wp_encrypt_key_pkcs8(ctx->provCtx, ctx->cipher, derData,
+                    (word32)derLen, encData, &encLen, pwCb, pwCbArg))) {
             ok = 0;
         }
         if (ok) {

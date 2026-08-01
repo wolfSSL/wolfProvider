@@ -19,6 +19,8 @@
  */
 
 #include <stdio.h>
+#include <limits.h>
+#include <stdlib.h>
 
 #include <openssl/err.h>
 #include <openssl/params.h>
@@ -26,7 +28,7 @@
 
 #define WOLFPROV_NAME "libwolfprov"
 
-int main(void)
+int main(int argc, char** argv)
 {
     int rc = 0;
     const char* buildInfo = NULL;
@@ -36,6 +38,8 @@ int main(void)
         OSSL_PARAM_utf8_ptr("buildinfo", (char**)&buildInfo, 0),
         OSSL_PARAM_END
     };
+    char executable[PATH_MAX];
+    char providerPath[PATH_MAX];
 
     libCtx = OSSL_LIB_CTX_new();
     if (libCtx == NULL) {
@@ -43,7 +47,14 @@ int main(void)
     }
 
     if (rc == 0) {
-        OSSL_PROVIDER_set_default_search_path(libCtx, ".libs");
+        if ((argc < 1) || (realpath(argv[0], executable) == NULL) ||
+                (snprintf(providerPath, sizeof(providerPath), "%s/../.libs",
+                    executable) >= (int)sizeof(providerPath))) {
+            rc = 1;
+        }
+    }
+    if (rc == 0) {
+        OSSL_PROVIDER_set_default_search_path(libCtx, providerPath);
         wolfProv = OSSL_PROVIDER_load(libCtx, WOLFPROV_NAME);
         if ((wolfProv == NULL) ||
                 (OSSL_PROVIDER_get_params(wolfProv, request) != 1)) {

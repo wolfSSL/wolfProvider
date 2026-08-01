@@ -144,7 +144,8 @@ static int run_mlkem(OSSL_LIB_CTX* libCtx)
 }
 #endif
 
-#if defined(WOLFPROV_HAVE_MLDSA) || defined(EXAMPLE_SLH_DSA_NAME)
+#if defined(WOLFPROV_HAVE_MLDSA) || \
+    (defined(WOLFPROV_HAVE_SLHDSA) && defined(EXAMPLE_SLH_DSA_NAME))
 static int run_signature(OSSL_LIB_CTX* libCtx, const char* algorithm)
 {
     static const unsigned char message[] =
@@ -235,7 +236,7 @@ int main(void)
     }
 #endif
 
-#ifdef EXAMPLE_SLH_DSA_NAME
+#if defined(WOLFPROV_HAVE_SLHDSA) && defined(EXAMPLE_SLH_DSA_NAME)
     if ((rc == 0) && (run_signature(libCtx, EXAMPLE_SLH_DSA_NAME) != 0)) {
         fprintf(stderr, "%s signature failed\n", EXAMPLE_SLH_DSA_NAME);
         rc = 1;
