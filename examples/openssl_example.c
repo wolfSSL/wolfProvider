@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <limits.h>
+#include <libgen.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -41,6 +42,7 @@ int main(int argc, char** argv)
     };
     char executable[PATH_MAX];
     char providerPath[PATH_MAX];
+    char* executableDir;
 
     libCtx = OSSL_LIB_CTX_new();
     if (libCtx == NULL) {
@@ -49,14 +51,15 @@ int main(int argc, char** argv)
 
     if (rc == 0) {
         if ((argc < 1) || (realpath(argv[0], executable) == NULL) ||
+                ((executableDir = dirname(executable)) == NULL) ||
                 (snprintf(providerPath, sizeof(providerPath),
-                    "%s/../../.libs", executable) >=
+                    "%s/../../.libs", executableDir) >=
                     (int)sizeof(providerPath))) {
             rc = 1;
         }
         if ((rc == 0) && (access(providerPath, R_OK | X_OK) != 0)) {
             if (snprintf(providerPath, sizeof(providerPath), "%s/../.libs",
-                    executable) >= (int)sizeof(providerPath) ||
+                    executableDir) >= (int)sizeof(providerPath) ||
                     access(providerPath, R_OK | X_OK) != 0) {
                 rc = 1;
             }
