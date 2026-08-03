@@ -22,6 +22,7 @@
 
 #include <openssl/store.h>
 #include <openssl/decoder.h>
+#include <openssl/encoder.h>
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
 
@@ -945,6 +946,9 @@ int test_ecc_encode_epki(void *data)
     const unsigned char* op = ecc_key_der_256;
     EVP_PKEY* pkey = NULL;
     EVP_PKEY* osslKey = NULL;
+    OSSL_ENCODER_CTX* typeEctx = NULL;
+    unsigned char* typeData = NULL;
+    size_t typeLen = 0;
 
     (void)data;
 
@@ -952,6 +956,18 @@ int test_ecc_encode_epki(void *data)
     pkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
         wpLibCtx, NULL);
     err = (pkey == NULL);
+
+    if (err == 0) {
+        /* Type-specific ECC encoding must reject a cipher rather than emit
+         * an unencrypted private key. */
+        typeEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_PRIVATE_KEY,
+            "DER", "type-specific", "provider=libwolfprov");
+        err = (typeEctx == NULL) ||
+            (OSSL_ENCODER_CTX_set_cipher(typeEctx, "AES-256-CBC", NULL) != 1) ||
+            (OSSL_ENCODER_to_data(typeEctx, &typeData, &typeLen) == 1);
+    }
+    OSSL_ENCODER_CTX_free(typeEctx);
+    OPENSSL_free(typeData);
 
     if (err == 0) {
         PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> OpenSSL");
