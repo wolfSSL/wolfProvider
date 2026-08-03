@@ -888,6 +888,7 @@ typedef struct wp_cipher {
 #endif
 
 /** wolfSSL compatible cipher names and wolfSSL identifiers. */
+#ifdef WP_HAVE_PKCS8_ENC
 static const wp_cipher wp_cipher_names[] = {
     { "AES-128-CBC", AES128CBCb, "AES-128-CBC" },
     { "AES-192-CBC", AES192CBCb, "AES-192-CBC" },
@@ -900,6 +901,7 @@ static const wp_cipher wp_cipher_names[] = {
 /** Number of cipher names in table.  */
 #define WP_CIPHER_NAMES_LEN    \
     (sizeof(wp_cipher_names) / sizeof(*wp_cipher_names))
+#endif
 
 /**
  * Get the cipher based on the parameters in the array.
@@ -991,7 +993,7 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
 int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
     word32 plainLen, size_t* outLen)
 {
-#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+#ifdef WP_HAVE_PKCS8_ENC
     int ok = 1;
     int rc = 0;
     word32 outSz = 0;
@@ -1071,7 +1073,7 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
     unsigned char* out, size_t* outLen,
     OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
 {
-#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+#ifdef WP_HAVE_PKCS8_ENC
     int ok = 1;
     int rc = 0;
     word32 outSz = (word32)*outLen;
@@ -1169,7 +1171,7 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
 #endif
 }
 
-#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+#ifdef WP_HAVE_PKCS8_ENC
 /* DER encoding of the PBKDF2 OID (1.2.840.113549.1.5.12). */
 static const unsigned char wp_pbkdf2_oid[] = {
     42, 134, 72, 134, 247, 13, 1, 5, 12
@@ -1211,7 +1213,7 @@ static int wp_is_pbkdf2_encrypted(const unsigned char* data, word32 len)
 int wp_decrypt_key_pkcs8(unsigned char* data, word32* len,
     OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
 {
-#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+#ifdef WP_HAVE_PKCS8_ENC
     int ok = 1;
     int rc;
 #ifdef WOLFSSL_SMALL_STACK

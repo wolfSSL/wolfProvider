@@ -336,7 +336,7 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
     const unsigned char* pp;
     const char* pass = "wolfprov-test-pass";
     const char* badPass = "wrong-passphrase";
-    size_t passLen = strlen(pass);
+    size_t passLen = XSTRLEN(pass);
     static const char epkiHdr[] = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
 
     ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
@@ -398,7 +398,7 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
     }
     if (err == 0) {
         err = OSSL_DECODER_CTX_set_passphrase(bctx,
-            (const unsigned char*)badPass, strlen(badPass)) != 1;
+            (const unsigned char*)badPass, XSTRLEN(badPass)) != 1;
     }
     if (err == 0) {
         if ((OSSL_DECODER_from_data(bctx, &pp, &dataLen) == 1) &&
@@ -437,7 +437,7 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
     const unsigned char* pp;
     const char* pass = "wolfprov-test-pass";
     const char* badPass = "wrong-passphrase";
-    size_t passLen = strlen(pass);
+    size_t passLen = XSTRLEN(pass);
 
     /* Encode as EncryptedPrivateKeyInfo with the requested provider. */
     ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
@@ -489,7 +489,7 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
     }
     if (err == 0) {
         err = OSSL_DECODER_CTX_set_passphrase(bctx,
-            (const unsigned char*)badPass, strlen(badPass)) != 1;
+            (const unsigned char*)badPass, XSTRLEN(badPass)) != 1;
     }
     if (err == 0) {
         /* Decode is expected to fail; success with a recovered key is wrong. */
@@ -510,4 +510,3 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
 
     return err;
 }
-
