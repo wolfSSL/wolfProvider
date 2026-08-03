@@ -558,6 +558,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mlkem_keygen, NULL),
     TEST_DECL(test_mlkem_import_export_roundtrip, NULL),
     TEST_DECL(test_mlkem_encap_decap, NULL),
+    TEST_DECL(test_mlkem_mixed_null, NULL),
     TEST_DECL(test_mlkem_decap_tampered_ct, NULL),
     TEST_DECL(test_mlkem_decap_wrong_key, NULL),
     TEST_DECL(test_mlkem_dup, NULL),
