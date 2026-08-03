@@ -1433,12 +1433,18 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
  * @param [in, out] key     wolfSSL X25519 key object.
  * @param [in]      endian  Which endian the bytes are in. Unused.
  * @return  0 on success.
+ * @return  BAD_FUNC_ARG when in is NULL or inLen is not the key size.
  * @return  -ve on failure.
  */
 static int wp_x25519_import_public(const byte* in, word32 inLen,
     curve25519_key* key, int endian)
 {
     unsigned char data[CURVE25519_KEYSIZE];
+
+    /* Length must be checked before in is read below. */
+    if ((in == NULL) || (inLen != CURVE25519_KEYSIZE)) {
+        return BAD_FUNC_ARG;
+    }
 
     /* OpenSSL masks off top bit of public key. */
     if ((in[CURVE25519_KEYSIZE - 1] & 0x80) != 0x00) {

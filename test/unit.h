@@ -546,6 +546,7 @@ int test_ecx_null_init(void *data);
 int test_ecx_x25519_raw_priv_roundtrip(void *data);
 int test_ecx_x25519_get_params_stale_ret(void *data);
 int test_ecx_import_zero_priv(void *data);
+int test_ecx_import_short_pub(void *data);
 #endif /* WP_HAVE_X25519 */
 int test_ecx_dup(void *data);
 #endif
