@@ -576,6 +576,7 @@ int test_des3_tls_cbc_dec(void *data);
 int test_mlkem_keygen(void *data);
 int test_mlkem_import_export_roundtrip(void *data);
 int test_mlkem_encap_decap(void *data);
+int test_mlkem_mixed_null(void *data);
 int test_mlkem_decap_tampered_ct(void *data);
 int test_mlkem_decap_wrong_key(void *data);
 int test_mlkem_dup(void *data);

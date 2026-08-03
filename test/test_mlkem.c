@@ -53,12 +53,13 @@ static const mlkem_test_level mlkem_levels[] = {
  * @param [out] pkey  Generated EVP_PKEY (caller frees).
  * @return  0 on success, non-zero on failure.
  */
-static int wp_test_mlkem_keygen(const char* name, EVP_PKEY** pkey)
+static int wp_test_mlkem_keygen_ex(OSSL_LIB_CTX* libCtx, const char* prop,
+    const char* name, EVP_PKEY** pkey)
 {
     int err = 0;
     EVP_PKEY_CTX* ctx = NULL;
 
-    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, name, NULL);
+    ctx = EVP_PKEY_CTX_new_from_name(libCtx, name, prop);
     err = (ctx == NULL);
     if (err == 0) {
         err = EVP_PKEY_keygen_init(ctx) != 1;
@@ -68,6 +69,11 @@ static int wp_test_mlkem_keygen(const char* name, EVP_PKEY** pkey)
     }
     EVP_PKEY_CTX_free(ctx);
     return err;
+}
+
+static int wp_test_mlkem_keygen(const char* name, EVP_PKEY** pkey)
+{
+    return wp_test_mlkem_keygen_ex(wpLibCtx, NULL, name, pkey);
 }
 
 /**
@@ -330,6 +336,109 @@ int test_mlkem_encap_decap(void* data)
         EVP_PKEY_free(pkey); pkey = NULL;
     }
 
+    return err;
+}
+
+typedef struct mlkem_null_result {
+    int rc;
+    size_t ctLen;
+    size_t secretLen;
+} mlkem_null_result;
+
+static int mlkem_null_results(OSSL_LIB_CTX* libCtx, const char* prop,
+    const mlkem_test_level* level, mlkem_null_result results[3])
+{
+    int err = 0;
+    EVP_PKEY* pkey = NULL;
+    EVP_PKEY_CTX* ectx = NULL;
+    EVP_PKEY_CTX* dctx = NULL;
+    unsigned char ct[WC_ML_KEM_1024_CIPHER_TEXT_SIZE] = { 0 };
+    unsigned char secret[32] = { 0 };
+    size_t ctLen = sizeof(ct);
+    size_t secretLen = sizeof(secret);
+
+    err = wp_test_mlkem_keygen_ex(libCtx, prop, level->name, &pkey);
+    if (err == 0) {
+        ectx = EVP_PKEY_CTX_new_from_pkey(libCtx, pkey, prop);
+        err = (ectx == NULL) ||
+            (EVP_PKEY_encapsulate_init(ectx, NULL) != 1);
+    }
+    if (err == 0) {
+        results[0].rc = EVP_PKEY_encapsulate(ectx, NULL, &ctLen, secret,
+            &secretLen);
+        results[0].ctLen = ctLen;
+        results[0].secretLen = secretLen;
+        ctLen = sizeof(ct);
+        secretLen = sizeof(secret);
+        results[1].rc = EVP_PKEY_encapsulate(ectx, ct, &ctLen, NULL,
+            &secretLen);
+        results[1].ctLen = ctLen;
+        results[1].secretLen = secretLen;
+    }
+    if (err == 0) {
+        dctx = EVP_PKEY_CTX_new_from_pkey(libCtx, pkey, prop);
+        err = (dctx == NULL) ||
+            (EVP_PKEY_decapsulate_init(dctx, NULL) != 1);
+    }
+    if (err == 0) {
+        ctLen = level->ctSize;
+        secretLen = sizeof(secret);
+        results[2].rc = EVP_PKEY_decapsulate(dctx, secret, &secretLen, NULL,
+            ctLen);
+        results[2].ctLen = ctLen;
+        results[2].secretLen = secretLen;
+    }
+
+    EVP_PKEY_CTX_free(ectx);
+    EVP_PKEY_CTX_free(dctx);
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
+/* Compare wolfProvider NULL handling directly with the OpenSSL provider. */
+int test_mlkem_mixed_null(void* data)
+{
+    int err = 0;
+    size_t i;
+
+    (void)data;
+    for (i = 0; (err == 0) && (i < MLKEM_LEVEL_COUNT); i++) {
+        mlkem_null_result osslResults[3] = { { 0 } };
+        mlkem_null_result wpResults[3] = { { 0 } };
+        size_t j;
+
+        PRINT_MSG("Mixed-NULL A/B %s", mlkem_levels[i].name);
+        err = mlkem_null_results(osslLibCtx, "provider=default",
+            &mlkem_levels[i], osslResults);
+        if (err == 0) {
+            err = mlkem_null_results(wpLibCtx, NULL, &mlkem_levels[i],
+                wpResults);
+        }
+        if (err == 0 && ((osslResults[0].rc != 1) ||
+                (osslResults[1].rc != 0) || (osslResults[2].rc != 0))) {
+            PRINT_ERR_MSG("Unexpected OpenSSL NULL handling: %d, %d, %d",
+                osslResults[0].rc, osslResults[1].rc, osslResults[2].rc);
+            err = 1;
+        }
+        if (err == 0 && ((osslResults[0].ctLen != mlkem_levels[i].ctSize) ||
+                (osslResults[0].secretLen != 32))) {
+            PRINT_ERR_MSG("Unexpected OpenSSL size query: ct=%zu, secret=%zu",
+                osslResults[0].ctLen, osslResults[0].secretLen);
+            err = 1;
+        }
+        for (j = 0; (err == 0) && (j < 3); j++) {
+            if ((osslResults[j].rc != wpResults[j].rc) ||
+                    (osslResults[j].ctLen != wpResults[j].ctLen) ||
+                    (osslResults[j].secretLen != wpResults[j].secretLen)) {
+                PRINT_ERR_MSG("wolfProvider differs from OpenSSL call %zu: "
+                    "rc=%d/%d, ct=%zu/%zu, secret=%zu/%zu", j,
+                    wpResults[j].rc, osslResults[j].rc,
+                    wpResults[j].ctLen, osslResults[j].ctLen,
+                    wpResults[j].secretLen, osslResults[j].secretLen);
+                err = 1;
+            }
+        }
+    }
     return err;
 }
 

@@ -211,9 +211,9 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
     ctSize = wp_mlkem_data_ct_size(data);
     ssSize = WP_MLKEM_SS_SIZE;
 
-    /* Size-only query: both output buffers NULL. A mixed-NULL request (one
-     * buffer NULL, the other not) is a caller bug, not a size query. */
-    if ((out == NULL) && (secret == NULL)) {
+    /* OpenSSL permits a size query with no ciphertext output buffer while
+     * the caller supplies the shared-secret buffer. */
+    if (out == NULL) {
         if (outLen != NULL) {
             *outLen = ctSize;
         }
@@ -223,8 +223,7 @@ static int wp_mlkem_kem_encapsulate(wp_MlKemCtx* ctx, unsigned char* out,
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
         return 1;
     }
-    if ((out == NULL) || (secret == NULL) || (outLen == NULL) ||
-            (secretLen == NULL)) {
+    if ((secret == NULL) || (outLen == NULL) || (secretLen == NULL)) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }

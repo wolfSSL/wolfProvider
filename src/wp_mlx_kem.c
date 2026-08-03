@@ -279,7 +279,7 @@ static int wp_mlx_kem_encapsulate(wp_MlxCtx* ctx, unsigned char* out,
     ctSize = (size_t)data->mlkemCtSize + data->classicalPubSize;
     ssSize = (size_t)WP_MLKEM_SS_SIZE + data->classicalShSecSize;
 
-    if ((out == NULL) && (secret == NULL)) {
+    if (out == NULL) {
         if (outLen != NULL) {
             *outLen = ctSize;
         }
@@ -288,8 +288,7 @@ static int wp_mlx_kem_encapsulate(wp_MlxCtx* ctx, unsigned char* out,
         }
         return 1;
     }
-    if ((out == NULL) || (secret == NULL) || (outLen == NULL) ||
-            (secretLen == NULL)) {
+    if ((secret == NULL) || (outLen == NULL) || (secretLen == NULL)) {
         return 0;
     }
     if ((*outLen < ctSize) || (*secretLen < ssSize)) {
