@@ -328,6 +328,7 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
     EVP_PKEY* pkey2 = NULL;
     EVP_PKEY* badKey = NULL;
     OSSL_ENCODER_CTX* ectx = NULL;
+    OSSL_ENCODER_CTX* badEctx = NULL;
     OSSL_DECODER_CTX* dctx = NULL;
     OSSL_DECODER_CTX* bctx = NULL;
     unsigned char* data = NULL;
@@ -342,6 +343,16 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
     ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
         "PrivateKeyInfo", encProp);
     err = (ectx == NULL);
+    if (err == 0) {
+        /* Unsupported ciphers must be rejected instead of falling back to
+         * plaintext output. */
+        badEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
+            "PrivateKeyInfo", encProp);
+        err = (badEctx == NULL) ||
+            (OSSL_ENCODER_CTX_set_cipher(badEctx, "unsupported-cipher",
+                NULL) == 1);
+    }
+    OSSL_ENCODER_CTX_free(badEctx);
     if (err == 0) {
         err = OSSL_ENCODER_CTX_set_cipher(ectx, "AES-256-CBC", NULL) != 1;
     }
