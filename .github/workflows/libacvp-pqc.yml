@@ -155,10 +155,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: aidangarske/osp
-          # Pin the OSP patch set so this integration remains reproducible.
-          # Update this commit when the patch is accepted upstream or a new
-          # libacvp OSP release is published.
-          ref: ccd4a7956c530ef7630c91838face94cc2571aa5
+          # TODO: switch to the upstream wolfSSL/osp ref when PR #351 merges.
+          ref: add-libacvp-pqc-tests
           path: osp
           fetch-depth: 1
 
