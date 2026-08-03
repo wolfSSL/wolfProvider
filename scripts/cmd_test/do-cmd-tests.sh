@@ -33,6 +33,7 @@ RUN_AES=0
 RUN_RSA=0
 RUN_ECC=0
 RUN_REQ=0
+RUN_PKCS8=0
 RUN_ALL=1
 
 show_help() {
@@ -50,6 +51,7 @@ TESTS (if none specified, all tests run):
     rsa                 Run RSA key generation test
     ecc                 Run ECC key generation test
     req                 Run certificate request test
+    pkcs8               Run PKCS#8 encryption command test
 
 ENVIRONMENT VARIABLES:
     OPENSSL_BIN              Path to OpenSSL binary (auto-detected with which(openssl) if not set)
@@ -92,6 +94,11 @@ while [[ $# -gt 0 ]]; do
             RUN_ALL=0
             shift
             ;;
+        pkcs8)
+            RUN_PKCS8=1
+            RUN_ALL=0
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Use --help for usage information"
@@ -107,6 +114,7 @@ if [ $RUN_ALL -eq 1 ]; then
     RUN_RSA=1
     RUN_ECC=1
     RUN_REQ=1
+    RUN_PKCS8=1
 fi
 
 source "${CMD_TEST_DIR}/cmd-test-common.sh"
@@ -168,6 +176,7 @@ AES_RESULT=0
 RSA_RESULT=0
 ECC_RESULT=0
 REQ_RESULT=0
+PKCS8_RESULT=0
 
 # Run the hash comparison test
 if [ $RUN_HASH -eq 1 ]; then
@@ -204,6 +213,12 @@ if [ $RUN_REQ -eq 1 ]; then
     REQ_RESULT=$?
 fi
 
+if [ $RUN_PKCS8 -eq 1 ]; then
+    echo -e "\n=== Running PKCS#8 Command Test ==="
+    "${REPO_ROOT}/scripts/cmd_test/pkcs8-cmd-test.sh"
+    PKCS8_RESULT=$?
+fi
+
 # Check results
 ALL_PASSED=1
 if [ $RUN_HASH -eq 1 ] && [ $HASH_RESULT -ne 0 ]; then
@@ -219,6 +234,9 @@ if [ $RUN_ECC -eq 1 ] && [ $ECC_RESULT -ne 0 ]; then
     ALL_PASSED=0
 fi
 if [ $RUN_REQ -eq 1 ] && [ $REQ_RESULT -ne 0 ]; then
+    ALL_PASSED=0
+fi
+if [ $RUN_PKCS8 -eq 1 ] && [ $PKCS8_RESULT -ne 0 ]; then
     ALL_PASSED=0
 fi
 
@@ -255,6 +273,9 @@ if [ $RUN_ECC -eq 1 ]; then
 fi
 if [ $RUN_REQ -eq 1 ]; then
     echo "REQ Test Result: $REQ_RESULT (0=success)"
+fi
+if [ $RUN_PKCS8 -eq 1 ]; then
+    echo "PKCS#8 Test Result: $PKCS8_RESULT (0=success)"
 fi
 
 exit $((1 - ALL_PASSED))
