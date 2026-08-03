@@ -960,7 +960,7 @@ int test_ecc_encode_epki(void *data)
     if (err == 0) {
         /* Type-specific ECC encoding must reject a cipher rather than emit
          * an unencrypted private key. */
-        typeEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_PRIVATE_KEY,
+        typeEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR,
             "DER", "type-specific", "provider=libwolfprov");
         err = (typeEctx == NULL) ||
             (OSSL_ENCODER_CTX_set_cipher(typeEctx, "AES-256-CBC", NULL) != 1) ||
