@@ -2664,6 +2664,14 @@ static int wp_dh_sync_priv_to_key(const wp_Dh *dh)
     return ok;
 }
 
+/* wolfSSL calculating it wrong. */
+static void wp_dh_fix_pki_len(unsigned char* keyData, word32 len)
+{
+    if (keyData[1] == 0x81) {
+        keyData[2] = (unsigned char)(len - 3);
+    }
+}
+
 /**
  * Get the PKCS#8 encoding size for the key.
  *
@@ -2706,14 +2714,6 @@ static int wp_dh_encode_pki_size(const wp_Dh *dh, size_t* keyLen)
  * @return  1 on success.
  * @return  0 on failure.
  */
-/* wolfSSL calculating it wrong. */
-static void wp_dh_fix_pki_len(unsigned char* keyData, word32 len)
-{
-    if (keyData[1] == 0x81) {
-        keyData[2] = (unsigned char)(len - 3);
-    }
-}
-
 static int wp_dh_encode_pki(const wp_Dh *dh, unsigned char* keyData,
     size_t* keyLen)
 {
