@@ -81,8 +81,9 @@ PQC is opt-in and requires wolfSSL master/v5.9.2-stable+ and OpenSSL 3.6+.
   (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa` for one only)
 * Building wolfProvider directly: `./configure --enable-pqc`
   (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa`); build wolfSSL
-  with the matching `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa`
-  and link an OpenSSL 3.6+
+  with the matching `--enable-mlkem` / `--enable-mldsa`. For all 12 SLH-DSA
+  parameter sets, configure wolfSSL with `--enable-slhdsa=yes,sha2`; plain
+  `--enable-slhdsa` enables only the SHAKE family. Link an OpenSSL 3.6+.
 
 Without an enable flag no PQC code is compiled, regardless of what wolfSSL enables.
 

@@ -62,9 +62,11 @@ fi
 if [ "$WOLFPROV_MLDSA" = "1" ]; then
     WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-mldsa"
 fi
-# 'yes,sha2' selects all 12 FIPS 205 parameter sets; plain 'yes' is SHAKE only.
+# 'yes,sha2' selects all 12 FIPS 205 parameter sets; callers may add profiles
+# such as verify-only while retaining the same parameter-set coverage.
 if [ "$WOLFPROV_SLHDSA" = "1" ]; then
-    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-slhdsa=yes,sha2"
+    WOLFSSL_SLHDSA_CONFIG=${WOLFSSL_SLHDSA_CONFIG:-yes,sha2}
+    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-slhdsa=${WOLFSSL_SLHDSA_CONFIG}"
 fi
 if [ "$WOLFPROV_LMS" = "1" ]; then
     # wolfProvider exposes LMS verification only; build wolfSSL without keygen

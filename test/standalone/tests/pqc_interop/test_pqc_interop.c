@@ -656,11 +656,15 @@ static int slhdsa_name_to_param(const char* alg, enum SlhDsaParam* param)
         const char* name;
         enum SlhDsaParam param;
     } map[] = {
-#ifdef WOLFSSL_SLHDSA_SHA2
+#ifdef WP_HAVE_SLH_DSA_SHA2_128F
         { "SLH-DSA-SHA2-128f",  SLHDSA_SHA2_128F  },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHA2_192F
         { "SLH-DSA-SHA2-192f",  SLHDSA_SHA2_192F  },
 #endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_128F
         { "SLH-DSA-SHAKE-128f", SLHDSA_SHAKE128F  },
+#endif
     };
     size_t i;
 
@@ -1010,10 +1014,15 @@ int main(int argc, char* argv[])
     const char* mldsa[] = { "ML-DSA-44", "ML-DSA-65", "ML-DSA-87" };
 #if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
     const char* slhdsa[] = {
-#ifdef WOLFSSL_SLHDSA_SHA2
-        "SLH-DSA-SHA2-128f", "SLH-DSA-SHA2-192f",
+#ifdef WP_HAVE_SLH_DSA_SHA2_128F
+        "SLH-DSA-SHA2-128f",
 #endif
-        "SLH-DSA-SHAKE-128f"
+#ifdef WP_HAVE_SLH_DSA_SHA2_192F
+        "SLH-DSA-SHA2-192f",
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_128F
+        "SLH-DSA-SHAKE-128f",
+#endif
     };
 #endif
     const char* wp_path = ".libs";

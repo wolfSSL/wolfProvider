@@ -282,6 +282,9 @@ static int wp_slhdsa_init(wp_SlhDsaSigCtx* ctx, wp_SlhDsa* slhdsa,
         ctx->slhdsa = slhdsa;
     }
     wp_slhdsa_buf_reset(ctx);
+    OPENSSL_free(ctx->verifySig);
+    ctx->verifySig = NULL;
+    ctx->verifySigLen = 0;
     wc_ForceZero(ctx->context, sizeof(ctx->context));
     ctx->contextLen = 0;
     wc_ForceZero(ctx->testEntropy, sizeof(ctx->testEntropy));
@@ -377,8 +380,7 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
     }
     /* wolfSSL's SLH-DSA API takes a 32-bit message length. Reject >4 GiB
      * messages explicitly rather than silently truncating. */
-    if (ok && ((!WP_FITS_WORD32(msgLen)) ||
-            (msgLen > WP_SLHDSA_BUF_MAX))) {
+    if (ok && (!WP_FITS_WORD32(msgLen))) {
         ok = 0;
     }
     /* Test entropy is sized against the key it was set for, and a re-init can
@@ -484,8 +486,7 @@ static int wp_slhdsa_verify(wp_SlhDsaSigCtx* ctx, const unsigned char* sig,
     }
     /* wolfSSL's SLH-DSA API takes 32-bit lengths. Reject oversize inputs
      * explicitly rather than silently truncating. */
-    if ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(msgLen)) ||
-            (msgLen > WP_SLHDSA_BUF_MAX)) {
+    if ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(msgLen))) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
     }
@@ -631,11 +632,6 @@ static int wp_slhdsa_sign_message_final(wp_SlhDsaSigCtx* ctx,
 static int wp_slhdsa_verify_message_init(wp_SlhDsaSigCtx* ctx,
     wp_SlhDsa* slhdsa, const OSSL_PARAM params[])
 {
-    if (ctx != NULL) {
-        OPENSSL_free(ctx->verifySig);
-        ctx->verifySig = NULL;
-        ctx->verifySigLen = 0;
-    }
     return wp_slhdsa_message_init(ctx, slhdsa, params);
 }
 
@@ -793,6 +789,9 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
             }
             if (ok) {
                 ctx->testEntropyLen = len;
+            }
+            else {
+                wc_ForceZero(ctx->testEntropy, sizeof(ctx->testEntropy));
             }
         }
     }

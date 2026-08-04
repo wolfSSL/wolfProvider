@@ -94,7 +94,10 @@ jobs:
               {"name":"master (--enable-lms only)",
                "wolfssl-ref":"master","enable":"--enable-lms","expect":"lms"},
               {"name":"v5.9.2-stable (--enable-lms only)",
-               "wolfssl-ref":"v5.9.2-stable","enable":"--enable-lms","expect":"lms"}
+               "wolfssl-ref":"v5.9.2-stable","enable":"--enable-lms","expect":"lms"},
+              {"name":"master (SLH-DSA verify-only)",
+               "wolfssl-ref":"master","enable":"--enable-slhdsa",
+               "slh-config":"yes,sha2,verify-only","expect":"slhdsa-verify"}
             ]
           }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -127,13 +130,14 @@ jobs:
           variant: ${{ matrix.expect == 'lms' && 'pqc-lms' || 'pqc' }}
           openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
           wolfssl_ref: ${{ matrix.wolfssl-ref }}
-          extra_key: ${{ matrix.enable }}
+          extra_key: ${{ matrix.enable }}-${{ matrix.slh-config }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wolfProvider (${{ matrix.enable || 'no PQC flag' }})
         run: |
           OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
           WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
+          WOLFSSL_SLHDSA_CONFIG=${{ matrix.slh-config || 'yes,sha2' }} \
             ./scripts/build-wolfprovider.sh ${{ matrix.enable }}
 
       - name: Run OpenSSL provider example
@@ -142,7 +146,7 @@ jobs:
           ./examples/openssl_example
 
       - name: Run PQC OpenSSL example (${{ matrix.expect }})
-        if: matrix.expect != 'none'
+        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify'
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           ./examples/pqc_openssl_example
@@ -174,6 +178,7 @@ jobs:
             mlkem)  [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             mldsa)  [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             slhdsa) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
+            slhdsa-verify) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             lms)    [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 1 ] ;;
             none)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             *) false ;;
@@ -185,7 +190,7 @@ jobs:
       # many PQC tests are registered. LD_LIBRARY_PATH carries libwolfprov's
       # deps; the provider module itself is found via the default .libs dir.
       - name: Run PQC unit tests
-        if: matrix.expect != 'none'
+        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify'
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx|slhdsa|lms' \
@@ -198,6 +203,15 @@ jobs:
             echo "== PQC unit test $i =="
             ./test/unit.test "$i" || exit 1
           done
+
+      - name: Run SLH-DSA verify-only KAT
+        if: matrix.expect == 'slhdsa-verify'
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          export OPENSSL_MODULES="$(pwd)/.libs"
+          test -x ./openssl-source/test/evp_test
+          ./openssl-source/test/evp_test -config ./provider.conf \
+            ./openssl-source/test/recipes/30-test_evp_data/evppkey_slh_dsa_sigver.txt
 
       # Three-way interop: wolfProvider <-> OpenSSL default <-> wolfSSL direct.
       # Only runs on PQC-enabled rows; the latest OpenSSL (3.6+, the PQC floor)

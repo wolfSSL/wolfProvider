@@ -645,6 +645,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_slhdsa_match, NULL),
     TEST_DECL(test_slhdsa_dupctx, NULL),
     TEST_DECL(test_slhdsa_oneshot_sign_verify, NULL),
+    TEST_DECL(test_slhdsa_message_api, NULL),
+    TEST_DECL(test_slhdsa_reject_digest, NULL),
     TEST_DECL(test_slhdsa_get_params, NULL),
     TEST_DECL(test_slhdsa_pubonly_sign_fails, NULL),
     TEST_DECL(test_slhdsa_import_mismatched_pubpriv, NULL),

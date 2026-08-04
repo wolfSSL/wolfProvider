@@ -384,6 +384,8 @@ void wp_slhdsa_free(wp_SlhDsa* slhdsa)
         }
         else {
             /* Cannot safely decrement without the lock; keep the object. */
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                "wc_LockMutex", rc);
             cnt = 1;
         }
     #else
@@ -458,9 +460,6 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
                 ok = 0;
             }
         }
-        if (ok) {
-            dst->hasPub = 1;
-        }
         OPENSSL_free(pubBuf);
         pubBuf = NULL;
     }
@@ -486,9 +485,6 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
                 ok = 0;
             }
         }
-        if (ok) {
-            dst->hasPriv = 1;
-        }
         /* Zero the full allocation, not just the (possibly-truncated) out len. */
         OPENSSL_clear_free(privBuf, privAllocLen);
     }
@@ -507,6 +503,10 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
         wp_slhdsa_free(dst);
         return NULL;
     }
+    dst->hasPub =
+        ((dst->key.flags & WC_SLHDSA_FLAG_PUBLIC) != 0) ? 1 : 0;
+    dst->hasPriv =
+        ((dst->key.flags & WC_SLHDSA_FLAG_PRIVATE) != 0) ? 1 : 0;
     return dst;
 }
 
@@ -711,6 +711,45 @@ static int wp_slhdsa_match(const wp_SlhDsa* a, const wp_SlhDsa* b,
     return ok;
 }
 
+/* Validate that the selected SLH-DSA components are present and consistent. */
+static int wp_slhdsa_validate(const wp_SlhDsa* slhdsa, int selection,
+    int checkType)
+{
+    int ok;
+    int locked = 0;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_slhdsa_validate");
+
+    (void)checkType;
+
+    ok = wolfssl_prov_is_running() && (slhdsa != NULL) &&
+        ((selection & WP_SLHDSA_POSSIBLE_SELECTIONS) != 0);
+    if (ok && (wp_lock(wp_slhdsa_get_mutex((wp_SlhDsa*)slhdsa)) != 1)) {
+        ok = 0;
+    }
+    else if (ok) {
+        locked = 1;
+    }
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+        ok = slhdsa->hasPub;
+    }
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+        ok = slhdsa->hasPriv;
+    }
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) ==
+            OSSL_KEYMGMT_SELECT_KEYPAIR)) {
+        ok = wc_SlhDsaKey_CheckKey((SlhDsaKey*)&slhdsa->key) == 0;
+    }
+#endif
+    if (locked) {
+        wp_unlock(wp_slhdsa_get_mutex((wp_SlhDsa*)slhdsa));
+    }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
 /**
  * Import an SLH-DSA key from parameters.
  *
@@ -805,8 +844,16 @@ static int wp_slhdsa_import(wp_SlhDsa* slhdsa, int selection,
         }
     }
 #endif
-    if (!ok && (slhdsa != NULL)) {
-        /* Clear flags on failure so partial-init state is not advertised. */
+    if (ok && (slhdsa != NULL)) {
+        /* Derive availability from wolfSSL because an imported private key
+         * embeds and may expose its public component too. */
+        slhdsa->hasPriv =
+            ((slhdsa->key.flags & WC_SLHDSA_FLAG_PRIVATE) != 0) ? 1 : 0;
+        slhdsa->hasPub =
+            ((slhdsa->key.flags & WC_SLHDSA_FLAG_PUBLIC) != 0) ? 1 : 0;
+    }
+    else if (slhdsa != NULL) {
+        /* Never advertise a key after a partially completed failed import. */
         slhdsa->hasPriv = 0;
         slhdsa->hasPub = 0;
     }
@@ -946,6 +993,10 @@ static int wp_slhdsa_export(wp_SlhDsa* slhdsa, int selection,
     if (ok && (paramsSz == 0) && (expPub || expPriv)) {
         ok = 0;
     }
+    if (locked) {
+        wp_unlock(wp_slhdsa_get_mutex(slhdsa));
+        locked = 0;
+    }
     if (ok) {
         ok = paramCb(params, cbArg);
     }
@@ -1040,7 +1091,7 @@ static int wp_slhdsa_get_params(wp_SlhDsa* slhdsa, OSSL_PARAM params[])
         if (p != NULL) {
             word32 outLen = slhdsa->data->pubKeySize;
             if (!slhdsa->hasPub) {
-                p->return_size = 0;
+                ok = 0;
             }
             else if (p->data == NULL) {
                 /* Size query. */
@@ -1071,7 +1122,7 @@ static int wp_slhdsa_get_params(wp_SlhDsa* slhdsa, OSSL_PARAM params[])
         if (p != NULL) {
             word32 outLen = slhdsa->data->privKeySize;
             if (!slhdsa->hasPriv) {
-                p->return_size = 0;
+                ok = 0;
             }
             else if (p->data == NULL) {
                 p->return_size = outLen;
@@ -1371,6 +1422,7 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
         (DFUNC)wp_slhdsa_settable_params                        },             \
     { OSSL_FUNC_KEYMGMT_HAS,            (DFUNC)wp_slhdsa_has    },             \
     { OSSL_FUNC_KEYMGMT_MATCH,          (DFUNC)wp_slhdsa_match  },             \
+    { OSSL_FUNC_KEYMGMT_VALIDATE,       (DFUNC)wp_slhdsa_validate },           \
     { OSSL_FUNC_KEYMGMT_IMPORT,         (DFUNC)wp_slhdsa_import },             \
     { OSSL_FUNC_KEYMGMT_IMPORT_TYPES,                                          \
         (DFUNC)wp_slhdsa_import_types                           },             \
@@ -1778,6 +1830,9 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (ok && (out == NULL)) {
         ok = 0;
     }
+    if (ok && (slhdsa == NULL)) {
+        ok = 0;
+    }
     if (ok && (wp_lock(wp_slhdsa_get_mutex((wp_SlhDsa*)slhdsa)) != 1)) {
         ok = 0;
     }
@@ -1914,11 +1969,23 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
  * @return  1 on success.
  * @return  0 on failure.
  */
-static int wp_slhdsa_export_object(wp_SlhDsaEncDecCtx* ctx, wp_SlhDsa* slhdsa,
-    size_t size, OSSL_CALLBACK* exportCb, void* exportCbArg)
+static int wp_slhdsa_export_object(wp_SlhDsaEncDecCtx* ctx,
+    const void* reference, size_t size, OSSL_CALLBACK* exportCb,
+    void* exportCbArg)
 {
-    (void)size;
-    return wp_slhdsa_export(slhdsa, ctx->selection, exportCb, exportCbArg);
+    wp_SlhDsa* slhdsa;
+    int selection;
+
+    if ((ctx == NULL) || (reference == NULL) ||
+            (size != sizeof(slhdsa))) {
+        return 0;
+    }
+    slhdsa = *(wp_SlhDsa* const*)reference;
+    selection = ctx->selection;
+    if (selection == 0) {
+        selection = OSSL_KEYMGMT_SELECT_ALL;
+    }
+    return wp_slhdsa_export(slhdsa, selection, exportCb, exportCbArg);
 }
 
 /**

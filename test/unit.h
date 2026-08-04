@@ -673,6 +673,8 @@ int test_slhdsa_dup(void *data);
 int test_slhdsa_match(void *data);
 int test_slhdsa_dupctx(void *data);
 int test_slhdsa_oneshot_sign_verify(void *data);
+int test_slhdsa_message_api(void *data);
+int test_slhdsa_reject_digest(void *data);
 int test_slhdsa_get_params(void *data);
 int test_slhdsa_pubonly_sign_fails(void *data);
 int test_slhdsa_import_mismatched_pubpriv(void *data);

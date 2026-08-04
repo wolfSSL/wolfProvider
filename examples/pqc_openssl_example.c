@@ -19,7 +19,11 @@
  */
 
 #include <stdio.h>
+#include <limits.h>
+#include <libgen.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -197,11 +201,14 @@ static int run_signature(OSSL_LIB_CTX* libCtx, const char* algorithm)
 }
 #endif
 
-int main(void)
+int main(int argc, char** argv)
 {
     int rc = 0;
     OSSL_LIB_CTX* libCtx = NULL;
     OSSL_PROVIDER* wolfProv = NULL;
+    char executable[PATH_MAX];
+    char providerPath[PATH_MAX];
+    char* executableDir;
 
     libCtx = OSSL_LIB_CTX_new();
     if (libCtx == NULL) {
@@ -209,7 +216,23 @@ int main(void)
     }
 
     if (rc == 0) {
-        OSSL_PROVIDER_set_default_search_path(libCtx, ".libs");
+        if ((argc < 1) || (realpath(argv[0], executable) == NULL) ||
+                ((executableDir = dirname(executable)) == NULL) ||
+                (snprintf(providerPath, sizeof(providerPath),
+                    "%s/../../.libs", executableDir) >=
+                    (int)sizeof(providerPath))) {
+            rc = 1;
+        }
+        if ((rc == 0) && (access(providerPath, R_OK | X_OK) != 0)) {
+            if ((snprintf(providerPath, sizeof(providerPath), "%s/../.libs",
+                    executableDir) >= (int)sizeof(providerPath)) ||
+                    (access(providerPath, R_OK | X_OK) != 0)) {
+                rc = 1;
+            }
+        }
+    }
+    if (rc == 0) {
+        OSSL_PROVIDER_set_default_search_path(libCtx, providerPath);
         wolfProv = OSSL_PROVIDER_load(libCtx, WOLFPROV_NAME);
         if (wolfProv == NULL) {
             rc = 1;

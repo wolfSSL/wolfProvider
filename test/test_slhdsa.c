@@ -21,6 +21,7 @@
 #include "unit.h"
 
 #include <openssl/core_names.h>
+#include <openssl/err.h>
 #include <openssl/param_build.h>
 #include <openssl/encoder.h>
 #include <openssl/decoder.h>
@@ -692,6 +693,101 @@ int test_slhdsa_oneshot_sign_verify(void* data)
     return err;
 }
 
+/* Test the OpenSSL 3.6 message API and its staged-signature parameter. */
+int test_slhdsa_message_api(void* data)
+{
+    int err = 0;
+    EVP_PKEY* key = NULL;
+    EVP_PKEY_CTX* signCtx = NULL;
+    EVP_PKEY_CTX* verifyCtx = NULL;
+    EVP_SIGNATURE* algorithm = NULL;
+    unsigned char* sig = NULL;
+    size_t sigLen = 0;
+
+    (void)data;
+
+    PRINT_MSG("Message API %s", slhdsa_sets[0].name);
+    err = slhdsa_keygen(slhdsa_sets[0].name, &key);
+    if (err == 0) {
+        algorithm = EVP_SIGNATURE_fetch(wpLibCtx, slhdsa_sets[0].name, NULL);
+        signCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (algorithm == NULL) || (signCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_init(signCtx, algorithm, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_update(signCtx, slhdsa_test_msg, 8) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_update(signCtx, slhdsa_test_msg + 8,
+            SLHDSA_TEST_MSG_LEN - 8) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_final(signCtx, NULL, &sigLen) != 1;
+    }
+    if (err == 0) {
+        sig = (unsigned char*)OPENSSL_malloc(sigLen);
+        err = (sig == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_final(signCtx, sig, &sigLen) != 1;
+    }
+    if (err == 0) {
+        verifyCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (verifyCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_verify_message_init(verifyCtx, algorithm, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_signature(verifyCtx, sig, sigLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_verify_message_update(verifyCtx, slhdsa_test_msg,
+            SLHDSA_TEST_MSG_LEN) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_verify_message_final(verifyCtx) != 1;
+    }
+
+    OPENSSL_free(sig);
+    EVP_PKEY_CTX_free(verifyCtx);
+    EVP_PKEY_CTX_free(signCtx);
+    EVP_SIGNATURE_free(algorithm);
+    EVP_PKEY_free(key);
+    return err;
+}
+
+/* Test that pure SLH-DSA rejects the distinct pre-hash API. */
+int test_slhdsa_reject_digest(void* data)
+{
+    int err = 0;
+    EVP_PKEY* key = NULL;
+    EVP_MD_CTX* mdctx = NULL;
+
+    (void)data;
+
+    PRINT_MSG("Reject named digest %s", slhdsa_sets[0].name);
+    err = slhdsa_keygen(slhdsa_sets[0].name, &key);
+    if (err == 0) {
+        mdctx = EVP_MD_CTX_new();
+        err = (mdctx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdctx, NULL, "SHA256", wpLibCtx, NULL,
+            key, NULL) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Pure SLH-DSA accepted a named digest");
+        }
+    }
+
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(key);
+    ERR_clear_error();
+    return err;
+}
+
 /**
  * Test the SLH-DSA key parameters reported to OpenSSL.
  */
@@ -795,6 +891,30 @@ int test_slhdsa_pubonly_sign_fails(void* data)
     if (err == 0) {
         err = EVP_PKEY_fromdata(ctx, &pubOnly, EVP_PKEY_PUBLIC_KEY,
             params) != 1;
+    }
+    if (err == 0) {
+        size_t privLen = 0;
+
+        err = EVP_PKEY_get_octet_string_param(pubOnly,
+            OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0, &privLen) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Public-only key reported a private component");
+        }
+    }
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pubOnly, NULL);
+        err = (ctx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_public_check(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_pairwise_check(ctx) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Public-only key passed pairwise validation");
+        }
+        ERR_clear_error();
     }
     /* Signing must fail: either at init or at the sign call. */
     if (err == 0) {
