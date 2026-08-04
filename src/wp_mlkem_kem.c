@@ -183,7 +183,7 @@ static int wp_mlkem_kem_decapsulate_init(wp_MlKemCtx* ctx, wp_MlKem* mlkem,
 /**
  * Encapsulate: produce ciphertext and shared secret.
  *
- * If out or secret is NULL, just report the output sizes.
+ * If both output buffers are NULL, report the output sizes.
  *
  * @param [in]      ctx        KEM context.
  * @param [out]     out        Ciphertext buffer.

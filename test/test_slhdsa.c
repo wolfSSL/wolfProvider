@@ -764,25 +764,35 @@ int test_slhdsa_reject_digest(void* data)
 {
     int err = 0;
     EVP_PKEY* key = NULL;
-    EVP_MD_CTX* mdctx = NULL;
+    EVP_MD_CTX* signCtx = NULL;
+    EVP_MD_CTX* verifyCtx = NULL;
 
     (void)data;
 
     PRINT_MSG("Reject named digest %s", slhdsa_sets[0].name);
     err = slhdsa_keygen(slhdsa_sets[0].name, &key);
     if (err == 0) {
-        mdctx = EVP_MD_CTX_new();
-        err = (mdctx == NULL);
+        signCtx = EVP_MD_CTX_new();
+        verifyCtx = EVP_MD_CTX_new();
+        err = (signCtx == NULL) || (verifyCtx == NULL);
     }
     if (err == 0) {
-        err = EVP_DigestSignInit_ex(mdctx, NULL, "SHA256", wpLibCtx, NULL,
+        err = EVP_DigestSignInit_ex(signCtx, NULL, "SHA256", wpLibCtx, NULL,
             key, NULL) == 1;
         if (err) {
             PRINT_ERR_MSG("Pure SLH-DSA accepted a named digest");
         }
     }
+    if (err == 0) {
+        err = EVP_DigestVerifyInit_ex(verifyCtx, NULL, "SHA256", wpLibCtx,
+            NULL, key, NULL) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Pure SLH-DSA verify accepted a named digest");
+        }
+    }
 
-    EVP_MD_CTX_free(mdctx);
+    EVP_MD_CTX_free(verifyCtx);
+    EVP_MD_CTX_free(signCtx);
     EVP_PKEY_free(key);
     ERR_clear_error();
     return err;

@@ -1003,9 +1003,6 @@ static int wp_slhdsa_export(wp_SlhDsa* slhdsa, int selection,
     OPENSSL_free(pubBuf);
     /* Zero full allocation in case ExportPrivate truncated privLen. */
     OPENSSL_clear_free(privBuf, privAllocLen);
-    if (locked) {
-        wp_unlock(wp_slhdsa_get_mutex(slhdsa));
-    }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -1950,9 +1947,6 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         OPENSSL_free(pemData);
     }
     OPENSSL_clear_free(encData, encLen);
-    if (locked) {
-        wp_unlock(wp_slhdsa_get_mutex((wp_SlhDsa*)slhdsa));
-    }
     BIO_free(out);
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
