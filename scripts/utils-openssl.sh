@@ -400,6 +400,20 @@ check_openssl_fips_baseline_mismatch() {
     fi
 }
 
+check_openssl_lms_mismatch() {
+    local config="${OPENSSL_INSTALL_DIR}/include/openssl/configuration.h"
+
+    if [ "${WOLFPROV_LMS}" = "1" ] && [ -d "${OPENSSL_INSTALL_DIR}" ] &&
+            { [ ! -f "${config}" ] || grep -Eq \
+                '^[[:space:]]*#[[:space:]]*define[[:space:]]+OPENSSL_NO_LMS' \
+                "${config}"; };
+    then
+        printf "ERROR: existing OpenSSL install was built without LMS.\n"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        exit 1
+    fi
+}
+
 install_openssl() {
     printf "\nInstalling OpenSSL ${OPENSSL_TAG} ...\n"
     clone_openssl
@@ -407,6 +421,7 @@ install_openssl() {
     check_openssl_replace_default_mismatch
     check_openssl_fips_baseline_mismatch
     check_replace_default_testing_mismatch
+    check_openssl_lms_mismatch
 
     pushd ${OPENSSL_SOURCE_DIR} &> /dev/null
 
@@ -417,6 +432,9 @@ install_openssl() {
         CONFIG_CMD="./config shared --prefix=${OPENSSL_INSTALL_DIR}"
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
             CONFIG_CMD+=" enable-trace --debug"
+        fi
+        if [ "${WOLFPROV_LMS}" = "1" ]; then
+            CONFIG_CMD+=" enable-lms"
         fi
         # Replace-default builds skip the OpenSSL test suite for speed, unless
         # --enable-openssl-test asks for it (e.g. CI that runs evp_test).
@@ -481,4 +499,3 @@ init_openssl() {
       export LD_LIBRARY_PATH=${OPENSSL_LIB_DIRS}:$LD_LIBRARY_PATH
     fi
 }
-

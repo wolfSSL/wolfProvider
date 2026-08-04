@@ -580,6 +580,12 @@ int test_des3_tls_cbc_dec(void *data);
 #endif
 #endif
 
+#ifdef WP_HAVE_LMS
+int test_lms_import_export(void *data);
+int test_lms_decode(void *data);
+int test_lms_unsupported_operations(void *data);
+#endif
+
 #ifdef WP_HAVE_MLKEM
 int test_mlkem_keygen(void *data);
 int test_mlkem_import_export_roundtrip(void *data);

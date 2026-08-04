@@ -28,6 +28,7 @@ test_unit_test_SOURCES = \
 	test/test_hmac.c \
 	test/test_kbkdf.c \
 	test/test_logging.c \
+	test/test_lms.c \
 	test/test_pbe.c \
 	test/test_pbkdf2.c \
 	test/test_pkey.c \

@@ -1,7 +1,7 @@
 name: wolfSSL PQC KAT (OpenSSL vectors)
 
-# Runs OpenSSL's own ML-KEM (FIPS 203) and ML-DSA (FIPS 204) EVP KAT vectors
-# (NIST ACVP + Wycheproof, 2602 sub-tests) through wolfProvider using
+# Runs OpenSSL's own ML-KEM (FIPS 203), ML-DSA (FIPS 204), and LMS
+# (RFC 8554 / SP 800-208) EVP KAT vectors through wolfProvider using
 # OpenSSL's own evp_test harness, unmodified. Closely mirrors the version
 # matrix of wolfssl-versions-pqc.yml: a discover job resolves the latest
 # wolfSSL -stable tag and the latest OpenSSL release, then the test job runs
@@ -62,9 +62,9 @@ jobs:
           echo "Latest stable wolfSSL: $LATEST"
           echo "Latest OpenSSL: $OSSL"
           echo "openssl-tag=$OSSL" >> "$GITHUB_OUTPUT"
-          PQC_FLOOR="v5.9.1-stable"
+          PQC_FLOOR="v5.9.2-stable"
           if [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$LATEST" \
-                  | sort -V | tail -n1)" != "$PQC_FLOOR" ]; then
+                  | sort -V | head -n1)" = "$PQC_FLOOR" ]; then
             LATEST_PQC=true
           else
             LATEST_PQC=false
@@ -85,17 +85,22 @@ jobs:
                    "sfx":" [non-replace] [force-fail]"},
                   {"replace":false,"ff":"","sfx":" [non-replace]"} ]
                 | map({"name":($lbl+.sfx),
-                       "wolfssl-ref":$ref,"pqc":true,"replace":.replace,
+                       "wolfssl-ref":$ref,"pqc":true,"lms":true,
+                       "replace":.replace,
                        "force_fail":.ff})
               else
                 [ {"name":($lbl+" [build-only]"),
-                   "wolfssl-ref":$ref,"pqc":false,"replace":false,
+                   "wolfssl-ref":$ref,"pqc":false,"lms":false,
+                   "replace":false,
                    "force_fail":""} ]
               end;
             { include:
                 ( rows("v5.8.0-stable"; false; "pre-PQC v5.8.0-stable")
                 + rows($latest; $latest_pqc; ("latest stable " + $latest))
-                + rows("master"; true; "master") )
+                + rows("master"; true; "master")
+                + [ {"name":"master [LMS only]",
+                     "wolfssl-ref":"master","pqc":false,"lms":true,
+                     "replace":false,"force_fail":""} ] )
             }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
@@ -125,25 +130,29 @@ jobs:
         id: deps
         uses: ./.github/actions/oras-build-deps
         with:
-          variant: pqckat${{ matrix.replace == true && '-rd' || '' }}
+          variant: pqckat${{ matrix.replace == true && '-rd' || '' }}${{ matrix.lms == true && '-lms' || '' }}
           openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
           wolfssl_ref: ${{ matrix.wolfssl-ref }}
-          extra_key: pqc${{ matrix.pqc }}
-          cache_openssl_source: ${{ matrix.pqc }}
+          extra_key: pqc${{ matrix.pqc }}-lms${{ matrix.lms }}
+          cache_openssl_source: ${{ matrix.pqc == true || matrix.lms == true }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build wolfProvider (PQC=${{ matrix.pqc }}, replace=${{ matrix.replace }})
+      - name: Build wolfProvider (PQC=${{ matrix.pqc }}, LMS=${{ matrix.lms }}, replace=${{ matrix.replace }})
         run: |
-          ARGS="--enable-pqc"
+          ARGS=""
+          if [ "${{ matrix.pqc }}" = "true" ]; then
+            ARGS="$ARGS --enable-pqc"
+          fi
+          if [ "${{ matrix.lms }}" = "true" ]; then
+            ARGS="$ARGS --enable-lms"
+          fi
           if [ "${{ matrix.replace }}" = "true" ]; then
             ARGS="$ARGS --replace-default"
           fi
-          if [ "${{ matrix.pqc }}" != "true" ]; then
-            ARGS=""
-          fi
           # The KAT runs OpenSSL's evp_test; replace-default builds omit it
           # ('no-tests') unless we ask for it here.
-          if [ "${{ matrix.pqc }}" = "true" ]; then
+          if [ "${{ matrix.pqc }}" = "true" ] || \
+             [ "${{ matrix.lms }}" = "true" ]; then
             ARGS="$ARGS --enable-openssl-test"
           fi
           OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
@@ -162,18 +171,19 @@ jobs:
           openssl_source_hit: ${{ steps.deps.outputs.openssl_source_hit }}
           cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
 
-      # Runs all 2602 OpenSSL ML-KEM/ML-DSA vectors. In normal mode every file
+      # Runs all OpenSSL ML-KEM/ML-DSA/LMS vectors. In normal mode every file
       # must pass and the full count must run; in force-fail mode the run fails
       # and check-workflow-result.sh inverts that to a pass, proving wolfProvider
       # genuinely served the crypto with no silent OpenSSL fallback.
-      - name: PQC KAT (all 2602 OpenSSL vectors)
-        if: matrix.pqc == true
+      - name: PQC KAT (ML-KEM, ML-DSA, and LMS OpenSSL vectors)
+        if: matrix.pqc == true || matrix.lms == true
         shell: bash
         run: |
           set +e
-          # The build step already built the provider with --enable-pqc; the KAT
-          # only runs against it (no rebuild). Force-fail is a runtime env var.
+          # The KAT only runs against the provider built in the prior step.
           export ${{ matrix.force_fail }}
+          export WOLFPROV_PQC=${{ matrix.pqc == true && '1' || '0' }}
+          export WOLFPROV_LMS=${{ matrix.lms == true && '1' || '0' }}
           ./scripts/test-pqc-kat.sh
           TEST_RESULT=$?
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \

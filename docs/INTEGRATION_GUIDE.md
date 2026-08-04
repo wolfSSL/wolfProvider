@@ -30,7 +30,8 @@ This retrieves dependencies (OpenSSL and wolfSSL) and compiles them as necessary
 | `--openssl-dir=/path` | Use existing OpenSSL installation |
 | `--replace-default` | Make wolfProvider the default provider |
 | `--enable-replace-default-testing` | Enable unit testing with replace-default |
-| `--enable-pqc` | Enable ML-KEM and ML-DSA post-quantum algorithms (adds `--enable-mlkem --enable-mldsa` to wolfSSL). Requires wolfSSL post-v5.9.1-stable. |
+| `--enable-pqc` | Enable ML-KEM and ML-DSA (adds `--enable-mlkem --enable-mldsa` to wolfSSL). Requires wolfSSL v5.9.2-stable or later and OpenSSL 3.6 or later. |
+| `--enable-lms` | Enable verification-only LMS support. Requires wolfSSL v5.9.2-stable or later and OpenSSL 3.6 or later. |
 
 **Examples:**
 
@@ -83,7 +84,8 @@ sudo make install
 | `--enable-pwdbased` | PKCS#12 support |
 | `--enable-hmac-copy` | Faster repeated HMAC with same key (wolfSSL 5.7.8+) |
 | `--enable-sp=yes,asm --enable-sp-math-all` | SP Integer maths |
-| `--enable-mlkem --enable-mldsa` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL post-v5.9.1-stable). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
+| `--enable-mlkem --enable-mldsa` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL v5.9.2-stable or later). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
+| `--enable-lms=sha256-192,shake256` | LMS verification with the parameter families used by the OpenSSL vectors. The `build-wolfprovider.sh --enable-lms` flag sets this automatically. |
 
 **Optional CPPFLAGS:**
 
@@ -153,7 +155,7 @@ This makes replace default mode useful for testing scenarios where you want to e
 
 ---
 
-## Post-Quantum Cryptography (ML-KEM and ML-DSA)
+## Post-Quantum Cryptography (ML-KEM, ML-DSA, and LMS)
 
 wolfProvider supports NIST's post-quantum algorithms via the wolfSSL backend:
 
@@ -161,13 +163,14 @@ wolfProvider supports NIST's post-quantum algorithms via the wolfSSL backend:
 |-----------|----------|----------------|
 | ML-KEM (key encapsulation) | FIPS 203 | ML-KEM-512, ML-KEM-768, ML-KEM-1024 |
 | ML-DSA (digital signature)  | FIPS 204 | ML-DSA-44, ML-DSA-65, ML-DSA-87 |
+| LMS (digital signature verification) | RFC 8554 / SP 800-208 | OpenSSL-compatible XDR public keys |
 
 ML-DSA uses pure mode with an empty context string (FIPS 204 sec 5.2, Algorithm 22), interoperable with OpenSSL 3.5+'s native ML-DSA.
 
 ### Requirements
 
-- **wolfSSL**: post-v5.9.1-stable (i.e. v5.9.2-stable or master). v5.9.1-stable defines `HAVE_DILITHIUM` and exposes `wc_dilithium_sign_ctx_msg` (the older name for the FIPS 204 pure-mode signer) but does not yet ship the canonical `WOLFSSL_HAVE_MLDSA` macro, `<wolfssl/wolfcrypt/wc_mldsa.h>` header, or `wc_MlDsaKey_SignCtx` alias that wolfProvider gates on.
-- **OpenSSL**: any 3.x. OpenSSL 3.5+ is required only for cross-provider interop against its native ML-KEM/ML-DSA implementations.
+- **wolfSSL**: v5.9.2-stable or later. v5.9.1-stable does not provide the complete public interfaces required by wolfProvider.
+- **OpenSSL**: 3.6 or later when these features are enabled.
 
 ### Building with PQC
 
@@ -176,6 +179,14 @@ ML-DSA uses pure mode with an empty context string (FIPS 204 sec 5.2, Algorithm 
 ```
 
 This adds `--enable-mlkem --enable-mldsa` to the wolfSSL configure step. wolfProvider auto-detects the resulting `WOLFSSL_HAVE_MLKEM` / `WOLFSSL_HAVE_MLDSA` macros via `include/wolfprovider/settings.h` (gated on `__has_include` of `<wolfssl/wolfcrypt/wc_mlkem.h>` / `<wolfssl/wolfcrypt/wc_mldsa.h>`) and registers the six PQC algorithms.
+
+LMS is enabled separately because it is a stateful signature scheme and is
+verification-only in OpenSSL 3.6. Build it with `--enable-lms`; wolfProvider
+uses wolfSSL's `wc_LmsKey_ImportPubRaw()` and `wc_LmsKey_Verify()` APIs and
+accepts OpenSSL's raw XDR public-key representation. OpenSSL removes the
+single-level HSS header from LMS public keys and signatures, so wolfProvider
+restores that wrapper only while calling wolfCrypt. The provider does not
+generate, import, or sign with LMS private keys.
 
 ### Usage Example
 
@@ -202,6 +213,13 @@ A standalone three-way interop validator (`test/pqc_interop.test`) cross-checks 
 - wolfSSL's `wc_*` APIs directly (no provider abstraction)
 
 This proves wolfProvider's raw-key, ciphertext, and signature bytes are FIPS 203 / 204 standards-compliant. The CI workflow `.github/workflows/wolfssl-versions-pqc.yml` runs this validator on every PR, plus a backward-compatibility build against pre-PQC wolfSSL to verify the no-symbol path still builds cleanly.
+
+The `.github/workflows/wolfssl-pqc-kat.yml` workflow runs OpenSSL's unmodified
+ML-KEM, ML-DSA, and LMS EVP vectors. LMS contributes 320 verification cases
+covering valid and corrupted messages, signatures, and public keys. The matrix
+tests combined PQC builds across the latest stable wolfSSL and master in
+replace-default, standard-provider, and force-fail configurations, and also
+contains an LMS-only build and KAT run.
 
 ---
 

@@ -63,22 +63,20 @@ jobs:
           else
             REFS=$(printf '%s\n%s\n' "master" "$LATEST")
           fi
-          # PQC needs the wc_MlDsaKey_* seed/message API that lands after
-          # v5.9.1-stable, so the floor is v5.9.2-stable. master is always
-          # eligible; a -stable ref only runs once it is past the floor. A
+          # v5.9.2-stable is the first release with the complete PQC interfaces
+          # required by wolfProvider. master is always eligible. A
           # pre-floor ref (e.g. v5.8.4-stable from Wave 2) is dropped -- it
           # would just fail the --enable-pqc gate.
-          PQC_FLOOR="v5.9.1-stable"
+          PQC_FLOOR="v5.9.2-stable"
           ELIGIBLE=()
           for ref in $REFS; do
             if [ "$ref" = "master" ]; then
               ELIGIBLE+=("$ref")
-            elif [ "$ref" != "$PQC_FLOOR" ] && \
-                 [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$ref" \
-                      | sort -V | tail -n1)" = "$ref" ]; then
+            elif [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$ref" \
+                      | sort -V | head -n1)" = "$PQC_FLOOR" ]; then
               ELIGIBLE+=("$ref")
             else
-              echo "::notice::Skipping pre-PQC-floor wolfSSL ref $ref (floor past $PQC_FLOOR)"
+              echo "::notice::Skipping pre-PQC-floor wolfSSL ref $ref (floor $PQC_FLOOR)"
             fi
           done
           if [ ${#ELIGIBLE[@]} -eq 0 ]; then
