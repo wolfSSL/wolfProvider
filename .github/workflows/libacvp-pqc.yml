@@ -154,9 +154,7 @@ jobs:
       - name: Checkout OSP
         uses: actions/checkout@v4
         with:
-          repository: aidangarske/osp
-          # TODO: switch to the upstream wolfSSL/osp ref when PR #351 merges.
-          ref: add-libacvp-pqc-tests
+          repository: wolfssl/osp
           path: osp
           fetch-depth: 1
 
