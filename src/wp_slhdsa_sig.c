@@ -210,13 +210,15 @@ static wp_SlhDsaSigCtx* wp_slhdsa_dupctx(wp_SlhDsaSigCtx* src)
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_slhdsa_dupctx");
 
     if (!wolfssl_prov_is_running() || (src == NULL)) {
-        return NULL;
+        ok = 0;
     }
-    dst = wp_slhdsa_newctx(src->provCtx, NULL);
-    if (dst == NULL) {
-        return NULL;
+    if (ok) {
+        dst = wp_slhdsa_newctx(src->provCtx, NULL);
+        if (dst == NULL) {
+            ok = 0;
+        }
     }
-    if ((src->slhdsa != NULL) && !wp_slhdsa_up_ref(src->slhdsa)) {
+    if (ok && (src->slhdsa != NULL) && !wp_slhdsa_up_ref(src->slhdsa)) {
         ok = 0;
     }
     if (ok) {
@@ -285,12 +287,8 @@ static int wp_slhdsa_init(wp_SlhDsaSigCtx* ctx, wp_SlhDsa* slhdsa,
     OPENSSL_free(ctx->verifySig);
     ctx->verifySig = NULL;
     ctx->verifySigLen = 0;
-    wc_ForceZero(ctx->context, sizeof(ctx->context));
-    ctx->contextLen = 0;
-    wc_ForceZero(ctx->testEntropy, sizeof(ctx->testEntropy));
-    ctx->testEntropyLen = 0;
-    ctx->deterministic = 0;
-    ctx->rawMsg = 0;
+    /* Match OpenSSL: the context string, deterministic mode, test entropy and
+     * message encoding persist across re-init until explicitly changed. */
     if (!wp_slhdsa_set_ctx_params(ctx, params)) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
@@ -341,7 +339,7 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
     size_t* sigLen, size_t sigSize, const unsigned char* msg, size_t msgLen)
 {
     int ok = 1;
-    int rc;
+    int rc = -1;
     int locked = 0;
     word32 sigSz;
     /* FIPS 205 permits an empty message; give wolfSSL a valid pointer so a
@@ -465,7 +463,7 @@ static int wp_slhdsa_verify(wp_SlhDsaSigCtx* ctx, const unsigned char* sig,
     size_t sigLen, const unsigned char* msg, size_t msgLen)
 {
     int ok = 1;
-    int rc;
+    int rc = -1;
     int locked = 0;
     /* FIPS 205 permits an empty message; give wolfSSL a valid pointer. */
     unsigned char dummy = 0;
@@ -741,6 +739,15 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
 {
     int ok = 1;
     const OSSL_PARAM* p;
+    unsigned char context[WP_SLHDSA_CTX_MAX];
+    size_t contextLen;
+    unsigned char testEntropy[WP_SLHDSA_RND_MAX];
+    size_t testEntropyLen;
+    unsigned int deterministic;
+    unsigned int rawMsg;
+    unsigned char* verifySig = NULL;
+    size_t verifySigLen = 0;
+    int setVerifySig = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_slhdsa_set_ctx_params");
 
@@ -753,9 +760,18 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
         return 1;
     }
 
+    XMEMSET(context, 0, sizeof(context));
+    XMEMCPY(context, ctx->context, ctx->contextLen);
+    contextLen = ctx->contextLen;
+    XMEMSET(testEntropy, 0, sizeof(testEntropy));
+    XMEMCPY(testEntropy, ctx->testEntropy, ctx->testEntropyLen);
+    testEntropyLen = ctx->testEntropyLen;
+    deterministic = ctx->deterministic;
+    rawMsg = ctx->rawMsg;
+
     p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_CONTEXT_STRING);
     if (p != NULL) {
-        void* vp = ctx->context;
+        void* vp = context;
         size_t len = 0;
 
         /* Changing the context mid-stream would sign a different M' than the
@@ -763,23 +779,22 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
         if (ctx->mdLen > 0) {
             ok = 0;
         }
-        if (ok && !OSSL_PARAM_get_octet_string(p, &vp, sizeof(ctx->context),
+        if (ok && !OSSL_PARAM_get_octet_string(p, &vp, sizeof(context),
                 &len)) {
             ok = 0;
         }
         if (ok) {
-            ctx->contextLen = len;
+            contextLen = len;
         }
     }
     if (ok) {
         p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_TEST_ENTROPY);
         if (p != NULL) {
-            void* vp = ctx->testEntropy;
+            void* vp = testEntropy;
             size_t len = 0;
 
-            ctx->testEntropyLen = 0;
             if (!OSSL_PARAM_get_octet_string(p, &vp,
-                    sizeof(ctx->testEntropy), &len)) {
+                    sizeof(testEntropy), &len)) {
                 ok = 0;
             }
             /* addrnd is exactly n bytes. A short value would silently fall
@@ -788,10 +803,7 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
                 ok = 0;
             }
             if (ok) {
-                ctx->testEntropyLen = len;
-            }
-            else {
-                wc_ForceZero(ctx->testEntropy, sizeof(ctx->testEntropy));
+                testEntropyLen = len;
             }
         }
     }
@@ -803,7 +815,7 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
                 ok = 0;
             }
             if (ok) {
-                ctx->deterministic = (det != 0);
+                deterministic = (det != 0);
             }
         }
     }
@@ -824,28 +836,40 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
                 ok = 0;
             }
             if (ok) {
-                ctx->rawMsg = (enc == 0);
+                rawMsg = (enc == 0);
             }
         }
     }
     if (ok) {
         p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_SIGNATURE);
         if (p != NULL) {
-            unsigned char* sig = NULL;
-            size_t sigLen = 0;
-
             /* Reject malformed signatures before allocating a copy. */
             if ((p->data_size != (size_t)wp_slhdsa_get_sig_size(ctx->slhdsa)) ||
-                    !OSSL_PARAM_get_octet_string(p, (void**)&sig, 0, &sigLen)) {
+                    !OSSL_PARAM_get_octet_string(p, (void**)&verifySig, 0,
+                        &verifySigLen)) {
                 ok = 0;
             }
             if (ok) {
-                OPENSSL_free(ctx->verifySig);
-                ctx->verifySig = sig;
-                ctx->verifySigLen = sigLen;
+                setVerifySig = 1;
             }
         }
     }
+    if (ok) {
+        XMEMCPY(ctx->context, context, sizeof(context));
+        ctx->contextLen = contextLen;
+        XMEMCPY(ctx->testEntropy, testEntropy, sizeof(testEntropy));
+        ctx->testEntropyLen = testEntropyLen;
+        ctx->deterministic = deterministic;
+        ctx->rawMsg = rawMsg;
+        if (setVerifySig) {
+            OPENSSL_free(ctx->verifySig);
+            ctx->verifySig = verifySig;
+            ctx->verifySigLen = verifySigLen;
+            verifySig = NULL;
+        }
+    }
+    OPENSSL_free(verifySig);
+    wc_ForceZero(testEntropy, sizeof(testEntropy));
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }

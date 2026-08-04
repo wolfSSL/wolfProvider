@@ -850,6 +850,15 @@ int test_slhdsa_get_params(void* data)
         if (err == 0) {
             err = EVP_PKEY_get_size(key) != (int)set->sigSize;
         }
+        if (err == 0) {
+            char mdName[20];
+
+            err = EVP_PKEY_get_default_digest_name(key, mdName,
+                sizeof(mdName)) != 2;
+            if (err) {
+                PRINT_ERR_MSG("SLH-DSA did not report a mandatory digest");
+            }
+        }
 
         EVP_PKEY_free(key); key = NULL;
     }
@@ -1078,6 +1087,7 @@ int test_slhdsa_reinit_null_key(void* data)
     int err = 0;
     EVP_PKEY* key = NULL;
     EVP_MD_CTX* mdctx = NULL;
+    EVP_MD_CTX* verifyCtx = NULL;
     unsigned char* sig = NULL;
     unsigned char* sig2 = NULL;
     size_t sigLen = 0;
@@ -1112,7 +1122,7 @@ int test_slhdsa_reinit_null_key(void* data)
         err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, key,
             params) != 1;
     }
-    /* Re-init must reuse the key and reset operation-specific parameters. */
+    /* Re-init must reuse the key and preserve configured signature params. */
     if (err == 0) {
         err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, NULL,
             NULL) != 1;
@@ -1129,9 +1139,33 @@ int test_slhdsa_reinit_null_key(void* data)
         err = EVP_DigestSign(mdctx, sig, &sigLen, slhdsa_test_msg,
             SLHDSA_TEST_MSG_LEN) != 1;
     }
+    /* Failed updates must not partially replace the retained parameters. */
     if (err == 0) {
-        err = !slhdsa_verify_msg(key, slhdsa_test_msg, SLHDSA_TEST_MSG_LEN,
-            sig, sigLen);
+        OSSL_PARAM bad[3];
+        int encBad = 2;
+
+        bad[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_CONTEXT_STRING, (void*)"ctx-B", 5);
+        bad[1] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, &encBad);
+        bad[2] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(EVP_MD_CTX_get_pkey_ctx(mdctx), bad)
+            == 1;
+        if (err) {
+            PRINT_ERR_MSG("Invalid parameter set was accepted");
+        }
+    }
+    if (err == 0) {
+        OSSL_PARAM bad[2];
+
+        bad[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_TEST_ENTROPY, entropy, n - 1);
+        bad[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(EVP_MD_CTX_get_pkey_ctx(mdctx), bad)
+            == 1;
+        if (err) {
+            PRINT_ERR_MSG("Invalid test entropy was accepted");
+        }
     }
     if (err == 0) {
         err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, NULL,
@@ -1150,14 +1184,27 @@ int test_slhdsa_reinit_null_key(void* data)
             SLHDSA_TEST_MSG_LEN) != 1;
     }
     if (err == 0) {
-        err = (sigLen == sig2Len) && (XMEMCMP(sig, sig2, sigLen) == 0);
+        err = (sigLen != sig2Len) || (XMEMCMP(sig, sig2, sigLen) != 0);
         if (err) {
-            PRINT_ERR_MSG("Reinit retained deterministic signature state");
+            PRINT_ERR_MSG("Reinit did not retain SLH-DSA parameters");
         }
+    }
+    if (err == 0) {
+        verifyCtx = EVP_MD_CTX_new();
+        err = (verifyCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestVerifyInit_ex(verifyCtx, NULL, NULL, wpLibCtx, NULL,
+            key, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestVerify(verifyCtx, sig, sigLen, slhdsa_test_msg,
+            SLHDSA_TEST_MSG_LEN) != 1;
     }
 
     OPENSSL_free(sig);
     OPENSSL_free(sig2);
+    EVP_MD_CTX_free(verifyCtx);
     EVP_MD_CTX_free(mdctx);
     EVP_PKEY_free(key);
     return err;

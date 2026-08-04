@@ -91,6 +91,11 @@ Without an enable flag no PQC code is compiled, regardless of what wolfSSL enabl
 * ML-DSA (FIPS 204): ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
 * SLH-DSA (FIPS 205): all 12 parameter sets, SLH-DSA-SHA2-{128,192,256}{s,f} and SLH-DSA-SHAKE-{128,192,256}{s,f} (signatures, pure mode)
 
+wolfProvider additionally supports streamed SLH-DSA sign and verify by
+buffering the message because wolfSSL has no streaming SLH-DSA API. This
+extension accepts messages up to 64 MiB; use the one-shot API for larger
+messages.
+
 ### LMS (RFC 8554 / NIST SP 800-208)
 LMS verification is independently opt-in and requires wolfSSL 5.9.2-stable or
 newer and OpenSSL 3.6 or newer:

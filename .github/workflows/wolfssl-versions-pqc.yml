@@ -131,6 +131,7 @@ jobs:
           openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
           wolfssl_ref: ${{ matrix.wolfssl-ref }}
           extra_key: ${{ matrix.enable }}-${{ matrix.slh-config }}
+          cache_openssl_source: ${{ matrix.expect == 'slhdsa-verify' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wolfProvider (${{ matrix.enable || 'no PQC flag' }})
@@ -157,8 +158,11 @@ jobs:
           registry: ${{ steps.deps.outputs.registry }}
           openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
           wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_source_tag: ${{ steps.deps.outputs.openssl_source_tag }}
           openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
           wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
+          openssl_source_hit: ${{ steps.deps.outputs.openssl_source_hit }}
+          cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
 
       # Opt-in is per-algorithm: assert exactly the expected PQC test families
       # are present (all / mlkem / mldsa / slhdsa / lms / none). This catches a leaked
@@ -209,7 +213,10 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           export OPENSSL_MODULES="$(pwd)/.libs"
-          test -x ./openssl-source/test/evp_test
+          if [ ! -x ./openssl-source/test/evp_test ]; then
+            echo "::error::OpenSSL evp_test is missing"
+            exit 1
+          fi
           ./openssl-source/test/evp_test -config ./provider.conf \
             ./openssl-source/test/recipes/30-test_evp_data/evppkey_slh_dsa_sigver.txt
 

@@ -235,4 +235,4 @@ runs:
       uses: actions/cache@v4
       with:
         path: wolfssl-install
-        key: wolfssl-install-${{ inputs.variant }}-${{ inputs.wolfssl_fixed_key || steps.wolfssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-*.sh', 'scripts/build-wolfprovider.sh', 'scripts/patch-*.sh', 'patches/**') }}${{ inputs.extra_key != '' && format('-{0}', inputs.extra_key) || '' }}
+        key: ${{ steps.tags.outputs.wolfssl_install_tag }}

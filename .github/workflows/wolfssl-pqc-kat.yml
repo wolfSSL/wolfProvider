@@ -48,9 +48,8 @@ jobs:
             echo "::error::Could not resolve latest wolfSSL -stable tag"
             exit 1
           fi
-          # Latest stable OpenSSL release (exclude pre-releases). The PQC KAT
-          # vectors require OpenSSL 3.5+ (first release with native ML-KEM /
-          # ML-DSA and the 30-test_evp_data PQC files).
+          # Latest stable OpenSSL release (exclude pre-releases). The complete
+          # PQC KAT set requires OpenSSL 3.6+ for the SLH-DSA vectors.
           OSSL=$(git ls-remote --tags --refs \
               https://github.com/openssl/openssl.git 'openssl-3.*' \
               | awk -F/ '{print $NF}' | grep -E '^openssl-3\.[0-9.]+$' \
