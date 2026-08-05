@@ -36,7 +36,7 @@ show_help() {
   echo "  --enable-pqc               Enable ML-KEM, ML-DSA and SLH-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)."
   echo "  --enable-mlkem             Enable ML-KEM only."
   echo "  --enable-mldsa             Enable ML-DSA only."
-  echo "  --enable-slhdsa            Enable SLH-DSA only."
+  echo "  --enable-slhdsa            Enable SLH-DSA only, with all 12 parameter sets."
   echo "  --enable-lms               Enable LMS verification only (requires OpenSSL 3.6+)."
   echo "  --enable-openssl-test      Build OpenSSL with its test suite (e.g. evp_test). For CI that runs OpenSSL's own tests."
   echo ""
@@ -61,7 +61,8 @@ show_help() {
   echo "  WOLFPROV_PQC               If set to 1, enables ML-KEM, ML-DSA and SLH-DSA (requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+)"
   echo "  WOLFPROV_MLKEM             If set to 1, enables ML-KEM only"
   echo "  WOLFPROV_MLDSA             If set to 1, enables ML-DSA only"
-  echo "  WOLFPROV_SLHDSA            If set to 1, enables SLH-DSA only"
+  echo "  WOLFPROV_SLHDSA            If set to 1, enables SLH-DSA only, with all 12 parameter sets"
+  echo "  WOLFSSL_SLHDSA_CONFIG      wolfSSL SLH-DSA profile (default: yes,sha2; use yes,sha2,verify-only for verification only)"
   echo "  WOLFPROV_LMS               If set to 1, enables LMS verification only"
   echo ""
 }

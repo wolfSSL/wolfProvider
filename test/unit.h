@@ -658,12 +658,14 @@ int test_mldsa_encode_decode(void *data);
 int test_mldsa_x509_sign_verify(void *data);
 #endif
 
-#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
-    defined(WP_SLHDSA_TEST_SETS)
+#if defined(WP_HAVE_SLHDSA) && defined(WP_SLHDSA_TEST_SETS)
+int test_slhdsa_public_keymgmt(void *data);
+#ifdef WP_HAVE_SLHDSA_PRIVATE
 #ifdef WP_HAVE_EPKI_TEST
 int test_slhdsa_encode_epki(void *data);
 #endif
 int test_slhdsa_keygen(void *data);
+int test_slhdsa_validate_keypair(void *data);
 int test_slhdsa_import_export_roundtrip(void *data);
 int test_slhdsa_sign_verify(void *data);
 int test_slhdsa_verify_tampered_sig(void *data);
@@ -684,6 +686,7 @@ int test_slhdsa_encode_decode(void *data);
 int test_slhdsa_sig_params(void *data);
 int test_slhdsa_keygen_seed(void *data);
 int test_slhdsa_x509_sign_verify(void *data);
+#endif
 #endif
 
 #endif /* UNIT_H */

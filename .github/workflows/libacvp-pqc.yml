@@ -183,13 +183,24 @@ jobs:
             export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
           fi
           set +e
-          export ${{ matrix.force_fail || 'WOLFPROV_NOOP=1' }}
-          if [ -n "${{ matrix.force_fail }}" ]; then
-            ./runtest -g APP_PQC_HANDLER -v 2>&1 | tee libacvp-pqc.log
-            TEST_RESULT=${PIPESTATUS[0]}
-          else
-            ./runtest -v 2>&1 | tee libacvp-pqc.log
-            TEST_RESULT=${PIPESTATUS[0]}
+          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ]; then
+            export WOLFPROV_FORCE_FAIL=1
           fi
+          ./runtest -g APP_PQC_HANDLER -v 2>&1 | tee libacvp-pqc.log
+          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
             $TEST_RESULT "${{ matrix.force_fail }}" libacvp-pqc
+          CHECK_RESULT=$?
+          if [ $CHECK_RESULT -ne 0 ]; then
+            exit $CHECK_RESULT
+          fi
+          if [ -z "${{ matrix.force_fail }}" ]; then
+            ./runtest -v 2>&1 | tee -a libacvp-pqc.log
+            TEST_RESULT=${PIPESTATUS[0]}
+            $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
+              $TEST_RESULT "" libacvp-pqc
+            CHECK_RESULT=$?
+            if [ $CHECK_RESULT -ne 0 ]; then
+              exit $CHECK_RESULT
+            fi
+          fi

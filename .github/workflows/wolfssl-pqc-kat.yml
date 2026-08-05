@@ -1,7 +1,7 @@
 name: wolfSSL PQC KAT (OpenSSL vectors)
 
-# Runs OpenSSL's own ML-KEM (FIPS 203), ML-DSA (FIPS 204), and LMS
-# (RFC 8554 / SP 800-208) EVP KAT vectors through wolfProvider using
+# Runs OpenSSL's own ML-KEM (FIPS 203), ML-DSA (FIPS 204), SLH-DSA (FIPS 205),
+# and LMS (RFC 8554 / SP 800-208) EVP KAT vectors through wolfProvider using
 # OpenSSL's own evp_test harness, unmodified. Closely mirrors the version
 # matrix of wolfssl-versions-pqc.yml: a discover job resolves the latest
 # wolfSSL -stable tag and the latest OpenSSL release, then the test job runs
@@ -173,12 +173,12 @@ jobs:
           openssl_source_hit: ${{ steps.deps.outputs.openssl_source_hit }}
           cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
 
-      # Runs all OpenSSL ML-KEM/ML-DSA/LMS vectors. In normal mode every file
-      # must pass and each family must meet its minimum count; in force-fail
+      # Runs all OpenSSL ML-KEM/ML-DSA/SLH-DSA/LMS vectors. In normal mode every
+      # file must pass and each family must meet its minimum count; in force-fail
       # mode the run fails and check-workflow-result.sh inverts that to a pass,
       # proving wolfProvider genuinely served the crypto with no silent OpenSSL
       # fallback.
-      - name: PQC KAT (ML-KEM, ML-DSA, and LMS OpenSSL vectors)
+      - name: PQC KAT (ML-KEM, ML-DSA, SLH-DSA, and LMS OpenSSL vectors)
         if: matrix.pqc == true || matrix.lms == true
         shell: bash
         run: |

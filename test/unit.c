@@ -630,12 +630,14 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mldsa_x509_sign_verify, NULL),
 #endif
 
-#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
-    defined(WP_SLHDSA_TEST_SETS)
+#if defined(WP_HAVE_SLHDSA) && defined(WP_SLHDSA_TEST_SETS)
+    TEST_DECL(test_slhdsa_public_keymgmt, NULL),
+    #ifdef WP_HAVE_SLHDSA_PRIVATE
     #ifdef WP_HAVE_EPKI_TEST
     TEST_DECL(test_slhdsa_encode_epki, NULL),
     #endif
     TEST_DECL(test_slhdsa_keygen, NULL),
+    TEST_DECL(test_slhdsa_validate_keypair, NULL),
     TEST_DECL(test_slhdsa_import_export_roundtrip, NULL),
     TEST_DECL(test_slhdsa_sign_verify, NULL),
     TEST_DECL(test_slhdsa_verify_tampered_sig, NULL),
@@ -656,6 +658,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_slhdsa_sig_params, NULL),
     TEST_DECL(test_slhdsa_keygen_seed, NULL),
     TEST_DECL(test_slhdsa_x509_sign_verify, NULL),
+    #endif
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))

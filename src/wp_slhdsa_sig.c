@@ -167,7 +167,7 @@ static wp_SlhDsaSigCtx* wp_slhdsa_newctx(WOLFPROV_CTX* provCtx,
     if (ctx != NULL) {
         int rc = wc_InitRng(&ctx->rng);
         if (rc != 0) {
-            OPENSSL_free(ctx);
+            OPENSSL_clear_free(ctx, sizeof(*ctx));
             ctx = NULL;
         }
     }
@@ -287,8 +287,8 @@ static int wp_slhdsa_init(wp_SlhDsaSigCtx* ctx, wp_SlhDsa* slhdsa,
     OPENSSL_free(ctx->verifySig);
     ctx->verifySig = NULL;
     ctx->verifySigLen = 0;
-    /* Match OpenSSL: the context string, deterministic mode, test entropy and
-     * message encoding persist across re-init until explicitly changed. */
+    /* Match OpenSSL: signature parameters persist across re-init until the
+     * caller explicitly replaces them. */
     if (!wp_slhdsa_set_ctx_params(ctx, params)) {
         WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 0);
         return 0;
@@ -361,19 +361,27 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
         m = &dummy;
     }
 
-    sigSz = (word32)wp_slhdsa_get_sig_size(ctx->slhdsa);
-
-    if (sig == NULL) {
+    if (wp_lock(wp_slhdsa_get_mutex(ctx->slhdsa)) != 1) {
+        ok = 0;
+    }
+    else {
+        locked = 1;
+    }
+    if (ok && !wp_slhdsa_has_private(ctx->slhdsa)) {
+        ok = 0;
+    }
+    if (ok) {
+        sigSz = (word32)wp_slhdsa_get_sig_size(ctx->slhdsa);
+    }
+    if (ok && (sig == NULL)) {
         *sigLen = sigSz;
-        WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
-        return 1;
     }
     /* sigSize is the authoritative buffer capacity; fall back to *sigLen only
      * when the dispatcher passes SIZE_MAX (matching wp_ecx_sig). */
-    if (sigSize == (size_t)-1) {
+    if (ok && (sig != NULL) && (sigSize == (size_t)-1)) {
         sigSize = *sigLen;
     }
-    if (sigSize < sigSz) {
+    if (ok && (sig != NULL) && (sigSize < sigSz)) {
         ok = 0;
     }
     /* wolfSSL's SLH-DSA API takes a 32-bit message length. Reject >4 GiB
@@ -388,16 +396,10 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
             (ctx->testEntropyLen != (size_t)wp_slhdsa_get_n(ctx->slhdsa))) {
         ok = 0;
     }
-    if (ok) {
+    if (ok && (sig != NULL)) {
         word32 outLen = sigSz;
         SlhDsaKey* key = (SlhDsaKey*)wp_slhdsa_get_key(ctx->slhdsa);
 
-        if (wp_lock(wp_slhdsa_get_mutex(ctx->slhdsa)) != 1) {
-            ok = 0;
-        }
-        else {
-            locked = 1;
-        }
         if (ok && ctx->rawMsg) {
             /* FIPS 205 internal interface: the message already is M', so the
              * context string is part of it and must not be applied again. */
@@ -413,10 +415,15 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
                 byte rnd[WP_SLHDSA_RND_MAX];
                 int n = wp_slhdsa_get_n(ctx->slhdsa);
 
-                rc = wc_RNG_GenerateBlock(&ctx->rng, rnd, (word32)n);
-                if (rc == 0) {
-                    rc = wc_SlhDsaKey_SignMsgWithRandom(key, m,
-                        (word32)msgLen, sig, &outLen, rnd);
+                if ((n <= 0) || (n > (int)sizeof(rnd))) {
+                    ok = 0;
+                }
+                else {
+                    rc = wc_RNG_GenerateBlock(&ctx->rng, rnd, (word32)n);
+                    if (rc == 0) {
+                        rc = wc_SlhDsaKey_SignMsgWithRandom(key, m,
+                            (word32)msgLen, sig, &outLen, rnd);
+                    }
                 }
                 wc_ForceZero(rnd, sizeof(rnd));
             }
@@ -434,15 +441,15 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
             rc = wc_SlhDsaKey_Sign(key, ctx->context, (byte)ctx->contextLen,
                 m, (word32)msgLen, sig, &outLen, &ctx->rng);
         }
-        if (locked) {
-            wp_unlock(wp_slhdsa_get_mutex(ctx->slhdsa));
-        }
         if (ok && (rc != 0)) {
             ok = 0;
         }
         if (ok) {
             *sigLen = outLen;
         }
+    }
+    if (locked) {
+        wp_unlock(wp_slhdsa_get_mutex(ctx->slhdsa));
     }
     WOLFPROV_LEAVE(WP_LOG_COMP_PQC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -496,6 +503,9 @@ static int wp_slhdsa_verify(wp_SlhDsaSigCtx* ctx, const unsigned char* sig,
     }
     else {
         locked = 1;
+    }
+    if (ok && !wp_slhdsa_has_public(ctx->slhdsa)) {
+        ok = 0;
     }
     if (ok && ctx->rawMsg) {
         rc = wc_SlhDsaKey_VerifyMsg((SlhDsaKey*)wp_slhdsa_get_key(ctx->slhdsa),
@@ -623,23 +633,49 @@ static int wp_slhdsa_message_init(wp_SlhDsaSigCtx* ctx, wp_SlhDsa* slhdsa,
 static int wp_slhdsa_sign_message_final(wp_SlhDsaSigCtx* ctx,
     unsigned char* sig, size_t* sigLen, size_t sigSize)
 {
-    return wp_slhdsa_digest_sign_final(ctx, sig, sigLen, sigSize);
+    int ok;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_slhdsa_sign_message_final");
+    ok = wp_slhdsa_digest_sign_final(ctx, sig, sigLen, sigSize);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 #endif
 
 static int wp_slhdsa_verify_message_init(wp_SlhDsaSigCtx* ctx,
     wp_SlhDsa* slhdsa, const OSSL_PARAM params[])
 {
-    return wp_slhdsa_message_init(ctx, slhdsa, params);
+    int ok;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_slhdsa_verify_message_init");
+    ok = wp_slhdsa_message_init(ctx, slhdsa, params);
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 static int wp_slhdsa_verify_message_final(wp_SlhDsaSigCtx* ctx)
 {
+    int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_slhdsa_verify_message_final");
     if ((ctx == NULL) || (ctx->verifySig == NULL)) {
-        return 0;
+        ok = 0;
     }
-    return wp_slhdsa_digest_verify_final(ctx, ctx->verifySig,
-        ctx->verifySigLen);
+    if (ok) {
+        ok = wp_slhdsa_digest_verify_final(ctx, ctx->verifySig,
+            ctx->verifySigLen);
+    }
+    if (ctx != NULL) {
+        OPENSSL_free(ctx->verifySig);
+        ctx->verifySig = NULL;
+        ctx->verifySigLen = 0;
+        wp_slhdsa_buf_reset(ctx);
+    }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PQC,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /* DER AlgorithmIdentifier (SEQUENCE { OID }) for each SLH-DSA parameter set.
@@ -779,6 +815,7 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
         if (ctx->mdLen > 0) {
             ok = 0;
         }
+        XMEMSET(context, 0, sizeof(context));
         if (ok && !OSSL_PARAM_get_octet_string(p, &vp, sizeof(context),
                 &len)) {
             ok = 0;
@@ -793,13 +830,15 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
             void* vp = testEntropy;
             size_t len = 0;
 
+            XMEMSET(testEntropy, 0, sizeof(testEntropy));
             if (!OSSL_PARAM_get_octet_string(p, &vp,
                     sizeof(testEntropy), &len)) {
                 ok = 0;
             }
             /* addrnd is exactly n bytes. A short value would silently fall
              * back to hedged signing, breaking the caller's reproducibility. */
-            if (ok && (len != (size_t)wp_slhdsa_get_n(ctx->slhdsa))) {
+            if (ok && ((ctx->slhdsa == NULL) || (len == 0) ||
+                    (len != (size_t)wp_slhdsa_get_n(ctx->slhdsa)))) {
                 ok = 0;
             }
             if (ok) {
@@ -844,7 +883,9 @@ static int wp_slhdsa_set_ctx_params(wp_SlhDsaSigCtx* ctx,
         p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_SIGNATURE);
         if (p != NULL) {
             /* Reject malformed signatures before allocating a copy. */
-            if ((p->data_size != (size_t)wp_slhdsa_get_sig_size(ctx->slhdsa)) ||
+            if ((ctx->slhdsa == NULL) ||
+                    (p->data_size !=
+                    (size_t)wp_slhdsa_get_sig_size(ctx->slhdsa)) ||
                     !OSSL_PARAM_get_octet_string(p, (void**)&verifySig, 0,
                         &verifySigLen)) {
                 ok = 0;

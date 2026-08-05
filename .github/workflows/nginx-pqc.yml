@@ -223,7 +223,9 @@ jobs:
             export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
           fi
           set +e
-          export ${{ matrix.force_fail || 'WOLFPROV_NOOP=1' }}
+          if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ]; then
+            export WOLFPROV_FORCE_FAIL=1
+          fi
           bash .github/nginx/test.sh 2>&1 | tee nginx-pqc.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \

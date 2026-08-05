@@ -338,6 +338,8 @@ int wp_slhdsa_up_ref(wp_SlhDsa* slhdsa);
 void wp_slhdsa_free(wp_SlhDsa* slhdsa);
 void* wp_slhdsa_get_key(wp_SlhDsa* slhdsa);
 wolfSSL_Mutex* wp_slhdsa_get_mutex(wp_SlhDsa* slhdsa);
+int wp_slhdsa_has_public(const wp_SlhDsa* slhdsa);
+int wp_slhdsa_has_private(const wp_SlhDsa* slhdsa);
 int wp_slhdsa_get_sig_size(const wp_SlhDsa* slhdsa);
 int wp_slhdsa_get_n(const wp_SlhDsa* slhdsa);
 int wp_slhdsa_get_param(wp_SlhDsa* slhdsa);

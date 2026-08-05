@@ -27,8 +27,7 @@
 #include <openssl/decoder.h>
 #include <openssl/x509.h>
 
-#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
-    defined(WP_SLHDSA_TEST_SETS)
+#if defined(WP_HAVE_SLHDSA) && defined(WP_SLHDSA_TEST_SETS)
 
 #include <wolfssl/wolfcrypt/wc_slhdsa.h>
 
@@ -71,6 +70,114 @@ static const slhdsa_test_set slhdsa_sets[] = {
 };
 #define SLHDSA_SET_COUNT (sizeof(slhdsa_sets) / sizeof(slhdsa_sets[0]))
 
+int test_slhdsa_public_keymgmt(void* data)
+{
+    int err = 0;
+    const slhdsa_test_set* set = &slhdsa_sets[0];
+    EVP_PKEY* key = NULL;
+    EVP_PKEY* dup = NULL;
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+    EVP_PKEY* paramsKey = NULL;
+#endif
+    EVP_PKEY_CTX* ctx = NULL;
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+    BIO* bio = NULL;
+#endif
+    unsigned char pub[64];
+    unsigned char out[64];
+    size_t outLen = 0;
+    size_t privLen = 0;
+    OSSL_PARAM params[2];
+    size_t i;
+
+    (void)data;
+
+    PRINT_MSG("Public key management %s", set->name);
+    for (i = 0; i < set->pubKeySize; i++) {
+        pub[i] = (unsigned char)(i + 1);
+    }
+    params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PUB_KEY,
+        pub, set->pubKeySize);
+    params[1] = OSSL_PARAM_construct_end();
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, set->name, NULL);
+    err = (ctx == NULL);
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, &key, EVP_PKEY_PUBLIC_KEY, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY,
+            out, sizeof(out), &outLen) != 1;
+    }
+    if (err == 0) {
+        err = (outLen != set->pubKeySize) ||
+            (XMEMCMP(pub, out, outLen) != 0);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PRIV_KEY,
+            NULL, 0, &privLen) == 1;
+        ERR_clear_error();
+    }
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (ctx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_public_check(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_private_check(ctx) == 1;
+        ERR_clear_error();
+    }
+    if (err == 0) {
+        err = EVP_PKEY_pairwise_check(ctx) == 1;
+        ERR_clear_error();
+    }
+    if (err == 0) {
+        dup = EVP_PKEY_dup(key);
+        err = (dup == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_eq(key, dup) != 1;
+    }
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, set->name, NULL);
+        err = (ctx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen(ctx, &paramsKey) != 1;
+    }
+    if (err == 0) {
+        bio = BIO_new(BIO_s_mem());
+        err = (bio == NULL);
+    }
+    if (err == 0) {
+        err = PEM_write_bio_PUBKEY(bio, paramsKey) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Parameter-only key encoded as a public key");
+        }
+        ERR_clear_error();
+    }
+
+    BIO_free(bio);
+    EVP_PKEY_free(paramsKey);
+#endif
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(dup);
+    EVP_PKEY_free(key);
+    return err;
+}
+
+#ifdef WP_HAVE_SLHDSA_PRIVATE
 
 
 static const unsigned char slhdsa_test_msg[] =
@@ -111,6 +218,7 @@ static int slhdsa_get_raw(EVP_PKEY* pkey, const char* param,
     int err = 0;
     size_t need = 0;
 
+    *out = NULL;
     err = EVP_PKEY_get_octet_string_param(pkey, param, NULL, 0, &need) != 1;
     if (err == 0) {
         *out = (unsigned char*)OPENSSL_malloc(need);
@@ -236,7 +344,11 @@ int test_slhdsa_keygen(void* data)
             }
         }
         if (err == 0) {
-            err = (memcmp(p1, p2, p1Len) == 0);
+            err = (p1Len != p2Len) || (XMEMCMP(p1, p2, p1Len) == 0);
+            if (err) {
+                PRINT_ERR_MSG("Generated public keys have invalid lengths or "
+                    "are identical");
+            }
         }
 
         OPENSSL_free(p1); p1 = NULL;
@@ -244,6 +356,61 @@ int test_slhdsa_keygen(void* data)
         EVP_PKEY_free(k1); k1 = NULL;
         EVP_PKEY_free(k2); k2 = NULL;
     }
+    return err;
+}
+
+int test_slhdsa_validate_keypair(void* data)
+{
+    int err = 0;
+    EVP_PKEY* key = NULL;
+    EVP_PKEY_CTX* ctx = NULL;
+    unsigned char* priv = NULL;
+    size_t privLen = 0;
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    PRINT_MSG("Key pair validation %s", slhdsa_sets[0].name);
+    err = slhdsa_keygen(slhdsa_sets[0].name, &key);
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (ctx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_private_check(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_pairwise_check(ctx) != 1;
+    }
+    if (err == 0) {
+        err = slhdsa_get_raw(key, OSSL_PKEY_PARAM_PRIV_KEY, &priv, &privLen);
+    }
+    if (err == 0) {
+        priv[0] ^= 1;
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_PRIV_KEY, priv, privLen);
+        params[1] = OSSL_PARAM_construct_end();
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, slhdsa_sets[0].name, NULL);
+        err = (ctx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        EVP_PKEY* bad = NULL;
+
+        err = EVP_PKEY_fromdata(ctx, &bad, EVP_PKEY_PRIVATE_KEY, params) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Corrupted private-only key was imported");
+        }
+        EVP_PKEY_free(bad);
+        ERR_clear_error();
+    }
+
+    OPENSSL_clear_free(priv, privLen);
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
     return err;
 }
 
@@ -316,10 +483,11 @@ int test_slhdsa_import_export_roundtrip(void* data)
                 &priv2Len);
         }
         if (err == 0) {
-            err = (pubLen != pub2Len) || (memcmp(pub, pub2, pubLen) != 0);
+            err = (pubLen != pub2Len) || (XMEMCMP(pub, pub2, pubLen) != 0);
         }
         if (err == 0) {
-            err = (privLen != priv2Len) || (memcmp(priv, priv2, privLen) != 0);
+            err = (privLen != priv2Len) ||
+                (XMEMCMP(priv, priv2, privLen) != 0);
         }
 
         OPENSSL_free(pub); pub = NULL;
@@ -442,7 +610,7 @@ int test_slhdsa_verify_tampered_msg(void* data)
         const slhdsa_test_set* set = &slhdsa_sets[i];
         PRINT_MSG("Tampered msg %s", set->name);
 
-        memcpy(msg, slhdsa_test_msg, SLHDSA_TEST_MSG_LEN);
+        XMEMCPY(msg, slhdsa_test_msg, SLHDSA_TEST_MSG_LEN);
         err = slhdsa_keygen(set->name, &key);
         if (err == 0) {
             err = slhdsa_sign_msg(key, msg, SLHDSA_TEST_MSG_LEN, &sig,
@@ -507,6 +675,9 @@ int test_slhdsa_dup(void* data)
     size_t i;
     EVP_PKEY* key = NULL;
     EVP_PKEY* dup = NULL;
+    EVP_PKEY* pub = NULL;
+    EVP_PKEY* pubDup = NULL;
+    BIO* bio = NULL;
     unsigned char* sig = NULL;
     size_t sigLen = 0;
 
@@ -530,8 +701,32 @@ int test_slhdsa_dup(void* data)
             err = !slhdsa_verify_msg(key, slhdsa_test_msg,
                 SLHDSA_TEST_MSG_LEN, sig, sigLen);
         }
+        /* EVP_PKEY_dup requests all components even for a public-only key. */
+        if (err == 0) {
+            bio = BIO_new(BIO_s_mem());
+            err = (bio == NULL);
+        }
+        if (err == 0) {
+            err = PEM_write_bio_PUBKEY(bio, key) != 1;
+        }
+        if (err == 0) {
+            pub = PEM_read_bio_PUBKEY_ex(bio, NULL, NULL, NULL, wpLibCtx,
+                NULL);
+            err = (pub == NULL);
+        }
+        if (err == 0) {
+            pubDup = EVP_PKEY_dup(pub);
+            err = (pubDup == NULL);
+        }
+        if (err == 0) {
+            err = !slhdsa_verify_msg(pubDup, slhdsa_test_msg,
+                SLHDSA_TEST_MSG_LEN, sig, sigLen);
+        }
 
+        BIO_free(bio); bio = NULL;
         OPENSSL_free(sig); sig = NULL;
+        EVP_PKEY_free(pubDup); pubDup = NULL;
+        EVP_PKEY_free(pub); pub = NULL;
         EVP_PKEY_free(dup); dup = NULL;
         EVP_PKEY_free(key); key = NULL;
     }
@@ -750,6 +945,13 @@ int test_slhdsa_message_api(void* data)
     if (err == 0) {
         err = EVP_PKEY_verify_message_final(verifyCtx) != 1;
     }
+    if (err == 0) {
+        err = EVP_PKEY_verify_message_final(verifyCtx) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Staged signature was reused after final");
+        }
+        ERR_clear_error();
+    }
 
     OPENSSL_free(sig);
     EVP_PKEY_CTX_free(verifyCtx);
@@ -947,11 +1149,18 @@ int test_slhdsa_pubonly_sign_fails(void* data)
                     pubOnly, NULL) == 1) {
                 /* A real buffer: if the sign ever stops failing, it must not
                  * write a multi-kilobyte signature over the message array. */
-                err = EVP_DigestSign(mdctx, NULL, &sigLen, slhdsa_test_msg,
-                    SLHDSA_TEST_MSG_LEN) == 1 &&
-                    (sig = OPENSSL_malloc(sigLen)) != NULL &&
-                    EVP_DigestSign(mdctx, sig,
-                        &sigLen, slhdsa_test_msg, SLHDSA_TEST_MSG_LEN) == 1;
+                if (EVP_DigestSign(mdctx, NULL, &sigLen, slhdsa_test_msg,
+                        SLHDSA_TEST_MSG_LEN) == 1) {
+                    sig = OPENSSL_malloc(sigLen);
+                    err = (sig == NULL);
+                    if (err == 0) {
+                        err = EVP_DigestSign(mdctx, sig, &sigLen,
+                            slhdsa_test_msg, SLHDSA_TEST_MSG_LEN) == 1;
+                        if (err) {
+                            PRINT_ERR_MSG("Public-only key produced a signature");
+                        }
+                    }
+                }
                 OPENSSL_free(sig);
             }
         }
@@ -1094,6 +1303,7 @@ int test_slhdsa_reinit_null_key(void* data)
     size_t sig2Len = 0;
     unsigned char entropy[32];
     OSSL_PARAM params[5];
+    OSSL_PARAM verifyParams[3];
     int detOn = 1;
     int encRaw = 0;
     size_t n;
@@ -1122,11 +1332,6 @@ int test_slhdsa_reinit_null_key(void* data)
         err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, key,
             params) != 1;
     }
-    /* Re-init must reuse the key and preserve configured signature params. */
-    if (err == 0) {
-        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, NULL,
-            NULL) != 1;
-    }
     if (err == 0) {
         err = EVP_DigestSign(mdctx, NULL, &sigLen, slhdsa_test_msg,
             SLHDSA_TEST_MSG_LEN) != 1;
@@ -1138,6 +1343,11 @@ int test_slhdsa_reinit_null_key(void* data)
     if (err == 0) {
         err = EVP_DigestSign(mdctx, sig, &sigLen, slhdsa_test_msg,
             SLHDSA_TEST_MSG_LEN) != 1;
+    }
+    /* Re-init reuses the key and preserves configured signature parameters. */
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, NULL,
+            NULL) != 1;
     }
     /* Failed updates must not partially replace the retained parameters. */
     if (err == 0) {
@@ -1194,8 +1404,13 @@ int test_slhdsa_reinit_null_key(void* data)
         err = (verifyCtx == NULL);
     }
     if (err == 0) {
+        verifyParams[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_CONTEXT_STRING, (void*)"ctx-A", 5);
+        verifyParams[1] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, &encRaw);
+        verifyParams[2] = OSSL_PARAM_construct_end();
         err = EVP_DigestVerifyInit_ex(verifyCtx, NULL, NULL, wpLibCtx, NULL,
-            key, params) != 1;
+            key, verifyParams) != 1;
     }
     if (err == 0) {
         err = EVP_DigestVerify(verifyCtx, sig, sigLen, slhdsa_test_msg,
@@ -1226,13 +1441,44 @@ int test_slhdsa_encode_decode(void* data)
         EVP_PKEY* key = NULL;
         EVP_PKEY* privKey = NULL;
         EVP_PKEY* pubKey = NULL;
+        EVP_PKEY* rawKey = NULL;
+        OSSL_DECODER_CTX* dctx = NULL;
         BIO* bio = NULL;
+        unsigned char* rawPub = NULL;
+        const unsigned char* rawData = NULL;
+        size_t rawLen = 0;
+        size_t rawDataLen = 0;
         unsigned char* sig = NULL;
         size_t sigLen = 0;
 
         PRINT_MSG("Encode/decode %s", set->name);
 
         err = slhdsa_keygen(set->name, &key);
+
+        /* A SubjectPublicKeyInfo decoder must not accept a bare raw key. */
+        if (err == 0) {
+            err = slhdsa_get_pub(key, &rawPub, &rawLen);
+        }
+        if (err == 0) {
+            /* Exercise the raw-key/SPKI ambiguity deterministically. */
+            rawPub[0] = 0x30;
+            rawData = rawPub;
+            rawDataLen = rawLen;
+            dctx = OSSL_DECODER_CTX_new_for_pkey(&rawKey, "DER",
+                "SubjectPublicKeyInfo", set->name,
+                OSSL_KEYMGMT_SELECT_PUBLIC_KEY, wpLibCtx, NULL);
+            err = (dctx == NULL);
+        }
+        if (err == 0) {
+            err = OSSL_DECODER_from_data(dctx, &rawData, &rawDataLen) == 1;
+            if (err) {
+                PRINT_ERR_MSG("SPKI decoder accepted a raw public key");
+            }
+            ERR_clear_error();
+        }
+        OSSL_DECODER_CTX_free(dctx); dctx = NULL;
+        EVP_PKEY_free(rawKey); rawKey = NULL;
+        OPENSSL_free(rawPub); rawPub = NULL;
 
         /* PKCS#8 private key round-trip. */
         if (err == 0) {
@@ -1279,6 +1525,9 @@ int test_slhdsa_encode_decode(void* data)
         }
 
         OPENSSL_free(sig);
+        OSSL_DECODER_CTX_free(dctx);
+        EVP_PKEY_free(rawKey);
+        OPENSSL_free(rawPub);
         EVP_PKEY_free(pubKey);
         EVP_PKEY_free(privKey);
         EVP_PKEY_free(key);
@@ -1479,13 +1728,14 @@ int test_slhdsa_keygen_seed(void* data)
     EVP_PKEY* keyA = NULL;
     EVP_PKEY* keyB = NULL;
     EVP_PKEY_CTX* ctx = NULL;
-    unsigned char seed[96];
+    unsigned char seed[(3 * 32) + 1];
     unsigned char pubA[128];
     unsigned char pubB[128];
     size_t pubALen = 0;
     size_t pubBLen = 0;
     OSSL_PARAM params[2];
     size_t seedLen;
+    size_t badSeedLens[2];
     size_t i;
 
     (void)data;
@@ -1494,7 +1744,7 @@ int test_slhdsa_keygen_seed(void* data)
 
     /* FIPS 205 seeds SK.seed || SK.prf || PK.seed, each n bytes. */
     seedLen = (slhdsa_sets[0].pubKeySize / 2) * 3;
-    for (i = 0; i < seedLen; i++) {
+    for (i = 0; i < sizeof(seed); i++) {
         seed[i] = (unsigned char)i;
     }
     params[0] = OSSL_PARAM_construct_octet_string(
@@ -1534,6 +1784,28 @@ int test_slhdsa_keygen_seed(void* data)
 
     EVP_PKEY_free(keyA); keyA = NULL;
     EVP_PKEY_free(keyB); keyB = NULL;
+
+    if (err == 0) {
+        PRINT_MSG("Wrong-length keygen seeds are rejected");
+        badSeedLens[0] = seedLen - 1;
+        badSeedLens[1] = seedLen + 1;
+    }
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, slhdsa_sets[0].name, NULL);
+        err = (ctx == NULL);
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx) != 1;
+        }
+        if (err == 0) {
+            params[0] = OSSL_PARAM_construct_octet_string(
+                OSSL_PKEY_PARAM_SLH_DSA_SEED, seed, badSeedLens[i]);
+            err = EVP_PKEY_CTX_set_params(ctx, params) == 1;
+            if (err) {
+                PRINT_ERR_MSG("Wrong-length keygen seed was accepted");
+            }
+        }
+        EVP_PKEY_CTX_free(ctx); ctx = NULL;
+    }
 
     if (err == 0) {
         PRINT_MSG("Rejected seed does not persist in keygen context");
@@ -1577,6 +1849,42 @@ int test_slhdsa_keygen_seed(void* data)
     return err;
 }
 
+static int slhdsa_check_alg_id(EVP_PKEY* key, byte arc)
+{
+    static const byte prefix[] = {
+        0x30, 0x0b, 0x06, 0x09, 0x60, 0x86, 0x48,
+        0x01, 0x65, 0x03, 0x04, 0x03
+    };
+    int err = 0;
+    EVP_MD_CTX* mdCtx = NULL;
+    EVP_PKEY_CTX* keyCtx = NULL;
+    byte expected[sizeof(prefix) + 1];
+    byte actual[sizeof(expected)];
+    OSSL_PARAM params[2];
+
+    XMEMCPY(expected, prefix, sizeof(prefix));
+    expected[sizeof(prefix)] = arc;
+    mdCtx = EVP_MD_CTX_new();
+    err = (mdCtx == NULL);
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, &keyCtx, NULL, wpLibCtx, NULL,
+            key, NULL) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_ALGORITHM_ID, actual, sizeof(actual));
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_get_params(keyCtx, params) != 1;
+    }
+    if (err == 0) {
+        err = (params[0].return_size != sizeof(expected)) ||
+            (XMEMCMP(actual, expected, sizeof(expected)) != 0);
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    return err;
+}
+
 int test_slhdsa_x509_sign_verify(void* data)
 {
     int err = 0;
@@ -1593,6 +1901,13 @@ int test_slhdsa_x509_sign_verify(void* data)
         PRINT_MSG("X509 sign/verify %s", set->name);
 
         err = slhdsa_keygen(set->name, &key);
+        if ((err == 0) && (XSTRCMP(set->name, "SLH-DSA-SHA2-128f") == 0)) {
+            err = slhdsa_check_alg_id(key, 0x15);
+        }
+        if ((err == 0) &&
+                (XSTRCMP(set->name, "SLH-DSA-SHAKE-128f") == 0)) {
+            err = slhdsa_check_alg_id(key, 0x1b);
+        }
         if (err == 0) {
             cert = X509_new_ex(wpLibCtx, NULL);
             err = (cert == NULL);
@@ -1656,7 +1971,7 @@ int test_slhdsa_encode_epki(void* data)
     }
     if (err == 0) {
         err = PEM_write_bio_PrivateKey(bio, key,
-            EVP_aes_256_cbc(), (unsigned char*)pw, (int)strlen(pw), NULL,
+            EVP_aes_256_cbc(), (unsigned char*)pw, (int)XSTRLEN(pw), NULL,
             NULL) != 1;
     }
     if (err == 0) {
@@ -1685,4 +2000,5 @@ int test_slhdsa_encode_epki(void* data)
 }
 #endif /* WP_HAVE_EPKI_TEST */
 
-#endif /* WP_HAVE_SLHDSA && WP_HAVE_SLHDSA_PRIVATE && WP_SLHDSA_TEST_SETS */
+#endif /* WP_HAVE_SLHDSA_PRIVATE */
+#endif /* WP_HAVE_SLHDSA && WP_SLHDSA_TEST_SETS */

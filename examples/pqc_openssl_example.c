@@ -60,6 +60,9 @@
     #define EXAMPLE_SLH_DSA_NAME "SLH-DSA-SHA2-256s"
 #endif
 
+#if defined(WOLFPROV_HAVE_MLKEM) || defined(WOLFPROV_HAVE_MLDSA) || \
+    (defined(WOLFPROV_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
+    defined(EXAMPLE_SLH_DSA_NAME))
 static EVP_PKEY* generate_key(OSSL_LIB_CTX* libCtx, const char* algorithm)
 {
     EVP_PKEY* key = NULL;
@@ -75,6 +78,7 @@ static EVP_PKEY* generate_key(OSSL_LIB_CTX* libCtx, const char* algorithm)
     EVP_PKEY_CTX_free(keyCtx);
     return key;
 }
+#endif
 
 #ifdef WOLFPROV_HAVE_MLKEM
 static int run_mlkem(OSSL_LIB_CTX* libCtx)
@@ -149,7 +153,8 @@ static int run_mlkem(OSSL_LIB_CTX* libCtx)
 #endif
 
 #if defined(WOLFPROV_HAVE_MLDSA) || \
-    (defined(WOLFPROV_HAVE_SLHDSA) && defined(EXAMPLE_SLH_DSA_NAME))
+    (defined(WOLFPROV_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
+    defined(EXAMPLE_SLH_DSA_NAME))
 static int run_signature(OSSL_LIB_CTX* libCtx, const char* algorithm)
 {
     static const unsigned char message[] =
@@ -204,11 +209,14 @@ static int run_signature(OSSL_LIB_CTX* libCtx, const char* algorithm)
 int main(int argc, char** argv)
 {
     int rc = 0;
+    int ran = 0;
     OSSL_LIB_CTX* libCtx = NULL;
     OSSL_PROVIDER* wolfProv = NULL;
     char executable[PATH_MAX];
     char providerPath[PATH_MAX];
-    char* executableDir;
+    char* executableDir = NULL;
+    int providerPathLen = 0;
+    int haveProviderPath = 0;
 
     libCtx = OSSL_LIB_CTX_new();
     if (libCtx == NULL) {
@@ -216,23 +224,34 @@ int main(int argc, char** argv)
     }
 
     if (rc == 0) {
-        if ((argc < 1) || (realpath(argv[0], executable) == NULL) ||
-                ((executableDir = dirname(executable)) == NULL) ||
-                (snprintf(providerPath, sizeof(providerPath),
-                    "%s/../../.libs", executableDir) >=
-                    (int)sizeof(providerPath))) {
-            rc = 1;
+        if ((argc > 0) && (realpath(argv[0], executable) != NULL)) {
+            executableDir = dirname(executable);
         }
-        if ((rc == 0) && (access(providerPath, R_OK | X_OK) != 0)) {
-            if ((snprintf(providerPath, sizeof(providerPath), "%s/../.libs",
-                    executableDir) >= (int)sizeof(providerPath)) ||
-                    (access(providerPath, R_OK | X_OK) != 0)) {
-                rc = 1;
+        if (executableDir != NULL) {
+            providerPathLen = snprintf(providerPath, sizeof(providerPath),
+                "%s/../../.libs", executableDir);
+            if ((providerPathLen >= 0) &&
+                    (providerPathLen < (int)sizeof(providerPath)) &&
+                    (access(providerPath, R_OK | X_OK) == 0)) {
+                haveProviderPath = 1;
+            }
+            if (!haveProviderPath) {
+                providerPathLen = snprintf(providerPath, sizeof(providerPath),
+                    "%s/../.libs", executableDir);
+                if ((providerPathLen >= 0) &&
+                        (providerPathLen < (int)sizeof(providerPath)) &&
+                        (access(providerPath, R_OK | X_OK) == 0)) {
+                    haveProviderPath = 1;
+                }
             }
         }
     }
+    if ((rc == 0) && haveProviderPath &&
+            (OSSL_PROVIDER_set_default_search_path(libCtx, providerPath) !=
+                1)) {
+        rc = 1;
+    }
     if (rc == 0) {
-        OSSL_PROVIDER_set_default_search_path(libCtx, providerPath);
         wolfProv = OSSL_PROVIDER_load(libCtx, WOLFPROV_NAME);
         if (wolfProv == NULL) {
             rc = 1;
@@ -240,6 +259,7 @@ int main(int argc, char** argv)
     }
 
 #ifdef WOLFPROV_HAVE_MLKEM
+    ran = 1;
     if ((rc == 0) && (run_mlkem(libCtx) != 0)) {
         fprintf(stderr, "ML-KEM-768 encapsulation failed\n");
         rc = 1;
@@ -250,6 +270,7 @@ int main(int argc, char** argv)
 #endif
 
 #ifdef WOLFPROV_HAVE_MLDSA
+    ran = 1;
     if ((rc == 0) && (run_signature(libCtx, "ML-DSA-65") != 0)) {
         fprintf(stderr, "ML-DSA-65 signature failed\n");
         rc = 1;
@@ -259,7 +280,9 @@ int main(int argc, char** argv)
     }
 #endif
 
-#if defined(WOLFPROV_HAVE_SLHDSA) && defined(EXAMPLE_SLH_DSA_NAME)
+#if defined(WOLFPROV_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
+    defined(EXAMPLE_SLH_DSA_NAME)
+    ran = 1;
     if ((rc == 0) && (run_signature(libCtx, EXAMPLE_SLH_DSA_NAME) != 0)) {
         fprintf(stderr, "%s signature failed\n", EXAMPLE_SLH_DSA_NAME);
         rc = 1;
@@ -268,6 +291,11 @@ int main(int argc, char** argv)
         printf("%s signature passed\n", EXAMPLE_SLH_DSA_NAME);
     }
 #endif
+
+    if ((rc == 0) && !ran) {
+        fprintf(stderr, "No enabled post-quantum algorithm can be exercised\n");
+        rc = 1;
+    }
 
     if (rc != 0) {
         ERR_print_errors_fp(stderr);

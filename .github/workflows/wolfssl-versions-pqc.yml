@@ -141,17 +141,6 @@ jobs:
           WOLFSSL_SLHDSA_CONFIG=${{ matrix.slh-config || 'yes,sha2' }} \
             ./scripts/build-wolfprovider.sh ${{ matrix.enable }}
 
-      - name: Run OpenSSL provider example
-        run: |
-          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
-          ./examples/openssl_example
-
-      - name: Run PQC OpenSSL example (${{ matrix.expect }})
-        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify'
-        run: |
-          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
-          ./examples/pqc_openssl_example
-
       - name: Push build dependencies
         uses: ./.github/actions/oras-build-deps-push
         with:
@@ -164,6 +153,27 @@ jobs:
           openssl_source_hit: ${{ steps.deps.outputs.openssl_source_hit }}
           cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
 
+      - name: Run OpenSSL provider example
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          ./examples/openssl_example
+          cp ./examples/.libs/openssl_example "$RUNNER_TEMP/openssl_example"
+          OPENSSL_MODULES="$(pwd)/.libs" "$RUNNER_TEMP/openssl_example"
+
+      - name: Run PQC OpenSSL example (${{ matrix.expect }})
+        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify'
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          if [ ! -x ./examples/pqc_openssl_example ]; then
+            echo "::error::PQC OpenSSL example was not built"
+            exit 1
+          fi
+          ./examples/pqc_openssl_example
+          cp ./examples/.libs/pqc_openssl_example \
+            "$RUNNER_TEMP/pqc_openssl_example"
+          OPENSSL_MODULES="$(pwd)/.libs" \
+            "$RUNNER_TEMP/pqc_openssl_example"
+
       # Opt-in is per-algorithm: assert exactly the expected PQC test families
       # are present (all / mlkem / mldsa / slhdsa / lms / none). This catches a leaked
       # algorithm, a missing one, or PQC dragged in without a flag.
@@ -174,7 +184,8 @@ jobs:
           kem=0; dsa=0; slh=0; lms=0
           printf '%s\n' "$tests" | grep -q 'test_mlkem_keygen' && kem=1
           printf '%s\n' "$tests" | grep -q 'test_mldsa_sign_verify' && dsa=1
-          printf '%s\n' "$tests" | grep -q 'test_slhdsa_sign_verify' && slh=1
+          printf '%s\n' "$tests" | \
+            grep -qE 'test_slhdsa_(sign_verify|public_keymgmt)' && slh=1
           printf '%s\n' "$tests" | grep -q 'test_lms_import_export' && lms=1
           echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa slhdsa=$slh lms=$lms"
           case "${{ matrix.expect }}" in
@@ -182,7 +193,7 @@ jobs:
             mlkem)  [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             mldsa)  [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             slhdsa) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
-            slhdsa-verify) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
+            slhdsa-verify) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
             lms)    [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 1 ] ;;
             none)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             *) false ;;
@@ -194,7 +205,7 @@ jobs:
       # many PQC tests are registered. LD_LIBRARY_PATH carries libwolfprov's
       # deps; the provider module itself is found via the default .libs dir.
       - name: Run PQC unit tests
-        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify'
+        if: matrix.expect != 'none'
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx|slhdsa|lms' \
@@ -213,12 +224,28 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           export OPENSSL_MODULES="$(pwd)/.libs"
+          vector=./openssl-source/test/recipes/30-test_evp_data/evppkey_slh_dsa_sigver.txt
           if [ ! -x ./openssl-source/test/evp_test ]; then
             echo "::error::OpenSSL evp_test is missing"
             exit 1
           fi
-          ./openssl-source/test/evp_test -config ./provider.conf \
-            ./openssl-source/test/recipes/30-test_evp_data/evppkey_slh_dsa_sigver.txt
+          if [ ! -f "$vector" ]; then
+            echo "::error::SLH-DSA verification vectors are missing"
+            exit 1
+          fi
+          rc=0
+          out=$(./openssl-source/test/evp_test -config ./provider.conf \
+            "$vector" 2>&1) || rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
+          ran=$(printf '%s\n' "$out" | \
+            sed -n 's/.*Completed \([0-9][0-9]*\) tests.*/\1/p')
+          if [ -z "$ran" ] || [ "$ran" -eq 0 ]; then
+            echo "::error::SLH-DSA verify-only KAT executed no vectors"
+            exit 1
+          fi
 
       # Three-way interop: wolfProvider <-> OpenSSL default <-> wolfSSL direct.
       # Only runs on PQC-enabled rows; the latest OpenSSL (3.6+, the PQC floor)

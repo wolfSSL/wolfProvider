@@ -42,7 +42,9 @@ int main(int argc, char** argv)
     };
     char executable[PATH_MAX];
     char providerPath[PATH_MAX];
-    char* executableDir;
+    char* executableDir = NULL;
+    int providerPathLen = 0;
+    int haveProviderPath = 0;
 
     libCtx = OSSL_LIB_CTX_new();
     if (libCtx == NULL) {
@@ -50,23 +52,34 @@ int main(int argc, char** argv)
     }
 
     if (rc == 0) {
-        if ((argc < 1) || (realpath(argv[0], executable) == NULL) ||
-                ((executableDir = dirname(executable)) == NULL) ||
-                (snprintf(providerPath, sizeof(providerPath),
-                    "%s/../../.libs", executableDir) >=
-                    (int)sizeof(providerPath))) {
-            rc = 1;
+        if ((argc > 0) && (realpath(argv[0], executable) != NULL)) {
+            executableDir = dirname(executable);
         }
-        if ((rc == 0) && (access(providerPath, R_OK | X_OK) != 0)) {
-            if (snprintf(providerPath, sizeof(providerPath), "%s/../.libs",
-                    executableDir) >= (int)sizeof(providerPath) ||
-                    access(providerPath, R_OK | X_OK) != 0) {
-                rc = 1;
+        if (executableDir != NULL) {
+            providerPathLen = snprintf(providerPath, sizeof(providerPath),
+                "%s/../../.libs", executableDir);
+            if ((providerPathLen >= 0) &&
+                    (providerPathLen < (int)sizeof(providerPath)) &&
+                    (access(providerPath, R_OK | X_OK) == 0)) {
+                haveProviderPath = 1;
+            }
+            if (!haveProviderPath) {
+                providerPathLen = snprintf(providerPath, sizeof(providerPath),
+                    "%s/../.libs", executableDir);
+                if ((providerPathLen >= 0) &&
+                        (providerPathLen < (int)sizeof(providerPath)) &&
+                        (access(providerPath, R_OK | X_OK) == 0)) {
+                    haveProviderPath = 1;
+                }
             }
         }
     }
+    if ((rc == 0) && haveProviderPath &&
+            (OSSL_PROVIDER_set_default_search_path(libCtx, providerPath) !=
+                1)) {
+        rc = 1;
+    }
     if (rc == 0) {
-        OSSL_PROVIDER_set_default_search_path(libCtx, providerPath);
         wolfProv = OSSL_PROVIDER_load(libCtx, WOLFPROV_NAME);
         if ((wolfProv == NULL) ||
                 (OSSL_PROVIDER_get_params(wolfProv, request) != 1)) {

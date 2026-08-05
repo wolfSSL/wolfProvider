@@ -7,7 +7,8 @@
 # chain, and that the page is served. Exits non-zero if any group fails; the CI
 # step inverts that under WOLFPROV_FORCE_FAIL=1.
 
-WOLFPROV_ROOT=${WOLFPROV_ROOT:-/opt/wolfProvider}
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+WOLFPROV_ROOT=${WOLFPROV_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}
 O=${WOLFPROV_ROOT}/openssl-install
 CA=/opt/nginx/cacert/CA.crt
 PORT=4433

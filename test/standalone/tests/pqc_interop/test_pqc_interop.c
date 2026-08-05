@@ -70,7 +70,14 @@
 
 #include <wolfssl/wolfcrypt/wc_mlkem.h>
 #include <wolfssl/wolfcrypt/wc_mldsa.h>
-#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
+    (defined(WP_HAVE_SLH_DSA_SHA2_128F) || \
+    defined(WP_HAVE_SLH_DSA_SHA2_192F) || \
+    defined(WP_HAVE_SLH_DSA_SHAKE_128F))
+    #define WP_PQC_INTEROP_SLHDSA_SETS
+#endif
+
+#ifdef WP_PQC_INTEROP_SLHDSA_SETS
 #include <wolfssl/wolfcrypt/wc_slhdsa.h>
 #endif
 #include <wolfssl/wolfcrypt/random.h>
@@ -644,7 +651,7 @@ end:
 }
 
 
-#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+#ifdef WP_PQC_INTEROP_SLHDSA_SETS
 
 static const char* slhdsa_msg =
     "SLH-DSA three-way interop message (FIPS 205).";
@@ -817,7 +824,7 @@ end:
     return ok;
 }
 
-#endif /* WP_HAVE_SLHDSA && WP_HAVE_SLHDSA_PRIVATE */
+#endif /* WP_PQC_INTEROP_SLHDSA_SETS */
 
 /*
  * TLS 1.3 group interop - drives a real handshake over an in-memory BIO pair
@@ -1012,7 +1019,7 @@ int main(int argc, char* argv[])
     };
     const char* mlkem[] = { "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024" };
     const char* mldsa[] = { "ML-DSA-44", "ML-DSA-65", "ML-DSA-87" };
-#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+#ifdef WP_PQC_INTEROP_SLHDSA_SETS
     const char* slhdsa[] = {
 #ifdef WP_HAVE_SLH_DSA_SHA2_128F
         "SLH-DSA-SHA2-128f",
@@ -1059,7 +1066,7 @@ int main(int argc, char* argv[])
         if (!test_mldsa_pair_to_wp(mldsa[i], "direct"))  fail++;
     }
 
-#if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE)
+#ifdef WP_PQC_INTEROP_SLHDSA_SETS
     /* Only the fast ('f') parameter sets: the small ('s') variants sign
      * orders of magnitude slower and would dominate CI runtime. */
     printf("\nSLH-DSA three-way interop:\n");

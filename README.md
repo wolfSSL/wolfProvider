@@ -78,12 +78,14 @@ Information on how to configure, build, and test wolfProvider can be found here:
 PQC is opt-in and requires wolfSSL master/v5.9.2-stable+ and OpenSSL 3.6+.
 
 * With the script: `./scripts/build-wolfprovider.sh --enable-pqc`
-  (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa` for one only)
+  (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa` for one only).
+  `--enable-slhdsa` enables all 12 parameter sets by default. For SHAKE-only:
+  `WOLFSSL_SLHDSA_CONFIG=yes ./scripts/build-wolfprovider.sh --enable-slhdsa`.
 * Building wolfProvider directly: `./configure --enable-pqc`
   (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa`); build wolfSSL
-  with the matching `--enable-mlkem` / `--enable-mldsa`. For all 12 SLH-DSA
-  parameter sets, configure wolfSSL with `--enable-slhdsa=yes,sha2`; plain
-  `--enable-slhdsa` enables only the SHAKE family. Link an OpenSSL 3.6+.
+  with the matching options. Use wolfSSL's `--enable-slhdsa=yes,sha2` for all
+  12 parameter sets or plain `--enable-slhdsa` for SHAKE-only. Link an OpenSSL
+  3.6+.
 
 Without an enable flag no PQC code is compiled, regardless of what wolfSSL enables.
 

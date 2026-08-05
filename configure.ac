@@ -215,10 +215,35 @@ if test "x$ENABLED_LMS" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_LMS"
 fi
 
+BUILD_SLHDSA_EXAMPLE=no
+if test "x$ENABLED_SLHDSA" = "xyes"; then
+    AC_MSG_CHECKING([whether wolfSSL SLH-DSA headers are usable])
+    AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/wc_slhdsa.h>
+        ]], [[]])],
+        [AC_MSG_RESULT([yes])],
+        [AC_MSG_RESULT([no])
+         AC_MSG_FAILURE([wolfSSL SLH-DSA headers cannot be compiled])])
+    AC_MSG_CHECKING([whether wolfSSL SLH-DSA private operations are enabled])
+    AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/wc_slhdsa.h>
+#ifndef WOLFSSL_SLHDSA_VERIFY_ONLY
+#error wolfSSL SLH-DSA private operations are enabled
+#endif
+        ]], [[]])],
+        [BUILD_SLHDSA_EXAMPLE=no],
+        [BUILD_SLHDSA_EXAMPLE=yes])
+    AC_MSG_RESULT([$BUILD_SLHDSA_EXAMPLE])
+fi
+
 AM_CONDITIONAL([BUILD_PQC_EXAMPLE],
     [test "x$ENABLED_MLKEM" = "xyes" ||
      test "x$ENABLED_MLDSA" = "xyes" ||
-     test "x$ENABLED_SLHDSA" = "xyes"])
+     test "x$BUILD_SLHDSA_EXAMPLE" = "xyes"])
 
 # Set OpenSSL lib directory for installing libdefault.so
 if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then

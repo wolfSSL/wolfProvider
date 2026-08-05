@@ -32,6 +32,7 @@
 
 #ifdef WP_HAVE_SLHDSA
 
+#include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/wc_slhdsa.h>
 
 /* Supported selections (key parts) in this key manager for SLH-DSA. */
@@ -55,6 +56,7 @@ typedef struct wp_SlhDsaData {
 /* SLH-DSA key object. */
 struct wp_SlhDsa {
     SlhDsaKey key;
+    /* Immutable after construction and safe to read without keyMutex. */
     const wp_SlhDsaData* data;
 
 #ifndef WP_SINGLE_THREADED
@@ -266,6 +268,17 @@ wolfSSL_Mutex* wp_slhdsa_get_mutex(wp_SlhDsa* slhdsa)
 #endif
 }
 
+/* Callers must hold keyMutex while using these availability accessors. */
+int wp_slhdsa_has_public(const wp_SlhDsa* slhdsa)
+{
+    return (slhdsa != NULL) && slhdsa->hasPub;
+}
+
+int wp_slhdsa_has_private(const wp_SlhDsa* slhdsa)
+{
+    return (slhdsa != NULL) && slhdsa->hasPriv;
+}
+
 /**
  * Get the SLH-DSA parameter id for the key.
  *
@@ -333,6 +346,7 @@ static wp_SlhDsa* wp_slhdsa_new(WOLFPROV_CTX* provCtx,
 
         rc = wc_SlhDsaKey_Init(&slhdsa->key, data->param, NULL, INVALID_DEVID);
         if (rc != 0) {
+            wc_SlhDsaKey_Free(&slhdsa->key);
             ok = 0;
         }
     #ifndef WP_SINGLE_THREADED
@@ -358,7 +372,7 @@ static wp_SlhDsa* wp_slhdsa_new(WOLFPROV_CTX* provCtx,
             slhdsa->data    = data;
         }
         if (!ok) {
-            OPENSSL_free(slhdsa);
+            OPENSSL_clear_free(slhdsa, sizeof(*slhdsa));
             slhdsa = NULL;
         }
     }
@@ -384,7 +398,7 @@ void wp_slhdsa_free(wp_SlhDsa* slhdsa)
         }
         else {
             /* Cannot safely decrement without the lock; keep the object. */
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_ERROR,
                 "wc_LockMutex", rc);
             cnt = 1;
         }
@@ -398,7 +412,7 @@ void wp_slhdsa_free(wp_SlhDsa* slhdsa)
             wc_FreeMutex(&slhdsa->refMutex);
         #endif
             wc_SlhDsaKey_Free(&slhdsa->key);
-            OPENSSL_free(slhdsa);
+            OPENSSL_clear_free(slhdsa, sizeof(*slhdsa));
         }
     }
 }
@@ -420,7 +434,6 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
     word32 privAllocLen = 0;
     int rc;
     int ok = 1;
-    int locked = 0;
     int dupPub;
     int dupPriv;
 
@@ -430,15 +443,13 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
     if (wp_lock(wp_slhdsa_get_mutex((wp_SlhDsa*)src)) != 1) {
         return NULL;
     }
-    locked = 1;
     dupPub = ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) && src->hasPub;
     dupPriv = ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
               && src->hasPriv;
 
     dst = wp_slhdsa_new(src->provCtx, src->data);
     if (dst == NULL) {
-        wp_unlock(wp_slhdsa_get_mutex((wp_SlhDsa*)src));
-        return NULL;
+        ok = 0;
     }
 
     if (dupPub) {
@@ -495,9 +506,7 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
     (void)dupPriv;
 #endif
 
-    if (locked) {
-        wp_unlock(wp_slhdsa_get_mutex((wp_SlhDsa*)src));
-    }
+    wp_unlock(wp_slhdsa_get_mutex((wp_SlhDsa*)src));
 
     if (!ok) {
         wp_slhdsa_free(dst);
@@ -514,13 +523,17 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
  * Load an SLH-DSA key from a reference.
  *
  * @param [in, out] pSlhDsa  Pointer to an SLH-DSA key reference.
- * @param [in]      size     Size of reference object. Unused.
+ * @param [in]      size     Size of reference object.
  * @return  SLH-DSA key object on success.
  */
 static const wp_SlhDsa* wp_slhdsa_load(const wp_SlhDsa** pSlhDsa, size_t size)
 {
-    const wp_SlhDsa* slhdsa = *pSlhDsa;
-    (void)size;
+    const wp_SlhDsa* slhdsa;
+
+    if ((pSlhDsa == NULL) || (size != sizeof(*pSlhDsa))) {
+        return NULL;
+    }
+    slhdsa = *pSlhDsa;
     *pSlhDsa = NULL;
     return slhdsa;
 }
@@ -717,6 +730,13 @@ static int wp_slhdsa_validate(const wp_SlhDsa* slhdsa, int selection,
 {
     int ok;
     int locked = 0;
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+    wp_SlhDsa* copy = NULL;
+    unsigned char* priv = NULL;
+    word32 privLen = 0;
+    word32 privAllocLen = 0;
+    int rc;
+#endif
 
     WOLFPROV_ENTER(WP_LOG_COMP_PQC, "wp_slhdsa_validate");
 
@@ -735,10 +755,37 @@ static int wp_slhdsa_validate(const wp_SlhDsa* slhdsa, int selection,
         ok = slhdsa->hasPriv;
     }
 #ifdef WP_HAVE_SLHDSA_PRIVATE
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) ==
-            OSSL_KEYMGMT_SELECT_KEYPAIR) &&
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
             (checkType != OSSL_KEYMGMT_VALIDATE_QUICK_CHECK)) {
-        ok = wc_SlhDsaKey_CheckKey((SlhDsaKey*)&slhdsa->key) == 0;
+        copy = wp_slhdsa_new(slhdsa->provCtx, slhdsa->data);
+        if (copy == NULL) {
+            ok = 0;
+        }
+        if (ok) {
+            privLen = privAllocLen = slhdsa->data->privKeySize;
+            priv = OPENSSL_malloc(privAllocLen);
+            if (priv == NULL) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            rc = wc_SlhDsaKey_ExportPrivate((SlhDsaKey*)&slhdsa->key, priv,
+                &privLen);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            rc = wc_SlhDsaKey_ImportPrivate(&copy->key, priv, privLen);
+            if (rc != 0) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            ok = wc_SlhDsaKey_CheckKey(&copy->key) == 0;
+        }
+        OPENSSL_clear_free(priv, privAllocLen);
+        wp_slhdsa_free(copy);
     }
 #else
     (void)checkType;
@@ -804,6 +851,9 @@ static int wp_slhdsa_import(wp_SlhDsa* slhdsa, int selection,
             if (rc != 0) {
                 ok = 0;
             }
+            if (ok && (wc_SlhDsaKey_CheckKey(&slhdsa->key) != 0)) {
+                ok = 0;
+            }
             if (ok) {
                 slhdsa->hasPriv =
                     ((slhdsa->key.flags & WC_SLHDSA_FLAG_PRIVATE) != 0) ? 1 : 0;
@@ -839,10 +889,9 @@ static int wp_slhdsa_import(wp_SlhDsa* slhdsa, int selection,
         ok = 0;
     }
 #ifdef WP_HAVE_SLHDSA_PRIVATE
-    /* Catches a mismatched pub/priv pair that the imports accept separately.
-     * Only when both were supplied: CheckKey rebuilds the public root, which
-     * is slow for the 's' parameter sets. */
-    if (ok && (privData != NULL) && (pubData != NULL)) {
+    /* A public import must remain consistent with any private component. */
+    if (ok && (pubData != NULL) &&
+            ((slhdsa->key.flags & WC_SLHDSA_FLAG_PRIVATE) != 0)) {
         if (wc_SlhDsaKey_CheckKey(&slhdsa->key) != 0) {
             ok = 0;
         }
@@ -857,7 +906,14 @@ static int wp_slhdsa_import(wp_SlhDsa* slhdsa, int selection,
             ((slhdsa->key.flags & WC_SLHDSA_FLAG_PUBLIC) != 0) ? 1 : 0;
     }
     else if (locked && keyTouched) {
-        /* Never advertise a key after a partially completed failed import. */
+        /* Never retain or advertise a partially imported key. */
+        wc_SlhDsaKey_Free(&slhdsa->key);
+        rc = wc_SlhDsaKey_Init(&slhdsa->key, slhdsa->data->param, NULL,
+            INVALID_DEVID);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_ERROR,
+                "wc_SlhDsaKey_Init", rc);
+        }
         slhdsa->hasPriv = 0;
         slhdsa->hasPub = 0;
     }
@@ -869,41 +925,49 @@ static int wp_slhdsa_import(wp_SlhDsa* slhdsa, int selection,
 }
 
 /* SLH-DSA key parameters for import/export type queries. */
-static const OSSL_PARAM wp_slhdsa_key_params[] = {
-    /* 0: none */
+static const OSSL_PARAM wp_slhdsa_no_key_params[] = {
     OSSL_PARAM_END,
+};
 
-    /* 1: private only */
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+static const OSSL_PARAM wp_slhdsa_private_key_params[] = {
     OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
     OSSL_PARAM_END,
+};
+#endif
 
-    /* 3: public only */
-    OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
-    OSSL_PARAM_END,
-
-    /* 5: both */
-    OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
+static const OSSL_PARAM wp_slhdsa_public_key_params[] = {
     OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
     OSSL_PARAM_END,
 };
 
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+static const OSSL_PARAM wp_slhdsa_keypair_params[] = {
+    OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
+    OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
+    OSSL_PARAM_END,
+};
+#endif
+
 static const OSSL_PARAM* wp_slhdsa_key_types(int selection)
 {
-    int idx = 0;
-    int extra = 0;
-
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
-        idx += 3;
-        extra++;
-    }
+    int hasPublic =
+        (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
 #ifdef WP_HAVE_SLHDSA_PRIVATE
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
-        idx += 1 + extra;
+    int hasPrivate =
+        (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
+
+    if (hasPublic && hasPrivate) {
+        return wp_slhdsa_keypair_params;
     }
-#else
-    (void)extra;
+    if (hasPrivate) {
+        return wp_slhdsa_private_key_params;
+    }
 #endif
-    return &wp_slhdsa_key_params[idx];
+    if (hasPublic) {
+        return wp_slhdsa_public_key_params;
+    }
+    return wp_slhdsa_no_key_params;
 }
 
 static const OSSL_PARAM* wp_slhdsa_import_types(int selection)
@@ -1719,8 +1783,10 @@ static int wp_slhdsa_decode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         ok = 0;
     }
 
+#if !defined(WP_HAVE_PKCS8_ENC) || !defined(WP_HAVE_SLHDSA_PRIVATE)
     (void)pwCb;
     (void)pwCbArg;
+#endif
 
     if (ok) {
         ctx->selection = selection;
@@ -1734,19 +1800,23 @@ static int wp_slhdsa_decode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         ok = wp_read_der_bio(ctx->provCtx, cBio, &data, &len);
     }
     if (ok) {
+        /* The object is not published until dec_send_params below. */
         rc = ctx->decode(data, &idx, (void*)&slhdsa->key, len);
         if ((rc != 0) || (idx != len)) {
 #if defined(WP_HAVE_PKCS8_ENC) && defined(WP_HAVE_SLHDSA_PRIVATE)
             /* May be an encrypted PKCS#8 key - decrypt and retry. */
             if ((ctx->format != WP_ENC_FORMAT_PKI) ||
                     (!wp_slhdsa_decode_enc_pki(ctx, slhdsa, data, len, pwCb,
-                        pwCbArg)))
-#endif
-            {
+                        pwCbArg))) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "decode", rc);
                 ok = 0;
                 decoded = 0;
             }
+#else
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "decode", rc);
+            ok = 0;
+            decoded = 0;
+#endif
         }
     }
     /* wc_SlhDsaKey_*Decode overwrites the preset parameter set from the DER's
@@ -1758,6 +1828,12 @@ static int wp_slhdsa_decode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         ok = 0;
         decoded = 0;
     }
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+    if (ok && (ctx->format == WP_ENC_FORMAT_PKI) &&
+            (wc_SlhDsaKey_CheckKey(&slhdsa->key) != 0)) {
+        ok = 0;
+    }
+#endif
     if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
         slhdsa->hasPub = 1;
     }
@@ -1820,7 +1896,7 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     unsigned char* srcData;
     size_t srcLen;
     unsigned char* pemData = NULL;
-    size_t pemLen = 0;
+    size_t pemAllocLen = 0;
     int pemType = (ctx->format == WP_ENC_FORMAT_SPKI) ? PUBLICKEY_TYPE :
                                                         PKCS8_PRIVATEKEY_TYPE;
     int private = (ctx->format == WP_ENC_FORMAT_PKI) ||
@@ -1848,6 +1924,10 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         locked = 1;
     }
 
+    if (ok && ((private && !slhdsa->hasPriv) ||
+            (!private && !slhdsa->hasPub))) {
+        ok = 0;
+    }
     if (ok) {
         rc = ctx->encode((void*)&slhdsa->key, NULL, 0);
         if (rc <= 0) {
@@ -1922,27 +2002,27 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
             ok = 0;
         }
         if (ok) {
-            pemLen = (size_t)rc;
-            pemData = (unsigned char*)OPENSSL_malloc(pemLen);
+            pemAllocLen = (size_t)rc;
+            pemData = (unsigned char*)OPENSSL_malloc(pemAllocLen);
             if (pemData == NULL) {
                 ok = 0;
             }
         }
         if (ok) {
             rc = wc_DerToPemEx(srcData, (word32)srcLen, pemData,
-                (word32)pemLen, NULL, pemType);
+                (word32)pemAllocLen, NULL, pemType);
             if (rc <= 0) {
                 ok = 0;
             }
         }
         if (ok) {
-            keyLen = pemLen = (size_t)rc;
+            keyLen = (size_t)rc;
             keyData = pemData;
         }
     }
     if (ok) {
         rc = BIO_write(out, keyData, (int)keyLen);
-        if (rc <= 0) {
+        if (rc != (int)keyLen) {
             ok = 0;
         }
     }
@@ -1951,7 +2031,7 @@ static int wp_slhdsa_encode(wp_SlhDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
         if (derData != NULL) {
             OPENSSL_clear_free(derData, derAllocLen);
         }
-        OPENSSL_clear_free(pemData, pemLen);
+        OPENSSL_clear_free(pemData, pemAllocLen);
     }
     else {
         OPENSSL_free(derData);
@@ -1980,17 +2060,26 @@ static int wp_slhdsa_export_object(wp_SlhDsaEncDecCtx* ctx,
 {
     wp_SlhDsa* slhdsa;
     int selection;
+    int ok;
 
     if ((ctx == NULL) || (reference == NULL) ||
             (size != sizeof(slhdsa))) {
         return 0;
     }
     slhdsa = *(wp_SlhDsa* const*)reference;
+    if (slhdsa == NULL) {
+        return 0;
+    }
     selection = ctx->selection;
     if (selection == 0) {
         selection = OSSL_KEYMGMT_SELECT_ALL;
     }
-    return wp_slhdsa_export(slhdsa, selection, exportCb, exportCbArg);
+    if (!wp_slhdsa_up_ref(slhdsa)) {
+        return 0;
+    }
+    ok = wp_slhdsa_export(slhdsa, selection, exportCb, exportCbArg);
+    wp_slhdsa_free(slhdsa);
+    return ok;
 }
 
 /**
@@ -2032,7 +2121,23 @@ static int wp_slhdsa_spki_does_selection(WOLFPROV_CTX* provCtx, int selection)
 static int wp_slhdsa_pub_decode(const byte* input, word32* inOutIdx, void* key,
     word32 inSz)
 {
-    return wc_SlhDsaKey_PublicKeyDecode(input, inOutIdx, (SlhDsaKey*)key, inSz);
+    SlhDsaKey* slhdsa = (SlhDsaKey*)key;
+
+    if ((input == NULL) || (inOutIdx == NULL) || (slhdsa == NULL) ||
+            (slhdsa->params == NULL) || (*inOutIdx > inSz)) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* The backend first accepts a window of exactly 2n bytes as a raw public
+     * key. This decoder advertises SubjectPublicKeyInfo, whose DER wrapper
+     * necessarily makes it larger than 2n. Reject the raw-sized window so
+     * the backend's normal SPKI parser validates the complete structure and
+     * algorithm identifier. */
+    if ((inSz - *inOutIdx) == (word32)(2 * slhdsa->params->n)) {
+        return ASN_PARSE_E;
+    }
+
+    return wc_SlhDsaKey_PublicKeyDecode(input, inOutIdx, slhdsa, inSz);
 }
 
 /**
