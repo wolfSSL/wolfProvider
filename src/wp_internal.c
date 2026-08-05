@@ -23,6 +23,7 @@
 #include <openssl/x509.h>
 #include <openssl/objects.h>
 #include <openssl/err.h>
+#include <openssl/crypto.h>
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/internal.h>
@@ -94,14 +95,13 @@ typedef struct wp_cast_algo_state {
 
 static wp_cast_algo_state castAlgos[WP_CAST_ALGO_COUNT];
 
+static CRYPTO_ONCE castAlgosOnce = CRYPTO_ONCE_STATIC_INIT;
+
 /**
- * Initialize the cast mutexes on library load.
+ * Initialize the CAST self-test state of every algorithm.
  *
- * This constructor runs when libwolfprov.so is loaded via dlopen() or at
- * program startup. It ensures the castAlgos are initialized before any
- * wolfProvider functions are called.
+ * Run once, through wp_init_cast_mutexes().
  */
-__attribute__((constructor))
 static void wolfprov_init_cast_mutex(void)
 {
     int i;
@@ -109,6 +109,16 @@ static void wolfprov_init_cast_mutex(void)
         wc_InitMutex(&castAlgos[i].mutex);
         castAlgos[i].init = 0;
     }
+}
+
+/**
+ * Initialize the cast mutexes. Runs once.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_init_cast_mutexes(void)
+{
+    return CRYPTO_THREAD_run_once(&castAlgosOnce, wolfprov_init_cast_mutex);
 }
 
 /**
@@ -1555,6 +1565,24 @@ byte wp_ct_byte_mask_sel(byte mask, byte a, byte b)
  * them here. Consumed by SSHKDF (mpint length decode) and KBKDF
  * (counter / length encode). */
 
+#if !defined(WOLFSSL_USE_ALIGN) && defined(LITTLE_ENDIAN_ORDER)
+/**
+ * Reverse the byte order of a 32-bit value.
+ *
+ * wolfSSL's ByteReverseWord32() is not exported.
+ *
+ * @param [in] value  Value to reverse the byte order of.
+ * @return  Value with byte order reversed.
+ */
+static word32 wp_byte_reverse_word32(word32 value)
+{
+    return ((value & 0x000000ffU) << 24) |
+           ((value & 0x0000ff00U) <<  8) |
+           ((value & 0x00ff0000U) >>  8) |
+           ((value & 0xff000000U) >> 24);
+}
+#endif /* !WOLFSSL_USE_ALIGN && LITTLE_ENDIAN_ORDER */
+
 void wp_c32toa(word32 wc_u32, byte* c) {
 #ifdef WOLFSSL_USE_ALIGN
     c[0] = (byte)((wc_u32 >> 24) & 0xff);
@@ -1562,7 +1590,7 @@ void wp_c32toa(word32 wc_u32, byte* c) {
     c[2] = (byte)((wc_u32 >>  8) & 0xff);
     c[3] = (byte) (wc_u32 &        0xff);
 #elif defined(LITTLE_ENDIAN_ORDER)
-    *(word32*)c = ByteReverseWord32(wc_u32);
+    *(word32*)c = wp_byte_reverse_word32(wc_u32);
 #else
     *(word32*)c = wc_u32;
 #endif
@@ -1573,7 +1601,7 @@ word32 wp_atoc32(const byte* c) {
     return ((word32)c[0] << 24) | ((word32)c[1] << 16)
          | ((word32)c[2] <<  8) |  (word32)c[3];
 #elif defined(LITTLE_ENDIAN_ORDER)
-    return ByteReverseWord32(*(const word32*)c);
+    return wp_byte_reverse_word32(*(const word32*)c);
 #else
     return *(const word32*)c;
 #endif

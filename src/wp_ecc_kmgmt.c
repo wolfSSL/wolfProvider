@@ -157,7 +157,7 @@ static int wp_ecc_map_group_name(wp_Ecc* ecc, const char* name)
     WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_map_group_name");
 
     for (i = 0; i < WP_ECC_GROUP_MAP_SZ; i++) {
-        if (strcasecmp(wp_ecc_group_map[i].name, name) == 0) {
+        if (XSTRCASECMP(wp_ecc_group_map[i].name, name) == 0) {
             ecc->curveId = wp_ecc_group_map[i].curveId;
             ecc->bits    = wp_ecc_group_map[i].bits;
             break;

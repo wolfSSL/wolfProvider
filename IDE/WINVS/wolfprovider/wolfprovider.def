@@ -1,0 +1,26 @@
+; wolfProvider module exports.
+;
+; A provider module loaded by stock libcrypto needs exactly one symbol:
+; crypto/provider_core.c:1026-1027 does
+;     DSO_bind_func(prov->module, "OSSL_provider_init")
+; and that is the only name-based lookup performed against a provider
+; module. Exporting it from a .def keeps wolfProvider's sources free of
+; __declspec annotations (PORT-DESIGN Decision 5).
+;
+; This file applies to the DLL configurations ONLY. <ModuleDefinitionFile>
+; appears in the DLL Debug|x64 and DLL Release|x64 ItemDefinitionGroups of
+; wolfprovider.vcxproj and nowhere else: a static library has no export table,
+; and the Link task that consumes this file does not run for a StaticLibrary
+; configuration. The unit test reaches wolfProvider internals by linking the
+; Static Release|x64 library, never by widening this list -- growing it would
+; invite customers to ship a DLL with internal crypto symbols exposed.
+;
+; No LIBRARY statement: it is optional, and a LIBRARY name that does not
+; match the linker's output name produces LNK4102. The output name is set
+; by <TargetName>libwolfprov</TargetName> in wolfprovider.vcxproj.
+;
+; Requires WP_NO_DYNAMIC_PROVIDER to be undefined -- it guards
+; OSSL_provider_init at src/wp_wolfprov.c:1578-1592. None of the four
+; configurations defines it.
+EXPORTS
+    OSSL_provider_init

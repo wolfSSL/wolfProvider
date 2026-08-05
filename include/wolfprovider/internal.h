@@ -26,7 +26,9 @@
 #ifdef WOLFENGINE_USER_SETTINGS
     #include "user_settings.h"
 #endif
-#include <wolfssl/options.h>
+#ifndef WOLFSSL_USER_SETTINGS
+    #include <wolfssl/options.h>
+#endif
 #include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/hash.h>
@@ -198,6 +200,8 @@ void wp_provctx_unlock_rng(WOLFPROV_CTX* provCtx);
 #define WP_CAST_ALGO_ECDH   5
 #define WP_CAST_ALGO_DH     6
 #define WP_CAST_ALGO_COUNT  7
+
+int wp_init_cast_mutexes(void);
 
 int wp_init_cast(int algo);
 

@@ -21,7 +21,9 @@
 #ifndef WOLFPROV_SETTINGS_H
 #define WOLFPROV_SETTINGS_H
 
-#include <wolfssl/options.h>
+#ifndef WOLFSSL_USER_SETTINGS
+    #include <wolfssl/options.h>
+#endif
 #ifdef WOLFPROV_USER_SETTINGS
     #include "user_settings.h"
 #endif

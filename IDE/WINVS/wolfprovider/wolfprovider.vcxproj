@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- The Static configurations are never shipped. They exist so that
+       unit-test.vcxproj can link wolfProvider internals the DLL does not export. -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="DLL Debug|x64">
+      <Configuration>DLL Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="DLL Release|x64">
+      <Configuration>DLL Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Static Debug|x64">
+      <Configuration>Static Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Static Release|x64">
+      <Configuration>Static Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <!-- Mirrors src/include.am, in that order and unconditional. Many of these
+       compile to declaration only object files, so LNK4221 is suppressed below. -->
+  <ItemGroup>
+    <ClCompile Include="..\..\..\src\wp_wolfprov.c" />
+    <ClCompile Include="..\..\..\src\wp_tls_capa.c" />
+    <ClCompile Include="..\..\..\src\wp_digests.c" />
+    <ClCompile Include="..\..\..\src\wp_aes_block.c" />
+    <ClCompile Include="..\..\..\src\wp_aes_stream.c" />
+    <ClCompile Include="..\..\..\src\wp_aes_aead.c" />
+    <ClCompile Include="..\..\..\src\wp_aes_wrap.c" />
+    <ClCompile Include="..\..\..\src\wp_des.c" />
+    <ClCompile Include="..\..\..\src\wp_hmac.c" />
+    <ClCompile Include="..\..\..\src\wp_cmac.c" />
+    <ClCompile Include="..\..\..\src\wp_gmac.c" />
+    <ClCompile Include="..\..\..\src\wp_mac_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_mac_sig.c" />
+    <ClCompile Include="..\..\..\src\wp_hkdf.c" />
+    <ClCompile Include="..\..\..\src\wp_tls1_prf.c" />
+    <ClCompile Include="..\..\..\src\wp_kdf_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_kdf_exch.c" />
+    <ClCompile Include="..\..\..\src\wp_pbkdf2.c" />
+    <ClCompile Include="..\..\..\src\wp_kbkdf.c" />
+    <ClCompile Include="..\..\..\src\wp_krb5kdf.c" />
+    <ClCompile Include="..\..\..\src\wp_sshkdf.c" />
+    <ClCompile Include="..\..\..\src\wp_rsa_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_rsa_sig.c" />
+    <ClCompile Include="..\..\..\src\wp_rsa_asym.c" />
+    <ClCompile Include="..\..\..\src\wp_rsa_kem.c" />
+    <ClCompile Include="..\..\..\src\wp_ecc_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_ecdh_exch.c" />
+    <ClCompile Include="..\..\..\src\wp_ecdsa_sig.c" />
+    <ClCompile Include="..\..\..\src\wp_ecx_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_ecx_exch.c" />
+    <ClCompile Include="..\..\..\src\wp_ecx_sig.c" />
+    <ClCompile Include="..\..\..\src\wp_dh_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_dh_exch.c" />
+    <ClCompile Include="..\..\..\src\wp_mlkem_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_mlkem_kem.c" />
+    <ClCompile Include="..\..\..\src\wp_mlx_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_mlx_kem.c" />
+    <ClCompile Include="..\..\..\src\wp_mldsa_kmgmt.c" />
+    <ClCompile Include="..\..\..\src\wp_mldsa_sig.c" />
+    <ClCompile Include="..\..\..\src\wp_drbg.c" />
+    <ClCompile Include="..\..\..\src\wp_seed_src.c" />
+    <ClCompile Include="..\..\..\src\wp_dec_pem2der.c" />
+    <ClCompile Include="..\..\..\src\wp_dec_epki2pki.c" />
+    <ClCompile Include="..\..\..\src\wp_file_store.c" />
+    <ClCompile Include="..\..\..\src\wp_internal.c" />
+    <ClCompile Include="..\..\..\src\wp_params.c" />
+    <ClCompile Include="..\..\..\src\wp_logging.c" />
+    <ClCompile Include="..\..\..\src\wp_fips.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="wolfprovider.def" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>wolfprovider</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DLL Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DLL Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Static Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Static Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <!-- No WholeProgramOptimization here: /GL objects in a static library force
+         /LTCG onto the consumer, and a mismatch gives LNK4075 and LNK4272. -->
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='DLL Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\wolfprovider.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='DLL Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\wolfprovider.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Static Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\wolfprovider.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Static Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\wolfprovider.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <!-- TargetName stays libwolfprov: OpenSSL resolves "-provider libwolfprov" to
+       libwolfprov.dll, which must match wolfprovider_id in src/wp_wolfprov.c. -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DLL Debug|x64'">
+    <OutDir>$(SolutionDir)$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(Configuration)\$(Platform)\$(ProjectName)_obj\</IntDir>
+    <TargetName>libwolfprov</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DLL Release|x64'">
+    <OutDir>$(SolutionDir)$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(Configuration)\$(Platform)\$(ProjectName)_obj\</IntDir>
+    <TargetName>libwolfprov</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Static Debug|x64'">
+    <OutDir>$(SolutionDir)$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(Configuration)\$(Platform)\$(ProjectName)_obj\</IntDir>
+    <TargetName>libwolfprov</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Static Release|x64'">
+    <OutDir>$(SolutionDir)$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(Configuration)\$(Platform)\$(ProjectName)_obj\</IntDir>
+    <TargetName>libwolfprov</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DLL Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>Disabled</Optimization>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;WOLFSSL_DLL;WIN32;_WINDOWS;_DEBUG;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(userSettingsDir);..;..\..\..\include;$(wolfCryptDir);$(openSslDirDebug)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <!-- Only in the DLL configurations: the Link task does not run for a
+           StaticLibrary. It exports one symbol, OSSL_provider_init. -->
+      <ModuleDefinitionFile>wolfprovider.def</ModuleDefinitionFile>
+      <AdditionalDependencies>libcrypto.lib;$(wolfSslLib);ws2_32.lib;advapi32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(openSslDirDebug);$(wolfCryptDllDebug64);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>/IGNORE:4221 %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DLL Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;WOLFSSL_DLL;WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(userSettingsDir);..;..\..\..\include;$(wolfCryptDir);$(openSslDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <ModuleDefinitionFile>wolfprovider.def</ModuleDefinitionFile>
+      <AdditionalDependencies>libcrypto.lib;$(wolfSslLib);ws2_32.lib;advapi32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(openSslDir);$(wolfCryptDllRelease64);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>/IGNORE:4221 %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Static Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>Disabled</Optimization>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;WOLFSSL_DLL;WIN32;_WINDOWS;_DEBUG;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(userSettingsDir);..;..\..\..\include;$(wolfCryptDir);$(openSslDirDebug)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Lib>
+      <AdditionalOptions>/IGNORE:4221 %(AdditionalOptions)</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Static Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;WOLFSSL_DLL;WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(userSettingsDir);..;..\..\..\include;$(wolfCryptDir);$(openSslDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Lib>
+      <AdditionalOptions>/IGNORE:4221 %(AdditionalOptions)</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

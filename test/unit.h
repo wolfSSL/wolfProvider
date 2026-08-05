@@ -30,7 +30,9 @@
 #ifdef WOLFPROV_USER_SETTINGS
 #include <user_settings.h>
 #endif
+#ifndef WOLFSSL_USER_SETTINGS
 #include <wolfssl/options.h>
+#endif
 #include <wolfssl/wolfcrypt/wc_port.h>
 
 #include <openssl/provider.h>

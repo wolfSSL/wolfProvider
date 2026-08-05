@@ -16,19 +16,21 @@ lib_LTLIBRARIES = libwolfprov.la
 
 EXTRA_DIST+=ChangeLog.md
 EXTRA_DIST+=README.md
-EXTRA_DIST+=IDE
 EXTRA_DIST+=examples
 EXTRA_DIST+=docs
 EXTRA_DIST+=patches
 EXTRA_DIST+=provider.conf
 EXTRA_DIST+=provider-fips.conf
 
+# Not EXTRA_DIST+=IDE: that is recursive and not .gitignore-aware, and both
+# IDE/WINVS and IDE/Android are built into.
 include src/include.am
 include include/include.am
 include test/include.am
 include certs/include.am
 include scripts/include.am
 include examples/include.am
+include IDE/include.am
 
 #noinst_PROGRAMS += bench
 #bench_SOURCES    = bench.c

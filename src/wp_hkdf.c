@@ -361,13 +361,13 @@ static int wp_hkdf_base_get_mode(const OSSL_PARAM params[], int* mode)
         int n;
 
         if (p->data_type == OSSL_PARAM_UTF8_STRING) {
-            if (strcasecmp(p->data, "EXTRACT_AND_EXPAND") == 0) {
+            if (XSTRCASECMP(p->data, "EXTRACT_AND_EXPAND") == 0) {
                 *mode = EVP_KDF_HKDF_MODE_EXTRACT_AND_EXPAND;
             }
-            else if (strcasecmp(p->data, "EXTRACT_ONLY") == 0) {
+            else if (XSTRCASECMP(p->data, "EXTRACT_ONLY") == 0) {
                 *mode = EVP_KDF_HKDF_MODE_EXTRACT_ONLY;
             }
-            else if (strcasecmp(p->data, "EXPAND_ONLY") == 0) {
+            else if (XSTRCASECMP(p->data, "EXPAND_ONLY") == 0) {
                 *mode = EVP_KDF_HKDF_MODE_EXPAND_ONLY;
             }
             else {

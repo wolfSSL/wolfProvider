@@ -1,0 +1,19 @@
+# vim:ft=automake
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+include IDE/WINVS/include.am
+
+# Files not directories: EXTRA_DIST copies a directory whole, .gitignore and all.
+EXTRA_DIST += IDE/XCODE/README.md
+EXTRA_DIST += IDE/XCODE/build-all.sh
+EXTRA_DIST += IDE/XCODE/build-openssl-framework.sh
+EXTRA_DIST += IDE/XCODE/build-wolfprovider-framework.sh
+EXTRA_DIST += IDE/XCODE/build-wolfssl-framework.sh
+EXTRA_DIST += IDE/XCODE/run_openssl.sh
+
+EXTRA_DIST += IDE/Android/README.md
+EXTRA_DIST += IDE/Android/build.sh
+EXTRA_DIST += IDE/Android/run.sh
+EXTRA_DIST += IDE/Android/run_helper.sh
+EXTRA_DIST += IDE/Android/run_openssl.sh

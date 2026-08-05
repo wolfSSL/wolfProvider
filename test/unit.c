@@ -967,13 +967,24 @@ int main(int argc, char* argv[])
     if (err == 0 && runTests) {
         printf("\n");
 
-        (void)staticTest;
-        printf("Running tests using dynamic provider.\n");
         OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG, NULL);
 
         wpLibCtx = OSSL_LIB_CTX_new();
 
+        (void)staticTest;
+#ifdef WP_UNIT_STATIC_PROVIDER
+        /* Linked into this executable, so there is no module to load. Loading
+         * it here would put a second copy of wolfProvider in the process. */
+        printf("Running tests using built-in (statically linked) provider.\n");
+        if (!OSSL_PROVIDER_add_builtin(wpLibCtx, name,
+                wolfssl_provider_init)) {
+            PRINT_ERR_MSG("Failed to add built-in wolf provider!\n");
+            err = 1;
+        }
+#else
+        printf("Running tests using dynamic provider.\n");
         OSSL_PROVIDER_set_default_search_path(wpLibCtx, dir);
+#endif
         wpProv = OSSL_PROVIDER_load(wpLibCtx, name);
         if (wpProv == NULL) {
             PRINT_ERR_MSG("Failed to find wolf provider!\n");

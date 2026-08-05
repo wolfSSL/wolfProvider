@@ -304,11 +304,11 @@ int wolfssl_prov_get_capabilities(void *provCtx, const char *capability,
 
     (void)provCtx;
 
-    if (strcasecmp(capability, "TLS-GROUP") == 0) {
+    if (XSTRCASECMP(capability, "TLS-GROUP") == 0) {
         ok = wp_tls_group_capability(cb, arg);
     }
 #ifdef WP_HAVE_MLDSA
-    else if (strcasecmp(capability, "TLS-SIGALG") == 0) {
+    else if (XSTRCASECMP(capability, "TLS-SIGALG") == 0) {
         ok = wp_tls_sigalg_capability(cb, arg);
     }
 #endif
