@@ -3560,6 +3560,8 @@ static int wp_rsa_encode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (ok && (ctx->format == WP_ENC_FORMAT_TYPE_SPECIFIC) &&
             (ctx->cipherName != NULL) &&
             ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+        WOLFPROV_ERROR_MSG(WP_LOG_COMP_RSA,
+            "encrypted traditional RSA encoding is not supported");
         ok = 0;
     }
 
@@ -4611,4 +4613,3 @@ const OSSL_DISPATCH wp_rsa_text_encoder_functions[] = {
 };
 
 #endif /* WP_HAVE_RSA */
-

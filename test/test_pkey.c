@@ -329,9 +329,11 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
     EVP_PKEY* badKey = NULL;
     OSSL_ENCODER_CTX* ectx = NULL;
     OSSL_ENCODER_CTX* badEctx = NULL;
+    OSSL_ENCODER_CTX* stateEctx = NULL;
     OSSL_DECODER_CTX* dctx = NULL;
     OSSL_DECODER_CTX* bctx = NULL;
     unsigned char* data = NULL;
+    unsigned char* stateData = NULL;
     size_t dataLen = 0;
     size_t encLen = 0;
     const unsigned char* pp;
@@ -339,6 +341,7 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
     const char* badPass = "wrong-passphrase";
     size_t passLen = XSTRLEN(pass);
     static const char epkiHdr[] = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
+    static const char pkiHdr[] = "-----BEGIN PRIVATE KEY-----";
 
     ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
         "PrivateKeyInfo", encProp);
@@ -351,8 +354,36 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
         err = (badEctx == NULL) ||
             (OSSL_ENCODER_CTX_set_cipher(badEctx, "unsupported-cipher",
                 NULL) == 1);
+        if (err) {
+            PRINT_ERR_MSG("Unsupported PKCS8 cipher was accepted");
+        }
     }
     OSSL_ENCODER_CTX_free(badEctx);
+    if ((err == 0) && (XSTRCMP(fmt, "PEM") == 0)) {
+        int badType = 1;
+        OSSL_PARAM badParams[] = {
+            OSSL_PARAM_int(OSSL_ENCODER_PARAM_CIPHER, &badType),
+            OSSL_PARAM_END
+        };
+        size_t stateLen = 0;
+
+        stateEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR,
+            fmt, "PrivateKeyInfo", encProp);
+        err = (stateEctx == NULL) ||
+            (OSSL_ENCODER_CTX_set_cipher(stateEctx, "AES-256-CBC", NULL) != 1) ||
+            (OSSL_ENCODER_CTX_set_params(stateEctx, badParams) == 1);
+        ERR_clear_error();
+        if (err == 0) {
+            err = (OSSL_ENCODER_to_data(stateEctx, &stateData, &stateLen) != 1) ||
+                (stateLen < sizeof(pkiHdr) - 1) ||
+                (XMEMCMP(stateData, pkiHdr, sizeof(pkiHdr) - 1) != 0);
+            if (err) {
+                PRINT_ERR_MSG("Rejected cipher parameter retained stale state");
+            }
+        }
+    }
+    OSSL_ENCODER_CTX_free(stateEctx);
+    OPENSSL_free(stateData);
     if (err == 0) {
         err = OSSL_ENCODER_CTX_set_cipher(ectx, "AES-256-CBC", NULL) != 1;
     }
@@ -412,9 +443,8 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
             (const unsigned char*)badPass, XSTRLEN(badPass)) != 1;
     }
     if (err == 0) {
-        if ((OSSL_DECODER_from_data(bctx, &pp, &dataLen) == 1) &&
-                (badKey != NULL)) {
-            PRINT_ERR_MSG("Wrong passphrase recovered the key");
+        if (OSSL_DECODER_from_data(bctx, &pp, &dataLen) == 1) {
+            PRINT_ERR_MSG("Wrong passphrase was accepted");
             err = 1;
         }
         ERR_clear_error();
@@ -482,12 +512,22 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
     }
     if (err == 0) {
         err = OSSL_DECODER_from_data(dctx, &pp, &dataLen) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Failed to decode encrypted private key");
+            ERR_print_errors_fp(stderr);
+        }
     }
     if (err == 0) {
         err = (pkey2 == NULL);
+        if (err) {
+            PRINT_ERR_MSG("Encrypted private key decode returned no key");
+        }
     }
     if (err == 0) {
         err = EVP_PKEY_eq(pkey, pkey2) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Decoded encrypted private key does not match");
+        }
     }
 
     /* Negative case: a wrong passphrase must not yield a key. */

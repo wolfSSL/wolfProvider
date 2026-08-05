@@ -906,7 +906,9 @@ static const wp_cipher wp_cipher_names[] = {
 /**
  * Get the cipher based on the parameters in the array.
  *
- * A parameter with the name of the cipher may not be in the array.
+ * An absent cipher parameter leaves the outputs unchanged. A NULL cipher
+ * value clears the outputs and succeeds. An invalid or unsupported cipher
+ * clears the outputs and fails.
  *
  * @param [in]  params      Array of parameters and values.
  * @param [out] cipher      wolfSSL cipher identifier.
@@ -925,6 +927,10 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
     p = OSSL_PARAM_locate_const(params, OSSL_ALG_PARAM_CIPHER);
     if (p != NULL) {
         if (p->data_type != OSSL_PARAM_UTF8_STRING) {
+            *cipher = 0;
+            if (cipherName != NULL) {
+                *cipherName = NULL;
+            }
             ok = 0;
         }
         else if (p->data == NULL) {
@@ -936,9 +942,9 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
             }
         }
         else {
-            size_t i = WP_CIPHER_NAMES_LEN;
-
 #ifdef WP_HAVE_PKCS8_ENC
+            size_t i;
+
             for (i = 0; i < WP_CIPHER_NAMES_LEN; i++) {
                 if ((XSTRLEN(wp_cipher_names[i].name) == p->data_size) &&
                         (XSTRNCMP(p->data, wp_cipher_names[i].name,
@@ -950,10 +956,9 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
                     break;
                 }
             }
-#endif
-            /* Unknown cipher, or a build that cannot encrypt keys at all.
-             * Clear so a previously set cipher cannot drive a later encode,
-             * and fail rather than silently write the key in the clear. */
+            /* Unknown cipher. Clear so a previously set cipher cannot drive a
+             * later encode, and fail rather than silently write the key in the
+             * clear. */
             if (i == WP_CIPHER_NAMES_LEN) {
                 *cipher = 0;
                 if (cipherName != NULL) {
@@ -961,6 +966,14 @@ int wp_cipher_from_params(const OSSL_PARAM params[], int* cipher,
                 }
                 ok = 0;
             }
+#else
+            /* This build cannot encrypt private keys. */
+            *cipher = 0;
+            if (cipherName != NULL) {
+                *cipherName = NULL;
+            }
+            ok = 0;
+#endif
         }
     }
 
@@ -997,13 +1010,16 @@ int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
     int ok = 1;
     int rc = 0;
     word32 outSz = 0;
+#ifndef WP_SINGLE_THREADED
+    int rngLocked = 0;
+#endif
     byte fakeData[1] = { 0 };
     byte fakeSalt[WP_EPKI_SALT_LEN] = { 0 };
 
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_encrypt_key_pkcs8_size");
 
-    /* A cipher must be selected to produce an encrypted key. */
-    if (cipher == 0) {
+    /* A provider context, cipher and output length are required. */
+    if ((provCtx == NULL) || (cipher == 0) || (outLen == NULL)) {
         ok = 0;
     }
 #ifndef WP_SINGLE_THREADED
@@ -1011,6 +1027,9 @@ int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
      * shared RNG needs the same lock the encrypt path takes. */
     if (ok && (wp_provctx_lock_rng(provCtx) != 1)) {
         ok = 0;
+    }
+    else if (ok) {
+        rngLocked = 1;
     }
 #endif
     if (ok) {
@@ -1027,9 +1046,14 @@ int wp_encrypt_key_pkcs8_size(WOLFPROV_CTX* provCtx, int cipher,
             WP_PKCS5, WP_PBES2, cipher, fakeSalt, sizeof(fakeSalt),
             WP_PKCS12_ITERATIONS_DEFAULT, wp_provctx_get_rng(provCtx), NULL);
     #endif
-    #ifndef WP_SINGLE_THREADED
+    }
+#ifndef WP_SINGLE_THREADED
+    if (rngLocked) {
         wp_provctx_unlock_rng(provCtx);
-    #endif
+        rngLocked = 0;
+    }
+#endif
+    if (ok) {
         if (rc != LENGTH_ONLY_E) {
             ok = 0;
         }
@@ -1076,7 +1100,11 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
 #ifdef WP_HAVE_PKCS8_ENC
     int ok = 1;
     int rc = 0;
-    word32 outSz = (word32)*outLen;
+    word32 outSz = 0;
+    word32 outCap = 0;
+#ifndef WP_SINGLE_THREADED
+    int rngLocked = 0;
+#endif
     byte salt[WP_EPKI_SALT_LEN];
 #ifdef WOLFSSL_SMALL_STACK
     char* password = NULL;
@@ -1084,7 +1112,7 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
     char password[WP_EPKI_PASSWORD_MAX];
 #endif
     size_t passwordSz = WP_EPKI_PASSWORD_MAX;
-    WC_RNG* rng = wp_provctx_get_rng(provCtx);
+    WC_RNG* rng = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_encrypt_key_pkcs8");
 
@@ -1097,9 +1125,15 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
 #endif
 
     /* A cipher must be selected and the in/out buffers must differ. */
-    if (ok && ((cipher == 0) || (plain == NULL) || (out == NULL) ||
-            (plain == out))) {
+    if (ok && ((provCtx == NULL) || (cipher == 0) || (plain == NULL) ||
+            (out == NULL) ||
+            (plain == out) || (outLen == NULL) ||
+            (!WP_FITS_WORD32(*outLen)) || (pwCb == NULL))) {
         ok = 0;
+    }
+    if (ok) {
+        rng = wp_provctx_get_rng(provCtx);
+        outSz = outCap = (word32)*outLen;
     }
     /* Get the password from the callback. */
     if (ok && (!pwCb(password, passwordSz, &passwordSz, NULL, pwCbArg))) {
@@ -1109,11 +1143,14 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
     if (ok && (passwordSz > WP_EPKI_PASSWORD_MAX)) {
         ok = 0;
     }
-    #ifndef WP_SINGLE_THREADED
+#ifndef WP_SINGLE_THREADED
     if (ok && (wp_provctx_lock_rng(provCtx) != 1)) {
         ok = 0;
     }
-    #endif
+    else if (ok) {
+        rngLocked = 1;
+    }
+#endif
     if (ok) {
         /* Generate the PBKDF2 salt. */
         rc = wc_RNG_GenerateBlock(rng, salt, sizeof(salt));
@@ -1132,10 +1169,15 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
                 salt, sizeof(salt), WP_PKCS12_ITERATIONS_DEFAULT, rng, NULL);
         #endif
         }
-    #ifndef WP_SINGLE_THREADED
+    }
+#ifndef WP_SINGLE_THREADED
+    if (rngLocked) {
         wp_provctx_unlock_rng(provCtx);
-    #endif
-        if (rc <= 0) {
+        rngLocked = 0;
+    }
+#endif
+    if (ok) {
+        if ((rc <= 0) || ((word32)rc > outCap)) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_EncryptPKCS8Key",
                 rc);
             ok = 0;

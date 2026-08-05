@@ -25,21 +25,23 @@ test_pkey_cipher() {
     if ! eval "$keygen" >"$input" 2>/dev/null; then
         echo "[FAIL] ${name} key generation failed"
         FAIL=1
-        return
+        return 1
     fi
     if ! $OPENSSL_BIN pkey -aes256 -passout pass:wolfprov-test-pass \
             -in "$input" -out "$output" 2>/dev/null; then
         echo "[FAIL] ${name} pkey encryption failed"
         FAIL=1
-        return
+        return 1
     fi
     if ! grep -q "BEGIN ENCRYPTED PRIVATE KEY" "$output"; then
         echo "[FAIL] ${name} pkey -aes256 produced an unencrypted key"
         FAIL=1
+        return 1
     else
         echo "[PASS] ${name} pkey -aes256 produced EncryptedPrivateKeyInfo"
         check_force_fail
     fi
+    return 0
 }
 
 test_pkey_cipher "ec" "$OPENSSL_BIN genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1"

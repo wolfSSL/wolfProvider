@@ -21,6 +21,7 @@
 #include "unit.h"
 
 #include <openssl/store.h>
+#include <openssl/err.h>
 #include <openssl/decoder.h>
 #include <openssl/encoder.h>
 #include <openssl/core_names.h>
@@ -962,10 +963,24 @@ int test_ecc_encode_epki(void *data)
          * an unencrypted private key. */
         typeEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR,
             "DER", "type-specific", "provider=libwolfprov");
-        err = (typeEctx == NULL) ||
-            (OSSL_ENCODER_CTX_set_cipher(typeEctx, "AES-256-CBC", NULL) != 1) ||
-            (OSSL_ENCODER_to_data(typeEctx, &typeData, &typeLen) == 1);
+        err = (typeEctx == NULL);
+        if (err) {
+            PRINT_ERR_MSG("Failed to create type-specific ECC encoder");
+        }
     }
+    if (err == 0) {
+        err = OSSL_ENCODER_CTX_set_cipher(typeEctx, "AES-256-CBC", NULL) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Failed to configure the ECC encoder cipher");
+        }
+    }
+    if (err == 0) {
+        err = OSSL_ENCODER_to_data(typeEctx, &typeData, &typeLen) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Type-specific ECC encoder accepted a cipher");
+        }
+    }
+    ERR_clear_error();
     OSSL_ENCODER_CTX_free(typeEctx);
     OPENSSL_free(typeData);
 
