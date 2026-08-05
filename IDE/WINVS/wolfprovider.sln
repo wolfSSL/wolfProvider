@@ -1,0 +1,42 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+# Four configurations. DLL Release|x64 is the customer artifact;
+# the two Static configurations exist only so unit-test can link
+# wolfProvider internals and are never shipped. unit-test therefore
+# gets Build.0 in the Static configurations only, and its ActiveCfg
+# in the DLL configurations points at the Static counterpart.
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wolfprovider", "wolfprovider\wolfprovider.vcxproj", "{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "unit-test", "unit-test\unit-test.vcxproj", "{2E5D8B47-91FA-4C63-B0D2-6F14A3C97E85}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		DLL Debug|x64 = DLL Debug|x64
+		DLL Release|x64 = DLL Release|x64
+		Static Debug|x64 = Static Debug|x64
+		Static Release|x64 = Static Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.DLL Debug|x64.ActiveCfg = DLL Debug|x64
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.DLL Debug|x64.Build.0 = DLL Debug|x64
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.DLL Release|x64.ActiveCfg = DLL Release|x64
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.DLL Release|x64.Build.0 = DLL Release|x64
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.Static Debug|x64.ActiveCfg = Static Debug|x64
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.Static Debug|x64.Build.0 = Static Debug|x64
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.Static Release|x64.ActiveCfg = Static Release|x64
+		{9B1F3C0A-6D48-4E27-8A55-C3E7D2140F6B}.Static Release|x64.Build.0 = Static Release|x64
+		{2E5D8B47-91FA-4C63-B0D2-6F14A3C97E85}.DLL Debug|x64.ActiveCfg = Static Debug|x64
+		{2E5D8B47-91FA-4C63-B0D2-6F14A3C97E85}.DLL Release|x64.ActiveCfg = Static Release|x64
+		{2E5D8B47-91FA-4C63-B0D2-6F14A3C97E85}.Static Debug|x64.ActiveCfg = Static Debug|x64
+		{2E5D8B47-91FA-4C63-B0D2-6F14A3C97E85}.Static Debug|x64.Build.0 = Static Debug|x64
+		{2E5D8B47-91FA-4C63-B0D2-6F14A3C97E85}.Static Release|x64.ActiveCfg = Static Release|x64
+		{2E5D8B47-91FA-4C63-B0D2-6F14A3C97E85}.Static Release|x64.Build.0 = Static Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4C7A0E91-2B36-4D58-9F1C-7A08B5E3D62F}
+	EndGlobalSection
+EndGlobal

@@ -189,7 +189,7 @@ static int wp_dh_map_group_name(wp_Dh* dh, const char* name)
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_map_group_name");
 
     for (i = 0; i < WP_DH_GROUP_MAP_SZ; i++) {
-        if (strcasecmp(wp_dh_group_map[i].name, name) == 0) {
+        if (XSTRCASECMP(wp_dh_group_map[i].name, name) == 0) {
     #ifdef HAVE_PUBLIC_FFDHE
             const DhParams* params;
     #endif

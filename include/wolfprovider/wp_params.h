@@ -25,7 +25,9 @@
 #ifdef WOLFENGINE_USER_SETTINGS
     #include "user_settings.h"
 #endif
-#include <wolfssl/options.h>
+#ifndef WOLFSSL_USER_SETTINGS
+    #include <wolfssl/options.h>
+#endif
 #include <wolfssl/wolfcrypt/integer.h>
 
 #ifndef WP_PARAMS_H

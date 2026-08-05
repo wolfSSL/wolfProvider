@@ -1,0 +1,11 @@
+# vim:ft=automake
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+EXTRA_DIST+= IDE/WINVS/README.md
+EXTRA_DIST+= IDE/WINVS/user_settings.h
+EXTRA_DIST+= IDE/WINVS/wolfprovider.sln
+EXTRA_DIST+= IDE/WINVS/wolfprovider.props
+EXTRA_DIST+= IDE/WINVS/wolfprovider/wolfprovider.vcxproj
+EXTRA_DIST+= IDE/WINVS/wolfprovider/wolfprovider.def
+EXTRA_DIST+= IDE/WINVS/unit-test/unit-test.vcxproj

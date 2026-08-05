@@ -549,7 +549,7 @@ static int wp_ecdsa_digest_signverify_init(wp_EcdsaSigCtx *ctx,
     ok = wp_ecdsa_signverify_init(ctx, ecc, params, op);
     if (ok) {
         if ((mdName != NULL) && ((mdName[0] == '\0') ||
-            (strcasecmp(ctx->mdName, mdName) != 0))) {
+            (XSTRCASECMP(ctx->mdName, mdName) != 0))) {
             ok = wp_ecdsa_setup_md(ctx, mdName, ctx->propQuery, op);
         }
     }

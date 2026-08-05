@@ -35,6 +35,7 @@
 #include "wolfprovider/alg_funcs.h"
 
 #include "wolfssl/wolfcrypt/logging.h"
+#include "wolfssl/wolfcrypt/wc_port.h"
 
 #ifdef HAVE_FIPS
 #include <wolfssl/wolfcrypt/fips_test.h>
@@ -431,16 +432,18 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
     { WP_NAMES_SHA2_512, WOLFPROV_PROPERTIES, wp_sha512_functions,
       "" },
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-#ifndef WOLFSSL_NOSHA512_224
+#if !defined(WOLFSSL_NOSHA512_224) && \
+    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
     { WP_NAMES_SHA2_512_224, WOLFPROV_PROPERTIES,
       wp_sha512_224_functions,
       "" },
-#endif /* !WOLFSSL_NOSHA512_224 */
-#ifndef WOLFSSL_NOSHA512_256
+#endif /* !WOLFSSL_NOSHA512_224 && !HAVE_FIPS && !HAVE_SELFTEST */
+#if !defined(WOLFSSL_NOSHA512_256) && \
+    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
     { WP_NAMES_SHA2_512_256, WOLFPROV_PROPERTIES,
       wp_sha512_256_functions,
       "" },
-#endif /* !WOLFSSL_NOSHA512_256 */
+#endif /* !WOLFSSL_NOSHA512_256 && !HAVE_FIPS && !HAVE_SELFTEST */
 #endif
 #endif /* WP_HAVE_SHA512 */
 
@@ -1352,6 +1355,8 @@ static const OSSL_ALGORITHM* wolfprov_query(void* provCtx, int id,
 static void wolfprov_teardown(void* provCtx)
 {
     wolfssl_prov_ctx_free(provCtx);
+
+    wolfCrypt_Cleanup();
 }
 
 /* Table of functions the core will invoke. */
@@ -1406,6 +1411,8 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 {
     int ok = 1;
     const OSSL_DISPATCH* origIn = in;
+    int wcInited = 0;
+    int rc;
 
     wolfProv_LogInit();
 
@@ -1429,6 +1436,18 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 #ifdef HAVE_FIPS
     wolfCrypt_SetCb_fips(wp_fipsCb);
 #endif
+
+    if (ok) {
+        /* Reference counted, so a host that already initialized is unaffected. */
+        rc = wolfCrypt_Init();
+        if (rc != 0) {
+            WOLFPROV_ERROR_FUNC(WP_LOG_COMP_PROVIDER, "wolfCrypt_Init", rc);
+            ok = 0;
+        }
+        else {
+            wcInited = 1;
+        }
+    }
 
 #ifdef WP_CHECK_FORCE_FAIL
     char *forceFailEnv = NULL;
@@ -1484,7 +1503,15 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
          * wc_InitRng() in wolfssl_prov_ctx_new() would fail DRBG_NO_SEED_CB. */
         wc_SetSeed_Cb(wc_GenerateSeed);
 #endif
-        /* FIPS CAST tests are now run lazily per-algorithm via wp_init_cast() */
+#if defined(HAVE_FIPS) && !defined(WP_SINGLE_THREADED)
+        /* FIPS CAST tests are run lazily per-algorithm via wp_init_cast();
+         * their mutexes must exist before the first one runs. */
+        if (!wp_init_cast_mutexes()) {
+            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+                "Failed to initialize FIPS CAST mutexes");
+            ok = 0;
+        }
+#endif
     }
 
     if (ok) {
@@ -1505,6 +1532,11 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 
         /* Return out dispatch table. */
         *out = wolfprov_dispatch_table;
+    }
+
+    if (!ok && wcInited) {
+        /* The core does not call teardown when init fails. */
+        wolfCrypt_Cleanup();
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

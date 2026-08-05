@@ -23,7 +23,6 @@
 /include/config.h.in
 /include/config.h
 /include/config.h.in~
-/include/wolfprovider/version.h
 /config.status
 /include.am
 /libtool
@@ -100,6 +99,18 @@ IDE/Android/wolfssl-source/
 IDE/Android/wolfssl-install/
 IDE/Android/wolfProvider/
 
+# Visual Studio build output. The configuration names appear both under
+# IDE/WINVS/ (artifacts) and under each project directory (intermediates).
+IDE/WINVS/**/DLL Release/
+IDE/WINVS/**/DLL Debug/
+IDE/WINVS/**/Static Release/
+IDE/WINVS/**/Static Debug/
+IDE/WINVS/*.VC.db
+IDE/WINVS/*.VC.opendb
+IDE/WINVS/.vs/
+IDE/WINVS/**/*.user
+IDE/WINVS/**/*.vcxproj.filters
+
 examples/openssl_example
 
 cscope.out
@@ -108,6 +119,7 @@ tags
 
 # Debian build files
 libwolfprov*.tar.gz
+wolfprov-*.tar.gz
 debian/tmp
 debian/*.dch
 debian/autoreconf*

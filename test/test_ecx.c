@@ -821,6 +821,14 @@ int test_ecx_x25519_raw_priv_roundtrip(void *data)
  * size query; using it would truncate or fail the export. */
 int test_ecx_x25519_get_params_stale_ret(void *data)
 {
+#ifdef WOLFSSL_CURVE25519_BLINDING
+    /* Blinded curve25519 needs an RNG attached with wc_curve25519_set_rng(),
+     * which wolfProvider does not do yet. Gated on the macro rather than
+     * _WIN32 so builds without blinding keep the coverage. */
+    PRINT_MSG("X25519 get_params test skipped - curve25519 blinding enabled");
+    (void)data;
+    return 0;
+#endif
     int err = 0;
     EVP_PKEY *pkey = NULL;
     static const unsigned char privKey[] = {

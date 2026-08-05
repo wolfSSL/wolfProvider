@@ -25,7 +25,13 @@
     #include "user_settings.h"
 #endif
 
-#include <wolfssl/options.h>
+#ifndef WOLFSSL_USER_SETTINGS
+    #include <wolfssl/options.h>
+#endif
+/* Not redundant with the above: a WOLFSSL_USER_SETTINGS build has no options.h,
+ * and WP_FIPS_CHECKS_DEFAULT silently becomes 0 unless HAVE_FIPS is visible in
+ * this header - wp_fips.c includes nothing else. */
+#include <wolfssl/wolfcrypt/settings.h>
 
 enum wolfProvider_FipsCheck {
     /* check that RSA key size is valid */
