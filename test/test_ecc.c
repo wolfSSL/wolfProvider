@@ -21,7 +21,9 @@
 #include "unit.h"
 
 #include <openssl/store.h>
+#include <openssl/err.h>
 #include <openssl/decoder.h>
+#include <openssl/encoder.h>
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
 
@@ -945,6 +947,9 @@ int test_ecc_encode_epki(void *data)
     const unsigned char* op = ecc_key_der_256;
     EVP_PKEY* pkey = NULL;
     EVP_PKEY* osslKey = NULL;
+    OSSL_ENCODER_CTX* typeEctx = NULL;
+    unsigned char* typeData = NULL;
+    size_t typeLen = 0;
 
     (void)data;
 
@@ -952,6 +957,32 @@ int test_ecc_encode_epki(void *data)
     pkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
         wpLibCtx, NULL);
     err = (pkey == NULL);
+
+    if (err == 0) {
+        /* Type-specific ECC encoding must reject a cipher rather than emit
+         * an unencrypted private key. */
+        typeEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR,
+            "DER", "type-specific", "provider=libwolfprov");
+        err = (typeEctx == NULL);
+        if (err) {
+            PRINT_ERR_MSG("Failed to create type-specific ECC encoder");
+        }
+    }
+    if (err == 0) {
+        err = OSSL_ENCODER_CTX_set_cipher(typeEctx, "AES-256-CBC", NULL) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Failed to configure the ECC encoder cipher");
+        }
+    }
+    if (err == 0) {
+        err = OSSL_ENCODER_to_data(typeEctx, &typeData, &typeLen) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Type-specific ECC encoder accepted a cipher");
+        }
+    }
+    ERR_clear_error();
+    OSSL_ENCODER_CTX_free(typeEctx);
+    OPENSSL_free(typeData);
 
     if (err == 0) {
         PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> OpenSSL");
@@ -992,6 +1023,22 @@ int test_ecc_encode_epki(void *data)
     }
 
     EVP_PKEY_free(osslKey);
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo DER with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx, 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo PEM with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx, 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo PEM with cipher set: wolfProvider -> OpenSSL");
+        err = test_pki_cipher_encrypts(pkey, "PEM", "provider=libwolfprov",
+            osslLibCtx, 0);
+    }
+
     EVP_PKEY_free(pkey);
 
     return err;

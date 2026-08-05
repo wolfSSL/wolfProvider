@@ -149,9 +149,22 @@ int test_ecx_encode_epki(void *data)
         wpLibCtx, NULL);
     err = (pkey == NULL);
 
-    /* wolfProvider self round-trip (DER and PEM). ECX plaintext PKCS#8 is
-     * block-aligned, so wolfProvider -> OpenSSL interop additionally depends on
-     * a wolfSSL PKCS#7 padding fix and is not asserted here. */
+    /* Ed25519's PKCS#8 is an exact AES block multiple, the case needing a whole
+     * extra PKCS#7 pad block. wolfSSL omitted it until wc_EncryptPKCS8Key_ex
+     * was fixed after v5.9.2-stable, and its own decoder accepts the short
+     * form, so only OpenSSL catches it. Assert once a release carries the fix. */
+#if LIBWOLFSSL_VERSION_HEX > 0x05009002
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
+            osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> OpenSSL");
+        err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
+            osslLibCtx);
+    }
+#endif
     if (err == 0) {
         PRINT_MSG("EncryptedPrivateKeyInfo DER: wolfProvider -> wolfProvider");
         err = test_epki_encode_decode(pkey, "DER", "provider=libwolfprov",
@@ -161,6 +174,17 @@ int test_ecx_encode_epki(void *data)
         PRINT_MSG("EncryptedPrivateKeyInfo PEM: wolfProvider -> wolfProvider");
         err = test_epki_encode_decode(pkey, "PEM", "provider=libwolfprov",
             wpLibCtx);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo DER with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx, 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo PEM with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx, 1);
     }
 
     EVP_PKEY_free(pkey);

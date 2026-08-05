@@ -18,6 +18,9 @@
  * along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <limits.h>
+
+#include <openssl/asn1.h>
 #include <openssl/err.h>
 #include <openssl/proverr.h>
 #include <openssl/core_dispatch.h>
@@ -69,6 +72,67 @@ static wp_Epki2Pki* wp_epki2pki_newctx(WOLFPROV_CTX* provCtx)
 static void wp_epki2pki_freectx(wp_Epki2Pki* ctx)
 {
     OPENSSL_free(ctx);
+}
+
+static int wp_epki2pki_get_object(const unsigned char** data,
+    const unsigned char* end, int expectedTag, const unsigned char** objEnd)
+{
+    int ok = 1;
+    int flags;
+    int tag;
+    int cls;
+    long len;
+    size_t available;
+
+    if ((data == NULL) || (*data == NULL) || (end < *data)) {
+        ok = 0;
+    }
+    if (ok) {
+        available = (size_t)(end - *data);
+        if (available > LONG_MAX) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        flags = ASN1_get_object(data, &len, &tag, &cls, (long)available);
+        if (((flags & 0x80) != 0) || (len < 0) ||
+                (cls != V_ASN1_UNIVERSAL) || (tag != expectedTag) ||
+                ((size_t)len > (size_t)(end - *data))) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        *objEnd = *data + len;
+    }
+
+    return ok;
+}
+
+static int wp_epki2pki_is_epki(const unsigned char* data, word32 len)
+{
+    int ok = 1;
+    const unsigned char* p = data;
+    const unsigned char* end = data + len;
+    const unsigned char* seqEnd = NULL;
+    const unsigned char* objEnd = NULL;
+
+    if (!wp_epki2pki_get_object(&p, end, V_ASN1_SEQUENCE, &seqEnd) ||
+            (seqEnd != end)) {
+        ok = 0;
+    }
+    if (ok && !wp_epki2pki_get_object(&p, seqEnd, V_ASN1_SEQUENCE,
+            &objEnd)) {
+        ok = 0;
+    }
+    if (ok) {
+        p = objEnd;
+        if (!wp_epki2pki_get_object(&p, seqEnd, V_ASN1_OCTET_STRING,
+                &objEnd) || (objEnd != seqEnd)) {
+            ok = 0;
+        }
+    }
+
+    return ok;
 }
 
 #if LIBWOLFSSL_VERSION_HEX < 0x05000000
@@ -199,7 +263,6 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     word32 len = 0;
     char password[1024];
     size_t passwordLen = 0;
-    word32 tradIdx = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_epki2pki_decode");
 
@@ -214,30 +277,13 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     else if (data == NULL) {
         done = 1;
     }
-    if ((!done) && ok && wc_GetPkcs8TraditionalOffset(data, &tradIdx, (word32)len) <= 0) {
-        /* This is not PKCS8, we are done */
+    if ((!done) && ok && !wp_epki2pki_is_epki(data, len)) {
         done = 1;
-        ok = 1;
     }
-    if ((!done) && ok) {
-        /* Try decrypting without password and look for ASN_PARSE_E to indicate
-         * that the format is not PKCS#8 encrypted.
-         * TODO: should be parsing the structure without decrypting to
-         *       determine it is encrypted PKCS#8.
-         */
-    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-        rc = wc_DecryptPKCS8Key(data, len, password, 0);
-    #else
-        rc = wp_DecryptPKCS8Key(data, len, password, 0);
-    #endif
-        if (rc == ASN_PARSE_E) {
-            done = 1;
-            ok = 1;
-        }
-    }
-    if ((!done) && ok && (!pwCb(password, sizeof(password), &passwordLen, NULL,
-            pwCbArg))) {
-        done = 1;
+    if ((!done) && ok && ((pwCb == NULL) ||
+            (!pwCb(password, sizeof(password), &passwordLen, NULL,
+                pwCbArg)))) {
+        ok = 0;
     }
     if ((!done) && ok && (passwordLen > sizeof(password))) {
         ok = 0;
@@ -286,5 +332,3 @@ const OSSL_DISPATCH wp_epki_to_pki_decoder_functions[] = {
     { OSSL_FUNC_DECODER_DECODE,  (DFUNC)wp_epki2pki_decode },
     { 0, NULL }
 };
-
-

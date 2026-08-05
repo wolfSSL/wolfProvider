@@ -43,6 +43,13 @@
     #define WP_HAVE_DRBG_RESEED
 #endif
 
+/* The PKCS#8 encrypt/decrypt helpers need PKCS#8 and password-based key
+ * derivation. wolfSSL derives WOLFSSL_ENCRYPTED_KEYS from OPENSSL_EXTRA, which
+ * a FIPS build does not set even though both are present. */
+#if defined(HAVE_PKCS8) && !defined(NO_PWDBASED)
+    #define WP_HAVE_PKCS8_ENC
+#endif
+
 #define WP_HAVE_DIGEST
 #if !defined(NO_MD5)
     #define WP_HAVE_MD5

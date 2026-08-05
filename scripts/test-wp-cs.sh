@@ -36,19 +36,31 @@ prepend() { # Usage: cmd 2>&1 | prepend "sometext "
     while read line; do echo "${1}${line}"; done
 }
 
-check_process_running() {
-    if [ "$1" = "-1" ]; then
-        echo 1
-    else
-        ps -p $1 > /dev/null
-        echo $?
+kill_servers() {
+    if [ "$(jobs -p)" != "" ]; then
+        kill $(jobs -p) 2>/dev/null || true
     fi
 }
 
-kill_servers() {
-    if [ "$(jobs -p)" != "" ]; then
-        kill $(jobs -p)
-    fi
+wait_for_server() {
+    local log_offset=$1
+    local retries=100
+
+    while [ "$retries" -gt 0 ]; do
+        if tail -c "+$((log_offset + 1))" "$LOG_FILE" 2>/dev/null |
+                grep -q "\[server\] ACCEPT"; then
+            return 0
+        fi
+        if ! kill -0 "$OPENSSL_SERVER_PID" 2>/dev/null; then
+            printf "OpenSSL server exited before accepting connections\n"
+            return 1
+        fi
+        retries=$((retries - 1))
+        sleep 0.1
+    done
+
+    printf "OpenSSL server did not accept connections within 10 seconds\n"
+    return 1
 }
 
 do_cleanup() {
@@ -183,19 +195,20 @@ generate_port() {
 }
 
 start_openssl_server() { # usage: start_openssl_server [extraArgs]
+    local log_offset
+
     kill_servers
+    log_offset=$(wc -c < "$LOG_FILE")
 
     stdbuf -oL -eL $OPENSSL_BIN s_server -www $1 \
          -cert $CERT_DIR/server-cert.pem -key $CERT_DIR/server-key.pem \
          -dcert $CERT_DIR/server-ecc.pem -dkey $CERT_DIR/ecc-key.pem \
          -accept $OPENSSL_PORT $OPENSSL_ALL_CIPHERS \
          2>&1 | prepend "[server] " >>$LOG_FILE &
-    OPENSSL_SERVER_PID=$(($! - 1))
+    OPENSSL_SERVER_PID=$!
 
-    sleep 0.5
-
-    if [ $(check_process_running $OPENSSL_SERVER_PID) != "0" ]; then
-        printf "OpenSSL server might have failed to start (PID=$OPENSSL_SERVER_PID)\n"
+    if ! wait_for_server "$log_offset"; then
+        return 1
     fi
 }
 
@@ -304,12 +317,13 @@ if [ "${AM_BWRAPPED-}" != "yes" ]; then
 fi
 
 printf "Client testing\n" | tee $LOG_FILE
-start_openssl_server
+start_openssl_server || exit 1
 do_client_test "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
 kill_servers
 
 printf "Server testing\n" | tee -a $LOG_FILE
-start_openssl_server "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME"
+start_openssl_server \
+    "-provider-path $WOLFPROV_PATH -provider $WOLFPROV_NAME" || exit 1
 do_client_test
 kill_servers
 

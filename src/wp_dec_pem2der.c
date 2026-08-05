@@ -320,17 +320,26 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataFormat = "type-specific";
         obj = OSSL_OBJECT_PKEY;
     }
-#ifdef WOLFSSL_ENCRYPTED_KEYS
     else if (XMEMCMP(data, "-----BEGIN ENCRYPTED PRIVATE KEY-----", 37) == 0) {
         type = PKCS8_ENC_PRIVATEKEY_TYPE;
         dataType = NULL;
-        dataFormat = "PrivateKeyInfo";
         obj = OSSL_OBJECT_PKEY;
 
+#ifdef WOLFSSL_ENCRYPTED_KEYS
+        /* wc_PemToDer decrypts in place through the password callback. */
+        dataFormat = "PrivateKeyInfo";
         info.passwd_cb = wp_pem_password_cb;
         info.passwd_userdata = (void*)&wpPwCb;
-    }
+#else
+        /* Preserve the encrypted structure for the EPKI decoder. */
+        dataFormat = "EncryptedPrivateKeyInfo";
+        if (!wp_pem2der_convert((const char*)data, len, &der, &info,
+                XSTRLEN("ENCRYPTED PRIVATE KEY"))) {
+            ok = 0;
+        }
+        done = 1;
 #endif
+    }
     else {
         ok = 0;
     }
@@ -466,5 +475,3 @@ const OSSL_DISPATCH wp_pem_to_der_decoder_functions[] = {
     { OSSL_FUNC_DECODER_DECODE,  (DFUNC)wp_pem2der_decode },
     { 0, NULL }
 };
-
-

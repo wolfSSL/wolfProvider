@@ -1356,7 +1356,7 @@ static int wp_mldsa_dec_send_params(wp_MlDsa* mldsa, const char* dataType,
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 /**
  * Decode an encrypted PKCS#8 DER ML-DSA private key into the ML-DSA key object.
  *
@@ -1447,7 +1447,7 @@ static int wp_mldsa_decode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (ok) {
         rc = ctx->decode(data, &idx, (void*)&mldsa->key, len);
         if (rc != 0) {
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
             /* May be an encrypted PKCS#8 key - decrypt and retry. */
             if ((ctx->format != WP_ENC_FORMAT_PKI) ||
                     (!wp_mldsa_decode_enc_pki(ctx, mldsa, data, len, pwCb,
@@ -1568,7 +1568,13 @@ static int wp_mldsa_encode(wp_MlDsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     /* By default the plaintext DER is the source for the output encoding. */
     srcData = derData;
     srcLen = derLen;
-    if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
+    /* A cipher on a PrivateKeyInfo encoder selects the encrypted form. */
+    if (ok && ((ctx->format == WP_ENC_FORMAT_EPKI)
+#ifdef WP_HAVE_PKCS8_ENC
+            || ((ctx->format == WP_ENC_FORMAT_PKI) &&
+                (ctx->cipherName != NULL))
+#endif
+            )) {
         pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
         /* The PBES2 output is larger than the plaintext and must use a
          * separate buffer, so size it and encrypt into fresh memory. */

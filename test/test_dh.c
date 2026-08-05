@@ -19,6 +19,7 @@
  */
 
 #include "unit.h"
+#include <openssl/params.h>
 #include <openssl/core_names.h>
 #include <openssl/decoder.h>
 #include <wolfprovider/internal.h>
@@ -361,7 +362,12 @@ int test_dh_pkey(void *data)
     return err;
 }
 
-#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST)
+/* Not run under FIPS: dh_der carries an arbitrary group where FIPS allows
+ * only approved safe primes, and a generated ffdhe2048 key encrypts but
+ * will not decode back. Both predate the EPKI gate fix that made this
+ * test visible to FIPS builds. */
+#if defined(WOLFSSL_DH_EXTRA) && defined(WP_HAVE_EPKI_TEST) && \
+    !defined(HAVE_FIPS)
 int test_dh_encode_epki(void *data)
 {
     int err = 0;
@@ -396,11 +402,58 @@ int test_dh_encode_epki(void *data)
             wpLibCtx);
     }
 
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo DER with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "DER", "provider=libwolfprov",
+            wpLibCtx, 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("PrivateKeyInfo PEM with cipher set must encrypt");
+        err = test_pki_cipher_encrypts(pkey, "PEM", "provider=libwolfprov",
+            wpLibCtx, 1);
+    }
+    /* A generated key keeps its private value in wp_Dh rather than the inner
+     * wolfSSL key, so it reaches encode paths an imported key does not. */
+    if (err == 0) {
+        EVP_PKEY* genKey = NULL;
+        EVP_PKEY_CTX* genCtx = NULL;
+        OSSL_PARAM gp[2];
+
+        PRINT_MSG("Generated key: PrivateKeyInfo with cipher set");
+        gp[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+            (char*)"ffdhe2048", 0);
+        gp[1] = OSSL_PARAM_construct_end();
+
+        genCtx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = (genCtx == NULL);
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(genCtx) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_CTX_set_params(genCtx, gp) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_generate(genCtx, &genKey) != 1;
+        }
+        if (err == 0) {
+            /* No key comparison: a generated DH key does not compare equal
+             * after a PKCS#8 round trip, with or without a cipher. */
+            err = test_pki_cipher_encrypts(genKey, "DER",
+                "provider=libwolfprov", wpLibCtx, 0);
+        }
+        if (err == 0) {
+            err = test_pki_cipher_encrypts(genKey, "PEM",
+                "provider=libwolfprov", wpLibCtx, 0);
+        }
+        EVP_PKEY_free(genKey);
+        EVP_PKEY_CTX_free(genCtx);
+    }
+
     EVP_PKEY_free(pkey);
 
     return err;
 }
-#endif /* WOLFSSL_DH_EXTRA && WP_HAVE_EPKI_TEST */
+#endif /* WOLFSSL_DH_EXTRA && WP_HAVE_EPKI_TEST && !HAVE_FIPS */
 
 int test_dh_invalid_kdf_strings(void *data)
 {

@@ -2031,7 +2031,7 @@ static int wp_ecx_dec_send_params(wp_Ecx* ecx, const char* dataType,
     return ok;
 }
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
 /**
  * Decode an encrypted PKCS#8 DER ECX private key into the ECX key object.
  *
@@ -2152,7 +2152,7 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (ok) {
         rc = ctx->decode(data, &idx, (void*)&ecx->key, len);
         if (rc != 0) {
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#ifdef WP_HAVE_PKCS8_ENC
             /* May be an encrypted PKCS#8 key - decrypt and retry. */
             if ((ctx->format != WP_ENC_FORMAT_PKI) ||
                     (!wp_ecx_decode_enc_pki(ctx, ecx, data, len, pwCb, pwCbArg)))
@@ -2249,7 +2249,13 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     /* By default the plaintext DER is the source for the output encoding. */
     srcData = derData;
     srcLen = derLen;
-    if (ok && (ctx->format == WP_ENC_FORMAT_EPKI)) {
+    /* A cipher on a PrivateKeyInfo encoder selects the encrypted form. */
+    if (ok && ((ctx->format == WP_ENC_FORMAT_EPKI)
+#ifdef WP_HAVE_PKCS8_ENC
+            || ((ctx->format == WP_ENC_FORMAT_PKI) &&
+                (ctx->cipherName != NULL))
+#endif
+            )) {
         pemType = PKCS8_ENC_PRIVATEKEY_TYPE;
         /* The PBES2 output is larger than the plaintext and must use a
          * separate buffer, so size it and encrypt into fresh memory. */

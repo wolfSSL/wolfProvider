@@ -298,6 +298,169 @@ int test_pkey_dec(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *msg,
     return err;
 }
 
+/**
+ * Check that a cipher set on a PrivateKeyInfo encoder actually encrypts.
+ *
+ * This is the path "openssl pkey -aes256" takes: the structure stays
+ * PrivateKeyInfo and the cipher is set on the encoder.
+ *
+ * @param [in] pkey       Key to encode.
+ * @param [in] fmt        "DER" or "PEM".
+ * @param [in] encProp    Property query selecting the encoding provider.
+ * @param [in] decLibCtx  Library context used to decode.
+ * @param [in] cmpKey     Compare the decoded key with the original.
+ * @return  0 on success, non-zero on failure.
+ */
+int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
+    const char* encProp, OSSL_LIB_CTX* decLibCtx, int cmpKey)
+{
+#ifndef WP_HAVE_PKCS8_ENC
+    /* wolfSSL lacks the PKCS#8 encrypt helpers, so the encoder writes the
+     * plaintext form and there is nothing to assert. */
+    (void)pkey;
+    (void)fmt;
+    (void)encProp;
+    (void)decLibCtx;
+    (void)cmpKey;
+    return 0;
+#else
+    int err = 0;
+    EVP_PKEY* pkey2 = NULL;
+    EVP_PKEY* badKey = NULL;
+    OSSL_ENCODER_CTX* ectx = NULL;
+    OSSL_ENCODER_CTX* badEctx = NULL;
+    OSSL_ENCODER_CTX* stateEctx = NULL;
+    OSSL_DECODER_CTX* dctx = NULL;
+    OSSL_DECODER_CTX* bctx = NULL;
+    unsigned char* data = NULL;
+    unsigned char* stateData = NULL;
+    size_t dataLen = 0;
+    size_t encLen = 0;
+    const unsigned char* pp;
+    const char* pass = "wolfprov-test-pass";
+    const char* badPass = "wrong-passphrase";
+    size_t passLen = XSTRLEN(pass);
+    static const char epkiHdr[] = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
+    static const char pkiHdr[] = "-----BEGIN PRIVATE KEY-----";
+
+    ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
+        "PrivateKeyInfo", encProp);
+    err = (ectx == NULL);
+    if (err == 0) {
+        /* Unsupported ciphers must be rejected instead of falling back to
+         * plaintext output. */
+        badEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
+            "PrivateKeyInfo", encProp);
+        err = (badEctx == NULL) ||
+            (OSSL_ENCODER_CTX_set_cipher(badEctx, "unsupported-cipher",
+                NULL) == 1);
+        if (err) {
+            PRINT_ERR_MSG("Unsupported PKCS8 cipher was accepted");
+        }
+    }
+    OSSL_ENCODER_CTX_free(badEctx);
+    if ((err == 0) && (XSTRCMP(fmt, "PEM") == 0)) {
+        int badType = 1;
+        OSSL_PARAM badParams[] = {
+            OSSL_PARAM_int(OSSL_ENCODER_PARAM_CIPHER, &badType),
+            OSSL_PARAM_END
+        };
+        size_t stateLen = 0;
+
+        stateEctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR,
+            fmt, "PrivateKeyInfo", encProp);
+        err = (stateEctx == NULL) ||
+            (OSSL_ENCODER_CTX_set_cipher(stateEctx, "AES-256-CBC", NULL) != 1) ||
+            (OSSL_ENCODER_CTX_set_params(stateEctx, badParams) == 1);
+        ERR_clear_error();
+        if (err == 0) {
+            err = (OSSL_ENCODER_to_data(stateEctx, &stateData, &stateLen) != 1) ||
+                (stateLen < sizeof(pkiHdr) - 1) ||
+                (XMEMCMP(stateData, pkiHdr, sizeof(pkiHdr) - 1) != 0);
+            if (err) {
+                PRINT_ERR_MSG("Rejected cipher parameter retained stale state");
+            }
+        }
+    }
+    OSSL_ENCODER_CTX_free(stateEctx);
+    OPENSSL_free(stateData);
+    if (err == 0) {
+        err = OSSL_ENCODER_CTX_set_cipher(ectx, "AES-256-CBC", NULL) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_ENCODER_CTX_set_passphrase(ectx, (const unsigned char*)pass,
+            passLen) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_ENCODER_to_data(ectx, &data, &dataLen) != 1;
+    }
+    if (err == 0) {
+        encLen = dataLen;
+    }
+    /* PEM names the container outright. DER has no header, so the plaintext
+     * form is ruled out by requiring the wrong passphrase to fail below. */
+    if ((err == 0) && (XSTRCMP(fmt, "PEM") == 0)) {
+        err = (dataLen < sizeof(epkiHdr) - 1) ||
+              (XMEMCMP(data, epkiHdr, sizeof(epkiHdr) - 1) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Cipher set but key was not encrypted");
+        }
+    }
+    /* The encrypted key must still decode back to the same key. */
+    if (err == 0) {
+        pp = data;
+        dctx = OSSL_DECODER_CTX_new_for_pkey(&pkey2, fmt, NULL,
+            EVP_PKEY_get0_type_name(pkey), EVP_PKEY_KEYPAIR, decLibCtx, NULL);
+        err = (dctx == NULL);
+    }
+    if (err == 0) {
+        err = OSSL_DECODER_CTX_set_passphrase(dctx, (const unsigned char*)pass,
+            passLen) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_DECODER_from_data(dctx, &pp, &dataLen) != 1;
+    }
+    if (err == 0) {
+        err = (pkey2 == NULL);
+    }
+    if ((err == 0) && cmpKey) {
+        err = EVP_PKEY_eq(pkey, pkey2) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Decoded key does not match the original");
+        }
+    }
+    /* A wrong passphrase must not recover a key. This is what rules out an
+     * unencrypted DER body, which no passphrase would be needed to read. */
+    if (err == 0) {
+        pp = data;
+        dataLen = encLen;
+        bctx = OSSL_DECODER_CTX_new_for_pkey(&badKey, fmt, NULL,
+            EVP_PKEY_get0_type_name(pkey), EVP_PKEY_KEYPAIR, decLibCtx, NULL);
+        err = (bctx == NULL);
+    }
+    if (err == 0) {
+        err = OSSL_DECODER_CTX_set_passphrase(bctx,
+            (const unsigned char*)badPass, XSTRLEN(badPass)) != 1;
+    }
+    if (err == 0) {
+        if (OSSL_DECODER_from_data(bctx, &pp, &dataLen) == 1) {
+            PRINT_ERR_MSG("Wrong passphrase was accepted");
+            err = 1;
+        }
+        ERR_clear_error();
+    }
+
+    OSSL_DECODER_CTX_free(bctx);
+    OSSL_DECODER_CTX_free(dctx);
+    OSSL_ENCODER_CTX_free(ectx);
+    OPENSSL_free(data);
+    EVP_PKEY_free(badKey);
+    EVP_PKEY_free(pkey2);
+
+    return err;
+#endif /* WP_HAVE_PKCS8_ENC */
+}
+
 /* Encode as EncryptedPrivateKeyInfo with encProp, decode with decLibCtx and
  * check it matches; a wrong passphrase must fail. Drives both directions. */
 int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
@@ -315,7 +478,7 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
     const unsigned char* pp;
     const char* pass = "wolfprov-test-pass";
     const char* badPass = "wrong-passphrase";
-    size_t passLen = strlen(pass);
+    size_t passLen = XSTRLEN(pass);
 
     /* Encode as EncryptedPrivateKeyInfo with the requested provider. */
     ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, EVP_PKEY_KEYPAIR, fmt,
@@ -349,12 +512,22 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
     }
     if (err == 0) {
         err = OSSL_DECODER_from_data(dctx, &pp, &dataLen) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Failed to decode encrypted private key");
+            ERR_print_errors_fp(stderr);
+        }
     }
     if (err == 0) {
         err = (pkey2 == NULL);
+        if (err) {
+            PRINT_ERR_MSG("Encrypted private key decode returned no key");
+        }
     }
     if (err == 0) {
         err = EVP_PKEY_eq(pkey, pkey2) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Decoded encrypted private key does not match");
+        }
     }
 
     /* Negative case: a wrong passphrase must not yield a key. */
@@ -367,7 +540,7 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
     }
     if (err == 0) {
         err = OSSL_DECODER_CTX_set_passphrase(bctx,
-            (const unsigned char*)badPass, strlen(badPass)) != 1;
+            (const unsigned char*)badPass, XSTRLEN(badPass)) != 1;
     }
     if (err == 0) {
         /* Decode is expected to fail; success with a recovered key is wrong. */
@@ -388,4 +561,3 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
 
     return err;
 }
-
