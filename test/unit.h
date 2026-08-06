@@ -345,6 +345,9 @@ int test_rsa_pkey_keygen(void *data);
 int test_rsa_pkey_invalid_key_size(void *data);
 int test_rsa_get_params(void *data);
 int test_rsa_sig_alg_id(void *data);
+#if defined(WP_HAVE_SHA512_224) && defined(WP_HAVE_SHA512_256)
+int test_rsa_sha512_224_256_dupctx(void *data);
+#endif
 int test_rsa_pss_salt(void *date);
 int test_rsa_pss_restrictions(void *data);
 

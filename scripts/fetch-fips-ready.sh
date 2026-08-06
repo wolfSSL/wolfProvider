@@ -112,8 +112,30 @@ ls_wolfssl_stable() {
         | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$'
 }
 
+# Retries transient failures (timeout, 5xx, connection error) but treats a
+# confirmed 4xx as a definitive "not hosted" with no retry -- conflating the
+# two would silently drop a version on a network blip.
 bundle_exists() {
-    curl -fsI --max-time 30 "$(bundle_url "$1")" >/dev/null 2>&1
+    local ver="$1" code attempt
+    for attempt in 1 2 3; do
+        # A genuine connection failure (not just a non-200 status) makes
+        # curl itself exit nonzero; `|| code=""` keeps that from tripping
+        # `set -e` before the retry loop below gets to run.
+        code=$(curl -sS -I -o /dev/null -w '%{http_code}' --max-time 30 \
+            "$(bundle_url "$ver")" 2>/dev/null) || code=""
+        case "$code" in
+            200) return 0 ;;
+            4??) return 1 ;;
+            *)
+                if [[ "$attempt" -lt 3 ]]; then
+                    sleep $((attempt * 3))
+                fi
+                ;;
+        esac
+    done
+    echo "fetch-fips-ready: could not confirm bundle $ver after retries" \
+        "(last status: ${code:-none})" >&2
+    return 1
 }
 
 # Candidates are the union of upstream -stable tags and the advertised latest,
