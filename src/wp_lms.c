@@ -55,6 +55,8 @@ typedef struct wp_LmsSigCtx {
     wp_Lms* lms;
 } wp_LmsSigCtx;
 
+static size_t wp_lms_xdr_pub_len(const unsigned char* header);
+
 static wp_Lms* wp_lms_new(WOLFPROV_CTX* provCtx)
 {
     wp_Lms* lms = NULL;
@@ -90,11 +92,14 @@ static void wp_lms_free(wp_Lms* lms)
     if (lms != NULL) {
         int cnt;
 #ifndef WP_SINGLE_THREADED
-        if (wc_LockMutex(&lms->mutex) != 0) {
-            return;
+        if (wc_LockMutex(&lms->mutex) == 0) {
+            cnt = --lms->refCnt;
+            wc_UnLockMutex(&lms->mutex);
         }
-        cnt = --lms->refCnt;
-        wc_UnLockMutex(&lms->mutex);
+        else {
+            /* Cannot safely decrement without the lock; keep the object. */
+            cnt = lms->refCnt;
+        }
 #else
         cnt = --lms->refCnt;
 #endif
@@ -129,8 +134,7 @@ static int wp_lms_has(const wp_Lms* lms, int selection)
 {
     int ok = wolfssl_prov_is_running() && (lms != NULL);
 
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) == 0)) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
@@ -145,20 +149,17 @@ static int wp_lms_match(const wp_Lms* lms1, const wp_Lms* lms2,
 {
     int ok = wolfssl_prov_is_running() && (lms1 != NULL) && (lms2 != NULL);
 
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
-            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) == 0)) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
         ok = 0;
     }
     if (ok && ((lms1->pubLen == 0) || (lms2->pubLen == 0))) {
         ok = 0;
     }
     if (ok) {
-        ok = (lms1->pubLen >= (2 * WP_LMS_TYPE_SZ)) &&
-            (lms2->pubLen >= (2 * WP_LMS_TYPE_SZ)) &&
-            (XMEMCMP(lms1->pub, lms2->pub, 2 * WP_LMS_TYPE_SZ) == 0);
+        ok = XMEMCMP(lms1->pub, lms2->pub, 2 * WP_LMS_TYPE_SZ) == 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
-        ok = (lms1->pubLen != 0) && (lms1->pubLen == lms2->pubLen) &&
+        ok = (lms1->pubLen == lms2->pubLen) &&
             (XMEMCMP(lms1->pub, lms2->pub, lms1->pubLen) == 0);
     }
 
@@ -194,6 +195,9 @@ static int wp_lms_import(wp_Lms* lms, int selection,
             (pubLen > WP_LMS_XDR_MAX_SZ))) {
         ok = 0;
     }
+    if (ok && (pubLen != wp_lms_xdr_pub_len((const unsigned char*)pub))) {
+        ok = 0;
+    }
     if (ok) {
         raw[0] = 0;
         raw[1] = 0;
@@ -225,6 +229,70 @@ static const OSSL_PARAM* wp_lms_import_types(int selection)
 static const OSSL_PARAM* wp_lms_export_types(int selection)
 {
     return wp_lms_import_types(selection);
+}
+
+static const OSSL_PARAM* wp_lms_gettable_params(WOLFPROV_CTX* provCtx)
+{
+    static const OSSL_PARAM params[] = {
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
+        OSSL_PARAM_END
+    };
+
+    (void)provCtx;
+    return params;
+}
+
+static int wp_lms_get_params(wp_Lms* lms, OSSL_PARAM params[])
+{
+    int ok = (lms != NULL) && (lms->pubLen != 0);
+    OSSL_PARAM* p;
+    word32 sigLen = 0;
+    int bits;
+
+    if (ok) {
+        bits = (lms->pubLen == WP_LMS_XDR_MIN_SZ) ? 192 : 256;
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_BITS);
+        if ((p != NULL) && !OSSL_PARAM_set_int(p, bits)) {
+            ok = 0;
+        }
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_BITS);
+        if ((p != NULL) && !OSSL_PARAM_set_int(p, bits / 2)) {
+            ok = 0;
+        }
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_MAX_SIZE);
+        if (p != NULL) {
+            if ((wc_LmsKey_GetSigLen(&lms->key, &sigLen) != 0) ||
+                    (sigLen < WP_LMS_LEVELS_SZ) ||
+                    !OSSL_PARAM_set_int(p,
+                        (int)sigLen - WP_LMS_LEVELS_SZ)) {
+                ok = 0;
+            }
+        }
+    }
+    return ok;
+}
+
+static wp_Lms* wp_lms_dup(const wp_Lms* src, int selection)
+{
+    wp_Lms* dst = NULL;
+    OSSL_PARAM params[2];
+
+    if ((src != NULL) &&
+            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+        dst = wp_lms_new(src->provCtx);
+        if (dst != NULL) {
+            params[0] = OSSL_PARAM_construct_octet_string(
+                OSSL_PKEY_PARAM_PUB_KEY, (void*)src->pub, src->pubLen);
+            params[1] = OSSL_PARAM_construct_end();
+            if (!wp_lms_import(dst, OSSL_KEYMGMT_SELECT_PUBLIC_KEY, params)) {
+                wp_lms_free(dst);
+                dst = NULL;
+            }
+        }
+    }
+    return dst;
 }
 
 static int wp_lms_export(wp_Lms* lms, int selection, OSSL_CALLBACK* paramCb,
@@ -267,6 +335,9 @@ static const char* wp_lms_query_operation_name(int operationId)
 const OSSL_DISPATCH wp_lms_keymgmt_functions[] = {
     { OSSL_FUNC_KEYMGMT_NEW, (DFUNC)wp_lms_new },
     { OSSL_FUNC_KEYMGMT_FREE, (DFUNC)wp_lms_free },
+    { OSSL_FUNC_KEYMGMT_DUP, (DFUNC)wp_lms_dup },
+    { OSSL_FUNC_KEYMGMT_GET_PARAMS, (DFUNC)wp_lms_get_params },
+    { OSSL_FUNC_KEYMGMT_GETTABLE_PARAMS, (DFUNC)wp_lms_gettable_params },
     { OSSL_FUNC_KEYMGMT_HAS, (DFUNC)wp_lms_has },
     { OSSL_FUNC_KEYMGMT_MATCH, (DFUNC)wp_lms_match },
     { OSSL_FUNC_KEYMGMT_VALIDATE, (DFUNC)wp_lms_validate },
@@ -303,6 +374,26 @@ static void wp_lms_sig_freectx(wp_LmsSigCtx* ctx)
         wp_lms_free(ctx->lms);
         OPENSSL_free(ctx);
     }
+}
+
+static wp_LmsSigCtx* wp_lms_sig_dupctx(const wp_LmsSigCtx* src)
+{
+    wp_LmsSigCtx* dst = NULL;
+
+    if (src != NULL) {
+        dst = OPENSSL_zalloc(sizeof(*dst));
+        if (dst != NULL) {
+            dst->provCtx = src->provCtx;
+            if ((src->lms != NULL) && !wp_lms_up_ref(src->lms)) {
+                OPENSSL_free(dst);
+                dst = NULL;
+            }
+            else {
+                dst->lms = src->lms;
+            }
+        }
+    }
+    return dst;
 }
 
 static int wp_lms_verify_message_init(wp_LmsSigCtx* ctx, wp_Lms* lms,
@@ -366,6 +457,7 @@ static int wp_lms_verify(wp_LmsSigCtx* ctx, const unsigned char* sig,
 const OSSL_DISPATCH wp_lms_signature_functions[] = {
     { OSSL_FUNC_SIGNATURE_NEWCTX, (DFUNC)wp_lms_sig_newctx },
     { OSSL_FUNC_SIGNATURE_FREECTX, (DFUNC)wp_lms_sig_freectx },
+    { OSSL_FUNC_SIGNATURE_DUPCTX, (DFUNC)wp_lms_sig_dupctx },
     { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_INIT,
         (DFUNC)wp_lms_verify_message_init },
     { OSSL_FUNC_SIGNATURE_VERIFY, (DFUNC)wp_lms_verify },
@@ -395,11 +487,17 @@ static void wp_lms_dec_free(wp_LmsDecCtx* ctx)
     OPENSSL_free(ctx);
 }
 
-static int wp_lms_dec_selection(const wp_LmsDecCtx* ctx, int selection)
+static int wp_lms_selection_ok(int selection)
 {
-    (void)ctx;
-    return selection == 0 ||
-        (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0;
+    return (selection == 0) ||
+        (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) == 0) &&
+        ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0));
+}
+
+static int wp_lms_dec_selection(WOLFPROV_CTX* provCtx, int selection)
+{
+    (void)provCtx;
+    return wp_lms_selection_ok(selection);
 }
 
 static int wp_lms_dec_export(wp_LmsDecCtx* ctx, const void* reference,
@@ -462,13 +560,13 @@ static int wp_lms_dec_decode(wp_LmsDecCtx* ctx, OSSL_CORE_BIO* cBio,
     size_t pubLen = 0;
     int ok = 0;
     OSSL_PARAM params[4];
+    OSSL_PARAM importParams[2];
     int objectType = OSSL_OBJECT_PKEY;
 
-    (void)selection;
     (void)pwCb;
     (void)pwCbArg;
     if (!wolfssl_prov_is_running() || (ctx == NULL) ||
-            (dataCb == NULL) || !wp_lms_dec_selection(ctx, selection)) {
+            (dataCb == NULL) || !wp_lms_selection_ok(selection)) {
         goto done;
     }
     bio = wp_corebio_get_bio(ctx->provCtx, cBio);
@@ -494,10 +592,10 @@ static int wp_lms_dec_decode(wp_LmsDecCtx* ctx, OSSL_CORE_BIO* cBio,
     if (lms == NULL) {
         goto done;
     }
-    if (!wp_lms_import(lms, OSSL_KEYMGMT_SELECT_PUBLIC_KEY,
-            (OSSL_PARAM[]){ OSSL_PARAM_construct_octet_string(
-                OSSL_PKEY_PARAM_PUB_KEY, pub, pubLen),
-                OSSL_PARAM_construct_end() })) {
+    importParams[0] = OSSL_PARAM_construct_octet_string(
+        OSSL_PKEY_PARAM_PUB_KEY, pub, pubLen);
+    importParams[1] = OSSL_PARAM_construct_end();
+    if (!wp_lms_import(lms, OSSL_KEYMGMT_SELECT_PUBLIC_KEY, importParams)) {
         wp_lms_free(lms);
         lms = NULL;
         ok = 1;

@@ -29,7 +29,8 @@ WOLFPROV_WITH_WOLFSSL=--with-wolfssl=${WOLFSSL_INSTALL_DIR}
 WOLFPROV_WITH_OPENSSL=--with-openssl=${OPENSSL_INSTALL_DIR}
 
 # Check if using system wolfSSL installation
-if [ "$WOLFPROV_MLKEM" != "1" ] && [ "$WOLFPROV_MLDSA" != "1" ] &&
+if [ "$WOLFPROV_PQC" != "1" ] && [ "$WOLFPROV_MLKEM" != "1" ] &&
+        [ "$WOLFPROV_MLDSA" != "1" ] &&
         [ "$WOLFPROV_LMS" != "1" ] && [ ! -d "$WOLFSSL_INSTALL_DIR" ] &&
         command -v dpkg >/dev/null 2>&1; then
     if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then

@@ -32,6 +32,10 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source ${SCRIPT_DIR}/utils-wolfprovider.sh
 
+# Sub-test counts from OpenSSL's vector files. Update when vectors change.
+EXPECTED_MLKEM_MLDSA_TESTS=2602
+EXPECTED_LMS_TESTS=320
+
 # OpenSSL's KAT data files are run unmodified.
 VECTOR_DIR=${OPENSSL_SOURCE_DIR}/test/recipes/30-test_evp_data
 EVP_TEST=${OPENSSL_TEST}/evp_test
@@ -71,7 +75,7 @@ run_pqc_kat() {
 
     if [ "${WOLFPROV_PQC:-0}" = "1" ]; then
         vectors="${VECTOR_DIR}/evppkey_ml_kem_*.txt ${VECTOR_DIR}/evppkey_ml_dsa_*.txt"
-        expected=$((expected + 2602))
+        expected=$((expected + EXPECTED_MLKEM_MLDSA_TESTS))
     fi
     if [ "${WOLFPROV_LMS:-0}" = "1" ]; then
         if [ ! -f "${VECTOR_DIR}/evppkey_lms_sigver.txt" ]; then
@@ -80,7 +84,7 @@ run_pqc_kat() {
             return 1
         fi
         vectors="${vectors} ${VECTOR_DIR}/evppkey_lms_sigver.txt"
-        expected=$((expected + 320))
+        expected=$((expected + EXPECTED_LMS_TESTS))
     fi
     if [ -z "${vectors}" ]; then
         printf "ERROR: no PQC KAT family selected; set WOLFPROV_PQC=1 and/or WOLFPROV_LMS=1\n"
@@ -102,7 +106,9 @@ run_pqc_kat() {
             printf "PASS (%s)\n" "${n:-0}"
         else
             printf "FAIL\n"
-            printf "%s\n" "${out}"
+            if [ "${WOLFPROV_FORCE_FAIL}" != "1" ]; then
+                printf "%s\n" "${out}"
+            fi
             bad=$((bad + 1))
         fi
     done

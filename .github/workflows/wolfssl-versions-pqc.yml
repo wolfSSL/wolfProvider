@@ -90,7 +90,9 @@ jobs:
               {"name":"master (--enable-mldsa only)",
                "wolfssl-ref":"master","enable":"--enable-mldsa","expect":"mldsa"},
               {"name":"master (--enable-lms only)",
-               "wolfssl-ref":"master","enable":"--enable-lms","expect":"lms"}
+               "wolfssl-ref":"master","enable":"--enable-lms","expect":"lms"},
+              {"name":"v5.9.2-stable (--enable-lms only)",
+               "wolfssl-ref":"v5.9.2-stable","enable":"--enable-lms","expect":"lms"}
             ]
           }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"

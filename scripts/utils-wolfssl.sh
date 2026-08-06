@@ -63,7 +63,7 @@ if [ "$WOLFPROV_MLDSA" = "1" ]; then
     WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-mldsa"
 fi
 if [ "$WOLFPROV_LMS" = "1" ]; then
-    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-lms=sha256-192,shake256"
+    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-lms=sha256-192"
 fi
 WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS}${WOLFSSL_PQC_CONFIG_OPTS}"
 
@@ -151,15 +151,14 @@ check_wolfssl_feature_mismatch() {
     check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_HAVE_LMS LMS
     check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_LMS_SHA256_192 \
         "LMS SHA-256/192 parameter sets"
-    check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_LMS_SHAKE256 \
-        "LMS SHAKE256 parameter sets"
 }
 
 install_wolfssl() {
     # Check if libwolfssl and libwolfssl-dev packages are already installed
     # This is allowed only for wolfSSL, but not for OpenSSL because we want to
     # use the custom OpenSSL built with wolfProvider.
-    if [ "$WOLFPROV_MLKEM" != "1" ] && [ "$WOLFPROV_MLDSA" != "1" ] &&
+    if [ "$WOLFPROV_PQC" != "1" ] && [ "$WOLFPROV_MLKEM" != "1" ] &&
+            [ "$WOLFPROV_MLDSA" != "1" ] &&
             [ "$WOLFPROV_LMS" != "1" ] &&
             command -v dpkg >/dev/null 2>&1; then
         if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then

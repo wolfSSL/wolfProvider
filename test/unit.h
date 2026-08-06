@@ -582,6 +582,7 @@ int test_des3_tls_cbc_dec(void *data);
 
 #ifdef WP_HAVE_LMS
 int test_lms_import_export(void *data);
+int test_lms_verify(void *data);
 int test_lms_decode(void *data);
 int test_lms_unsupported_operations(void *data);
 #endif

@@ -403,11 +403,17 @@ check_openssl_fips_baseline_mismatch() {
 check_openssl_lms_mismatch() {
     local config="${OPENSSL_INSTALL_DIR}/include/openssl/configuration.h"
 
-    if [ "${WOLFPROV_LMS}" = "1" ] && [ -d "${OPENSSL_INSTALL_DIR}" ] &&
-            { [ ! -f "${config}" ] || grep -Eq \
-                '^[[:space:]]*#[[:space:]]*define[[:space:]]+OPENSSL_NO_LMS' \
-                "${config}"; };
-    then
+    if [ "${WOLFPROV_LMS}" != "1" ] || [ ! -d "${OPENSSL_INSTALL_DIR}" ]; then
+        return 0
+    fi
+    if [ ! -f "${config}" ]; then
+        printf "ERROR: existing OpenSSL install is incomplete (%s missing).\n" \
+            "${config}"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        exit 1
+    fi
+    if grep -Eq '^[[:space:]]*#[[:space:]]*define[[:space:]]+OPENSSL_NO_LMS' \
+            "${config}"; then
         printf "ERROR: existing OpenSSL install was built without LMS.\n"
         printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
         exit 1

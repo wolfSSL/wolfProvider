@@ -100,6 +100,9 @@ jobs:
                 + rows("master"; true; "master")
                 + [ {"name":"master [LMS only]",
                      "wolfssl-ref":"master","pqc":false,"lms":true,
+                     "replace":false,"force_fail":""},
+                    {"name":"v5.9.2-stable [LMS only]",
+                     "wolfssl-ref":"v5.9.2-stable","pqc":false,"lms":true,
                      "replace":false,"force_fail":""} ] )
             }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"

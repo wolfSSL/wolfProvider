@@ -8,6 +8,7 @@ number where the code change was added.
 
 ## New Feature Additions
 * Add ML-KEM (FIPS 203) and ML-DSA (FIPS 204) post-quantum support via `--enable-pqc` (PR 399)
+* Add LMS signature verification support (PR 459)
 
 ## Enhancements and Optimizations
 * Route KDF key-exchange and MAC-signature operations through wolfProvider directly (PR 429)
