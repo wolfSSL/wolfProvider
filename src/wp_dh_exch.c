@@ -273,15 +273,7 @@ static int wp_dh_check_peer_pub(DhKey* key, const unsigned char* pub,
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_check_peer_pub");
 
-    if (mp_iszero(&key->q)) {
-        rc = wc_DhCheckPubKey(key, pub, pubSz);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_DhCheckPubKey",
-                rc);
-            ok = 0;
-        }
-    }
-    else {
+    if (!mp_iszero(&key->q)) {
         /* q must be passed explicitly for the y^q test to be performed. */
         qSz = mp_unsigned_bin_size(&key->q);
         q = OPENSSL_malloc(qSz);
@@ -769,4 +761,3 @@ const OSSL_DISPATCH wp_dh_keyexch_functions[] = {
 };
 
 #endif /* WP_HAVE_DH */
-
