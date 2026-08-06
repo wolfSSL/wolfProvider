@@ -118,7 +118,7 @@ EOF
 
 # --- bundle_exists: a confirmed 4xx is definitive -- no retry burned. ---
 test_bundle_exists_confirmed_404_no_retry() {
-    local d counter
+    local d counter rc
     d=$(mktemp -d)
     counter="${d}/count"
     cat > "${MOCKBIN}/curl" <<EOF
@@ -135,22 +135,56 @@ exit 1
 EOF
     chmod +x "${MOCKBIN}/curl"
 
-    if run_case "${d}" bundle_exists "9.9.9"; then
-        fail "bundle_exists reported a 404 bundle as existing"
+    rc=0
+    run_case "${d}" bundle_exists "9.9.9" || rc=$?
+    if [[ "${rc}" -ne 1 ]]; then
+        fail "bundle_exists returned ${rc} for a confirmed 404, want 1 (absent)"
+    elif [[ "$(cat "${counter}")" == "1" ]]; then
+        pass "bundle_exists treats a confirmed 404 as final, no retry"
     else
-        if [[ "$(cat "${counter}")" == "1" ]]; then
-            pass "bundle_exists treats a confirmed 404 as final, no retry"
-        else
-            fail "bundle_exists retried after a confirmed 404 ($(cat "${counter}") calls)"
-        fi
+        fail "bundle_exists retried after a confirmed 404 ($(cat "${counter}") calls)"
     fi
     rm -rf "${d}"
 }
 
-# --- bundle_exists: exhausts retries and reports absent (not a crash) when
-# every attempt is transient. ---
+# --- bundle_exists: a 429 (rate limit) is transient, NOT a confirmed
+# absence -- conflating the two was the exact regression a prior review
+# round flagged (HIGH: 4xx classified all 4xx, including 429/408, as
+# permanently absent with no retry). ---
+test_bundle_exists_429_is_transient() {
+    local d counter rc
+    d=$(mktemp -d)
+    counter="${d}/count"
+    cat > "${MOCKBIN}/curl" <<EOF
+#!/usr/bin/env bash
+n=0
+[[ -f "${counter}" ]] && n=\$(cat "${counter}")
+n=\$((n + 1))
+echo "\$n" > "${counter}"
+if [[ "\$*" == *"-I"* && "\$*" == *"%{http_code}"* ]]; then
+    if [[ "\$n" -lt 2 ]]; then printf '429'; exit 0; fi
+    printf '200'
+    exit 0
+fi
+exit 1
+EOF
+    chmod +x "${MOCKBIN}/curl"
+
+    rc=0
+    run_case "${d}" bundle_exists "9.9.9" || rc=$?
+    if [[ "${rc}" -eq 0 ]]; then
+        pass "bundle_exists retries a 429 instead of treating it as absent"
+    else
+        fail "bundle_exists returned ${rc} for a 429-then-200 sequence, want 0 (exists)"
+    fi
+    rm -rf "${d}"
+}
+
+# --- bundle_exists: exhausts retries and reports INDETERMINATE (rc=2, not
+# the same as confirmed-absent rc=1) when every attempt is transient. A
+# caller that treats 1 and 2 the same silently drops a real bundle. ---
 test_bundle_exists_exhausts_on_persistent_transient() {
-    local d
+    local d rc
     d=$(mktemp -d)
     cat > "${MOCKBIN}/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -161,10 +195,12 @@ exit 1
 EOF
     chmod +x "${MOCKBIN}/curl"
 
-    if run_case "${d}" bundle_exists "9.9.9" 2>/dev/null; then
-        fail "bundle_exists reported existence despite persistent transient failure"
+    rc=0
+    run_case "${d}" bundle_exists "9.9.9" 2>/dev/null || rc=$?
+    if [[ "${rc}" -eq 2 ]]; then
+        pass "bundle_exists reports indeterminate (rc=2), distinct from confirmed absent"
     else
-        pass "bundle_exists exhausts retries and reports absent, not a crash"
+        fail "bundle_exists returned ${rc} for persistent transient failure, want 2"
     fi
     rm -rf "${d}"
 }
@@ -243,6 +279,48 @@ EOF
         fail "list_versions succeeded despite git ls-remote failing entirely"
     else
         pass "list_versions fails cleanly when upstream tags are unavailable"
+    fi
+    rm -rf "${d}"
+}
+
+# --- list_versions: one candidate hosted, one persistently indeterminate
+# (5xx/timeout throughout) -- the whole resolution must fail rather than
+# silently publishing a list that quietly omits the flaky candidate. ---
+test_list_versions_fails_on_indeterminate_candidate() {
+    local d rc
+    d=$(mktemp -d)
+    cat > "${MOCKBIN}/git" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "ls-remote" ]]; then
+    cat <<TAGS
+aaa1	refs/tags/v5.8.2-stable
+aaa2	refs/tags/v5.9.2-stable
+TAGS
+    exit 0
+fi
+exit 1
+EOF
+    chmod +x "${MOCKBIN}/git"
+    cat > "${MOCKBIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"-I"* && "$*" == *"%{http_code}"* ]]; then
+    for a in "$@"; do
+        # 5.8.2 is persistently flaky (503 forever); 5.9.2 is healthy.
+        if [[ "$a" == *"5.8.2"* ]]; then printf '503'; exit 0; fi
+    done
+    printf '200'
+    exit 0
+fi
+exit 1
+EOF
+    chmod +x "${MOCKBIN}/curl"
+
+    rc=0
+    run_case "${d}" list_versions 2>/dev/null || rc=$?
+    if [[ "${rc}" -ne 0 ]]; then
+        pass "list_versions fails when a real candidate is indeterminate"
+    else
+        fail "list_versions succeeded despite an indeterminate candidate (5.8.2 always 503)"
     fi
     rm -rf "${d}"
 }
@@ -378,9 +456,11 @@ EOF
 
 test_bundle_exists_retries_transient
 test_bundle_exists_confirmed_404_no_retry
+test_bundle_exists_429_is_transient
 test_bundle_exists_exhausts_on_persistent_transient
 test_list_versions_filters_and_sorts
 test_list_versions_fails_when_tags_unavailable
+test_list_versions_fails_on_indeterminate_candidate
 test_fetch_bundle_preserves_existing_on_download_failure
 test_fetch_bundle_checksum_mismatch_preserves_existing
 test_fetch_bundle_replaces_on_success

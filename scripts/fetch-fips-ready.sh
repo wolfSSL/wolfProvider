@@ -82,9 +82,20 @@ retry_out() {
     return 1
 }
 
+# Sorts newline-separated X.Y.Z version strings ascending. `sort -V` is a
+# GNU extension and unavailable on some BSD/macOS sort builds; this script
+# is documented for local (including macOS) use, so version ordering can't
+# depend on it. Zero-pads each numeric field to a fixed width and sorts
+# lexicographically instead, which every `sort` supports.
+ver_sort() {
+    awk -F. '{ printf "%05d.%05d.%05d %s\n", $1, $2, $3, $0 }' \
+        | sort \
+        | awk '{ print $2 }'
+}
+
 # ver_ge A B -- true when A >= B
 ver_ge() {
-    [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
+    [[ "$(printf '%s\n%s\n' "$2" "$1" | ver_sort | head -n1)" == "$2" ]]
 }
 
 get_page() {
@@ -96,7 +107,7 @@ page_latest() {
     get_page \
         | grep -o 'wolfssl-[0-9][0-9.]*-gplv3-fips-ready\.zip' \
         | sed -E 's/^wolfssl-(.*)-gplv3-fips-ready\.zip$/\1/' \
-        | sort -V | tail -n 1
+        | ver_sort | tail -n 1
 }
 
 page_sha256() {
@@ -112,9 +123,12 @@ ls_wolfssl_stable() {
         | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$'
 }
 
-# Retries transient failures (timeout, 5xx, connection error) but treats a
-# confirmed 4xx as a definitive "not hosted" with no retry -- conflating the
-# two would silently drop a version on a network blip.
+# Retries transient failures (timeout, 429, 5xx, connection error) but
+# treats a confirmed 404/410 as definitive "not hosted" with no retry --
+# conflating the two would silently drop a version on a network blip or a
+# rate limit. Returns 0 exists / 1 confirmed absent / 2 indeterminate (every
+# attempt was transient) -- callers must not treat 1 and 2 the same, or an
+# indeterminate result silently reads as "not hosted".
 bundle_exists() {
     local ver="$1" code attempt
     for attempt in 1 2 3; do
@@ -125,7 +139,7 @@ bundle_exists() {
             "$(bundle_url "$ver")" 2>/dev/null) || code=""
         case "$code" in
             200) return 0 ;;
-            4??) return 1 ;;
+            404|410) return 1 ;;
             *)
                 if [[ "$attempt" -lt 3 ]]; then
                     sleep $((attempt * 3))
@@ -135,7 +149,7 @@ bundle_exists() {
     done
     echo "fetch-fips-ready: could not confirm bundle $ver after retries" \
         "(last status: ${code:-none})" >&2
-    return 1
+    return 2
 }
 
 # Candidates are the union of upstream -stable tags and the advertised latest,
@@ -143,13 +157,15 @@ bundle_exists() {
 # bundle, and 5.9.1 has a bundle the page never lists.
 list_versions() {
     local candidates ver found probe_dir
+    local -a indeterminate=()
     candidates=$(retry_out ls_wolfssl_stable) || {
         echo "fetch-fips-ready: could not list wolfSSL tags" >&2
         return 1
     }
     candidates="$candidates
 $(page_latest 2>/dev/null || true)"
-    candidates=$(printf '%s\n' "$candidates" | grep -E '^[0-9.]+$' | sort -V -u \
+    candidates=$(printf '%s\n' "$candidates" | grep -E '^[0-9.]+$' | sort -u \
+        | ver_sort \
         | while read -r ver; do ver_ge "$ver" "$FLOOR" && echo "$ver"; done)
     [[ -n "$candidates" ]] || return 1
 
@@ -159,13 +175,33 @@ $(page_latest 2>/dev/null || true)"
     probe_dir=$(mktemp -d)
     trap 'rm -rf "$probe_dir"' RETURN
     for ver in $candidates; do
-        (bundle_exists "$ver" && touch "$probe_dir/$ver") &
+        (
+            bundle_exists "$ver"
+            case "$?" in
+                0) touch "$probe_dir/$ver.exists" ;;
+                2) touch "$probe_dir/$ver.indeterminate" ;;
+                # 1 (confirmed absent): no marker, correctly omitted below.
+            esac
+        ) &
     done
     wait
 
+    # An indeterminate probe must fail the whole resolution, not just drop
+    # that one candidate -- a rate-limited or flaky bundle would otherwise
+    # silently vanish from a list that still reports success.
+    while IFS= read -r ver; do
+        indeterminate+=("$ver")
+    done < <(find "$probe_dir" -maxdepth 1 -name '*.indeterminate' \
+        -exec basename {} .indeterminate \;)
+    if [[ "${#indeterminate[@]}" -gt 0 ]]; then
+        echo "fetch-fips-ready: could not determine availability for:" \
+            "${indeterminate[*]}" >&2
+        return 1
+    fi
+
     found=""
-    for ver in $(printf '%s\n' "$candidates" | sort -V); do
-        [[ -e "$probe_dir/$ver" ]] && found="$found$ver"$'\n'
+    for ver in $(printf '%s\n' "$candidates" | ver_sort); do
+        [[ -e "$probe_dir/$ver.exists" ]] && found="$found$ver"$'\n'
     done
 
     [[ -n "$found" ]] || return 1
