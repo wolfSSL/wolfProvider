@@ -528,25 +528,21 @@ IMPLEMENT_DIGEST(wp_sha512, wc_Sha512,
                  wc_InitSha512_ex, wc_Sha512Update, wc_Sha512Final,
                  wc_Sha512Copy, wc_Sha512Free)
 
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-#if !defined(WOLFSSL_NOSHA512_224) && \
-    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
+#ifdef WP_HAVE_SHA512_224
 IMPLEMENT_DIGEST(wp_sha512_224, wc_Sha512_224,
                  WC_SHA512_224_BLOCK_SIZE, WC_SHA512_224_DIGEST_SIZE,
                  WP_SHA2_FLAGS,
                  wc_InitSha512_224_ex, wc_Sha512_224Update, wc_Sha512_224Final,
                  wc_Sha512_224Copy, wc_Sha512_224Free)
-#endif /* WOLFSSL_NOSHA512_224 */
+#endif /* WP_HAVE_SHA512_224 */
 
-#if !defined(WOLFSSL_NOSHA512_256) && \
-    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
+#ifdef WP_HAVE_SHA512_256
 IMPLEMENT_DIGEST(wp_sha512_256, wc_Sha512_256,
                  WC_SHA512_256_BLOCK_SIZE, WC_SHA512_256_DIGEST_SIZE,
                  WP_SHA2_FLAGS,
                  wc_InitSha512_256_ex, wc_Sha512_256Update, wc_Sha512_256Final,
                  wc_Sha512_256Copy, wc_Sha512_256Free)
-#endif /* WOLFSSL_NOSHA512_256 */
-#endif
+#endif /* WP_HAVE_SHA512_256 */
 #endif /* WP_HAVE_SHA512 */
 
 

@@ -431,20 +431,16 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
 #ifdef WP_HAVE_SHA512
     { WP_NAMES_SHA2_512, WOLFPROV_PROPERTIES, wp_sha512_functions,
       "" },
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-#if !defined(WOLFSSL_NOSHA512_224) && \
-    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
+#ifdef WP_HAVE_SHA512_224
     { WP_NAMES_SHA2_512_224, WOLFPROV_PROPERTIES,
       wp_sha512_224_functions,
       "" },
-#endif /* !WOLFSSL_NOSHA512_224 && !HAVE_FIPS && !HAVE_SELFTEST */
-#if !defined(WOLFSSL_NOSHA512_256) && \
-    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
+#endif /* WP_HAVE_SHA512_224 */
+#ifdef WP_HAVE_SHA512_256
     { WP_NAMES_SHA2_512_256, WOLFPROV_PROPERTIES,
       wp_sha512_256_functions,
       "" },
-#endif /* !WOLFSSL_NOSHA512_256 && !HAVE_FIPS && !HAVE_SELFTEST */
-#endif
+#endif /* WP_HAVE_SHA512_256 */
 #endif /* WP_HAVE_SHA512 */
 
     /* SHA-3 */

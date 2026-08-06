@@ -780,9 +780,7 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         rc = wc_Sha512Copy(&src->sha512, &dst->sha512);
 #endif
         break;
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-#if !defined(WOLFSSL_NOSHA512_224) && !defined(HAVE_FIPS) && \
-        !defined(SELF_TEST)
+#ifdef WP_HAVE_SHA512_224
     case WC_HASH_TYPE_SHA512_224:
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         rc = wc_Sha512_224Copy(&src->alg.sha512, &dst->alg.sha512);
@@ -790,9 +788,8 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         rc = wc_Sha512_224Copy(&src->sha512, &dst->sha512);
 #endif
         break;
-#endif /* !WOLFSSL_NOSHA512_224 */
-#if !defined(WOLFSSL_NOSHA512_256) && !defined(HAVE_FIPS) && \
-        !defined(SELF_TEST)
+#endif /* WP_HAVE_SHA512_224 */
+#ifdef WP_HAVE_SHA512_256
     case WC_HASH_TYPE_SHA512_256:
 #if LIBWOLFSSL_VERSION_HEX >= 0x05007004
         rc = wc_Sha512_256Copy(&src->alg.sha512, &dst->alg.sha512);
@@ -800,8 +797,7 @@ int wp_hash_copy(wc_HashAlg* src, wc_HashAlg* dst, enum wc_HashType hashType)
         rc = wc_Sha512_256Copy(&src->sha512, &dst->sha512);
 #endif
         break;
-#endif /* !WOLFSSL_NOSHA512_256 */
-#endif /* LIBWOLFSSL_VERSION_HEX >= 0x05000000 */
+#endif /* WP_HAVE_SHA512_256 */
 #else
     case WC_HASH_TYPE_SHA512:
     case WC_HASH_TYPE_SHA512_224:

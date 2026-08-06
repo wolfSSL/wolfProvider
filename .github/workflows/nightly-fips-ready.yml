@@ -1,38 +1,25 @@
-name: FIPS Ready Bundle Test
+name: Nightly FIPS Ready Bundle Tests
 
-# START OF COMMON SECTION
+# Sweeps EVERY hosted FIPS Ready bundle at or above the floor. PR-time
+# fips-ready.yml runs the narrower fips_ready_pr_array (the back-compat
+# anchors plus the newest) to keep PR turnaround short; this restores the
+# versions it drops. Both sets are resolved at run time by
+# _discover-versions.yml, so a new FIPS Ready release joins the sweep on its
+# own.
+
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE*'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/dependabot.yml'
-      - '.gitignore'
-      - 'AUTHORS'
-      - 'COPYING'
-      - 'README*'
-      - 'CHANGELOG*'
+  workflow_call: {}
+  workflow_dispatch: {}
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+# No concurrency group: github.workflow is the caller's here, so any group collides with sibling calls.
 
 jobs:
   discover_versions:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_discover-versions.yml
 
   fips_ready_test:
     needs: discover_versions
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
+    name: Nightly FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -41,9 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_bundle_ref: ${{ fromJson(needs.discover_versions.outputs.fips_ready_pr_array) }}
+        wolfssl_bundle_ref: ${{ fromJson(needs.discover_versions.outputs.fips_ready_all_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
-        # force_fail collapsed into sequential runs in the test step
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -89,7 +75,6 @@ jobs:
 
       - name: Run FIPS Command Tests
         run: |
-          # Run cmd tests to verify functionality
           export WOLFSSL_ISFIPS=1
           source scripts/env-setup
 
@@ -101,9 +86,6 @@ jobs:
 
       - name: Run FIPS Status Test
         run: |
-          # Exercises the FIPS-status gate in wolfssl_prov_is_running(). In a
-          # FIPS build the test fails unless the forced-failure branch actually
-          # ran, so the exit status is the whole check.
           export WOLFSSL_ISFIPS=1
           source scripts/env-setup
           ./test/standalone/tests/fips_status/run.sh

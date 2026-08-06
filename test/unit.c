@@ -197,6 +197,12 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_SHA512
     TEST_DECL(test_sha512, NULL),
 #endif
+#ifdef WP_HAVE_SHA512_224
+    TEST_DECL(test_sha512_224, NULL),
+#endif
+#ifdef WP_HAVE_SHA512_256
+    TEST_DECL(test_sha512_256, NULL),
+#endif
 #ifdef WP_HAVE_SHA3_224
     TEST_DECL(test_sha3_224, NULL),
 #endif

@@ -149,6 +149,24 @@ int test_sha512(void *data)
 
 /******************************************************************************/
 
+#ifdef WP_HAVE_SHA512_224
+int test_sha512_224(void *data)
+{
+    return test_create_digest("SHA512-224", data);
+}
+#endif
+
+/******************************************************************************/
+
+#ifdef WP_HAVE_SHA512_256
+int test_sha512_256(void *data)
+{
+    return test_create_digest("SHA512-256", data);
+}
+#endif
+
+/******************************************************************************/
+
 #ifdef WP_HAVE_SHA3_224
 int test_sha3_224(void *data)
 {

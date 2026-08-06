@@ -55,7 +55,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_bundle_ref: [ '5.8.2' ]
+        # Newest bundle only: perf-baseline.fips.json is a single calibrated
+        # baseline, so fanning it across versions makes the numbers meaningless.
+        wolfssl_bundle_ref: [ '${{ needs.discover_versions.outputs.fips_ready_latest }}' ]
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
     steps:
       - name: Checkout wolfProvider
@@ -65,16 +67,8 @@ jobs:
 
       - name: Download FIPS Ready Bundle
         run: |
-          BUNDLE_URL="https://www.wolfssl.com/wolfssl-${{ matrix.wolfssl_bundle_ref }}-gplv3-fips-ready.zip"
-          wget -O wolfssl-fips-ready.zip "$BUNDLE_URL"
-          unzip wolfssl-fips-ready.zip
-          BUNDLE_DIR=$(find . -maxdepth 1 -type d -name "*fips-ready*" | head -n 1)
-          if [ -z "$BUNDLE_DIR" ]; then
-            echo "ERROR: Could not find FIPS ready bundle directory after extraction"
-            ls -la
-            exit 1
-          fi
-          echo "FIPS_BUNDLE_PATH=$(pwd)/$BUNDLE_DIR" >> $GITHUB_ENV
+          BUNDLE_DIR=$(./scripts/fetch-fips-ready.sh "${{ matrix.wolfssl_bundle_ref }}")
+          echo "FIPS_BUNDLE_PATH=$BUNDLE_DIR" >> $GITHUB_ENV
 
       - name: Build wolfProvider with FIPS Ready Bundle
         run: |

@@ -72,10 +72,15 @@
 #ifdef WOLFSSL_SHA512
     #define WP_HAVE_SHA512
 #endif
-#if (LIBWOLFSSL_VERSION_HEX >= 0x05000000) && !defined(WOLFSSL_NOSHA512_224)
+/* FIPS v5-v7 modules set WOLFSSL_NOSHA512_224/256; v8 exports both. */
+#if defined(WP_HAVE_SHA512) && (LIBWOLFSSL_VERSION_HEX >= 0x05000000) && \
+    !defined(WOLFSSL_NOSHA512_224) && !defined(HAVE_SELFTEST) && \
+    !defined(SELF_TEST)
     #define WP_HAVE_SHA512_224
 #endif
-#if (LIBWOLFSSL_VERSION_HEX >= 0x05000000) && !defined(WOLFSSL_NOSHA512_256)
+#if defined(WP_HAVE_SHA512) && (LIBWOLFSSL_VERSION_HEX >= 0x05000000) && \
+    !defined(WOLFSSL_NOSHA512_256) && !defined(HAVE_SELFTEST) && \
+    !defined(SELF_TEST)
     #define WP_HAVE_SHA512_256
 #endif
 #ifdef WOLFSSL_SHA3
