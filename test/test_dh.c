@@ -2175,9 +2175,10 @@ int test_dh_small_subgroup_peer(void *data)
         err = EVP_PKEY_derive_init(ctx) != 1;
     }
     if (err == 0) {
-        rc = EVP_PKEY_derive_set_peer(ctx, one);
+        rc = EVP_PKEY_derive_set_peer_ex(ctx, one, 0);
+        err = rc != 1;
     }
-    if ((err == 0) && (rc == 1)) {
+    if (err == 0) {
         secretLen = sizeof(secret);
         if (EVP_PKEY_derive(ctx, secret, &secretLen) == 1) {
             PRINT_ERR_MSG("q-less DH accepted peer public key 1");
@@ -2193,9 +2194,10 @@ int test_dh_small_subgroup_peer(void *data)
         err = EVP_PKEY_derive_init(ctx) != 1;
     }
     if (err == 0) {
-        rc = EVP_PKEY_derive_set_peer(ctx, pMinusOne);
+        rc = EVP_PKEY_derive_set_peer_ex(ctx, pMinusOne, 0);
+        err = rc != 1;
     }
-    if ((err == 0) && (rc == 1)) {
+    if (err == 0) {
         secretLen = sizeof(secret);
         if (EVP_PKEY_derive(ctx, secret, &secretLen) == 1) {
             PRINT_ERR_MSG("q-less DH accepted peer public key p-1");
