@@ -120,20 +120,30 @@ bundle_exists() {
 # because neither set alone matches what is hosted: 5.8.6 has a tag but no
 # bundle, and 5.9.1 has a bundle the page never lists.
 list_versions() {
-    local candidates ver found
+    local candidates ver found probe_dir
     candidates=$(retry_out ls_wolfssl_stable) || {
         echo "fetch-fips-ready: could not list wolfSSL tags" >&2
         return 1
     }
     candidates="$candidates
 $(page_latest 2>/dev/null || true)"
+    candidates=$(printf '%s\n' "$candidates" | grep -E '^[0-9.]+$' | sort -V -u \
+        | while read -r ver; do ver_ge "$ver" "$FLOOR" && echo "$ver"; done)
+    [[ -n "$candidates" ]] || return 1
+
+    # This runs inside the shared _discover-versions.yml job, which every
+    # caller pays for even when it never touches FIPS outputs -- probe
+    # candidates in parallel so N versions costs one round trip, not N.
+    probe_dir=$(mktemp -d)
+    trap 'rm -rf "$probe_dir"' RETURN
+    for ver in $candidates; do
+        (bundle_exists "$ver" && touch "$probe_dir/$ver") &
+    done
+    wait
 
     found=""
-    for ver in $(printf '%s\n' "$candidates" | grep -E '^[0-9.]+$' | sort -V -u); do
-        ver_ge "$ver" "$FLOOR" || continue
-        if bundle_exists "$ver"; then
-            found="$found$ver"$'\n'
-        fi
+    for ver in $(printf '%s\n' "$candidates" | sort -V); do
+        [[ -e "$probe_dir/$ver" ]] && found="$found$ver"$'\n'
     done
 
     [[ -n "$found" ]] || return 1
@@ -149,12 +159,16 @@ sha256_of() {
 }
 
 fetch_bundle() {
-    local ver="$1" zip dir want got attempt
-    zip="$DEST/wolfssl-$ver-gplv3-fips-ready.zip"
-    dir="$DEST/wolfssl-$ver-gplv3-fips-ready"
+    local ver="$1" zip dir want got attempt scratch scratch_dir
 
     mkdir -p "$DEST"
-    rm -rf "$dir"
+    # Download and verify into a scratch dir first; the caller's existing
+    # $dir is only touched after a verified download, so a failed fetch
+    # never destroys a bundle that was already there.
+    scratch=$(mktemp -d "$DEST/.fetch-fips-ready.XXXXXX")
+    trap 'rm -rf "$scratch"' RETURN
+    zip="$scratch/wolfssl-$ver-gplv3-fips-ready.zip"
+    dir="$DEST/wolfssl-$ver-gplv3-fips-ready"
 
     for attempt in 1 2 3; do
         if curl -fsSL --max-time 900 -o "$zip" "$(bundle_url "$ver")"; then
@@ -179,19 +193,28 @@ fetch_bundle() {
         # Only the newest bundle has a published hash; the rest get an integrity
         # check from the archive itself.
         echo "fetch-fips-ready: no published SHA256 for $ver, verifying archive" >&2
-        unzip -tqq "$zip" >/dev/null
+        if ! unzip -tqq "$zip" >/dev/null; then
+            echo "fetch-fips-ready: downloaded archive for $ver failed integrity check" >&2
+            return 1
+        fi
     fi
 
-    unzip -q "$zip" -d "$DEST"
+    unzip -q "$zip" -d "$scratch"
     rm -f "$zip"
 
-    if [[ ! -d "$dir" ]]; then
-        dir=$(find "$DEST" -maxdepth 1 -type d -name '*fips-ready*' | head -n 1)
+    if [[ ! -d "$scratch/wolfssl-$ver-gplv3-fips-ready" ]]; then
+        scratch_dir=$(find "$scratch" -maxdepth 1 -mindepth 1 -type d -name '*fips-ready*' | head -n 1)
+    else
+        scratch_dir="$scratch/wolfssl-$ver-gplv3-fips-ready"
     fi
-    if [[ -z "$dir" || ! -d "$dir" ]]; then
+    if [[ -z "$scratch_dir" || ! -d "$scratch_dir" ]]; then
         echo "fetch-fips-ready: no bundle directory after extracting $ver" >&2
         return 1
     fi
+
+    # Verified: safe to replace whatever was at $dir.
+    rm -rf "$dir"
+    mv "$scratch_dir" "$dir"
 
     cd "$(dirname "$dir")" && echo "$PWD/$(basename "$dir")"
 }
