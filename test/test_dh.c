@@ -1892,6 +1892,41 @@ static const unsigned char dh_ss_peer_pub[] = {
     0x07, 0xcf, 0x6b, 0x48, 0xf9, 0xf3, 0xa0, 0xb7
 };
 
+static const unsigned char dh_ss_secret[] = {
+    0x25, 0x34, 0x4A, 0xF2, 0x34, 0x06, 0x1B, 0x3A,
+    0x44, 0xB8, 0xE7, 0xBE, 0x19, 0x4B, 0x71, 0xA5,
+    0x2D, 0xE2, 0xC7, 0xAF, 0x69, 0xD2, 0xC1, 0xE7,
+    0x8B, 0xE3, 0x9C, 0x99, 0x1E, 0xDA, 0x53, 0xD4,
+    0x26, 0xCA, 0xF8, 0xE3, 0x75, 0xDE, 0x4A, 0xC1,
+    0x7A, 0x7D, 0xBF, 0x05, 0xB4, 0x8A, 0xE3, 0xD7,
+    0x0A, 0x4A, 0x44, 0xCD, 0x8F, 0x9F, 0xC5, 0x4F,
+    0x09, 0x8C, 0xB2, 0xBB, 0xAE, 0x4C, 0x8C, 0x48,
+    0x34, 0x11, 0x60, 0xA8, 0x12, 0xB9, 0x0E, 0x78,
+    0xBE, 0x29, 0xDA, 0xA3, 0x1B, 0xEC, 0xAF, 0x0F,
+    0x1B, 0xF5, 0x26, 0xFD, 0xE0, 0x78, 0xC8, 0x5D,
+    0x52, 0x9E, 0x81, 0x1C, 0x1D, 0xC7, 0xDE, 0x12,
+    0x6A, 0x08, 0x17, 0xFE, 0x82, 0x72, 0x06, 0xCA,
+    0x4A, 0x65, 0x92, 0x57, 0xC2, 0xEE, 0xAF, 0x51,
+    0xFD, 0x03, 0xB8, 0x8B, 0x55, 0x4B, 0x3F, 0x27,
+    0x90, 0x1F, 0x0E, 0x1B, 0x4F, 0xCC, 0x84, 0x70,
+    0x13, 0xBF, 0x08, 0x3F, 0x63, 0xC4, 0x55, 0xFC,
+    0x47, 0x7A, 0x5F, 0xA5, 0x2F, 0x37, 0xA8, 0x6D,
+    0x3F, 0xAE, 0x58, 0x03, 0xBE, 0xF4, 0xD3, 0xAA,
+    0x6D, 0xA4, 0x99, 0x5F, 0xB7, 0x08, 0x00, 0x22,
+    0x94, 0x2B, 0xD5, 0x8B, 0x49, 0x41, 0x71, 0x04,
+    0x81, 0x1E, 0x79, 0x34, 0x7D, 0xC7, 0x50, 0x1B,
+    0x2F, 0x17, 0xB8, 0x71, 0x97, 0xA3, 0x90, 0xAA,
+    0x26, 0xAF, 0x16, 0x49, 0x24, 0x85, 0xC2, 0x4D,
+    0x04, 0x8C, 0xC1, 0x59, 0x97, 0xEF, 0xA7, 0x1D,
+    0x4C, 0x69, 0x4D, 0x35, 0x8D, 0xB3, 0x3F, 0xBA,
+    0xD9, 0x4F, 0xDA, 0xC9, 0xBE, 0x0A, 0x04, 0xB2,
+    0xD8, 0x55, 0x22, 0x44, 0x10, 0xD6, 0x95, 0x79,
+    0x20, 0xB0, 0x6B, 0xD4, 0xD0, 0x1D, 0xE0, 0x40,
+    0x41, 0xB4, 0xE7, 0x82, 0xA8, 0xEA, 0x70, 0x3E,
+    0xD8, 0x25, 0x7C, 0x24, 0xE4, 0x41, 0xF2, 0xB6,
+    0x98, 0x4D, 0xEE, 0xC9, 0x01, 0x82, 0xE5, 0x43
+};
+
 /* Element of order 3: g^((p-1)/3). Deriving with it reveals our private key
  * modulo 3. */
 static const unsigned char dh_ss_small_pub[] = {
@@ -1931,7 +1966,7 @@ static const unsigned char dh_ss_small_pub[] = {
 
 /* Build a DHX key on the dh_ss group. A NULL priv gives a public only key. */
 static int test_dh_ss_key(EVP_PKEY **pkey, const unsigned char *pub,
-    size_t pubLen, const unsigned char *priv, size_t privLen)
+    size_t pubLen, const unsigned char *priv, size_t privLen, int withQ)
 {
     int err = 0;
     EVP_PKEY_CTX *ctx = NULL;
@@ -1945,10 +1980,13 @@ static int test_dh_ss_key(EVP_PKEY **pkey, const unsigned char *pub,
     int selection;
 
     p = BN_bin2bn(dh_ss_p, (int)sizeof(dh_ss_p), NULL);
-    q = BN_bin2bn(dh_ss_q, (int)sizeof(dh_ss_q), NULL);
+    if (withQ) {
+        q = BN_bin2bn(dh_ss_q, (int)sizeof(dh_ss_q), NULL);
+    }
     g = BN_bin2bn(dh_ss_g, (int)sizeof(dh_ss_g), NULL);
     pubBn = BN_bin2bn(pub, (int)pubLen, NULL);
-    err = (p == NULL) || (q == NULL) || (g == NULL) || (pubBn == NULL);
+    err = (p == NULL) || (g == NULL) || (pubBn == NULL) ||
+        (withQ && (q == NULL));
     if ((err == 0) && (priv != NULL)) {
         privBn = BN_bin2bn(priv, (int)privLen, NULL);
         err = privBn == NULL;
@@ -1960,7 +1998,7 @@ static int test_dh_ss_key(EVP_PKEY **pkey, const unsigned char *pub,
     if (err == 0) {
         err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p) != 1;
     }
-    if (err == 0) {
+    if ((err == 0) && withQ) {
         err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_Q, q) != 1;
     }
     if (err == 0) {
@@ -2011,23 +2049,41 @@ int test_dh_small_subgroup_peer(void *data)
     EVP_PKEY *key = NULL;
     EVP_PKEY *peer = NULL;
     EVP_PKEY *small = NULL;
+    EVP_PKEY *plain = NULL;
+    EVP_PKEY *one = NULL;
+    EVP_PKEY *pMinusOne = NULL;
     EVP_PKEY_CTX *ctx = NULL;
+    BIGNUM *p = NULL;
+    BIGNUM *oneBn = NULL;
+    BIGNUM *pMinusOneBn = NULL;
     unsigned char secret[sizeof(dh_ss_p)];
+    unsigned char onePub[sizeof(dh_ss_p)];
+    unsigned char pMinusOnePub[sizeof(dh_ss_p)];
     size_t secretLen;
+    int rc;
 
     (void)data;
 
     PRINT_MSG("Testing DH derive rejects a small subgroup peer key");
 
     err = test_dh_ss_key(&key, dh_ss_pub, sizeof(dh_ss_pub), dh_ss_priv,
-                         sizeof(dh_ss_priv));
+                         sizeof(dh_ss_priv), 1);
+    if (err != 0) {
+        PRINT_ERR_MSG("failed to create DH key");
+    }
     if (err == 0) {
         err = test_dh_ss_key(&peer, dh_ss_peer_pub, sizeof(dh_ss_peer_pub),
-                             NULL, 0);
+                             NULL, 0, 1);
+        if (err != 0) {
+            PRINT_ERR_MSG("failed to create DH peer key");
+        }
     }
     if (err == 0) {
         err = test_dh_ss_key(&small, dh_ss_small_pub, sizeof(dh_ss_small_pub),
-                             NULL, 0);
+                             NULL, 0, 1);
+        if (err != 0) {
+            PRINT_ERR_MSG("failed to create small subgroup key");
+        }
     }
 
     /* A peer key in the order q subgroup must still derive. */
@@ -2040,12 +2096,21 @@ int test_dh_small_subgroup_peer(void *data)
     }
     if (err == 0) {
         err = EVP_PKEY_derive_set_peer(ctx, peer) != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("set_peer failed with a valid peer key");
+        }
     }
     if (err == 0) {
         secretLen = sizeof(secret);
         err = EVP_PKEY_derive(ctx, secret, &secretLen) != 1;
         if (err != 0) {
             PRINT_ERR_MSG("derive failed with a valid peer key");
+        }
+        else if ((secretLen != sizeof(dh_ss_secret)) ||
+                (XMEMCMP(secret, dh_ss_secret, sizeof(dh_ss_secret)) != 0)) {
+            PRINT_BUFFER("derived secret", secret, secretLen);
+            PRINT_ERR_MSG("derive returned the wrong shared secret");
+            err = 1;
         }
     }
     EVP_PKEY_CTX_free(ctx);
@@ -2059,18 +2124,95 @@ int test_dh_small_subgroup_peer(void *data)
         err = EVP_PKEY_derive_init(ctx) != 1;
     }
     if (err == 0) {
+        rc = EVP_PKEY_derive_set_peer(ctx, small);
+        if (rc == 1) {
+            secretLen = sizeof(secret);
+            if (EVP_PKEY_derive(ctx, secret, &secretLen) == 1) {
+                PRINT_ERR_MSG("derive accepted a small subgroup peer key");
+                err = 1;
+            }
+        }
+    }
+
+    /* Exercise the q-less path with the two DH boundary values. */
+    if (err == 0) {
+        p = BN_bin2bn(dh_ss_p, (int)sizeof(dh_ss_p), NULL);
+        oneBn = BN_new();
+        pMinusOneBn = BN_dup(p);
+        err = (p == NULL) || (oneBn == NULL) || (pMinusOneBn == NULL) ||
+            (BN_one(oneBn) != 1) || (BN_sub_word(pMinusOneBn, 1) != 1) ||
+            (BN_bn2binpad(oneBn, onePub, sizeof(onePub)) !=
+                (int)sizeof(onePub)) ||
+            (BN_bn2binpad(pMinusOneBn, pMinusOnePub, sizeof(pMinusOnePub)) !=
+                (int)sizeof(pMinusOnePub));
+    }
+    if (err == 0) {
+        err = test_dh_ss_key(&plain, dh_ss_pub, sizeof(dh_ss_pub),
+            dh_ss_priv, sizeof(dh_ss_priv), 0);
+        if (err != 0) {
+            PRINT_ERR_MSG("failed to create q-less DH key");
+        }
+    }
+    if (err == 0) {
+        err = test_dh_ss_key(&one, onePub, sizeof(onePub), NULL, 0, 0);
+        if (err != 0) {
+            PRINT_ERR_MSG("failed to create q-less DH peer key 1");
+        }
+    }
+    if (err == 0) {
+        err = test_dh_ss_key(&pMinusOne, pMinusOnePub,
+            sizeof(pMinusOnePub), NULL, 0, 0);
+        if (err != 0) {
+            PRINT_ERR_MSG("failed to create q-less DH peer key p-1");
+        }
+    }
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, plain, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    if (err == 0) {
+        rc = EVP_PKEY_derive_set_peer(ctx, one);
+    }
+    if ((err == 0) && (rc == 1)) {
         secretLen = sizeof(secret);
-        if ((EVP_PKEY_derive_set_peer(ctx, small) == 1) &&
-            (EVP_PKEY_derive(ctx, secret, &secretLen) == 1)) {
-            PRINT_ERR_MSG("derive accepted a small subgroup peer key");
+        if (EVP_PKEY_derive(ctx, secret, &secretLen) == 1) {
+            PRINT_ERR_MSG("q-less DH accepted peer public key 1");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, plain, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_derive_init(ctx) != 1;
+    }
+    if (err == 0) {
+        rc = EVP_PKEY_derive_set_peer(ctx, pMinusOne);
+    }
+    if ((err == 0) && (rc == 1)) {
+        secretLen = sizeof(secret);
+        if (EVP_PKEY_derive(ctx, secret, &secretLen) == 1) {
+            PRINT_ERR_MSG("q-less DH accepted peer public key p-1");
             err = 1;
         }
     }
 
     EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(small);
+    EVP_PKEY_free(pMinusOne);
+    EVP_PKEY_free(one);
+    EVP_PKEY_free(plain);
     EVP_PKEY_free(peer);
     EVP_PKEY_free(key);
+    BN_free(pMinusOneBn);
+    BN_free(oneBn);
+    BN_free(p);
     return err;
 }
 
