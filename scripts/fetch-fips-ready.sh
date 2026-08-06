@@ -176,8 +176,14 @@ $(page_latest 2>/dev/null || true)"
     trap 'rm -rf "$probe_dir"' RETURN
     for ver in $candidates; do
         (
-            bundle_exists "$ver"
-            case "$?" in
+            # `|| rc=$?` is load-bearing under `set -e`: an unguarded
+            # `bundle_exists "$ver"` returning 2 would kill this subshell
+            # before the case below ever runs, silently losing the
+            # indeterminate marker (and with it, the whole-resolution
+            # failure this is supposed to trigger).
+            rc=0
+            bundle_exists "$ver" || rc=$?
+            case "$rc" in
                 0) touch "$probe_dir/$ver.exists" ;;
                 2) touch "$probe_dir/$ver.indeterminate" ;;
                 # 1 (confirmed absent): no marker, correctly omitted below.

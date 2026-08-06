@@ -79,7 +79,9 @@ run_case() {
     # DEST="$PWD", which would otherwise clobber a prefix assignment made
     # before the source builtin runs. DEST is consumed inside fns.sh, not
     # this file, hence the two shellcheck disables below.
-    # shellcheck disable=SC1090,SC2034
+    # SC2030: the PATH override is deliberately scoped to this subshell,
+    # so each call gets an isolated mock PATH without polluting later tests.
+    # shellcheck disable=SC1090,SC2030,SC2034
     ( PATH="${MOCKBIN}:${PATH}"; source "${FNS}"; DEST="${dest}"; "$@" )
 }
 
@@ -325,6 +327,62 @@ EOF
     rm -rf "${d}"
 }
 
+# --- Entrypoint-level regression for the indeterminate-candidate case.
+# Bash disables errexit checking for the ENTIRE call tree beneath a compound
+# command that sits on the left side of ||/&&/if -- including subshells
+# spawned deep inside a sourced function -- not just that top-level command.
+# Every other test in this file calls list_versions/bundle_exists through
+# run_case, which is itself always invoked as `run_case ... || rc=$?`; that
+# masked a real errexit bug (a bare `bundle_exists "$ver"` inside
+# list_versions' background probe subshell) that only showed up when the
+# real script binary was run as a genuine, unconditioned subprocess. This
+# test exercises exactly that: `bash "$TARGET" --list`, not sourced, not
+# wrapped in an if/||, so it has the same errexit semantics production CI
+# actually gets. ---
+test_entrypoint_list_fails_on_indeterminate_candidate() {
+    local d out status
+    d=$(mktemp -d)
+    cat > "${MOCKBIN}/git" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "ls-remote" ]]; then
+    cat <<TAGS
+aaa1	refs/tags/v5.8.2-stable
+aaa2	refs/tags/v5.9.2-stable
+TAGS
+    exit 0
+fi
+exit 1
+EOF
+    chmod +x "${MOCKBIN}/git"
+    cat > "${MOCKBIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"-I"* && "$*" == *"%{http_code}"* ]]; then
+    for a in "$@"; do
+        # 5.8.2 is persistently flaky (503 forever); 5.9.2 is healthy.
+        if [[ "$a" == *"5.8.2"* ]]; then printf '503'; exit 0; fi
+    done
+    printf '200'
+    exit 0
+fi
+exit 1
+EOF
+    chmod +x "${MOCKBIN}/curl"
+
+    status=0
+    # SC2031: the PATH override only needs to reach the `bash "$TARGET"`
+    # call on this same line -- it isn't meant to escape the subshell.
+    # shellcheck disable=SC2031
+    out=$(cd "${d}" && PATH="${MOCKBIN}:${PATH}" bash "${TARGET}" --list \
+        --floor 5.8.2 2>&1) || status=$?
+
+    if [[ "${status}" -ne 0 ]]; then
+        pass "entrypoint --list fails on an indeterminate candidate (real subprocess, no errexit masking)"
+    else
+        fail "entrypoint --list exited 0 despite an indeterminate candidate; got: [${out}]"
+    fi
+    rm -rf "${d}"
+}
+
 # Builds a valid zip fixture at $2 containing wolfssl-$1-gplv3-fips-ready/.
 make_fixture_zip() {
     local ver="$1" out="$2" stage
@@ -461,6 +519,7 @@ test_bundle_exists_exhausts_on_persistent_transient
 test_list_versions_filters_and_sorts
 test_list_versions_fails_when_tags_unavailable
 test_list_versions_fails_on_indeterminate_candidate
+test_entrypoint_list_fails_on_indeterminate_candidate
 test_fetch_bundle_preserves_existing_on_download_failure
 test_fetch_bundle_checksum_mismatch_preserves_existing
 test_fetch_bundle_replaces_on_success
