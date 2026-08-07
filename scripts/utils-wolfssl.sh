@@ -63,7 +63,7 @@ if [ "$WOLFPROV_MLDSA" = "1" ]; then
     WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-mldsa"
 fi
 if [ "$WOLFPROV_LMS" = "1" ]; then
-    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-lms=sha256-192"
+    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-lms=sha256-192,shake256"
 fi
 WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS}${WOLFSSL_PQC_CONFIG_OPTS}"
 
@@ -151,6 +151,8 @@ check_wolfssl_feature_mismatch() {
     check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_HAVE_LMS LMS
     check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_LMS_SHA256_192 \
         "LMS SHA-256/192 parameter sets"
+    check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_LMS_SHAKE256 \
+        "LMS SHAKE256 parameter sets"
 }
 
 install_wolfssl() {

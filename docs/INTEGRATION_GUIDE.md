@@ -85,7 +85,7 @@ sudo make install
 | `--enable-hmac-copy` | Faster repeated HMAC with same key (wolfSSL 5.7.8+) |
 | `--enable-sp=yes,asm --enable-sp-math-all` | SP Integer maths |
 | `--enable-mlkem --enable-mldsa` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL v5.9.2-stable or later). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
-| `--enable-lms=sha256-192` | LMS verification with the SHA-256/192 parameter family used by the OpenSSL vectors. The `build-wolfprovider.sh --enable-lms` flag sets this automatically. |
+| `--enable-lms=sha256-192,shake256` | LMS verification with the SHA-256 and SHAKE256 parameter families used by the OpenSSL vectors. The `build-wolfprovider.sh --enable-lms` flag sets this automatically. |
 
 **Optional CPPFLAGS:**
 
