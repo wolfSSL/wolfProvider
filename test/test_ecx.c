@@ -957,6 +957,77 @@ int test_ecx_import_zero_priv(void *data)
     OPENSSL_free(buf);
     return err;
 }
+
+/* An undersized public key octet string must be rejected without an
+ * out-of-bounds read (in[31] and a 32-byte copy out of a shorter buffer).
+ * The buffer is heap allocated so ASan sees the overread. */
+int test_ecx_import_short_pub(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    EVP_PKEY *setPkey = NULL;
+    unsigned char *buf = NULL;
+    /* RFC 7748 Section 6.1 Alice private key. */
+    static const unsigned char privKey[] = {
+        0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d,
+        0x3c, 0x16, 0xc1, 0x72, 0x51, 0xb2, 0x66, 0x45,
+        0xdf, 0x4c, 0x2f, 0x87, 0xeb, 0xc0, 0x99, 0x2a,
+        0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9, 0x2c, 0x2a
+    };
+    /* Deliberately shorter than CURVE25519_KEYSIZE. */
+    const size_t shortLen = 4;
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    PRINT_MSG("X25519 import of undersized public key");
+
+    buf = OPENSSL_malloc(shortLen);
+    if (buf == NULL) {
+        err = 1;
+    }
+    if (err == 0) {
+        /* Top bit of the last byte set is what triggers the 32-byte copy. */
+        memset(buf, 0xff, shortLen);
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "X25519", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PUB_KEY,
+            buf, shortLen);
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_PUBLIC_KEY, params) == 1) {
+            PRINT_ERR_MSG("X25519 fromdata accepted short public key");
+            err = 1;
+        }
+    }
+
+    /* Same undersized buffer through the encoded public key set_params path. */
+    if (err == 0) {
+        setPkey = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "X25519", NULL,
+            privKey, sizeof(privKey));
+        if (setPkey == NULL) {
+            PRINT_ERR_MSG("Failed to import X25519 private key");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_set1_encoded_public_key(setPkey, buf, shortLen) == 1) {
+            PRINT_ERR_MSG("X25519 set1_encoded_public_key accepted short key");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(setPkey);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OPENSSL_free(buf);
+    return err;
+}
 #endif /* WP_HAVE_X25519 */
 
 int test_ecx_dup(void *data)
