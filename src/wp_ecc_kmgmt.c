@@ -246,9 +246,10 @@ int wp_ecc_check_usage(wp_Ecc* ecc)
 /**
  * Check a point is usable with a curve.
  *
- * Rejects the point at infinity and any point that is not on the curve. A
- * point off the curve lies on a group whose order may be small enough to
- * recover the other party's private key from a key exchange.
+ * Rejects the point at infinity and, where wolfSSL provides the check, any
+ * point that is not on the curve. A point off the curve lies on a group whose
+ * order may be small enough to recover the other party's private key from a
+ * key exchange.
  *
  * @param [in] point    Public key point.
  * @param [in] curveId  wolfSSL identifier of curve point must be on.
@@ -259,7 +260,9 @@ static int wp_ecc_check_point(ecc_point* point, int curveId)
 {
     int ok = 1;
     int idx = ECC_CURVE_INVALID;
+#ifdef USE_ECC_B_PARAM
     int rc;
+#endif
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_check_point");
 
@@ -270,6 +273,9 @@ static int wp_ecc_check_point(ecc_point* point, int curveId)
     if (ok && wc_ecc_point_is_at_infinity(point)) {
         ok = 0;
     }
+#ifdef USE_ECC_B_PARAM
+    /* wolfSSL only builds the on-curve check when the curve b parameter is
+     * available. */
     if (ok) {
         rc = wc_ecc_point_is_on_curve(point, idx);
         if (rc != 0) {
@@ -278,6 +284,7 @@ static int wp_ecc_check_point(ecc_point* point, int curveId)
             ok = 0;
         }
     }
+#endif
 
     WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;

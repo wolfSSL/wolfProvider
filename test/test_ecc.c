@@ -1102,6 +1102,7 @@ int test_ecdh_invalid_kdf_strings(void *data)
     return err;
 }
 
+#ifdef USE_ECC_B_PARAM
 /* Build a P-256 public key from raw X and Y ordinates. */
 static EVP_PKEY* test_ecdh_peer_from_xy(const BIGNUM* x, const BIGNUM* y)
 {
@@ -1260,6 +1261,7 @@ int test_ecdh_invalid_curve_peer(void *data)
 
     return err;
 }
+#endif /* USE_ECC_B_PARAM */
 
 #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
 /* Apply X9.63 KDF using OpenSSL's reference implementation so we can compare
