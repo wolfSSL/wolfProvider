@@ -3361,13 +3361,19 @@ int test_rsa_sig_alg_id(void *data)
     return err;
 }
 
-#if defined(WP_HAVE_SHA512_224) && defined(WP_HAVE_SHA512_256)
+#if defined(WP_HAVE_SHA512_224) || defined(WP_HAVE_SHA512_256)
 /* EVP_MD_CTX_copy_ex on a partial RSA digest_sign accumulator, using
  * SHA512-224/SHA512-256 to exercise the wp_hash_copy() branches those two
  * digests only gained in FIPS v8 (older FIPS modules never define
  * WP_HAVE_SHA512_224/256, so this path is skipped there). Both the
  * original and duplicated contexts must produce signatures that verify
- * under the original key. */
+ * under the original key.
+ *
+ * WP_HAVE_SHA512_224 and WP_HAVE_SHA512_256 are independently defined
+ * (wolfSSL toggles WOLFSSL_NOSHA512_224/256 separately), and wp_hash_copy()
+ * has independent branches for each, so this is two separately-gated
+ * one-digest tests rather than one combined test -- a build enabling only
+ * one of the two must still exercise its copy branch. */
 static int test_rsa_dupctx_verify(EVP_PKEY *pkey, const char *md,
     const unsigned char *msg, size_t msgLen, unsigned char *sig,
     size_t sigLen)
@@ -3392,21 +3398,19 @@ static int test_rsa_dupctx_verify(EVP_PKEY *pkey, const char *md,
     return err;
 }
 
-int test_rsa_sha512_224_256_dupctx(void *data)
+static int test_rsa_dupctx_one_digest(const char *md, void *data)
 {
     static const unsigned char part1[16] = "rsa-dupctx-part1";
     static const unsigned char part2[16] = "rsa-dupctx-part2";
-    const char *mds[] = { "SHA512-224", "SHA512-256" };
     int err = 0;
-    size_t i;
     EVP_PKEY *pkey = NULL;
     const unsigned char *p = rsa_key_der_2048;
     EVP_MD_CTX *a = NULL;
     EVP_MD_CTX *b = NULL;
     unsigned char sigA[256];
     unsigned char sigB[256];
-    size_t sigALen;
-    size_t sigBLen;
+    size_t sigALen = sizeof(sigA);
+    size_t sigBLen = sizeof(sigB);
     unsigned char msg[32];
 
     (void)data;
@@ -3414,57 +3418,67 @@ int test_rsa_sha512_224_256_dupctx(void *data)
     XMEMCPY(msg, part1, sizeof(part1));
     XMEMCPY(msg + sizeof(part1), part2, sizeof(part2));
 
+    PRINT_MSG("RSA dupctx %s", md);
+
     pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
     err = pkey == NULL;
 
-    for (i = 0; (err == 0) && (i < sizeof(mds) / sizeof(mds[0])); i++) {
-        PRINT_MSG("RSA dupctx %s", mds[i]);
-
-        sigALen = sizeof(sigA);
-        sigBLen = sizeof(sigB);
-
+    if (err == 0) {
         a = EVP_MD_CTX_new();
         err = (a == NULL);
-        if (err == 0) {
-            err = EVP_DigestSignInit_ex(a, NULL, mds[i], wpLibCtx, NULL,
-                pkey, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(a, NULL, md, wpLibCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignUpdate(a, part1, sizeof(part1)) != 1;
+    }
+    if (err == 0) {
+        b = EVP_MD_CTX_new();
+        err = (b == NULL);
+    }
+    if (err == 0) {
+        err = EVP_MD_CTX_copy_ex(b, a) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignUpdate(a, part2, sizeof(part2)) != 1
+            || EVP_DigestSignUpdate(b, part2, sizeof(part2)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignFinal(a, sigA, &sigALen) != 1
+            || EVP_DigestSignFinal(b, sigB, &sigBLen) != 1;
+    }
+    if (err == 0) {
+        err = test_rsa_dupctx_verify(pkey, md, msg, sizeof(msg), sigA,
+                sigALen) != 0
+            || test_rsa_dupctx_verify(pkey, md, msg, sizeof(msg), sigB,
+                sigBLen) != 0;
+        if (err) {
+            PRINT_ERR_MSG("RSA dupctx sig verify failed");
         }
-        if (err == 0) {
-            err = EVP_DigestSignUpdate(a, part1, sizeof(part1)) != 1;
-        }
-        if (err == 0) {
-            b = EVP_MD_CTX_new();
-            err = (b == NULL);
-        }
-        if (err == 0) {
-            err = EVP_MD_CTX_copy_ex(b, a) != 1;
-        }
-        if (err == 0) {
-            err = EVP_DigestSignUpdate(a, part2, sizeof(part2)) != 1
-                || EVP_DigestSignUpdate(b, part2, sizeof(part2)) != 1;
-        }
-        if (err == 0) {
-            err = EVP_DigestSignFinal(a, sigA, &sigALen) != 1
-                || EVP_DigestSignFinal(b, sigB, &sigBLen) != 1;
-        }
-        if (err == 0) {
-            err = test_rsa_dupctx_verify(pkey, mds[i], msg, sizeof(msg),
-                    sigA, sigALen) != 0
-                || test_rsa_dupctx_verify(pkey, mds[i], msg, sizeof(msg),
-                    sigB, sigBLen) != 0;
-            if (err) {
-                PRINT_ERR_MSG("RSA dupctx sig verify failed");
-            }
-        }
-
-        EVP_MD_CTX_free(a); a = NULL;
-        EVP_MD_CTX_free(b); b = NULL;
     }
 
+    EVP_MD_CTX_free(a);
+    EVP_MD_CTX_free(b);
     EVP_PKEY_free(pkey);
 
     return err;
 }
-#endif /* WP_HAVE_SHA512_224 && WP_HAVE_SHA512_256 */
+#endif /* WP_HAVE_SHA512_224 || WP_HAVE_SHA512_256 */
+
+#ifdef WP_HAVE_SHA512_224
+int test_rsa_sha512_224_dupctx(void *data)
+{
+    return test_rsa_dupctx_one_digest("SHA512-224", data);
+}
+#endif /* WP_HAVE_SHA512_224 */
+
+#ifdef WP_HAVE_SHA512_256
+int test_rsa_sha512_256_dupctx(void *data)
+{
+    return test_rsa_dupctx_one_digest("SHA512-256", data);
+}
+#endif /* WP_HAVE_SHA512_256 */
 
 #endif /* WP_HAVE_RSA */

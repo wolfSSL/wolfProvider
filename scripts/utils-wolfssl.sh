@@ -203,6 +203,9 @@ install_wolfssl() {
                 v6.*|linuxv6.*)
                     fips_configure_arg="v6"
                     ;;
+                v7.*|linuxv7.*)
+                    fips_configure_arg="v7"
+                    ;;
                 *)
                     # For ready, v5, v6, or other tags, use as-is
                     fips_configure_arg="$fips_tag"

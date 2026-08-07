@@ -43,8 +43,25 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_discover-versions.yml
 
-  fips_ready_test:
+  # A resolution failure makes discover_versions fall back to testing only
+  # the floor version -- fine for the ~40 unrelated workflows that share
+  # that job, but here it would let this workflow report green while
+  # silently skipping most of the FIPS Ready matrix. Fail loudly instead.
+  require_fips_resolved:
     needs: discover_versions
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Require FIPS Ready bundle discovery succeeded
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Fail if discovery fell back to the floor
+        if: needs.discover_versions.outputs.fips_ready_resolved != 'true'
+        run: |
+          echo "::error::FIPS Ready bundle discovery failed and fell back to a single floor version; refusing to report success on a silently degraded matrix. See the discover_versions job log."
+          exit 1
+
+  fips_ready_test:
+    needs: [discover_versions, require_fips_resolved]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
     runs-on: ubuntu-22.04

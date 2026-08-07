@@ -47,8 +47,23 @@ jobs:
           path: perf_outputs/results.json
           retention-days: 7
 
-  perf_fips:
+  # A discovery failure falls back to the 5.8.2 floor -- without this gate,
+  # perf_fips would silently benchmark a stale bundle under the "latest"
+  # label instead of failing. See fips-ready.yml for the fuller rationale.
+  require_fips_resolved:
     needs: discover_versions
+    name: Require FIPS Ready bundle discovery succeeded
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Fail if discovery fell back to the floor
+        if: needs.discover_versions.outputs.fips_ready_resolved != 'true'
+        run: |
+          echo "::error::FIPS Ready bundle discovery failed and fell back to a single floor version; refusing to benchmark a stale bundle under the 'latest' label."
+          exit 1
+
+  perf_fips:
+    needs: [discover_versions, require_fips_resolved]
     name: Overhead regression (FIPS)
     runs-on: ubuntu-22.04
     timeout-minutes: 30

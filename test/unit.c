@@ -368,8 +368,11 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_get_params, NULL),
 #endif
     TEST_DECL(test_rsa_sig_alg_id, NULL),
-#if defined(WP_HAVE_SHA512_224) && defined(WP_HAVE_SHA512_256)
-    TEST_DECL(test_rsa_sha512_224_256_dupctx, NULL),
+#ifdef WP_HAVE_SHA512_224
+    TEST_DECL(test_rsa_sha512_224_dupctx, NULL),
+#endif
+#ifdef WP_HAVE_SHA512_256
+    TEST_DECL(test_rsa_sha512_256_dupctx, NULL),
 #endif
     TEST_DECL(test_rsa_pss_salt, NULL),
     TEST_DECL(test_rsa_pss_restrictions, NULL),

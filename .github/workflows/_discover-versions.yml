@@ -39,6 +39,9 @@ on:
       fips_ready_all_array:
         description: 'JSON array of every hosted FIPS Ready bundle version at or above the floor. Used by the nightly sweep.'
         value: ${{ jobs.discover.outputs.fips_ready_all_array }}
+      fips_ready_resolved:
+        description: '"true" if FIPS Ready bundle discovery succeeded, "false" if the outputs above are a degraded floor-only fallback. FIPS-specific callers must fail on "false" rather than silently testing a stale matrix.'
+        value: ${{ jobs.discover.outputs.fips_ready_resolved }}
 
 jobs:
   discover:
@@ -61,6 +64,7 @@ jobs:
       fips_ready_latest: ${{ steps.resolve.outputs.fips_ready_latest }}
       fips_ready_pr_array: ${{ steps.resolve.outputs.fips_ready_pr_array }}
       fips_ready_all_array: ${{ steps.resolve.outputs.fips_ready_all_array }}
+      fips_ready_resolved: ${{ steps.resolve.outputs.fips_ready_resolved }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -189,10 +193,19 @@ jobs:
           # FIPS Ready: every bundle hosted on wolfssl.com at or above the floor.
           # Floor 5.8.2 -- the oldest bundle wolfProvider is tested against.
           FR_FLOOR="5.8.2"
+          FR_OK=true
           FR_ALL=$(./scripts/fetch-fips-ready.sh --list --floor "$FR_FLOOR") || true
           if [ -z "${FR_ALL:-}" ]; then
-            echo "::warning::Could not list FIPS Ready bundles; falling back to $FR_FLOOR"
+            # This job is shared by ~40 workflows that never touch FIPS
+            # outputs, so a resolution failure here must not fail the whole
+            # job -- but silently falling back to a one-version floor would
+            # let fips-ready.yml / nightly-fips-ready.yml / perf-regression.yml
+            # report green while testing a stale, near-empty matrix. FR_OK
+            # lets those FIPS-specific callers fail loudly instead; every
+            # other caller of this workflow ignores it.
+            echo "::warning::Could not list FIPS Ready bundles; falling back to $FR_FLOOR (FIPS callers will fail this run)"
             FR_ALL="$FR_FLOOR"
+            FR_OK=false
           fi
           FR_ALL_JSON=$(printf '%s\n' "$FR_ALL" | jq -R . | jq -s -c .)
           FR_LATEST=$(echo "$FR_ALL" | tail -n 1)
@@ -229,4 +242,5 @@ jobs:
             echo "fips_ready_latest=$FR_LATEST"
             echo "fips_ready_pr_array=$FR_PR_JSON"
             echo "fips_ready_all_array=$FR_ALL_JSON"
+            echo "fips_ready_resolved=$FR_OK"
           } >> "$GITHUB_OUTPUT"
