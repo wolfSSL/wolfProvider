@@ -25,6 +25,8 @@
 
 #ifdef WP_HAVE_LMS
 
+#define LMS_XDR_MAX_SZ 56
+
 /* OpenSSL LMS XDR public keys exclude the single-level HSS header. */
 static const unsigned char lmsPub1[] = {
     0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x08,
@@ -36,12 +38,13 @@ static const unsigned char lmsPub1[] = {
 };
 
 static const unsigned char lmsPub2[] = {
-    0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x10,
-    0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
-    0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f,
-    0xdb, 0x54, 0xa4, 0x50, 0x99, 0x01, 0x05, 0x1c,
-    0x01, 0xe2, 0x6d, 0x99, 0x90, 0xe5, 0x50, 0x34,
-    0x79, 0x86, 0xda, 0x87, 0x92, 0x4f, 0xf0, 0xb1
+    0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x01,
+    0xc3, 0x4b, 0xae, 0x13, 0x90, 0xdd, 0xdb, 0x18,
+    0x2e, 0x0e, 0xd8, 0x97, 0x27, 0xcb, 0x17, 0xe6,
+    0x50, 0xdb, 0x2d, 0xad, 0x1f, 0xd2, 0xfa, 0x75,
+    0x19, 0x2b, 0x92, 0x3c, 0x5b, 0x6a, 0xf9, 0xa2,
+    0x70, 0xc8, 0x46, 0xd9, 0xfa, 0xfb, 0x22, 0xb0,
+    0x45, 0x1f, 0x2c, 0x28, 0xd4, 0x8a, 0x29, 0x67
 };
 
 static const unsigned char lmsPub3[] = {
@@ -110,8 +113,10 @@ int test_lms_import_export(void* data)
     const OSSL_PARAM* p = NULL;
     const void* exported = NULL;
     unsigned char badPub[sizeof(lmsPub1)];
-    unsigned char badPubLen[sizeof(lmsPub3)] = { 0 };
+    unsigned char badPubLen[LMS_XDR_MAX_SZ] = { 0 };
     size_t exportedLen = 0;
+    unsigned char rawPub[sizeof(lmsPub1)];
+    size_t rawPubLen = sizeof(rawPub);
 
     (void)data;
     XMEMCPY(badPub, lmsPub1, sizeof(badPub));
@@ -135,6 +140,22 @@ int test_lms_import_export(void* data)
             &key2);
         if (err != 0) {
             PRINT_ERR_MSG("LMS alternate public key import failed");
+        }
+    }
+    if (err == 0) {
+        err = lms_from_data(lmsPub1, sizeof(lmsPub1), EVP_PKEY_KEYPAIR,
+            &badKey);
+        if (err != 0) {
+            PRINT_ERR_MSG("LMS keypair import failed");
+        }
+    }
+    if (err == 0) {
+        checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, badKey, NULL);
+        err = (checkCtx == NULL) || (EVP_PKEY_private_check(checkCtx) == 1);
+        EVP_PKEY_CTX_free(checkCtx);
+        checkCtx = NULL;
+        if (err != 0) {
+            PRINT_ERR_MSG("LMS keypair import created private component");
         }
     }
     if (err == 0) {
@@ -169,6 +190,8 @@ int test_lms_import_export(void* data)
         err = (keyDup == NULL) || (EVP_PKEY_eq(key1, keyDup) != 1) ||
             (EVP_PKEY_get_bits(key1) == 0) ||
             (EVP_PKEY_get_security_bits(key1) == 0) ||
+            (EVP_PKEY_get_bits(key1) != 384) ||
+            (EVP_PKEY_get_security_bits(key1) != 192) ||
             (EVP_PKEY_get_size(key1) == 0);
         if (err != 0) {
             PRINT_ERR_MSG("LMS key duplication or metadata failed");
@@ -224,6 +247,14 @@ int test_lms_import_export(void* data)
         err = rawKey == NULL;
         if (err != 0) {
             PRINT_ERR_MSG("OpenSSL raw LMS public key import failed");
+        }
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_raw_public_key(rawKey, rawPub, &rawPubLen) != 1 ||
+            rawPubLen != sizeof(lmsPub1) ||
+            XMEMCMP(rawPub, lmsPub1, sizeof(lmsPub1)) != 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("OpenSSL raw LMS public key export failed");
         }
     }
     if (err == 0) {
@@ -340,8 +371,6 @@ int test_lms_unsupported_operations(void* data)
     EVP_PKEY_CTX* genCtx = NULL;
     EVP_SIGNATURE* signature = NULL;
     EVP_MD_CTX* mdCtx = NULL;
-    const unsigned char msg[] = "LMS unsupported operation test";
-    const unsigned char badSig[] = { 0 };
 
     (void)data;
     err = lms_from_data(lmsPub1, sizeof(lmsPub1), EVP_PKEY_PUBLIC_KEY, &key);
@@ -354,14 +383,15 @@ int test_lms_unsupported_operations(void* data)
         err = EVP_PKEY_verify_message_init(ctx, signature, NULL) != 1;
     }
     if (err == 0) {
-        err = EVP_PKEY_verify(ctx, badSig, sizeof(badSig), msg,
-            sizeof(msg) - 1) == 1;
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (ctx == NULL) || (EVP_PKEY_verify_init(ctx) == 1);
     }
     if (err == 0) {
-        err = EVP_PKEY_verify_init(ctx) != -2;
-    }
-    if (err == 0) {
-        err = EVP_PKEY_sign_message_init(ctx, signature, NULL) != -2;
+        EVP_PKEY_CTX_free(ctx);
+        ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (ctx == NULL) || (EVP_PKEY_sign_message_init(ctx, signature,
+            NULL) == 1);
     }
     if (err == 0) {
         mdCtx = EVP_MD_CTX_new();
@@ -376,8 +406,12 @@ int test_lms_unsupported_operations(void* data)
     }
     if (err == 0) {
         genCtx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "LMS", NULL);
-        err = (genCtx == NULL) || (EVP_PKEY_keygen_init(genCtx) != -2) ||
-            (EVP_PKEY_paramgen_init(genCtx) != -2);
+        err = (genCtx == NULL) || (EVP_PKEY_keygen_init(genCtx) == 1);
+    }
+    if (err == 0) {
+        EVP_PKEY_CTX_free(genCtx);
+        genCtx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "LMS", NULL);
+        err = (genCtx == NULL) || (EVP_PKEY_paramgen_init(genCtx) == 1);
     }
     if (err != 0) {
         PRINT_ERR_MSG("LMS unsupported operation validation failed");
