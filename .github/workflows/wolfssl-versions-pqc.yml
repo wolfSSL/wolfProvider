@@ -181,19 +181,22 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           tests=$(./test/unit.test --list) || exit 1
-          kem=0; dsa=0; slh=0; lms=0
+          kem=0; dsa=0; slh=0; slhpriv=0; lms=0
           printf '%s\n' "$tests" | grep -q 'test_mlkem_keygen' && kem=1
           printf '%s\n' "$tests" | grep -q 'test_mldsa_sign_verify' && dsa=1
           printf '%s\n' "$tests" | \
             grep -qE 'test_slhdsa_(sign_verify|public_keymgmt)' && slh=1
+          # sign_verify is gated on WP_HAVE_SLHDSA_PRIVATE, so it is absent in a
+          # verify-only build. This is what separates the two SLH-DSA rows.
+          printf '%s\n' "$tests" | grep -q 'test_slhdsa_sign_verify' && slhpriv=1
           printf '%s\n' "$tests" | grep -q 'test_lms_import_export' && lms=1
-          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa slhdsa=$slh lms=$lms"
+          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa slhdsa=$slh slhpriv=$slhpriv lms=$lms"
           case "${{ matrix.expect }}" in
             all)    [ "$kem" = 1 ] && [ "$dsa" = 1 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
             mlkem)  [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             mldsa)  [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
-            slhdsa) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
-            slhdsa-verify) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
+            slhdsa) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$slhpriv" = 1 ] && [ "$lms" = 0 ] ;;
+            slhdsa-verify) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$slhpriv" = 0 ] && [ "$lms" = 0 ] ;;
             lms)    [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 1 ] ;;
             none)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             *) false ;;

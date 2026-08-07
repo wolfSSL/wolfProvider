@@ -452,7 +452,7 @@ static wp_SlhDsa* wp_slhdsa_dup(const wp_SlhDsa* src, int selection)
         ok = 0;
     }
 
-    if (dupPub) {
+    if (ok && dupPub) {
         pubLen = src->data->pubKeySize;
         pubBuf = (unsigned char*)OPENSSL_malloc(pubLen);
         if (pubBuf == NULL) {
@@ -763,7 +763,7 @@ static int wp_slhdsa_validate(const wp_SlhDsa* slhdsa, int selection,
         }
         if (ok) {
             privLen = privAllocLen = slhdsa->data->privKeySize;
-            priv = OPENSSL_malloc(privAllocLen);
+            priv = (unsigned char*)OPENSSL_malloc(privAllocLen);
             if (priv == NULL) {
                 ok = 0;
             }
@@ -774,6 +774,12 @@ static int wp_slhdsa_validate(const wp_SlhDsa* slhdsa, int selection,
             if (rc != 0) {
                 ok = 0;
             }
+        }
+        /* The copy is private to this call; drop the source key lock before the
+         * expensive CheckKey so concurrent operations are not blocked by it. */
+        if (locked) {
+            wp_unlock(wp_slhdsa_get_mutex((wp_SlhDsa*)slhdsa));
+            locked = 0;
         }
         if (ok) {
             rc = wc_SlhDsaKey_ImportPrivate(&copy->key, priv, privLen);
@@ -851,9 +857,6 @@ static int wp_slhdsa_import(wp_SlhDsa* slhdsa, int selection,
             if (rc != 0) {
                 ok = 0;
             }
-            if (ok && (wc_SlhDsaKey_CheckKey(&slhdsa->key) != 0)) {
-                ok = 0;
-            }
             if (ok) {
                 slhdsa->hasPriv =
                     ((slhdsa->key.flags & WC_SLHDSA_FLAG_PRIVATE) != 0) ? 1 : 0;
@@ -889,9 +892,9 @@ static int wp_slhdsa_import(wp_SlhDsa* slhdsa, int selection,
         ok = 0;
     }
 #ifdef WP_HAVE_SLHDSA_PRIVATE
-    /* A public import must remain consistent with any private component. */
-    if (ok && (pubData != NULL) &&
-            ((slhdsa->key.flags & WC_SLHDSA_FLAG_PRIVATE) != 0)) {
+    /* Validate the private key once, after any public part is imported so the
+     * same check also confirms the two agree. */
+    if (ok && ((slhdsa->key.flags & WC_SLHDSA_FLAG_PRIVATE) != 0)) {
         if (wc_SlhDsaKey_CheckKey(&slhdsa->key) != 0) {
             ok = 0;
         }

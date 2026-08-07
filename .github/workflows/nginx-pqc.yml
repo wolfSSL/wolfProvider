@@ -128,12 +128,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install nginx build dependencies
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends libpcre3-dev zlib1g-dev
-          rm -rf /var/lib/apt/lists/*
-
       - name: Cache build dependencies
         id: deps
         uses: ./.github/actions/oras-build-deps

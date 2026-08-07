@@ -341,7 +341,7 @@ static int wp_slhdsa_sign(wp_SlhDsaSigCtx* ctx, unsigned char* sig,
     int ok = 1;
     int rc = -1;
     int locked = 0;
-    word32 sigSz;
+    word32 sigSz = 0;
     /* FIPS 205 permits an empty message; give wolfSSL a valid pointer so a
      * NULL+0 message does not become a backend-dependent NULL deref. */
     unsigned char dummy = 0;
