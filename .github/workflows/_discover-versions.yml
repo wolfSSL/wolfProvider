@@ -225,7 +225,7 @@ jobs:
           }
           FR_MAP_JSON="{}"
           while IFS= read -r ver; do
-            FR_MAP_JSON=$(jq --arg v "$ver" --arg f "$(fips_module_for "$ver")" \
+            FR_MAP_JSON=$(jq -c --arg v "$ver" --arg f "$(fips_module_for "$ver")" \
               '. + {($v): $f}' <<< "$FR_MAP_JSON")
           done <<< "$FR_ALL"
           # 5.8.4 and 5.9.1 are the back-compat anchors: the last two bundles
