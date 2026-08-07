@@ -762,6 +762,7 @@ int test_lms_verify(void* data)
     int err = 0;
     EVP_PKEY* key = NULL;
     EVP_PKEY_CTX* ctx = NULL;
+    EVP_PKEY_CTX* dupCtx = NULL;
     EVP_SIGNATURE* signature = NULL;
     unsigned char badSig[sizeof(lmsVerifySig)];
     unsigned char badMsg[sizeof(lmsVerifyMsg)];
@@ -794,8 +795,21 @@ int test_lms_verify(void* data)
             badMsg, sizeof(badMsg)) == 1;
         if (err != 0) PRINT_ERR_MSG("tampered LMS message was accepted");
     }
+    if (err == 0) {
+        err = EVP_PKEY_verify(ctx, lmsVerifySig, sizeof(lmsVerifySig),
+            NULL, 0) == 1;
+        if (err != 0) PRINT_ERR_MSG("empty-message LMS signature was accepted");
+    }
+    if (err == 0) {
+        dupCtx = EVP_PKEY_CTX_dup(ctx);
+        err = (dupCtx == NULL) ||
+            (EVP_PKEY_verify(dupCtx, lmsVerifySig, sizeof(lmsVerifySig),
+                lmsVerifyMsg, sizeof(lmsVerifyMsg)) != 1);
+        if (err != 0) PRINT_ERR_MSG("verify through duplicated LMS ctx failed");
+    }
     ERR_clear_error();
     EVP_SIGNATURE_free(signature);
+    EVP_PKEY_CTX_free(dupCtx);
     EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(key);
     return err;
