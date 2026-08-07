@@ -191,18 +191,15 @@ jobs:
           OSSL_LATEST=$(echo "$OSSL_ALL" | tail -n 1)
 
           # FIPS Ready: every bundle hosted on wolfssl.com at or above the floor.
-          # Floor 5.8.2 -- the oldest bundle wolfProvider is tested against.
+          # Floor 5.8.2: the oldest bundle wolfProvider is tested against.
           FR_FLOOR="5.8.2"
           FR_OK=true
           FR_ALL=$(./scripts/fetch-fips-ready.sh --list --floor "$FR_FLOOR") || true
           if [ -z "${FR_ALL:-}" ]; then
-            # This job is shared by ~40 workflows that never touch FIPS
-            # outputs, so a resolution failure here must not fail the whole
-            # job -- but silently falling back to a one-version floor would
-            # let fips-ready.yml / nightly-fips-ready.yml / perf-regression.yml
-            # report green while testing a stale, near-empty matrix. FR_OK
-            # lets those FIPS-specific callers fail loudly instead; every
-            # other caller of this workflow ignores it.
+            # ~40 workflows share this job for wolfssl/openssl outputs only,
+            # so a FIPS resolution failure must not fail the whole job. FR_OK
+            # lets the FIPS-specific callers fail loudly on their own instead
+            # of reporting green on a stale, near-empty fallback matrix.
             echo "::warning::Could not list FIPS Ready bundles; falling back to $FR_FLOOR (FIPS callers will fail this run)"
             FR_ALL="$FR_FLOOR"
             FR_OK=false

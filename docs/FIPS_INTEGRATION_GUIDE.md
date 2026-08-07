@@ -151,13 +151,13 @@ certificate, so the module version it selects moves with the bundle:
 
 | FIPS Ready bundle | `--enable-fips=ready` gives |
 |-------------------|-----------------------------|
-| 5.6.6 – 5.7.0 | `HAVE_FIPS_VERSION=5` |
-| 5.7.2 – 5.9.1 | `HAVE_FIPS_VERSION=7` |
+| 5.6.6 to 5.7.0 | `HAVE_FIPS_VERSION=5` |
+| 5.7.2 to 5.9.1 | `HAVE_FIPS_VERSION=7` |
 | 5.9.2 and newer | `HAVE_FIPS_VERSION=8` |
 
 When you need a stable target, pin a generation with the alias the bundle
 ships rather than `ready`: `v5-ready` on the older bundles, `v6-ready` on
-5.7.2 – 5.9.1, `v7-ready` on 5.9.2 and newer.
+5.7.2 to 5.9.1, `v7-ready` on 5.9.2 and newer.
 
 The FIPS Ready bundles are published as
 `https://www.wolfssl.com/wolfssl-<version>-gplv3-fips-ready.zip`.

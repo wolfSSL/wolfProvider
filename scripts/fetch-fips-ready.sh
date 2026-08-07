@@ -82,18 +82,16 @@ retry_out() {
     return 1
 }
 
-# Sorts newline-separated X.Y.Z version strings ascending. `sort -V` is a
-# GNU extension and unavailable on some BSD/macOS sort builds; this script
-# is documented for local (including macOS) use, so version ordering can't
-# depend on it. Zero-pads each numeric field to a fixed width and sorts
-# lexicographically instead, which every `sort` supports.
+# Sorts newline-separated X.Y.Z version strings ascending without `sort -V`,
+# a GNU extension this script (used on macOS too) can't rely on. Zero-pads
+# each numeric field so plain lexicographic sort orders them correctly.
 ver_sort() {
     awk -F. '{ printf "%05d.%05d.%05d %s\n", $1, $2, $3, $0 }' \
         | sort \
         | awk '{ print $2 }'
 }
 
-# ver_ge A B -- true when A >= B
+# ver_ge A B: true when A >= B
 ver_ge() {
     [[ "$(printf '%s\n%s\n' "$2" "$1" | ver_sort | head -n1)" == "$2" ]]
 }
@@ -123,12 +121,9 @@ ls_wolfssl_stable() {
         | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$'
 }
 
-# Retries transient failures (timeout, 429, 5xx, connection error) but
-# treats a confirmed 404/410 as definitive "not hosted" with no retry --
-# conflating the two would silently drop a version on a network blip or a
-# rate limit. Returns 0 exists / 1 confirmed absent / 2 indeterminate (every
-# attempt was transient) -- callers must not treat 1 and 2 the same, or an
-# indeterminate result silently reads as "not hosted".
+# Retries transient failures (timeout, 429, 5xx, connection error); only a
+# confirmed 404/410 means "not hosted" and skips retry. Returns 0 exists,
+# 1 confirmed absent, 2 indeterminate. Callers must not treat 1 and 2 alike.
 bundle_exists() {
     local ver="$1" code attempt
     for attempt in 1 2 3; do
@@ -169,18 +164,16 @@ $(page_latest 2>/dev/null || true)"
         | while read -r ver; do ver_ge "$ver" "$FLOOR" && echo "$ver"; done)
     [[ -n "$candidates" ]] || return 1
 
-    # This runs inside the shared _discover-versions.yml job, which every
-    # caller pays for even when it never touches FIPS outputs -- probe
-    # candidates in parallel so N versions costs one round trip, not N.
+    # Runs inside the shared _discover-versions.yml job that every caller
+    # pays for even without touching FIPS outputs, so probe candidates in
+    # parallel: N versions costs one round trip, not N.
     probe_dir=$(mktemp -d)
     trap 'rm -rf "$probe_dir"' RETURN
     for ver in $candidates; do
         (
-            # `|| rc=$?` is load-bearing under `set -e`: an unguarded
-            # `bundle_exists "$ver"` returning 2 would kill this subshell
-            # before the case below ever runs, silently losing the
-            # indeterminate marker (and with it, the whole-resolution
-            # failure this is supposed to trigger).
+            # `|| rc=$?` is load-bearing under `set -e`: an unguarded call
+            # returning 2 kills this subshell before the case below runs,
+            # silently losing the indeterminate marker.
             rc=0
             bundle_exists "$ver" || rc=$?
             case "$rc" in
@@ -193,8 +186,8 @@ $(page_latest 2>/dev/null || true)"
     wait
 
     # An indeterminate probe must fail the whole resolution, not just drop
-    # that one candidate -- a rate-limited or flaky bundle would otherwise
-    # silently vanish from a list that still reports success.
+    # that candidate: otherwise a flaky bundle vanishes silently from a
+    # list that still reports success.
     while IFS= read -r ver; do
         indeterminate+=("$ver")
     done < <(find "$probe_dir" -maxdepth 1 -name '*.indeterminate' \

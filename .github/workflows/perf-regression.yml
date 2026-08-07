@@ -47,9 +47,9 @@ jobs:
           path: perf_outputs/results.json
           retention-days: 7
 
-  # A discovery failure falls back to the 5.8.2 floor -- without this gate,
-  # perf_fips would silently benchmark a stale bundle under the "latest"
-  # label instead of failing. See fips-ready.yml for the fuller rationale.
+  # Without this gate, a discovery failure (falling back to the 5.8.2 floor)
+  # would let perf_fips silently benchmark a stale bundle labeled "latest".
+  # See fips-ready.yml for the fuller rationale.
   require_fips_resolved:
     needs: discover_versions
     name: Require FIPS Ready bundle discovery succeeded

@@ -3362,18 +3362,9 @@ int test_rsa_sig_alg_id(void *data)
 }
 
 #if defined(WP_HAVE_SHA512_224) || defined(WP_HAVE_SHA512_256)
-/* EVP_MD_CTX_copy_ex on a partial RSA digest_sign accumulator, using
- * SHA512-224/SHA512-256 to exercise the wp_hash_copy() branches those two
- * digests only gained in FIPS v8 (older FIPS modules never define
- * WP_HAVE_SHA512_224/256, so this path is skipped there). Both the
- * original and duplicated contexts must produce signatures that verify
- * under the original key.
- *
- * WP_HAVE_SHA512_224 and WP_HAVE_SHA512_256 are independently defined
- * (wolfSSL toggles WOLFSSL_NOSHA512_224/256 separately), and wp_hash_copy()
- * has independent branches for each, so this is two separately-gated
- * one-digest tests rather than one combined test -- a build enabling only
- * one of the two must still exercise its copy branch. */
+/* EVP_MD_CTX_copy_ex on a partial RSA digest_sign accumulator, exercising
+ * the wp_hash_copy() SHA512-224/256 branches. Split into two tests since
+ * WP_HAVE_SHA512_224 and WP_HAVE_SHA512_256 are independently defined. */
 static int test_rsa_dupctx_verify(EVP_PKEY *pkey, const char *md,
     const unsigned char *msg, size_t msgLen, unsigned char *sig,
     size_t sigLen)

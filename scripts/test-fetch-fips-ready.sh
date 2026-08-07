@@ -18,8 +18,8 @@
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 #
 # Isolated, network-free tests for scripts/fetch-fips-ready.sh: mocks curl
-# and git so the resolver and extraction logic -- especially its destructive
-# and failure paths -- run deterministically in CI without hitting
+# and git so the resolver and extraction logic, especially its destructive
+# and failure paths, run deterministically in CI without hitting
 # wolfssl.com or GitHub.
 set -euo pipefail
 
@@ -38,11 +38,11 @@ trap cleanup EXIT
 
 mkdir -p "${MOCKBIN}"
 
-# Source only fetch-fips-ready.sh's function definitions -- not its argv
-# parser or the case-dispatch at the bottom, both of which would run
-# immediately (and call exit) if sourced as-is. Boundaries are located by
-# marker pattern rather than hardcoded line numbers so this test doesn't
-# silently go stale as the script grows.
+# Source only fetch-fips-ready.sh's function definitions, not its argv
+# parser or the case-dispatch at the bottom (both would run immediately,
+# and call exit, if sourced as-is). Boundaries are located by marker
+# pattern, not hardcoded line numbers, so this stays in sync as the
+# script grows.
 # shellcheck disable=SC2016  # single-quoted on purpose: matching a literal
 # '$' in fetch-fips-ready.sh's source, not expanding a variable here.
 while_line=$(grep -n '^while \[\[ \$# -gt 0' "${TARGET}" | head -n1 | cut -d: -f1)
@@ -51,7 +51,7 @@ bundle_url_line=$(grep -n '^bundle_url()' "${TARGET}" | head -n1 | cut -d: -f1)
 case_line=$(grep -n '^case "\$MODE"' "${TARGET}" | head -n1 | cut -d: -f1)
 if [[ -z "${while_line}" || -z "${bundle_url_line}" || -z "${case_line}" ]]; then
     echo "test-fetch-fips-ready: could not locate expected markers in" \
-        "${TARGET} -- has its structure changed?" >&2
+        "${TARGET}; has its structure changed?" >&2
     exit 1
 fi
 {
@@ -85,8 +85,8 @@ run_case() {
     ( PATH="${MOCKBIN}:${PATH}"; source "${FNS}"; DEST="${dest}"; "$@" )
 }
 
-# --- bundle_exists: retries a transient failure (connection error, no HTTP
-# response) and succeeds once the server recovers. ---
+# bundle_exists: retries a transient failure (connection error, no HTTP
+# response) and succeeds once the server recovers.
 test_bundle_exists_retries_transient() {
     local d counter
     d=$(mktemp -d)
@@ -118,7 +118,7 @@ EOF
     rm -rf "${d}"
 }
 
-# --- bundle_exists: a confirmed 4xx is definitive -- no retry burned. ---
+# bundle_exists: a confirmed 4xx is definitive, no retry burned.
 test_bundle_exists_confirmed_404_no_retry() {
     local d counter rc
     d=$(mktemp -d)
@@ -149,10 +149,8 @@ EOF
     rm -rf "${d}"
 }
 
-# --- bundle_exists: a 429 (rate limit) is transient, NOT a confirmed
-# absence -- conflating the two was the exact regression a prior review
-# round flagged (HIGH: 4xx classified all 4xx, including 429/408, as
-# permanently absent with no retry). ---
+# bundle_exists: a 429 (rate limit) is transient, not a confirmed absence.
+# A prior review round flagged classifying all 4xx as permanently absent.
 test_bundle_exists_429_is_transient() {
     local d counter rc
     d=$(mktemp -d)
@@ -182,9 +180,8 @@ EOF
     rm -rf "${d}"
 }
 
-# --- bundle_exists: exhausts retries and reports INDETERMINATE (rc=2, not
-# the same as confirmed-absent rc=1) when every attempt is transient. A
-# caller that treats 1 and 2 the same silently drops a real bundle. ---
+# bundle_exists: exhausts retries and reports indeterminate (rc=2), not
+# confirmed-absent (rc=1), when every attempt is transient.
 test_bundle_exists_exhausts_on_persistent_transient() {
     local d rc
     d=$(mktemp -d)
@@ -207,8 +204,8 @@ EOF
     rm -rf "${d}"
 }
 
-# --- list_versions: unions git tags with the page's advertised latest,
-# applies the floor, and only keeps versions that probe as hosted. ---
+# list_versions: unions git tags with the page's advertised latest,
+# applies the floor, and only keeps versions that probe as hosted.
 test_list_versions_filters_and_sorts() {
     local d html
     d=$(mktemp -d)
@@ -234,7 +231,7 @@ EOF
     cat > "${MOCKBIN}/curl" <<EOF
 #!/usr/bin/env bash
 if [[ "\$*" == *"-I"* && "\$*" == *"%{http_code}"* ]]; then
-    # Everything except 5.8.6 is hosted -- exercises the "tag exists but no
+    # Everything except 5.8.6 is hosted: exercises the "tag exists but no
     # bundle" gap the floor/union logic has to handle.
     for a in "\$@"; do
         if [[ "\$a" == *"5.8.6"* ]]; then printf '404'; exit 0; fi
@@ -261,8 +258,8 @@ EOF
     rm -rf "${d}"
 }
 
-# --- list_versions: fails cleanly (not a crash) when upstream tags can't
-# be resolved at all. ---
+# list_versions: fails cleanly (not a crash) when upstream tags can't
+# be resolved at all.
 test_list_versions_fails_when_tags_unavailable() {
     local d
     d=$(mktemp -d)
@@ -285,9 +282,9 @@ EOF
     rm -rf "${d}"
 }
 
-# --- list_versions: one candidate hosted, one persistently indeterminate
-# (5xx/timeout throughout) -- the whole resolution must fail rather than
-# silently publishing a list that quietly omits the flaky candidate. ---
+# list_versions: one candidate hosted, one persistently indeterminate
+# (5xx/timeout throughout). The whole resolution must fail rather than
+# publishing a list that quietly omits the flaky candidate.
 test_list_versions_fails_on_indeterminate_candidate() {
     local d rc
     d=$(mktemp -d)
@@ -327,18 +324,11 @@ EOF
     rm -rf "${d}"
 }
 
-# --- Entrypoint-level regression for the indeterminate-candidate case.
-# Bash disables errexit checking for the ENTIRE call tree beneath a compound
-# command that sits on the left side of ||/&&/if -- including subshells
-# spawned deep inside a sourced function -- not just that top-level command.
-# Every other test in this file calls list_versions/bundle_exists through
-# run_case, which is itself always invoked as `run_case ... || rc=$?`; that
-# masked a real errexit bug (a bare `bundle_exists "$ver"` inside
-# list_versions' background probe subshell) that only showed up when the
-# real script binary was run as a genuine, unconditioned subprocess. This
-# test exercises exactly that: `bash "$TARGET" --list`, not sourced, not
-# wrapped in an if/||, so it has the same errexit semantics production CI
-# actually gets. ---
+# Entrypoint-level regression for the indeterminate-candidate case. Bash
+# disables errexit for the whole call tree beneath a command on the left
+# of ||/&&/if, so every other test's `run_case ... || rc=$?` masked a real
+# errexit bug that only showed up running the real binary unconditioned.
+# This runs `bash "$TARGET" --list` directly to match production CI.
 test_entrypoint_list_fails_on_indeterminate_candidate() {
     local d out status
     d=$(mktemp -d)
@@ -370,7 +360,7 @@ EOF
 
     status=0
     # SC2031: the PATH override only needs to reach the `bash "$TARGET"`
-    # call on this same line -- it isn't meant to escape the subshell.
+    # call on this line; it isn't meant to escape the subshell.
     # shellcheck disable=SC2031
     out=$(cd "${d}" && PATH="${MOCKBIN}:${PATH}" bash "${TARGET}" --list \
         --floor 5.8.2 2>&1) || status=$?
@@ -393,8 +383,8 @@ make_fixture_zip() {
     rm -rf "${stage}"
 }
 
-# --- fetch_bundle: a download failure must NOT destroy a bundle that was
-# already at the destination (the bug the HIGH finding flagged). ---
+# fetch_bundle: a download failure must not destroy a bundle already at
+# the destination (the bug the HIGH finding flagged).
 test_fetch_bundle_preserves_existing_on_download_failure() {
     local d
     d=$(mktemp -d)
@@ -428,8 +418,8 @@ EOF
     rm -rf "${d}"
 }
 
-# --- fetch_bundle: a checksum mismatch must also preserve whatever was
-# already there, not just a hard network failure. ---
+# fetch_bundle: a checksum mismatch must also preserve whatever was
+# already there, not just a hard network failure.
 test_fetch_bundle_checksum_mismatch_preserves_existing() {
     local d html zip
     d=$(mktemp -d)
@@ -470,8 +460,8 @@ EOF
     rm -rf "${d}"
 }
 
-# --- fetch_bundle: a verified, successful fetch DOES replace whatever was
-# there -- the fix must not make replacement impossible, only safe. ---
+# fetch_bundle: a verified, successful fetch does replace whatever was
+# there; the fix must not make replacement impossible, only safe.
 test_fetch_bundle_replaces_on_success() {
     local d zip out
     d=$(mktemp -d)
@@ -492,7 +482,7 @@ for a in "\$@"; do
         exit 0
     fi
 done
-# No SHA256 advertised for this version -- falls back to archive-integrity check.
+# No SHA256 advertised for this version; falls back to archive-integrity check.
 exit 0
 EOF
     chmod +x "${MOCKBIN}/curl"

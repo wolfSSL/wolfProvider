@@ -44,9 +44,8 @@ jobs:
     uses: ./.github/workflows/_discover-versions.yml
 
   # A resolution failure makes discover_versions fall back to testing only
-  # the floor version -- fine for the ~40 unrelated workflows that share
-  # that job, but here it would let this workflow report green while
-  # silently skipping most of the FIPS Ready matrix. Fail loudly instead.
+  # the floor version. Fine for the ~40 unrelated workflows sharing that
+  # job, but here it would report green while skipping most of the matrix.
   require_fips_resolved:
     needs: discover_versions
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
