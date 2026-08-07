@@ -64,7 +64,7 @@ jobs:
 
   perf_fips:
     needs: [discover_versions, require_fips_resolved]
-    name: Overhead regression (FIPS)
+    name: Overhead regression (FIPS ${{ fromJson(needs.discover_versions.outputs.fips_ready_version_map)[needs.discover_versions.outputs.fips_ready_latest] }})
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:

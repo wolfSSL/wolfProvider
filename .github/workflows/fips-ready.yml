@@ -62,7 +62,7 @@ jobs:
   fips_ready_test:
     needs: [discover_versions, require_fips_resolved]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
+    name: FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (FIPS ${{ fromJson(needs.discover_versions.outputs.fips_ready_version_map)[matrix.wolfssl_bundle_ref] }}, ${{ matrix.openssl_ref }})
     runs-on: ubuntu-22.04
     permissions:
       contents: read

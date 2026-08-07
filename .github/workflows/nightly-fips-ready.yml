@@ -45,7 +45,7 @@ jobs:
 
   fips_ready_test:
     needs: [discover_versions, require_fips_resolved]
-    name: Nightly FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
+    name: Nightly FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (FIPS ${{ fromJson(needs.discover_versions.outputs.fips_ready_version_map)[matrix.wolfssl_bundle_ref] }}, ${{ matrix.openssl_ref }})
     runs-on: ubuntu-22.04
     permissions:
       contents: read

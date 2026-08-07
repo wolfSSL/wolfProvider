@@ -42,6 +42,9 @@ on:
       fips_ready_resolved:
         description: '"true" if FIPS Ready bundle discovery succeeded, "false" if the outputs above are a degraded floor-only fallback. FIPS-specific callers must fail on "false" rather than silently testing a stale matrix.'
         value: ${{ jobs.discover.outputs.fips_ready_resolved }}
+      fips_ready_version_map:
+        description: 'JSON object mapping each FIPS Ready bundle version to the FIPS module (v5/v7/v8) that --enable-fips=ready actually resolves to for that bundle.'
+        value: ${{ jobs.discover.outputs.fips_ready_version_map }}
 
 jobs:
   discover:
@@ -65,6 +68,7 @@ jobs:
       fips_ready_pr_array: ${{ steps.resolve.outputs.fips_ready_pr_array }}
       fips_ready_all_array: ${{ steps.resolve.outputs.fips_ready_all_array }}
       fips_ready_resolved: ${{ steps.resolve.outputs.fips_ready_resolved }}
+      fips_ready_version_map: ${{ steps.resolve.outputs.fips_ready_version_map }}
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -206,6 +210,24 @@ jobs:
           fi
           FR_ALL_JSON=$(printf '%s\n' "$FR_ALL" | jq -R . | jq -s -c .)
           FR_LATEST=$(echo "$FR_ALL" | tail -n 1)
+
+          # `ready` does not name a fixed FIPS module; map each hosted bundle
+          # to the module it actually builds (from wolfSSL's configure.ac
+          # `ready|vN-ready` case, checked per tag). Extend the boundaries
+          # below when a new FIPS generation ships.
+          fips_module_for() {
+            local key
+            key=$(printf '%s' "$1" | awk -F. '{ printf "%05d.%05d.%05d", $1, $2, $3 }')
+            if   [[ "$key" > "00005.00009.00001" ]]; then echo "v8"  # > 5.9.1
+            elif [[ "$key" > "00005.00007.00000" ]]; then echo "v7"  # > 5.7.0
+            else echo "v5"
+            fi
+          }
+          FR_MAP_JSON="{}"
+          while IFS= read -r ver; do
+            FR_MAP_JSON=$(jq --arg v "$ver" --arg f "$(fips_module_for "$ver")" \
+              '. + {($v): $f}' <<< "$FR_MAP_JSON")
+          done <<< "$FR_ALL"
           # 5.8.4 and 5.9.1 are the back-compat anchors: the last two bundles
           # where --enable-fips=ready still meant FIPS v7, which 5.9.2 moved to v8.
           # Intersected with the hosted set so a delisted anchor drops out.
@@ -224,6 +246,7 @@ jobs:
           echo "FIPS Ready latest bundle:           $FR_LATEST"
           echo "FIPS Ready PR set:                  $FR_PR_JSON"
           echo "FIPS Ready full set (floor $FR_FLOOR):  $FR_ALL_JSON"
+          echo "FIPS Ready version map:             $FR_MAP_JSON"
 
           {
             echo "wolfssl_ref=$WOLFSSL_DEB_REF"
@@ -240,4 +263,5 @@ jobs:
             echo "fips_ready_pr_array=$FR_PR_JSON"
             echo "fips_ready_all_array=$FR_ALL_JSON"
             echo "fips_ready_resolved=$FR_OK"
+            echo "fips_ready_version_map=$FR_MAP_JSON"
           } >> "$GITHUB_OUTPUT"
