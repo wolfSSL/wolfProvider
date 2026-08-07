@@ -451,7 +451,9 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_ecdh_p256_keygen, NULL),
     #endif
         TEST_DECL(test_ecdh_invalid_kdf_strings, NULL),
+        #ifdef USE_ECC_B_PARAM
         TEST_DECL(test_ecdh_invalid_curve_peer, NULL),
+        #endif
         TEST_DECL(test_ecdh_p256, NULL),
         #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
         TEST_DECL(test_ecdh_x963_kdf, NULL),
