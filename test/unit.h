@@ -501,6 +501,7 @@ int test_ecdh_p224(void *data);
 #endif /* WP_HAVE_EC_P224 */
 #ifdef WP_HAVE_EC_P256
 int test_ecdh_invalid_kdf_strings(void *data);
+int test_ecdh_invalid_curve_peer(void *data);
 #ifdef WP_HAVE_EPKI_TEST
 int test_ecc_encode_epki(void *data);
 #endif
