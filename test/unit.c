@@ -656,6 +656,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_slhdsa_reinit_null_key, NULL),
     TEST_DECL(test_slhdsa_encode_decode, NULL),
     TEST_DECL(test_slhdsa_sig_params, NULL),
+    TEST_DECL(test_slhdsa_undersized_sig, NULL),
+    TEST_DECL(test_slhdsa_midstream_params, NULL),
     TEST_DECL(test_slhdsa_keygen_seed, NULL),
     TEST_DECL(test_slhdsa_x509_sign_verify, NULL),
     #endif

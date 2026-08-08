@@ -684,6 +684,8 @@ int test_slhdsa_empty_message(void *data);
 int test_slhdsa_reinit_null_key(void *data);
 int test_slhdsa_encode_decode(void *data);
 int test_slhdsa_sig_params(void *data);
+int test_slhdsa_undersized_sig(void *data);
+int test_slhdsa_midstream_params(void *data);
 int test_slhdsa_keygen_seed(void *data);
 int test_slhdsa_x509_sign_verify(void *data);
 #endif

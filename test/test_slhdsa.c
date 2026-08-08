@@ -1722,6 +1722,120 @@ int test_slhdsa_sig_params(void* data)
     return err;
 }
 
+int test_slhdsa_undersized_sig(void* data)
+{
+    int err = 0;
+    EVP_PKEY* key = NULL;
+    EVP_PKEY_CTX* signCtx = NULL;
+    EVP_SIGNATURE* algorithm = NULL;
+    unsigned char* sig = NULL;
+    size_t sigLen = 0;
+    size_t shortLen = 0;
+
+    (void)data;
+
+    PRINT_MSG("Undersized signature buffer %s", slhdsa_sets[0].name);
+    err = slhdsa_keygen(slhdsa_sets[0].name, &key);
+    if (err == 0) {
+        algorithm = EVP_SIGNATURE_fetch(wpLibCtx, slhdsa_sets[0].name, NULL);
+        signCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (algorithm == NULL) || (signCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_init(signCtx, algorithm, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_update(signCtx, slhdsa_test_msg,
+            SLHDSA_TEST_MSG_LEN) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_final(signCtx, NULL, &sigLen) != 1;
+    }
+    if (err == 0) {
+        sig = (unsigned char*)OPENSSL_malloc(sigLen);
+        err = (sig == NULL);
+    }
+    /* A buffer one byte short of the signature must be refused before wolfSSL
+     * writes, so the capacity guard in wp_slhdsa_sign actually runs. */
+    if (err == 0) {
+        XMEMSET(sig, 0xA5, sigLen);
+        shortLen = sigLen - 1;
+        err = EVP_PKEY_sign_message_final(signCtx, sig, &shortLen) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Undersized signature buffer was accepted");
+        }
+        ERR_clear_error();
+    }
+    if (err == 0) {
+        err = (sig[0] != 0xA5);
+        if (err) {
+            PRINT_ERR_MSG("Rejected signing wrote into the buffer");
+        }
+    }
+
+    OPENSSL_free(sig);
+    EVP_PKEY_CTX_free(signCtx);
+    EVP_SIGNATURE_free(algorithm);
+    EVP_PKEY_free(key);
+    return err;
+}
+
+int test_slhdsa_midstream_params(void* data)
+{
+    int err = 0;
+    EVP_PKEY* key = NULL;
+    EVP_PKEY_CTX* signCtx = NULL;
+    EVP_SIGNATURE* algorithm = NULL;
+    OSSL_PARAM ctxParams[2];
+    OSSL_PARAM encParams[2];
+    int enc = 0;
+
+    (void)data;
+
+    PRINT_MSG("Mid-stream domain change is refused %s", slhdsa_sets[0].name);
+    err = slhdsa_keygen(slhdsa_sets[0].name, &key);
+    if (err == 0) {
+        algorithm = EVP_SIGNATURE_fetch(wpLibCtx, slhdsa_sets[0].name, NULL);
+        signCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+        err = (algorithm == NULL) || (signCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_init(signCtx, algorithm, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_sign_message_update(signCtx, slhdsa_test_msg,
+            SLHDSA_TEST_MSG_LEN) != 1;
+    }
+    /* Changing the context string after bytes are accumulated must be refused;
+     * it would sign a different M' than streaming began under. */
+    if (err == 0) {
+        ctxParams[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_CONTEXT_STRING, (void*)"late", 4);
+        ctxParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(signCtx, ctxParams) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Mid-stream context string was accepted");
+        }
+        ERR_clear_error();
+    }
+    /* Same for the message encoding: pure and raw M' cannot switch mid-stream. */
+    if (err == 0) {
+        encParams[0] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, &enc);
+        encParams[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(signCtx, encParams) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Mid-stream message encoding was accepted");
+        }
+        ERR_clear_error();
+    }
+
+    EVP_PKEY_CTX_free(signCtx);
+    EVP_SIGNATURE_free(algorithm);
+    EVP_PKEY_free(key);
+    return err;
+}
+
 int test_slhdsa_keygen_seed(void* data)
 {
     int err = 0;
