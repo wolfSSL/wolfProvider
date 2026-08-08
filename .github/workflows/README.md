@@ -74,7 +74,7 @@ per-app workflows stay untouched.
 | Label | Effect |
 |-------|--------|
 | `ci:<name>` | Run that one job (e.g. `ci:hostap`, `ci:curl`, `ci:static-analysis`). Add several to run several. |
-| `ci:all` | Run the whole fan-out (all 43 jobs). |
+| `ci:all` | Run the whole fan-out (all 44 jobs). |
 | (no label) | Nothing runs — a normal PR is unaffected. |
 
 `<name>` is the job key in the table below (the workflow base name, e.g.
@@ -101,8 +101,9 @@ gh workflow run pr-osp-select.yml --ref <branch> -f jobs="all"
 
 ### What runs in the nightly fan-out
 
-43 workflows total: 40 third-party OSS integrations, 2 internal
-validations, and the static-analysis suite. Every one of these patches
+44 workflows total: 40 third-party OSS integrations, 3 internal
+validations (including nightly-fips-ready.yml, reachable via
+`ci:fips-ready`), and the static-analysis suite. Every one of these patches
 the upstream project (where needed) via `osp/wolfProvider/<app>/*.patch`
 from [wolfssl/osp](https://github.com/wolfssl/osp), builds it against
 the replace-default wolfProvider `.deb` stack, and runs the project's

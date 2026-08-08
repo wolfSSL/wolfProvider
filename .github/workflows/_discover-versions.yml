@@ -198,7 +198,9 @@ jobs:
           # Floor 5.8.2: the oldest bundle wolfProvider is tested against.
           FR_FLOOR="5.8.2"
           FR_OK=true
-          FR_ALL=$(./scripts/fetch-fips-ready.sh --list --floor "$FR_FLOOR") || true
+          # Bound the probe so a hung wolfssl.com cannot eat this shared job's
+          # timeout and take all ~40 callers down; a timeout degrades to FR_OK=false.
+          FR_ALL=$(timeout 240 ./scripts/fetch-fips-ready.sh --list --floor "$FR_FLOOR") || true
           if [ -z "${FR_ALL:-}" ]; then
             # ~40 workflows share this job for wolfssl/openssl outputs only,
             # so a FIPS resolution failure must not fail the whole job. FR_OK

@@ -76,8 +76,10 @@ retry_out() {
             printf '%s' "$out"
             return 0
         fi
-        echo "fetch-fips-ready: retry $attempt/3: '$*' failed; retrying..." >&2
-        sleep $((attempt * 5))
+        if [[ "$attempt" -lt 3 ]]; then
+            echo "fetch-fips-ready: retry $attempt/3: '$*' failed; retrying..." >&2
+            sleep $((attempt * 5))
+        fi
     done
     return 1
 }
@@ -130,7 +132,7 @@ bundle_exists() {
         # A genuine connection failure (not just a non-200 status) makes
         # curl itself exit nonzero; `|| code=""` keeps that from tripping
         # `set -e` before the retry loop below gets to run.
-        code=$(curl -sS -I -o /dev/null -w '%{http_code}' --max-time 30 \
+        code=$(curl -sS -L -I -o /dev/null -w '%{http_code}' --max-time 30 \
             "$(bundle_url "$ver")" 2>/dev/null) || code=""
         case "$code" in
             200) return 0 ;;
@@ -161,7 +163,8 @@ list_versions() {
 $(page_latest 2>/dev/null || true)"
     candidates=$(printf '%s\n' "$candidates" | grep -E '^[0-9.]+$' | sort -u \
         | ver_sort \
-        | while read -r ver; do ver_ge "$ver" "$FLOOR" && echo "$ver"; done)
+        | while read -r ver; do ver_ge "$ver" "$FLOOR" && echo "$ver"; done) \
+        || true
     [[ -n "$candidates" ]] || return 1
 
     # Runs inside the shared _discover-versions.yml job that every caller
@@ -170,6 +173,11 @@ $(page_latest 2>/dev/null || true)"
     probe_dir=$(mktemp -d)
     trap 'rm -rf "$probe_dir"' RETURN
     for ver in $candidates; do
+        # Cap concurrent probes so a growing candidate set does not hit
+        # wolfssl.com with one big HEAD burst, the most likely 429 trigger.
+        while [[ "$(jobs -rp | wc -l)" -ge 6 ]]; do
+            sleep 0.2
+        done
         (
             # `|| rc=$?` is load-bearing under `set -e`: an unguarded call
             # returning 2 kills this subshell before the case below runs,
@@ -216,7 +224,7 @@ sha256_of() {
 }
 
 fetch_bundle() {
-    local ver="$1" zip dir want got attempt scratch scratch_dir
+    local ver="$1" zip dir want got attempt scratch scratch_dir latest
 
     mkdir -p "$DEST"
     # Download and verify into a scratch dir first; the caller's existing
@@ -240,15 +248,25 @@ fetch_bundle() {
     done
 
     want=$(page_sha256 "$ver" 2>/dev/null || true)
+    latest=$(page_latest 2>/dev/null || true)
+    if [[ -z "$want" && -n "$latest" && "$ver" == "$latest" ]]; then
+        # The newest bundle always publishes a hash, so an empty scrape here is
+        # a transient page/markup failure, not "verification is optional". Retry
+        # before deciding, and never fall through to the CRC-only path.
+        want=$(retry_out page_sha256 "$ver" 2>/dev/null || true)
+    fi
     if [[ -n "$want" ]]; then
         got=$(sha256_of "$zip")
         if [[ "$got" != "$want" ]]; then
             echo "fetch-fips-ready: SHA256 mismatch for $ver (want $want, got $got)" >&2
             return 1
         fi
+    elif [[ -n "$latest" && "$ver" == "$latest" ]]; then
+        echo "fetch-fips-ready: expected a published SHA256 for newest bundle" \
+            "$ver but found none; refusing unverified download" >&2
+        return 1
     else
-        # Only the newest bundle has a published hash; the rest get an integrity
-        # check from the archive itself.
+        # Older bundles publish no hash; verify the archive itself instead.
         echo "fetch-fips-ready: no published SHA256 for $ver, verifying archive" >&2
         if ! unzip -tqq "$zip" >/dev/null; then
             echo "fetch-fips-ready: downloaded archive for $ver failed integrity check" >&2

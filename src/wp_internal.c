@@ -601,12 +601,12 @@ enum wc_HashType wp_nid_to_wc_hash_type(int nid)
             hashType = WC_HASH_TYPE_SHA512;
             break;
 #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-    #ifndef WOLFSSL_NOSHA512_224
+    #ifdef WP_HAVE_SHA512_224
         case NID_sha512_224:
             hashType = WC_HASH_TYPE_SHA512_224;
             break;
     #endif
-    #ifndef WOLFSSL_NOSHA512_256
+    #ifdef WP_HAVE_SHA512_256
         case NID_sha512_256:
             hashType = WC_HASH_TYPE_SHA512_256;
             break;
