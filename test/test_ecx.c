@@ -828,7 +828,7 @@ int test_ecx_x25519_get_params_stale_ret(void *data)
     PRINT_MSG("X25519 get_params test skipped - curve25519 blinding enabled");
     (void)data;
     return 0;
-#endif
+#else
     int err = 0;
     EVP_PKEY *pkey = NULL;
     static const unsigned char privKey[] = {
@@ -925,6 +925,7 @@ int test_ecx_x25519_get_params_stale_ret(void *data)
 
     EVP_PKEY_free(pkey);
     return err;
+#endif
 }
 
 /* A zero-length private key octet string must be rejected without an
