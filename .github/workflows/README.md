@@ -182,6 +182,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `debian-package.yml` | End-to-end check: builds the wolfprov `.deb`s and confirms they install cleanly on a fresh container and the provider loads. |
 | `openssl-version.yml` | Sweeps every upstream `openssl-3.X.Y` release tag — catches breakage from OpenSSL point releases before they hit our matrix defaults. |
 | `static-analysis.yml` | cppcheck, clang scan-build, Facebook Infer. Heavy enough that it lives in the nightly fan-out rather than per-PR. |
+| `nightly-fips-ready.yml` | Builds and tests every resolved FIPS Ready bundle — the nightly superset of the per-PR `fips-ready.yml` gate. Toggle on a PR with `ci:fips-ready`. |
 
 Sanitizers (ASan+UBSan, TSan) run on every PR/push — see the PR table
 above. They're fast enough with caching to gate merges, so they don't

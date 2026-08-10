@@ -155,10 +155,12 @@ certificate, so the module version it selects moves with the bundle:
 | 5.7.2 to 5.9.1 | `HAVE_FIPS_VERSION=7` |
 | 5.9.2 and newer | `HAVE_FIPS_VERSION=8` |
 
-When you need a stable target, pin a generation with the alias the bundle
-ships rather than `ready`. Each alias is only accepted by the bundle that
-ships it, not simultaneously: `v5-ready` on the older bundles, `v6-ready` on
-5.7.2 to 5.9.1, `v7-ready` on 5.9.2 and newer.
+When you need to pin a specific generation rather than tracking `ready`, use
+the alias that the bundle's own `configure.ac` accepts; these differ per
+release, so check the bundle you have. As of this writing: 5.8.2 accepts
+`ready` and `v6-ready`; 5.9.1 accepts `ready` only; 5.9.2 accepts `ready` and
+`v7-ready`. The `v5-ready` arm remains a separate, valid option across these
+releases.
 
 The FIPS Ready bundles are published as
 `https://www.wolfssl.com/wolfssl-<version>-gplv3-fips-ready.zip`.

@@ -224,9 +224,13 @@ sha256_of() {
 }
 
 fetch_bundle() {
-    local ver="$1" zip dir want got attempt scratch scratch_dir latest
+    local ver="$1" zip dir want got attempt scratch scratch_dir latest page
 
     mkdir -p "$DEST"
+    # Absolutize so the RETURN trap and the printed path stay valid even if a
+    # later cd changes the shell's cwd (a relative --dest would otherwise leak
+    # the scratch dir on cleanup).
+    DEST=$(cd "$DEST" && pwd)
     # Download and verify into a scratch dir first; the caller's existing
     # $dir is only touched after a verified download, so a failed fetch
     # never destroys a bundle that was already there.
@@ -247,23 +251,30 @@ fetch_bundle() {
         sleep $((attempt * 5))
     done
 
-    want=$(page_sha256 "$ver" 2>/dev/null || true)
-    latest=$(page_latest 2>/dev/null || true)
-    if [[ -z "$want" && -n "$latest" && "$ver" == "$latest" ]]; then
-        # The newest bundle always publishes a hash, so an empty scrape here is
-        # a transient page/markup failure, not "verification is optional". Retry
-        # before deciding, and never fall through to the CRC-only path.
-        want=$(retry_out page_sha256 "$ver" 2>/dev/null || true)
+    # Fetch the download page once, with retry, so verification can never fall
+    # open on a transient page failure. An unreachable page refuses every
+    # bundle rather than downgrading to the CRC-only path.
+    if ! page=$(retry_out get_page); then
+        echo "fetch-fips-ready: could not reach download page to verify $ver;" \
+            "refusing unverified download" >&2
+        return 1
     fi
+    want=$(printf '%s' "$page" | tr -d '\n' \
+        | grep -o "wolfssl-$ver-gplv3-fips-ready\.zip[^(]*(SHA256: *[0-9a-f]\{64\}" \
+        | head -n 1 | grep -o '[0-9a-f]\{64\}' || true)
+    latest=$(printf '%s' "$page" \
+        | grep -o 'wolfssl-[0-9][0-9.]*-gplv3-fips-ready\.zip' \
+        | sed -E 's/^wolfssl-(.*)-gplv3-fips-ready\.zip$/\1/' \
+        | ver_sort | tail -n 1 || true)
     if [[ -n "$want" ]]; then
         got=$(sha256_of "$zip")
         if [[ "$got" != "$want" ]]; then
             echo "fetch-fips-ready: SHA256 mismatch for $ver (want $want, got $got)" >&2
             return 1
         fi
-    elif [[ -n "$latest" && "$ver" == "$latest" ]]; then
-        echo "fetch-fips-ready: expected a published SHA256 for newest bundle" \
-            "$ver but found none; refusing unverified download" >&2
+    elif [[ "$ver" == "$latest" ]]; then
+        echo "fetch-fips-ready: no published SHA256 for newest bundle $ver;" \
+            "refusing unverified download" >&2
         return 1
     else
         # Older bundles publish no hash; verify the archive itself instead.
@@ -291,7 +302,7 @@ fetch_bundle() {
     rm -rf "$dir"
     mv "$scratch_dir" "$dir"
 
-    cd "$(dirname "$dir")" && echo "$PWD/$(basename "$dir")"
+    echo "$dir"
 }
 
 case "$MODE" in

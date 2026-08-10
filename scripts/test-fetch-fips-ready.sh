@@ -470,6 +470,16 @@ test_fetch_bundle_replaces_on_success() {
 
     zip="${d}/fixture.zip"
     make_fixture_zip "9.9.9" "${zip}"
+    if command -v sha256sum >/dev/null 2>&1; then
+        real=$(sha256sum "${zip}" | awk '{print $1}')
+    else
+        real=$(shasum -a 256 "${zip}" | awk '{print $1}')
+    fi
+    html="${d}/page.html"
+    # 9.9.9 is the newest bundle and its published hash matches the fixture.
+    cat > "${html}" <<EOF
+<input value="wolfssl-9.9.9-gplv3-fips-ready.zip" /> (SHA256: ${real})<br>
+EOF
     cat > "${MOCKBIN}/curl" <<EOF
 #!/usr/bin/env bash
 if [[ "\$*" == *"-I"* && "\$*" == *"%{http_code}"* ]]; then
@@ -482,7 +492,7 @@ for a in "\$@"; do
         exit 0
     fi
 done
-# No SHA256 advertised for this version; falls back to archive-integrity check.
+cat "${html}"
 exit 0
 EOF
     chmod +x "${MOCKBIN}/curl"
@@ -502,6 +512,82 @@ EOF
     rm -rf "${d}"
 }
 
+# fetch_bundle: the newest bundle must never be accepted without a published
+# SHA256, even when the download page is reachable but lists no hash for it.
+test_fetch_bundle_newest_no_hash_fails() {
+    local d html zip
+    d=$(mktemp -d)
+    mkdir -p "${d}/wolfssl-9.9.9-gplv3-fips-ready"
+    touch "${d}/wolfssl-9.9.9-gplv3-fips-ready/CANARY"
+
+    zip="${d}/fixture.zip"
+    make_fixture_zip "9.9.9" "${zip}"
+    html="${d}/page.html"
+    cat > "${html}" <<'EOF'
+<input value="wolfssl-9.9.9-gplv3-fips-ready.zip" /><br>
+EOF
+    cat > "${MOCKBIN}/curl" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == *"-I"* && "\$*" == *"%{http_code}"* ]]; then
+    printf '200'
+    exit 0
+fi
+for a in "\$@"; do
+    if [[ "\$a" == *"gplv3-fips-ready.zip" ]]; then
+        cp "${zip}" "\$a"
+        exit 0
+    fi
+done
+cat "${html}"
+exit 0
+EOF
+    chmod +x "${MOCKBIN}/curl"
+
+    if run_case "${d}" fetch_bundle "9.9.9" 2>/dev/null; then
+        fail "fetch_bundle accepted the newest bundle with no published SHA256"
+    else
+        pass "fetch_bundle refuses the newest bundle when no SHA256 is published"
+    fi
+    rm -rf "${d}"
+}
+
+# fetch_bundle: an unreachable download page must fail closed, not downgrade
+# the newest bundle to a CRC-only check. Regression test for the fail-open.
+test_fetch_bundle_unreachable_page_fails() {
+    local d zip
+    d=$(mktemp -d)
+    mkdir -p "${d}/wolfssl-9.9.9-gplv3-fips-ready"
+    touch "${d}/wolfssl-9.9.9-gplv3-fips-ready/CANARY"
+
+    zip="${d}/fixture.zip"
+    make_fixture_zip "9.9.9" "${zip}"
+    cat > "${MOCKBIN}/curl" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == *"-I"* && "\$*" == *"%{http_code}"* ]]; then
+    printf '200'
+    exit 0
+fi
+for a in "\$@"; do
+    if [[ "\$a" == *"gplv3-fips-ready.zip" ]]; then
+        cp "${zip}" "\$a"
+        exit 0
+    fi
+done
+# Download page unreachable.
+exit 1
+EOF
+    chmod +x "${MOCKBIN}/curl"
+
+    if run_case "${d}" fetch_bundle "9.9.9" 2>/dev/null; then
+        fail "fetch_bundle accepted a bundle while the download page was unreachable"
+    elif [[ -f "${d}/wolfssl-9.9.9-gplv3-fips-ready/CANARY" ]]; then
+        pass "fetch_bundle refuses when the download page is unreachable"
+    else
+        fail "fetch_bundle destroyed the existing bundle on an unreachable page"
+    fi
+    rm -rf "${d}"
+}
+
 test_bundle_exists_retries_transient
 test_bundle_exists_confirmed_404_no_retry
 test_bundle_exists_429_is_transient
@@ -513,6 +599,8 @@ test_entrypoint_list_fails_on_indeterminate_candidate
 test_fetch_bundle_preserves_existing_on_download_failure
 test_fetch_bundle_checksum_mismatch_preserves_existing
 test_fetch_bundle_replaces_on_success
+test_fetch_bundle_newest_no_hash_fails
+test_fetch_bundle_unreachable_page_fails
 
 echo ""
 echo "fetch-fips-ready tests: ${PASS} passed, ${FAIL} failed"
