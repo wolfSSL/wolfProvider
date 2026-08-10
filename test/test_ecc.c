@@ -1371,7 +1371,7 @@ int test_ecdh_x25519_vector(void *data)
     PRINT_MSG("X25519 ECDH KAT skipped - curve25519 blinding enabled");
     (void)data;
     return 0;
-#endif
+#else
     int err = 0;
     EVP_PKEY *keyA = NULL;
     EVP_PKEY *keyB = NULL;
@@ -1413,6 +1413,7 @@ int test_ecdh_x25519_vector(void *data)
     EVP_PKEY_free(keyA);
 
     return err;
+#endif
 }
 #endif /* WP_HAVE_X25519 */
 
