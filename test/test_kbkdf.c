@@ -427,6 +427,73 @@ done:
     return err;
 }
 
+/* Every parameter the derive calls above rely on must be discoverable
+ * through the settable parameter list. */
+static int test_kbkdf_settable_params(void)
+{
+    int err = 0;
+    size_t i;
+    EVP_KDF* kdf = NULL;
+    EVP_KDF_CTX* kctx = NULL;
+    const OSSL_PARAM* settable = NULL;
+    static const struct {
+        const char* name;
+        unsigned int dataType;
+    } expected[] = {
+        { OSSL_KDF_PARAM_MODE,   OSSL_PARAM_UTF8_STRING  },
+        { OSSL_KDF_PARAM_DIGEST, OSSL_PARAM_UTF8_STRING  },
+        { OSSL_KDF_PARAM_MAC,    OSSL_PARAM_UTF8_STRING  },
+        { OSSL_KDF_PARAM_CIPHER, OSSL_PARAM_UTF8_STRING  },
+        { OSSL_KDF_PARAM_KEY,    OSSL_PARAM_OCTET_STRING },
+        { OSSL_KDF_PARAM_SALT,   OSSL_PARAM_OCTET_STRING },
+        { OSSL_KDF_PARAM_LABEL,  OSSL_PARAM_OCTET_STRING },
+        { OSSL_KDF_PARAM_SEED,   OSSL_PARAM_OCTET_STRING },
+        { OSSL_KDF_PARAM_INFO,   OSSL_PARAM_OCTET_STRING }
+    };
+
+    PRINT_MSG("\nTesting KBKDF settable parameter list");
+
+    kdf = EVP_KDF_fetch(wpLibCtx, "KBKDF", NULL);
+    if (kdf == NULL) {
+        PRINT_MSG("Failed to fetch KBKDF");
+        err = 1;
+        goto done;
+    }
+
+    kctx = EVP_KDF_CTX_new(kdf);
+    if (kctx == NULL) {
+        PRINT_MSG("Failed to create KBKDF context");
+        err = 1;
+        goto done;
+    }
+
+    settable = EVP_KDF_CTX_settable_params(kctx);
+    if (settable == NULL) {
+        PRINT_MSG("No settable parameters reported");
+        err = 1;
+        goto done;
+    }
+
+    for (i = 0; i < sizeof(expected) / sizeof(*expected); i++) {
+        const OSSL_PARAM* p = OSSL_PARAM_locate_const(settable,
+            expected[i].name);
+        if (p == NULL) {
+            PRINT_MSG("Settable parameter missing: %s", expected[i].name);
+            err = 1;
+        }
+        else if (p->data_type != expected[i].dataType) {
+            PRINT_MSG("Settable parameter has wrong type: %s",
+                expected[i].name);
+            err = 1;
+        }
+    }
+
+done:
+    EVP_KDF_free(kdf);
+    EVP_KDF_CTX_free(kctx);
+    return err;
+}
+
 int test_kbkdf(void *data)
 {
     int err = 0;
@@ -438,6 +505,9 @@ int test_kbkdf(void *data)
     }
     if (err == 0) {
         err = test_kbkdf_bad_mode_type();
+    }
+    if (err == 0) {
+        err = test_kbkdf_settable_params();
     }
 
     return err;

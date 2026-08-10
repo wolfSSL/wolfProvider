@@ -38,12 +38,15 @@
 /** Base set of parameters settable against context for KBKDF. */
 #define WP_KBKDF_BASE_SETTABLES                                          \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_PROPERTIES, NULL, 0),         \
+    OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_MODE, NULL, 0),               \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_DIGEST, NULL, 0),             \
     OSSL_PARAM_octet_string(OSSL_KDF_PARAM_KEY, NULL, 0),               \
     OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SALT, NULL, 0),              \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_MAC, NULL, 0),                \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_CIPHER, NULL, 0),             \
-    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_LABEL, NULL, 0)
+    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_LABEL, NULL, 0),             \
+    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SEED, NULL, 0),              \
+    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_INFO, NULL, 0)
 
 /**
  * The KBKDF context structure.
