@@ -377,6 +377,56 @@ static int test_kbkdf_counter(void)
     return err;
 }
 
+/* Mode must be a UTF8 string; any other type is rejected without being
+ * used. */
+static int test_kbkdf_bad_mode_type(void)
+{
+    int err = 0;
+    EVP_KDF* kdf = NULL;
+    EVP_KDF_CTX* kctx = NULL;
+    OSSL_PARAM params[2];
+    int modeInt = 1;
+    unsigned char modeOctet[] = { 'C', 'O', 'U', 'N', 'T', 'E', 'R' };
+
+    PRINT_MSG("\nTesting KBKDF with wrong type for mode parameter");
+
+    kdf = EVP_KDF_fetch(wpLibCtx, "KBKDF", NULL);
+    if (kdf == NULL) {
+        PRINT_MSG("Failed to fetch KBKDF");
+        err = 1;
+        goto done;
+    }
+
+    kctx = EVP_KDF_CTX_new(kdf);
+    if (kctx == NULL) {
+        PRINT_MSG("Failed to create KBKDF context");
+        err = 1;
+        goto done;
+    }
+
+    params[0] = OSSL_PARAM_construct_int(OSSL_KDF_PARAM_MODE, &modeInt);
+    params[1] = OSSL_PARAM_construct_end();
+    if (EVP_KDF_CTX_set_params(kctx, params) > 0) {
+        PRINT_MSG("Integer mode parameter was accepted");
+        err = 1;
+        goto done;
+    }
+
+    params[0] = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_MODE,
+        modeOctet, sizeof(modeOctet));
+    params[1] = OSSL_PARAM_construct_end();
+    if (EVP_KDF_CTX_set_params(kctx, params) > 0) {
+        PRINT_MSG("Octet string mode parameter was accepted");
+        err = 1;
+        goto done;
+    }
+
+done:
+    EVP_KDF_free(kdf);
+    EVP_KDF_CTX_free(kctx);
+    return err;
+}
+
 int test_kbkdf(void *data)
 {
     int err = 0;
@@ -385,6 +435,9 @@ int test_kbkdf(void *data)
     err = test_kbkdf_feedback();
     if (err == 0) {
         err = test_kbkdf_counter();
+    }
+    if (err == 0) {
+        err = test_kbkdf_bad_mode_type();
     }
 
     return err;
