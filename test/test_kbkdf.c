@@ -494,6 +494,93 @@ done:
     return err;
 }
 
+/* Reset releases the MAC object, so a reused context must still derive
+ * the same key. */
+static int test_kbkdf_reset_reuse(const char* mac, const char* alg)
+{
+    int err = 0;
+    EVP_KDF* kdf = NULL;
+    EVP_KDF_CTX* kctx = NULL;
+    OSSL_PARAM params[7], *p;
+    unsigned char first[16];
+    unsigned char second[16];
+    unsigned char key[] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+    };
+    unsigned char label[] = {
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18
+    };
+    unsigned char context[] = {
+        0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28
+    };
+    char counter[] = "COUNTER";
+
+    PRINT_MSG("Test KBKDF reset and reuse with %s", mac);
+
+    kdf = EVP_KDF_fetch(wpLibCtx, "KBKDF", NULL);
+    if (kdf == NULL) {
+        PRINT_MSG("Failed to fetch KBKDF");
+        err = 1;
+        goto done;
+    }
+
+    kctx = EVP_KDF_CTX_new(kdf);
+    if (kctx == NULL) {
+        PRINT_MSG("Failed to create KBKDF context");
+        err = 1;
+        goto done;
+    }
+
+    p = params;
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_MODE, counter, 0);
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_MAC, (char*)mac, 0);
+    if (XSTRCMP(mac, "CMAC") == 0) {
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_CIPHER,
+            (char*)alg, 0);
+    }
+    else {
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
+            (char*)alg, 0);
+    }
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, key,
+        sizeof(key));
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT, label,
+        sizeof(label));
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, context,
+        sizeof(context));
+    *p = OSSL_PARAM_construct_end();
+
+    if (EVP_KDF_derive(kctx, first, sizeof(first), params) <= 0) {
+        PRINT_MSG("First derive failed");
+        err = 1;
+        goto done;
+    }
+
+    EVP_KDF_CTX_reset(kctx);
+
+    if (EVP_KDF_derive(kctx, second, sizeof(second), params) <= 0) {
+        PRINT_MSG("Derive after reset failed");
+        err = 1;
+        goto done;
+    }
+
+    if (XMEMCMP(first, second, sizeof(first)) != 0) {
+        PRINT_MSG("Derived key changed after reset");
+        err = 1;
+        goto done;
+    }
+
+    /* Reset with nothing to release must also be safe. */
+    EVP_KDF_CTX_reset(kctx);
+    EVP_KDF_CTX_reset(kctx);
+
+done:
+    EVP_KDF_free(kdf);
+    EVP_KDF_CTX_free(kctx);
+    return err;
+}
+
 int test_kbkdf(void *data)
 {
     int err = 0;
@@ -508,6 +595,13 @@ int test_kbkdf(void *data)
     }
     if (err == 0) {
         err = test_kbkdf_settable_params();
+    }
+    if (err == 0) {
+        PRINT_MSG("\nTesting KBKDF context reset and reuse:");
+        err = test_kbkdf_reset_reuse("CMAC", "AES-128-CBC");
+    }
+    if (err == 0) {
+        err = test_kbkdf_reset_reuse("HMAC", "SHA256");
     }
 
     return err;
