@@ -175,9 +175,10 @@ jobs:
           cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
 
       # Runs all OpenSSL ML-KEM/ML-DSA/LMS vectors. In normal mode every file
-      # must pass and the full count must run; in force-fail mode the run fails
-      # and check-workflow-result.sh inverts that to a pass, proving wolfProvider
-      # genuinely served the crypto with no silent OpenSSL fallback.
+      # must pass and each family must meet its minimum count; in force-fail
+      # mode the run fails and check-workflow-result.sh inverts that to a pass,
+      # proving wolfProvider genuinely served the crypto with no silent OpenSSL
+      # fallback.
       - name: PQC KAT (ML-KEM, ML-DSA, and LMS OpenSSL vectors)
         if: matrix.pqc == true || matrix.lms == true
         shell: bash

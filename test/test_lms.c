@@ -47,8 +47,17 @@ static const unsigned char lmsPub2[] = {
     0x45, 0x1f, 0x2c, 0x28, 0xd4, 0x8a, 0x29, 0x67
 };
 
-static const unsigned char lmsPub3[] = {
-    0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x01,
+static const unsigned char lmsPubShake192[] = {
+    0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x10,
+    0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+    0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+    0x2c, 0x57, 0x14, 0x50, 0xae, 0xd9, 0x9c, 0xfb,
+    0x4f, 0x4a, 0xc2, 0x85, 0xda, 0x14, 0x88, 0x27,
+    0x96, 0x61, 0x83, 0x14, 0x50, 0x8b, 0x12, 0xd2
+};
+
+static const unsigned char lmsPubShake256[] = {
+    0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x09,
     0xc3, 0x4b, 0xae, 0x13, 0x90, 0xdd, 0xdb, 0x18,
     0x2e, 0x0e, 0xd8, 0x97, 0x27, 0xcb, 0x17, 0xe6,
     0x50, 0xdb, 0x2d, 0xad, 0x1f, 0xd2, 0xfa, 0x75,
@@ -57,17 +66,33 @@ static const unsigned char lmsPub3[] = {
     0x45, 0x1f, 0x2c, 0x28, 0xd4, 0x8a, 0x29, 0x67
 };
 
-static int lms_from_data(const unsigned char* pub, size_t pubLen,
-    int selection, EVP_PKEY** pkey)
+typedef struct LmsPubCase {
+    const char* name;
+    const unsigned char* pub;
+    size_t pubLen;
+    int bits;
+    int securityBits;
+    int signatureSize;
+} LmsPubCase;
+
+static const LmsPubCase lmsPubCases[] = {
+    { "SHA256/192", lmsPub1, sizeof(lmsPub1), 384, 192, 780 },
+    { "SHA256/256", lmsPub2, sizeof(lmsPub2), 448, 256, 8684 },
+    { "SHAKE/192", lmsPubShake192, sizeof(lmsPubShake192), 384, 192, 780 },
+    { "SHAKE/256", lmsPubShake256, sizeof(lmsPubShake256), 448, 256, 8684 }
+};
+
+static int lms_from_data_ex(OSSL_LIB_CTX* libCtx, const char* paramName,
+    const unsigned char* pub, size_t pubLen, int selection, EVP_PKEY** pkey)
 {
     int err = 0;
     EVP_PKEY_CTX* ctx = NULL;
     OSSL_PARAM params[2];
 
-    params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PUB_KEY,
+    params[0] = OSSL_PARAM_construct_octet_string(paramName,
         (unsigned char*)pub, pubLen);
     params[1] = OSSL_PARAM_construct_end();
-    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "LMS", NULL);
+    ctx = EVP_PKEY_CTX_new_from_name(libCtx, "LMS", NULL);
     err = ctx == NULL;
     if (err == 0) {
         err = EVP_PKEY_fromdata_init(ctx) != 1;
@@ -79,15 +104,23 @@ static int lms_from_data(const unsigned char* pub, size_t pubLen,
     return err;
 }
 
-static int lms_decode_data(const unsigned char* data, size_t dataLen,
-    int selection, EVP_PKEY** pkey, size_t* remaining)
+static int lms_from_data(const unsigned char* pub, size_t pubLen,
+    int selection, EVP_PKEY** pkey)
+{
+    return lms_from_data_ex(wpLibCtx, OSSL_PKEY_PARAM_PUB_KEY, pub, pubLen,
+        selection, pkey);
+}
+
+static int lms_decode_data_ex(OSSL_LIB_CTX* libCtx,
+    const unsigned char* data, size_t dataLen, int selection,
+    EVP_PKEY** pkey, size_t* remaining)
 {
     int err = 0;
     OSSL_DECODER_CTX* ctx = NULL;
     const unsigned char* p = data;
 
     ctx = OSSL_DECODER_CTX_new_for_pkey(pkey, "XDR", NULL, "LMS",
-        selection, wpLibCtx, NULL);
+        selection, libCtx, NULL);
     err = ctx == NULL;
     if (err == 0) {
         err = OSSL_DECODER_from_data(ctx, &p, &dataLen) != 1;
@@ -99,6 +132,13 @@ static int lms_decode_data(const unsigned char* data, size_t dataLen,
     return err;
 }
 
+static int lms_decode_data(const unsigned char* data, size_t dataLen,
+    int selection, EVP_PKEY** pkey, size_t* remaining)
+{
+    return lms_decode_data_ex(wpLibCtx, data, dataLen, selection, pkey,
+        remaining);
+}
+
 int test_lms_import_export(void* data)
 {
     int err = 0;
@@ -108,6 +148,7 @@ int test_lms_import_export(void* data)
     EVP_PKEY* key2 = NULL;
     EVP_PKEY* badKey = NULL;
     EVP_PKEY* rawKey = NULL;
+    EVP_PKEY* encodedKey = NULL;
     EVP_PKEY_CTX* checkCtx = NULL;
     OSSL_PARAM* exportedParams = NULL;
     const OSSL_PARAM* p = NULL;
@@ -117,6 +158,8 @@ int test_lms_import_export(void* data)
     size_t exportedLen = 0;
     unsigned char rawPub[sizeof(lmsPub1)];
     size_t rawPubLen = sizeof(rawPub);
+    unsigned char encodedPub[sizeof(lmsPub1)];
+    size_t encodedPubLen = 0;
 
     (void)data;
     XMEMCPY(badPub, lmsPub1, sizeof(badPub));
@@ -192,7 +235,7 @@ int test_lms_import_export(void* data)
             (EVP_PKEY_get_security_bits(key1) == 0) ||
             (EVP_PKEY_get_bits(key1) != 384) ||
             (EVP_PKEY_get_security_bits(key1) != 192) ||
-            (EVP_PKEY_get_size(key1) == 0);
+            (EVP_PKEY_get_size(key1) != 780);
         if (err != 0) {
             PRINT_ERR_MSG("LMS key duplication or metadata failed");
         }
@@ -258,6 +301,25 @@ int test_lms_import_export(void* data)
         }
     }
     if (err == 0) {
+        err = EVP_PKEY_get_octet_string_param(key1,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, encodedPub,
+            sizeof(encodedPub), &encodedPubLen) != 1 ||
+            encodedPubLen != sizeof(lmsPub1) ||
+            XMEMCMP(encodedPub, lmsPub1, sizeof(lmsPub1)) != 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("OpenSSL encoded LMS public key export failed");
+        }
+    }
+    if (err == 0) {
+        err = lms_from_data_ex(wpLibCtx,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, encodedPub, encodedPubLen,
+            EVP_PKEY_PUBLIC_KEY, &encodedKey) != 0 ||
+            EVP_PKEY_eq(key1, encodedKey) != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("Encoded LMS public key did not round trip");
+        }
+    }
+    if (err == 0) {
         EVP_PKEY_CTX_free(checkCtx);
         checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, rawKey, NULL);
         err = (checkCtx == NULL) || (EVP_PKEY_private_check(checkCtx) == 1);
@@ -271,6 +333,7 @@ int test_lms_import_export(void* data)
     ERR_clear_error();
     OSSL_PARAM_free(exportedParams);
     EVP_PKEY_CTX_free(checkCtx);
+    EVP_PKEY_free(encodedKey);
     EVP_PKEY_free(rawKey);
     EVP_PKEY_free(badKey);
     EVP_PKEY_free(key2);
@@ -287,36 +350,39 @@ int test_lms_decode(void* data)
     EVP_PKEY_CTX* checkCtx = NULL;
     unsigned char bad[sizeof(lmsPub1) + 1];
     size_t remaining = 0;
+    size_t i;
 
     (void)data;
     XMEMCPY(bad, lmsPub1, sizeof(lmsPub1));
     bad[sizeof(lmsPub1)] = 0;
 
-    err = lms_decode_data(lmsPub1, sizeof(lmsPub1), EVP_PKEY_PUBLIC_KEY,
-        &key, NULL);
-    if (err != 0) {
-        PRINT_ERR_MSG("LMS XDR public key decode failed");
-    }
-    if (err == 0) {
-        checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
-        err = (checkCtx == NULL) || (EVP_PKEY_private_check(checkCtx) == 1);
+    for (i = 0; (i < sizeof(lmsPubCases) / sizeof(lmsPubCases[0])) &&
+            (err == 0); i++) {
+        const LmsPubCase* test = &lmsPubCases[i];
+
+        err = lms_decode_data(test->pub, test->pubLen,
+            EVP_PKEY_PUBLIC_KEY, &key, NULL);
         if (err != 0) {
-            PRINT_ERR_MSG("Decoded LMS public key reported a private component");
+            PRINT_ERR_MSG("LMS XDR public key decode failed for %s",
+                test->name);
+        }
+        if (err == 0) {
+            checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key, NULL);
+            err = (checkCtx == NULL) ||
+                (EVP_PKEY_private_check(checkCtx) == 1) ||
+                (EVP_PKEY_get_bits(key) != test->bits) ||
+                (EVP_PKEY_get_security_bits(key) != test->securityBits) ||
+                (EVP_PKEY_get_size(key) != test->signatureSize);
+            if (err != 0) {
+                PRINT_ERR_MSG("Decoded LMS public key metadata was invalid for %s",
+                    test->name);
+            }
         }
         EVP_PKEY_CTX_free(checkCtx);
         checkCtx = NULL;
+        EVP_PKEY_free(key);
+        key = NULL;
     }
-    EVP_PKEY_free(key);
-    key = NULL;
-    if (err == 0) {
-        err = lms_decode_data(lmsPub3, sizeof(lmsPub3),
-            EVP_PKEY_PUBLIC_KEY, &key, NULL);
-        if (err != 0) {
-            PRINT_ERR_MSG("LMS 32-byte XDR public key decode failed");
-        }
-    }
-    EVP_PKEY_free(key);
-    key = NULL;
     if (err == 0) {
         err = lms_decode_data(lmsPub1, sizeof(lmsPub1) - 1,
             EVP_PKEY_PUBLIC_KEY, &key, NULL) == 0;
@@ -765,10 +831,13 @@ int test_lms_verify(void* data)
     EVP_PKEY_CTX* dupCtx = NULL;
     EVP_SIGNATURE* signature = NULL;
     unsigned char badSig[sizeof(lmsVerifySig)];
+    unsigned char longSig[sizeof(lmsVerifySig) + 1];
     unsigned char badMsg[sizeof(lmsVerifyMsg)];
 
     (void)data;
     XMEMCPY(badSig, lmsVerifySig, sizeof(badSig));
+    XMEMCPY(longSig, lmsVerifySig, sizeof(lmsVerifySig));
+    longSig[sizeof(longSig) - 1] = 0;
     XMEMCPY(badMsg, lmsVerifyMsg, sizeof(badMsg));
     badSig[sizeof(badSig) / 2] ^= 1;
     badMsg[sizeof(badMsg) / 2] ^= 1;
@@ -781,9 +850,23 @@ int test_lms_verify(void* data)
             (EVP_PKEY_verify_message_init(ctx, signature, NULL) != 1);
     }
     if (err == 0) {
+        err = EVP_PKEY_get_size(key) != (int)sizeof(lmsVerifySig);
+        if (err != 0) PRINT_ERR_MSG("LMS signature size was incorrect");
+    }
+    if (err == 0) {
         err = EVP_PKEY_verify(ctx, lmsVerifySig, sizeof(lmsVerifySig),
             lmsVerifyMsg, sizeof(lmsVerifyMsg)) != 1;
         if (err != 0) PRINT_ERR_MSG("valid LMS signature did not verify");
+    }
+    if (err == 0) {
+        err = EVP_PKEY_verify(ctx, lmsVerifySig, sizeof(lmsVerifySig) - 1,
+            lmsVerifyMsg, sizeof(lmsVerifyMsg)) == 1;
+        if (err != 0) PRINT_ERR_MSG("short LMS signature was accepted");
+    }
+    if (err == 0) {
+        err = EVP_PKEY_verify(ctx, longSig, sizeof(longSig), lmsVerifyMsg,
+            sizeof(lmsVerifyMsg)) == 1;
+        if (err != 0) PRINT_ERR_MSG("long LMS signature was accepted");
     }
     if (err == 0) {
         err = EVP_PKEY_verify(ctx, badSig, sizeof(badSig),
@@ -812,6 +895,126 @@ int test_lms_verify(void* data)
     EVP_PKEY_CTX_free(dupCtx);
     EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(key);
+    return err;
+}
+
+typedef struct LmsProviderResult {
+    unsigned char rawPub[LMS_XDR_MAX_SZ];
+    size_t rawPubLen;
+    int stage;
+    int decodedEqual;
+    int validResult;
+    int tamperedResult;
+    int shortResult;
+    int longResult;
+} LmsProviderResult;
+
+static int lms_collect_provider_result(OSSL_LIB_CTX* libCtx,
+    LmsProviderResult* result)
+{
+    int err = 0;
+    EVP_PKEY* key = NULL;
+    EVP_PKEY* decodedKey = NULL;
+    EVP_PKEY_CTX* ctx = NULL;
+    EVP_SIGNATURE* signature = NULL;
+    OSSL_PARAM* params = NULL;
+    const OSSL_PARAM* param = NULL;
+    const void* exported = NULL;
+    size_t exportedLen = 0;
+    unsigned char badSig[sizeof(lmsVerifySig)];
+    unsigned char longSig[sizeof(lmsVerifySig) + 1];
+
+    XMEMSET(result, 0, sizeof(*result));
+    XMEMCPY(badSig, lmsVerifySig, sizeof(badSig));
+    badSig[sizeof(badSig) / 2] ^= 1;
+    XMEMCPY(longSig, lmsVerifySig, sizeof(lmsVerifySig));
+    longSig[sizeof(longSig) - 1] = 0;
+
+    err = lms_from_data_ex(libCtx, OSSL_PKEY_PARAM_PUB_KEY, lmsVerifyPub,
+        sizeof(lmsVerifyPub), EVP_PKEY_PUBLIC_KEY, &key);
+    if (err == 0) {
+        result->stage = 1;
+        err = lms_decode_data_ex(libCtx, lmsVerifyPub,
+            sizeof(lmsVerifyPub), EVP_PKEY_PUBLIC_KEY, &decodedKey,
+            NULL);
+    }
+    if (err == 0) {
+        result->stage = 2;
+        err = EVP_PKEY_todata(key, EVP_PKEY_PUBLIC_KEY, &params) != 1;
+    }
+    if (err == 0) {
+        result->stage = 3;
+        param = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_PUB_KEY);
+        err = (param == NULL) || !OSSL_PARAM_get_octet_string_ptr(param,
+            &exported, &exportedLen) || (exported == NULL) ||
+            (exportedLen > sizeof(result->rawPub));
+    }
+    if (err == 0) {
+        result->stage = 4;
+        XMEMCPY(result->rawPub, exported, exportedLen);
+        result->rawPubLen = exportedLen;
+        result->decodedEqual = EVP_PKEY_eq(key, decodedKey);
+        signature = EVP_SIGNATURE_fetch(libCtx, "LMS", NULL);
+        ctx = EVP_PKEY_CTX_new_from_pkey(libCtx, key, NULL);
+        err = (signature == NULL) || (ctx == NULL) ||
+            (EVP_PKEY_verify_message_init(ctx, signature, NULL) != 1);
+    }
+    if (err == 0) {
+        result->stage = 5;
+        result->validResult = EVP_PKEY_verify(ctx, lmsVerifySig,
+            sizeof(lmsVerifySig), lmsVerifyMsg, sizeof(lmsVerifyMsg));
+        result->tamperedResult = EVP_PKEY_verify(ctx, badSig,
+            sizeof(badSig), lmsVerifyMsg, sizeof(lmsVerifyMsg));
+        result->shortResult = EVP_PKEY_verify(ctx, lmsVerifySig,
+            sizeof(lmsVerifySig) - 1, lmsVerifyMsg, sizeof(lmsVerifyMsg));
+        result->longResult = EVP_PKEY_verify(ctx, longSig,
+            sizeof(longSig), lmsVerifyMsg, sizeof(lmsVerifyMsg));
+        result->stage = 6;
+    }
+
+    OSSL_PARAM_free(params);
+    EVP_SIGNATURE_free(signature);
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(decodedKey);
+    EVP_PKEY_free(key);
+    return err;
+}
+
+int test_lms_provider_ab(void* data)
+{
+    int err;
+    LmsProviderResult wpResult = { 0 };
+    LmsProviderResult osslResult = { 0 };
+
+    (void)data;
+    err = lms_collect_provider_result(wpLibCtx, &wpResult);
+    if (err == 0) {
+        err = lms_collect_provider_result(osslLibCtx, &osslResult);
+    }
+    if (err == 0) {
+        err = XMEMCMP(&wpResult, &osslResult, sizeof(wpResult)) != 0 ||
+            wpResult.rawPubLen != sizeof(lmsVerifyPub) ||
+            XMEMCMP(wpResult.rawPub, lmsVerifyPub,
+                sizeof(lmsVerifyPub)) != 0 ||
+            wpResult.decodedEqual != 1 ||
+            wpResult.validResult != 1 || wpResult.tamperedResult == 1 ||
+            wpResult.shortResult == 1 || wpResult.longResult == 1;
+    }
+    if (err != 0) {
+        PRINT_ERR_MSG("wolfProvider/OpenSSL LMS A/B result mismatch");
+        PRINT_ERR_MSG("stage wolfProvider=%d OpenSSL=%d",
+            wpResult.stage, osslResult.stage);
+        PRINT_ERR_MSG("export length wolfProvider=%zu OpenSSL=%zu",
+            wpResult.rawPubLen, osslResult.rawPubLen);
+        PRINT_ERR_MSG("verify wolfProvider=%d/%d/%d/%d OpenSSL=%d/%d/%d/%d",
+            wpResult.validResult, wpResult.tamperedResult,
+            wpResult.shortResult, wpResult.longResult,
+            osslResult.validResult, osslResult.tamperedResult,
+            osslResult.shortResult, osslResult.longResult);
+        PRINT_ERR_MSG("key equality wolfProvider=%d OpenSSL=%d",
+            wpResult.decodedEqual, osslResult.decodedEqual);
+    }
+    ERR_clear_error();
     return err;
 }
 

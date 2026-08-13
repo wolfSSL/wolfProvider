@@ -560,6 +560,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_lms_verify, NULL),
     TEST_DECL(test_lms_import_export, NULL),
     TEST_DECL(test_lms_decode, NULL),
+    TEST_DECL(test_lms_provider_ab, NULL),
     TEST_DECL(test_lms_unsupported_operations, NULL),
 #endif
 
