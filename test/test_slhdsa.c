@@ -41,6 +41,7 @@ typedef struct slhdsa_test_set {
     int securityCategory;
 } slhdsa_test_set;
 
+#ifdef WP_HAVE_SLHDSA_PRIVATE
 /* Every parameter set registered by wp_slhdsa_kmgmt.c. */
 static const slhdsa_test_set slhdsa_all_sets[] = {
 #ifdef WP_HAVE_SLH_DSA_SHA2_128F
@@ -94,6 +95,7 @@ static const slhdsa_test_set slhdsa_all_sets[] = {
 };
 #define SLHDSA_ALL_SET_COUNT \
     (sizeof(slhdsa_all_sets) / sizeof(slhdsa_all_sets[0]))
+#endif
 
 /* A representative spread rather than all 12: both hash families, both the
  * small and fast tradeoffs, and all three security parameters. The 's' sets
