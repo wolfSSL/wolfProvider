@@ -41,9 +41,75 @@ typedef struct slhdsa_test_set {
     int securityCategory;
 } slhdsa_test_set;
 
+/* Every parameter set registered by wp_slhdsa_kmgmt.c. */
+static const slhdsa_test_set slhdsa_all_sets[] = {
+#ifdef WP_HAVE_SLH_DSA_SHA2_128F
+    { "SLH-DSA-SHA2-128f", WC_SLHDSA_SHA2_128F_PUB_LEN,
+      WC_SLHDSA_SHA2_128F_PRIV_LEN, WC_SLHDSA_SHA2_128F_SIG_LEN, 128, 1 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHA2_128S
+    { "SLH-DSA-SHA2-128s", WC_SLHDSA_SHA2_128S_PUB_LEN,
+      WC_SLHDSA_SHA2_128S_PRIV_LEN, WC_SLHDSA_SHA2_128S_SIG_LEN, 128, 1 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHA2_192F
+    { "SLH-DSA-SHA2-192f", WC_SLHDSA_SHA2_192F_PUB_LEN,
+      WC_SLHDSA_SHA2_192F_PRIV_LEN, WC_SLHDSA_SHA2_192F_SIG_LEN, 192, 3 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHA2_192S
+    { "SLH-DSA-SHA2-192s", WC_SLHDSA_SHA2_192S_PUB_LEN,
+      WC_SLHDSA_SHA2_192S_PRIV_LEN, WC_SLHDSA_SHA2_192S_SIG_LEN, 192, 3 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHA2_256F
+    { "SLH-DSA-SHA2-256f", WC_SLHDSA_SHA2_256F_PUB_LEN,
+      WC_SLHDSA_SHA2_256F_PRIV_LEN, WC_SLHDSA_SHA2_256F_SIG_LEN, 256, 5 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHA2_256S
+    { "SLH-DSA-SHA2-256s", WC_SLHDSA_SHA2_256S_PUB_LEN,
+      WC_SLHDSA_SHA2_256S_PRIV_LEN, WC_SLHDSA_SHA2_256S_SIG_LEN, 256, 5 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_128F
+    { "SLH-DSA-SHAKE-128f", WC_SLHDSA_SHAKE128F_PUB_LEN,
+      WC_SLHDSA_SHAKE128F_PRIV_LEN, WC_SLHDSA_SHAKE128F_SIG_LEN, 128, 1 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_128S
+    { "SLH-DSA-SHAKE-128s", WC_SLHDSA_SHAKE128S_PUB_LEN,
+      WC_SLHDSA_SHAKE128S_PRIV_LEN, WC_SLHDSA_SHAKE128S_SIG_LEN, 128, 1 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_192F
+    { "SLH-DSA-SHAKE-192f", WC_SLHDSA_SHAKE192F_PUB_LEN,
+      WC_SLHDSA_SHAKE192F_PRIV_LEN, WC_SLHDSA_SHAKE192F_SIG_LEN, 192, 3 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_192S
+    { "SLH-DSA-SHAKE-192s", WC_SLHDSA_SHAKE192S_PUB_LEN,
+      WC_SLHDSA_SHAKE192S_PRIV_LEN, WC_SLHDSA_SHAKE192S_SIG_LEN, 192, 3 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_256F
+    { "SLH-DSA-SHAKE-256f", WC_SLHDSA_SHAKE256F_PUB_LEN,
+      WC_SLHDSA_SHAKE256F_PRIV_LEN, WC_SLHDSA_SHAKE256F_SIG_LEN, 256, 5 },
+#endif
+#ifdef WP_HAVE_SLH_DSA_SHAKE_256S
+    { "SLH-DSA-SHAKE-256s", WC_SLHDSA_SHAKE256S_PUB_LEN,
+      WC_SLHDSA_SHAKE256S_PRIV_LEN, WC_SLHDSA_SHAKE256S_SIG_LEN, 256, 5 },
+#endif
+};
+#define SLHDSA_ALL_SET_COUNT \
+    (sizeof(slhdsa_all_sets) / sizeof(slhdsa_all_sets[0]))
+
 /* A representative spread rather than all 12: both hash families, both the
  * small and fast tradeoffs, and all three security parameters. The 's' sets
  * sign roughly ten times slower, so only one is in the default matrix. */
+#ifdef WOLFPROV_QUICKTEST
+    #if !defined(WP_HAVE_SLH_DSA_SHA2_128F) && \
+        !defined(WP_HAVE_SLH_DSA_SHAKE_128F)
+        #define WP_SLHDSA_TEST_NEEDS_FALLBACK
+    #endif
+#elif !defined(WP_HAVE_SLH_DSA_SHA2_128F) && \
+      !defined(WP_HAVE_SLH_DSA_SHAKE_128F) && \
+      !defined(WP_HAVE_SLH_DSA_SHA2_128S) && \
+      !defined(WP_HAVE_SLH_DSA_SHAKE_192F) && \
+      !defined(WP_HAVE_SLH_DSA_SHAKE_256F)
+    #define WP_SLHDSA_TEST_NEEDS_FALLBACK
+#endif
 static const slhdsa_test_set slhdsa_sets[] = {
 #ifdef WP_HAVE_SLH_DSA_SHA2_128F
     { "SLH-DSA-SHA2-128f", WC_SLHDSA_SHA2_128F_PUB_LEN,
@@ -67,7 +133,41 @@ static const slhdsa_test_set slhdsa_sets[] = {
       WC_SLHDSA_SHAKE256F_PRIV_LEN, WC_SLHDSA_SHAKE256F_SIG_LEN, 256, 5 },
 #endif
 #endif /* !WOLFPROV_QUICKTEST */
+#ifdef WP_SLHDSA_TEST_NEEDS_FALLBACK
+    #if defined(WP_HAVE_SLH_DSA_SHA2_128S)
+    { "SLH-DSA-SHA2-128s", WC_SLHDSA_SHA2_128S_PUB_LEN,
+      WC_SLHDSA_SHA2_128S_PRIV_LEN, WC_SLHDSA_SHA2_128S_SIG_LEN, 128, 1 },
+    #elif defined(WP_HAVE_SLH_DSA_SHA2_192F)
+    { "SLH-DSA-SHA2-192f", WC_SLHDSA_SHA2_192F_PUB_LEN,
+      WC_SLHDSA_SHA2_192F_PRIV_LEN, WC_SLHDSA_SHA2_192F_SIG_LEN, 192, 3 },
+    #elif defined(WP_HAVE_SLH_DSA_SHA2_256F)
+    { "SLH-DSA-SHA2-256f", WC_SLHDSA_SHA2_256F_PUB_LEN,
+      WC_SLHDSA_SHA2_256F_PRIV_LEN, WC_SLHDSA_SHA2_256F_SIG_LEN, 256, 5 },
+    #elif defined(WP_HAVE_SLH_DSA_SHAKE_128S)
+    { "SLH-DSA-SHAKE-128s", WC_SLHDSA_SHAKE128S_PUB_LEN,
+      WC_SLHDSA_SHAKE128S_PRIV_LEN, WC_SLHDSA_SHAKE128S_SIG_LEN, 128, 1 },
+    #elif defined(WP_HAVE_SLH_DSA_SHAKE_192F)
+    { "SLH-DSA-SHAKE-192f", WC_SLHDSA_SHAKE192F_PUB_LEN,
+      WC_SLHDSA_SHAKE192F_PRIV_LEN, WC_SLHDSA_SHAKE192F_SIG_LEN, 192, 3 },
+    #elif defined(WP_HAVE_SLH_DSA_SHAKE_192S)
+    { "SLH-DSA-SHAKE-192s", WC_SLHDSA_SHAKE192S_PUB_LEN,
+      WC_SLHDSA_SHAKE192S_PRIV_LEN, WC_SLHDSA_SHAKE192S_SIG_LEN, 192, 3 },
+    #elif defined(WP_HAVE_SLH_DSA_SHAKE_256F)
+    { "SLH-DSA-SHAKE-256f", WC_SLHDSA_SHAKE256F_PUB_LEN,
+      WC_SLHDSA_SHAKE256F_PRIV_LEN, WC_SLHDSA_SHAKE256F_SIG_LEN, 256, 5 },
+    #elif defined(WP_HAVE_SLH_DSA_SHAKE_256S)
+    { "SLH-DSA-SHAKE-256s", WC_SLHDSA_SHAKE256S_PUB_LEN,
+      WC_SLHDSA_SHAKE256S_PRIV_LEN, WC_SLHDSA_SHAKE256S_SIG_LEN, 256, 5 },
+    #elif defined(WP_HAVE_SLH_DSA_SHA2_192S)
+    { "SLH-DSA-SHA2-192s", WC_SLHDSA_SHA2_192S_PUB_LEN,
+      WC_SLHDSA_SHA2_192S_PRIV_LEN, WC_SLHDSA_SHA2_192S_SIG_LEN, 192, 3 },
+    #elif defined(WP_HAVE_SLH_DSA_SHA2_256S)
+    { "SLH-DSA-SHA2-256s", WC_SLHDSA_SHA2_256S_PUB_LEN,
+      WC_SLHDSA_SHA2_256S_PRIV_LEN, WC_SLHDSA_SHA2_256S_SIG_LEN, 256, 5 },
+    #endif
+#endif
 };
+#undef WP_SLHDSA_TEST_NEEDS_FALLBACK
 #define SLHDSA_SET_COUNT (sizeof(slhdsa_sets) / sizeof(slhdsa_sets[0]))
 
 int test_slhdsa_public_keymgmt(void* data)
@@ -192,21 +292,35 @@ static const unsigned char slhdsa_test_msg[] =
  * @param [out] pkey  Generated EVP_PKEY (caller frees).
  * @return  0 on success, non-zero on failure.
  */
-static int slhdsa_keygen(const char* name, EVP_PKEY** pkey)
+static int slhdsa_keygen_ex(OSSL_LIB_CTX* libCtx, const char* prop,
+    const char* name, const unsigned char* seed, size_t seedLen,
+    EVP_PKEY** pkey)
 {
     int err = 0;
     EVP_PKEY_CTX* ctx = NULL;
+    OSSL_PARAM params[2];
 
-    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, name, NULL);
+    ctx = EVP_PKEY_CTX_new_from_name(libCtx, name, prop);
     err = (ctx == NULL);
     if (err == 0) {
         err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if ((err == 0) && (seed != NULL)) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_SLH_DSA_SEED, (void*)seed, seedLen);
+        params[1] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_CTX_set_params(ctx, params) != 1;
     }
     if (err == 0) {
         err = EVP_PKEY_keygen(ctx, pkey) != 1;
     }
     EVP_PKEY_CTX_free(ctx);
     return err;
+}
+
+static int slhdsa_keygen(const char* name, EVP_PKEY** pkey)
+{
+    return slhdsa_keygen_ex(wpLibCtx, NULL, name, NULL, 0, pkey);
 }
 
 /**
@@ -1539,8 +1653,8 @@ int test_slhdsa_encode_decode(void* data)
  * Test signing and verifying an X.509 certificate with an SLH-DSA key.
  */
 /* Sign the standard message with the supplied signature params. */
-static int slhdsa_sign_with(EVP_PKEY* key, const OSSL_PARAM* params,
-    unsigned char** sig, size_t* sigLen)
+static int slhdsa_sign_with_ex(OSSL_LIB_CTX* libCtx, EVP_PKEY* key,
+    const OSSL_PARAM* params, unsigned char** sig, size_t* sigLen)
 {
     int err;
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
@@ -1549,7 +1663,7 @@ static int slhdsa_sign_with(EVP_PKEY* key, const OSSL_PARAM* params,
     *sigLen = 0;
     err = (mdctx == NULL);
     if (err == 0) {
-        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, key,
+        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, libCtx, NULL, key,
             params) != 1;
     }
     if (err == 0) {
@@ -1572,15 +1686,21 @@ static int slhdsa_sign_with(EVP_PKEY* key, const OSSL_PARAM* params,
     return err;
 }
 
+static int slhdsa_sign_with(EVP_PKEY* key, const OSSL_PARAM* params,
+    unsigned char** sig, size_t* sigLen)
+{
+    return slhdsa_sign_with_ex(wpLibCtx, key, params, sig, sigLen);
+}
+
 /* Verify the standard message with the supplied signature params. */
-static int slhdsa_verify_with(EVP_PKEY* key, const OSSL_PARAM* params,
-    const unsigned char* sig, size_t sigLen)
+static int slhdsa_verify_with_ex(OSSL_LIB_CTX* libCtx, EVP_PKEY* key,
+    const OSSL_PARAM* params, const unsigned char* sig, size_t sigLen)
 {
     int rc = 0;
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
 
     if (mdctx != NULL) {
-        if (EVP_DigestVerifyInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, key,
+        if (EVP_DigestVerifyInit_ex(mdctx, NULL, NULL, libCtx, NULL, key,
                 params) == 1) {
             rc = EVP_DigestVerify(mdctx, sig, sigLen, slhdsa_test_msg,
                 SLHDSA_TEST_MSG_LEN);
@@ -1588,6 +1708,168 @@ static int slhdsa_verify_with(EVP_PKEY* key, const OSSL_PARAM* params,
     }
     EVP_MD_CTX_free(mdctx);
     return rc;
+}
+
+static int slhdsa_verify_with(EVP_PKEY* key, const OSSL_PARAM* params,
+    const unsigned char* sig, size_t sigLen)
+{
+    return slhdsa_verify_with_ex(wpLibCtx, key, params, sig, sigLen);
+}
+
+int test_slhdsa_all_set_metadata(void* data)
+{
+    int err = 0;
+    size_t i;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < SLHDSA_ALL_SET_COUNT); i++) {
+        const slhdsa_test_set* set = &slhdsa_all_sets[i];
+        EVP_PKEY* key = NULL;
+        int bits = 0;
+        int secBits = 0;
+        int category = 0;
+        int maxSize = 0;
+
+        PRINT_MSG("Registration and metadata %s", set->name);
+        err = slhdsa_keygen(set->name, &key);
+        if (err == 0) {
+            err = EVP_PKEY_get_int_param(key, OSSL_PKEY_PARAM_BITS,
+                &bits) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_int_param(key, OSSL_PKEY_PARAM_SECURITY_BITS,
+                &secBits) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_int_param(key,
+                OSSL_PKEY_PARAM_SECURITY_CATEGORY, &category) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_int_param(key, OSSL_PKEY_PARAM_MAX_SIZE,
+                &maxSize) != 1;
+        }
+        if (err == 0) {
+            err = (bits != (int)(8 * set->pubKeySize)) ||
+                (secBits != set->securityBits) ||
+                (category != set->securityCategory) ||
+                (maxSize != (int)set->sigSize) ||
+                (EVP_PKEY_get_size(key) != (int)set->sigSize);
+            if (err) {
+                PRINT_ERR_MSG("Unexpected metadata for %s", set->name);
+            }
+        }
+        EVP_PKEY_free(key);
+    }
+    return err;
+}
+
+static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
+{
+    int err = 0;
+    EVP_PKEY* wpKey = NULL;
+    EVP_PKEY* osslKey = NULL;
+    unsigned char seed[3 * 32];
+    unsigned char* wpPub = NULL;
+    unsigned char* osslPub = NULL;
+    unsigned char* wpPriv = NULL;
+    unsigned char* osslPriv = NULL;
+    unsigned char* wpSig = NULL;
+    unsigned char* osslSig = NULL;
+    size_t seedLen = (set->pubKeySize / 2) * 3;
+    size_t wpPubLen = 0;
+    size_t osslPubLen = 0;
+    size_t wpPrivLen = 0;
+    size_t osslPrivLen = 0;
+    size_t wpSigLen = 0;
+    size_t osslSigLen = 0;
+    OSSL_PARAM params[2];
+    int deterministic = 1;
+    size_t i;
+
+    PRINT_MSG("wolfProvider/OpenSSL A/B %s", set->name);
+    for (i = 0; i < seedLen; i++) {
+        seed[i] = (unsigned char)i;
+    }
+    err = slhdsa_keygen_ex(wpLibCtx, NULL, set->name, seed, seedLen,
+        &wpKey);
+    if (err == 0) {
+        err = slhdsa_keygen_ex(osslLibCtx, "provider=default", set->name,
+            seed, seedLen, &osslKey);
+    }
+    if (err == 0) {
+        err = slhdsa_get_pub(wpKey, &wpPub, &wpPubLen);
+    }
+    if (err == 0) {
+        err = slhdsa_get_pub(osslKey, &osslPub, &osslPubLen);
+    }
+    if (err == 0) {
+        err = slhdsa_get_raw(wpKey, OSSL_PKEY_PARAM_PRIV_KEY, &wpPriv,
+            &wpPrivLen);
+    }
+    if (err == 0) {
+        err = slhdsa_get_raw(osslKey, OSSL_PKEY_PARAM_PRIV_KEY, &osslPriv,
+            &osslPrivLen);
+    }
+    if (err == 0) {
+        err = (wpPubLen != osslPubLen) ||
+            (XMEMCMP(wpPub, osslPub, wpPubLen) != 0) ||
+            (wpPrivLen != osslPrivLen) ||
+            (XMEMCMP(wpPriv, osslPriv, wpPrivLen) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Seeded wolfProvider/OpenSSL keys differ");
+        }
+    }
+
+    params[0] = OSSL_PARAM_construct_int(
+        OSSL_SIGNATURE_PARAM_DETERMINISTIC, &deterministic);
+    params[1] = OSSL_PARAM_construct_end();
+    if (err == 0) {
+        err = slhdsa_sign_with_ex(wpLibCtx, wpKey, params, &wpSig,
+            &wpSigLen);
+    }
+    if (err == 0) {
+        err = slhdsa_sign_with_ex(osslLibCtx, osslKey, params, &osslSig,
+            &osslSigLen);
+    }
+    if (err == 0) {
+        err = (wpSigLen != osslSigLen) ||
+            (XMEMCMP(wpSig, osslSig, wpSigLen) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Deterministic wolfProvider/OpenSSL signatures differ");
+        }
+    }
+    if (err == 0) {
+        err = slhdsa_verify_with_ex(osslLibCtx, osslKey, NULL, wpSig,
+            wpSigLen) != 1;
+    }
+    if (err == 0) {
+        err = slhdsa_verify_with_ex(wpLibCtx, wpKey, NULL, osslSig,
+            osslSigLen) != 1;
+    }
+
+    OPENSSL_free(wpSig);
+    OPENSSL_free(osslSig);
+    OPENSSL_clear_free(wpPriv, wpPrivLen);
+    OPENSSL_clear_free(osslPriv, osslPrivLen);
+    OPENSSL_free(wpPub);
+    OPENSSL_free(osslPub);
+    EVP_PKEY_free(wpKey);
+    EVP_PKEY_free(osslKey);
+    return err;
+}
+
+int test_slhdsa_provider_ab(void* data)
+{
+    int err = 0;
+    size_t i;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < SLHDSA_SET_COUNT); i++) {
+        err = slhdsa_provider_ab_set(&slhdsa_sets[i]);
+    }
+    return err;
 }
 
 int test_slhdsa_sig_params(void* data)

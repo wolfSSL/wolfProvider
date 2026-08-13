@@ -60,6 +60,8 @@
 #include <openssl/provider.h>
 #include <openssl/core_names.h>
 #include <openssl/params.h>
+#include <openssl/encoder.h>
+#include <openssl/decoder.h>
 #include <openssl/ssl.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -67,14 +69,21 @@
 #include <wolfprovider/settings.h>
 
 #if defined(WP_HAVE_MLKEM) && defined(WP_HAVE_MLDSA)
-
-#include <wolfssl/wolfcrypt/wc_mlkem.h>
-#include <wolfssl/wolfcrypt/wc_mldsa.h>
+    #define WP_PQC_INTEROP_MLKEM_MLDSA
+#endif
 #if defined(WP_HAVE_SLHDSA) && defined(WP_HAVE_SLHDSA_PRIVATE) && \
     (defined(WP_HAVE_SLH_DSA_SHA2_128F) || \
     defined(WP_HAVE_SLH_DSA_SHA2_192F) || \
     defined(WP_HAVE_SLH_DSA_SHAKE_128F))
     #define WP_PQC_INTEROP_SLHDSA_SETS
+#endif
+
+#if defined(WP_PQC_INTEROP_MLKEM_MLDSA) || \
+    defined(WP_PQC_INTEROP_SLHDSA_SETS)
+
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
+#include <wolfssl/wolfcrypt/wc_mlkem.h>
+#include <wolfssl/wolfcrypt/wc_mldsa.h>
 #endif
 
 #ifdef WP_PQC_INTEROP_SLHDSA_SETS
@@ -93,6 +102,7 @@ static OSSL_LIB_CTX* wp_ctx;
 #define oss_ctx ((OSSL_LIB_CTX*)NULL)
 static OSSL_PROVIDER* wp_prov;
 static WC_RNG g_rng;
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
 /* Server identity for the TLS-handshake group interop. Loaded once on the
  * default library context (which always has PEM decoders); the key's own
  * context signs CertificateVerify, independent of the group provider under
@@ -109,6 +119,7 @@ static EVP_PKEY* g_oss_mldsa_key;
 
 static int make_mldsa_cert(OSSL_LIB_CTX* lib, X509** certOut,
     EVP_PKEY** keyOut);
+#endif
 
 #ifndef CERTS_DIR
 #define CERTS_DIR "certs"
@@ -139,6 +150,7 @@ static int load_all(const char* wp_path)
         fprintf(stderr, "wc_InitRng failed\n");
         ok = 0;
     }
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
     if (ok) {
         BIO* bio = BIO_new_file(CERTS_DIR "/server-cert.pem", "r");
         if (bio != NULL) {
@@ -164,6 +176,7 @@ static int load_all(const char* wp_path)
         fprintf(stderr, "Failed to build default-provider ML-DSA certificate\n");
         ok = 0;
     }
+#endif
     if (!ok) {
         if (wp_prov != NULL) {
             OSSL_PROVIDER_unload(wp_prov);
@@ -178,16 +191,19 @@ static int load_all(const char* wp_path)
 static void unload_all(void)
 {
     wc_FreeRng(&g_rng);
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
     if (g_wp_mldsa_key) EVP_PKEY_free(g_wp_mldsa_key);
     if (g_wp_mldsa_cert) X509_free(g_wp_mldsa_cert);
     if (g_oss_mldsa_key) EVP_PKEY_free(g_oss_mldsa_key);
     if (g_oss_mldsa_cert) X509_free(g_oss_mldsa_cert);
     if (g_key) EVP_PKEY_free(g_key);
     if (g_cert) X509_free(g_cert);
+#endif
     if (wp_prov) OSSL_PROVIDER_unload(wp_prov);
     if (wp_ctx) OSSL_LIB_CTX_free(wp_ctx);
 }
 
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
 /* Map "ML-KEM-512/768/1024" to wolfSSL type enum. */
 static int mlkem_name_to_type(const char* alg)
 {
@@ -205,6 +221,7 @@ static byte mldsa_name_to_level(const char* alg)
     if (strcmp(alg, "ML-DSA-87") == 0) return WC_ML_DSA_87;
     return 0;
 }
+#endif
 
 /* Pull raw pub/priv bytes out of an EVP_PKEY. priv is optional. */
 static int evp_pkey_export_raw(EVP_PKEY* src, unsigned char** pub,
@@ -282,6 +299,7 @@ end:
  * ML-KEM helpers
  */
 
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
 /* wolfProvider keygen for ML-KEM, returns EVP_PKEY in wp_ctx. */
 static EVP_PKEY* mlkem_wp_keygen(const char* alg)
 {
@@ -385,6 +403,7 @@ static EVP_PKEY* mldsa_wp_keygen(const char* alg)
     EVP_PKEY_CTX_free(g);
     return k;
 }
+#endif
 
 static int evp_sign(OSSL_LIB_CTX* lib, EVP_PKEY* k, const unsigned char* msg,
     size_t msgLen, unsigned char** sig, size_t* sigLen)
@@ -420,6 +439,7 @@ end:
     return ok;
 }
 
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
 /* wolfSSL-direct sign using wc_MlDsaKey_SignCtx with empty context
  * (FIPS 204 pure ML-DSA). */
 static int wc_mldsa_sign_direct(const char* alg, const unsigned char* priv,
@@ -649,6 +669,7 @@ end:
     EVP_PKEY_free(part_key);
     return ok;
 }
+#endif
 
 
 #ifdef WP_PQC_INTEROP_SLHDSA_SETS
@@ -824,8 +845,152 @@ end:
     return ok;
 }
 
+static EVP_PKEY* slhdsa_encode_decode(EVP_PKEY* source, const char* alg,
+    int selection, const char* format, const char* structure,
+    const char* encProp, OSSL_LIB_CTX* decLib, const char* decProp)
+{
+    EVP_PKEY* decoded = NULL;
+    OSSL_ENCODER_CTX* ectx = NULL;
+    OSSL_DECODER_CTX* dctx = NULL;
+    BIO* bio = NULL;
+    FILE* file = NULL;
+
+    file = tmpfile();
+    if (file == NULL) {
+        goto end;
+    }
+    bio = BIO_new_fp(file, BIO_NOCLOSE);
+    if (bio == NULL) {
+        goto end;
+    }
+    ectx = OSSL_ENCODER_CTX_new_for_pkey(source, selection, format, structure,
+        encProp);
+    if ((ectx == NULL) ||
+            (OSSL_ENCODER_to_bio(ectx, bio) != 1) ||
+            (BIO_flush(bio) != 1) || (fseek(file, 0, SEEK_SET) != 0)) {
+        goto end;
+    }
+    dctx = OSSL_DECODER_CTX_new_for_pkey(&decoded, format, structure, alg,
+        selection, decLib, decProp);
+    if ((dctx == NULL) || (OSSL_DECODER_from_bio(dctx, bio) != 1)) {
+        EVP_PKEY_free(decoded);
+        decoded = NULL;
+    }
+
+end:
+    OSSL_DECODER_CTX_free(dctx);
+    OSSL_ENCODER_CTX_free(ectx);
+    BIO_free(bio);
+    if (file != NULL) {
+        fclose(file);
+    }
+    return decoded;
+}
+
+static int test_slhdsa_format_direction(const char* alg, const char* format,
+    EVP_PKEY* source, const char* encProp, OSSL_LIB_CTX* decLib,
+    const char* decProp, const char* direction)
+{
+    int ok = 0;
+    EVP_PKEY* privateKey = NULL;
+    EVP_PKEY* publicKey = NULL;
+    unsigned char* sourcePub = NULL;
+    unsigned char* sourcePriv = NULL;
+    unsigned char* decodedPub = NULL;
+    unsigned char* decodedPriv = NULL;
+    unsigned char* publicOnly = NULL;
+    unsigned char* sig = NULL;
+    size_t sourcePubLen = 0;
+    size_t sourcePrivLen = 0;
+    size_t decodedPubLen = 0;
+    size_t decodedPrivLen = 0;
+    size_t publicOnlyLen = 0;
+    size_t sigLen = 0;
+
+    privateKey = slhdsa_encode_decode(source, alg,
+        OSSL_KEYMGMT_SELECT_KEYPAIR, format, "PrivateKeyInfo", encProp,
+        decLib, decProp);
+    publicKey = slhdsa_encode_decode(source, alg,
+        OSSL_KEYMGMT_SELECT_PUBLIC_KEY, format, "SubjectPublicKeyInfo",
+        encProp, decLib, decProp);
+    if ((privateKey == NULL) || (publicKey == NULL)) goto end;
+    if (!evp_pkey_export_raw(source, &sourcePub, &sourcePubLen, &sourcePriv,
+            &sourcePrivLen)) goto end;
+    if (!evp_pkey_export_raw(privateKey, &decodedPub, &decodedPubLen,
+            &decodedPriv, &decodedPrivLen)) goto end;
+    if (!evp_pkey_export_raw(publicKey, &publicOnly, &publicOnlyLen, NULL,
+            NULL)) goto end;
+    if ((sourcePubLen != decodedPubLen) ||
+            (memcmp(sourcePub, decodedPub, sourcePubLen) != 0) ||
+            (sourcePrivLen != decodedPrivLen) ||
+            (memcmp(sourcePriv, decodedPriv, sourcePrivLen) != 0) ||
+            (sourcePubLen != publicOnlyLen) ||
+            (memcmp(sourcePub, publicOnly, sourcePubLen) != 0)) goto end;
+    if (!evp_sign(decLib, privateKey, (const unsigned char*)slhdsa_msg,
+            strlen(slhdsa_msg), &sig, &sigLen)) goto end;
+    ok = evp_verify(decLib, publicKey, (const unsigned char*)slhdsa_msg,
+        strlen(slhdsa_msg), sig, sigLen);
+
+end:
+    if (!ok) ERR_print_errors_fp(stderr);
+    printf("  %-4s %-19s %s: %s\n", format, alg, direction,
+        ok ? "PASS" : "FAIL");
+    OPENSSL_free(sig);
+    OPENSSL_free(publicOnly);
+    OPENSSL_clear_free(decodedPriv, decodedPrivLen);
+    OPENSSL_free(decodedPub);
+    OPENSSL_clear_free(sourcePriv, sourcePrivLen);
+    OPENSSL_free(sourcePub);
+    EVP_PKEY_free(publicKey);
+    EVP_PKEY_free(privateKey);
+    return ok;
+}
+
+static int test_slhdsa_format_interop(const char* alg)
+{
+    int ok = 1;
+    EVP_PKEY* wpKey = NULL;
+    EVP_PKEY* osslKey = NULL;
+    unsigned char* pub = NULL;
+    unsigned char* priv = NULL;
+    size_t pubLen = 0;
+    size_t privLen = 0;
+    const char* formats[] = { "DER", "PEM" };
+    size_t i;
+
+    wpKey = slhdsa_wp_keygen(alg);
+    if ((wpKey == NULL) ||
+            !evp_pkey_export_raw(wpKey, &pub, &pubLen, &priv, &privLen)) {
+        ok = 0;
+        goto end;
+    }
+    osslKey = evp_pkey_import_raw(oss_ctx, alg, pub, pubLen, priv, privLen);
+    if (osslKey == NULL) {
+        ok = 0;
+        goto end;
+    }
+    for (i = 0; (i < sizeof(formats) / sizeof(formats[0])) && ok; i++) {
+        ok = test_slhdsa_format_direction(alg, formats[i], wpKey,
+            "provider=libwolfprov", oss_ctx, "provider=default",
+            "wolfProv -> default");
+        if (ok) {
+            ok = test_slhdsa_format_direction(alg, formats[i], osslKey,
+                "provider=default", wp_ctx, NULL,
+                "default -> wolfProv");
+        }
+    }
+
+end:
+    OPENSSL_clear_free(priv, privLen);
+    OPENSSL_free(pub);
+    EVP_PKEY_free(osslKey);
+    EVP_PKEY_free(wpKey);
+    return ok;
+}
+
 #endif /* WP_PQC_INTEROP_SLHDSA_SETS */
 
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
 /*
  * TLS 1.3 group interop - drives a real handshake over an in-memory BIO pair
  * with one peer on wolfProvider's library context and the other on OpenSSL's
@@ -1009,16 +1174,19 @@ end:
     if (cctx != NULL) SSL_CTX_free(cctx);
     return ok;
 }
+#endif
 
 int main(int argc, char* argv[])
 {
     int fail = 0;
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
     const char* groups[] = {
         "MLKEM512", "MLKEM768", "MLKEM1024",
         "X25519MLKEM768", "SecP256r1MLKEM768", "SecP384r1MLKEM1024"
     };
     const char* mlkem[] = { "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024" };
     const char* mldsa[] = { "ML-DSA-44", "ML-DSA-65", "ML-DSA-87" };
+#endif
 #ifdef WP_PQC_INTEROP_SLHDSA_SETS
     const char* slhdsa[] = {
 #ifdef WP_HAVE_SLH_DSA_SHA2_128F
@@ -1048,6 +1216,7 @@ int main(int argc, char* argv[])
 
     if (!load_all(wp_path)) return 1;
 
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
     printf("ML-KEM three-way interop:\n");
     printf("  (wolfProvider) <-> (OpenSSL default) and <-> (wolfSSL direct)\n");
     for (i = 0; i < 3; i++) {
@@ -1065,6 +1234,7 @@ int main(int argc, char* argv[])
         if (!test_mldsa_pair_wp_to(mldsa[i], "direct"))  fail++;
         if (!test_mldsa_pair_to_wp(mldsa[i], "direct"))  fail++;
     }
+#endif
 
 #ifdef WP_PQC_INTEROP_SLHDSA_SETS
     /* Only the fast ('f') parameter sets: the small ('s') variants sign
@@ -1077,8 +1247,11 @@ int main(int argc, char* argv[])
         if (!test_slhdsa_pair_wp_to(slhdsa[i], "direct"))  fail++;
         if (!test_slhdsa_pair_to_wp(slhdsa[i], "direct"))  fail++;
     }
+    printf("\nSLH-DSA PEM/DER key interop:\n");
+    if (!test_slhdsa_format_interop(slhdsa[0])) fail++;
 #endif
 
+#ifdef WP_PQC_INTEROP_MLKEM_MLDSA
     printf("\nTLS 1.3 group interop (handshake over BIO pair):\n");
     printf("  (wolfProvider) <-> (OpenSSL default), both directions\n");
     for (i = 0; i < sizeof(groups) / sizeof(groups[0]); i++) {
@@ -1097,19 +1270,19 @@ int main(int argc, char* argv[])
         if (!test_tls_group(groups[i], 0, g_oss_mldsa_cert, g_oss_mldsa_key,
                 "ML-DSA")) fail++;
     }
+#endif
 
     unload_all();
     printf("\n%s: %d failure(s)\n", fail == 0 ? "ALL PASS" : "FAILED", fail);
     return fail ? 1 : 0;
 }
 
-#else /* !WP_HAVE_MLKEM || !WP_HAVE_MLDSA */
+#else
 
 int main(void)
 {
-    printf("PQC interop test skipped: wolfProvider built without ML-KEM and "
-           "ML-DSA support.\n");
+    printf("PQC interop test skipped: no supported PQC algorithms enabled.\n");
     return 0;
 }
 
-#endif /* WP_HAVE_MLKEM && WP_HAVE_MLDSA */
+#endif

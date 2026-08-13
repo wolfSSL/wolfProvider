@@ -637,6 +637,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_slhdsa_encode_epki, NULL),
     #endif
     TEST_DECL(test_slhdsa_keygen, NULL),
+    TEST_DECL(test_slhdsa_all_set_metadata, NULL),
+    TEST_DECL(test_slhdsa_provider_ab, NULL),
     TEST_DECL(test_slhdsa_validate_keypair, NULL),
     TEST_DECL(test_slhdsa_import_export_roundtrip, NULL),
     TEST_DECL(test_slhdsa_sign_verify, NULL),
