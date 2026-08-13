@@ -537,13 +537,99 @@ static const OSSL_PARAM* wp_ecc_settable_params(WOLFPROV_CTX* provCtx)
     static const OSSL_PARAM wp_ecc_supported_settable_params[] = {
         OSSL_PARAM_int(OSSL_PKEY_PARAM_USE_COFACTOR_ECDH, NULL),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0),
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_EC_PUB_X, NULL, 0),
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_EC_PUB_Y, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_EC_PUB_X, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_EC_PUB_Y, NULL, 0),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_EC_INCLUDE_PUBLIC, NULL),
         OSSL_PARAM_END
     };
     (void)provCtx;
     return wp_ecc_supported_settable_params;
+}
+
+/**
+ * Import an X9.63 encoded public key point into the ECC key object.
+ *
+ * @param [in, out] ecc   ECC key object.
+ * @param [in]      data  X9.63 encoded public key point.
+ * @param [in]      len   Length of encoded point in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecc_import_pub_x963(wp_Ecc* ecc, const unsigned char* data,
+    word32 len)
+{
+    int ok = 1;
+    int rc;
+    int init = 0;
+    ecc_key pub;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_import_pub_x963");
+
+    rc = wc_ecc_init_ex(&pub, NULL, INVALID_DEVID);
+    if (rc != 0) {
+        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_init_ex", rc);
+        ok = 0;
+    }
+    else {
+        init = 1;
+    }
+    if (ok) {
+        rc = wc_ecc_import_x963_ex(data, len, &pub, ecc->curveId);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                "wc_ecc_import_x963_ex", rc);
+            ok = 0;
+        }
+    }
+    /* Curve may have been resolved from the point size when no curve was set
+     * on the key object yet. */
+    if (ok && (pub.dp == NULL)) {
+        ok = 0;
+    }
+    if (ok) {
+        rc = wc_ecc_check_key(&pub);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_check_key",
+                rc);
+            ok = 0;
+        }
+    }
+    if (ok) {
+        rc = wc_ecc_set_curve(&ecc->key, 0, pub.dp->id);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_set_curve",
+                rc);
+            ecc->hasPub = 0;
+            ok = 0;
+        }
+    }
+    if (ok) {
+        rc = wc_ecc_copy_point(&pub.pubkey, &ecc->key.pubkey);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_copy_point",
+                rc);
+            ecc->hasPub = 0;
+            ok = 0;
+        }
+    }
+    if (ok) {
+        /* Only the public part was set - keep any private key in place. */
+        if ((ecc->key.type == ECC_PRIVATEKEY) ||
+            (ecc->key.type == ECC_PRIVATEKEY_ONLY)) {
+            ecc->key.type = ECC_PRIVATEKEY;
+        }
+        else {
+            ecc->key.type = ECC_PUBLICKEY;
+        }
+        ecc->hasPub = 1;
+    }
+
+    if (init) {
+        wc_ecc_free(&pub);
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**
@@ -568,15 +654,91 @@ static int wp_ecc_set_params_enc_pub_key(wp_Ecc *ecc, const OSSL_PARAM params[],
         ok = 0;
     }
     if (ok && (data != NULL)) {
-        int rc = wc_ecc_import_x963_ex(data, (word32)len, &ecc->key,
-            ecc->curveId);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_import_x963_ex", rc);
+        if (!wp_ecc_import_pub_x963(ecc, data, (word32)len)) {
             ok = 0;
         }
-        if (ok) {
-            ecc->hasPub = 1;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Set the public key ordinates into the ECC key object.
+ *
+ * X and Y are imported together as an X9.63 point, and the resulting point is
+ * checked against the curve, instead of being stored unvalidated.
+ *
+ * @param [in, out] ecc     ECC key object.
+ * @param [in]      params  Array of parameters and values.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecc_set_params_pub_xy(wp_Ecc* ecc, const OSSL_PARAM params[])
+{
+    int ok = 1;
+    int setX = 0;
+    int setY = 0;
+    int init = 0;
+    int size = 0;
+    unsigned char* point = NULL;
+    mp_int x;
+    mp_int y;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_set_params_pub_xy");
+
+    if (mp_init_multi(&x, &y, NULL, NULL, NULL, NULL) != MP_OKAY) {
+        ok = 0;
+    }
+    else {
+        init = 1;
+    }
+    if (ok && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_X, &x,
+            &setX))) {
+        ok = 0;
+    }
+    if (ok && (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y, &y,
+            &setY))) {
+        ok = 0;
+    }
+    /* One ordinate on its own is not a public key. */
+    if (ok && (setX != setY)) {
+        ok = 0;
+    }
+    if (ok && setX) {
+        size = wc_ecc_get_curve_size_from_id(ecc->curveId);
+        if (size <= 0) {
+            ok = 0;
         }
+    }
+    if (ok && setX) {
+        point = OPENSSL_malloc(1 + (2 * (size_t)size));
+        if (point == NULL) {
+            ok = 0;
+        }
+    }
+    if (ok && setX) {
+        /* Uncompressed X9.63 point: 0x04 || X || Y. */
+        point[0] = 0x04;
+        if (mp_to_unsigned_bin_len(&x, point + 1, size) != MP_OKAY) {
+            ok = 0;
+        }
+    }
+    if (ok && setX) {
+        if (mp_to_unsigned_bin_len(&y, point + 1 + size, size) != MP_OKAY) {
+            ok = 0;
+        }
+    }
+    if (ok && setX) {
+        if (!wp_ecc_import_pub_x963(ecc, point, 1 + (2 * (word32)size))) {
+            ok = 0;
+        }
+    }
+
+    OPENSSL_free(point);
+    if (init) {
+        mp_clear(&x);
+        mp_clear(&y);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -594,33 +756,18 @@ static int wp_ecc_set_params_enc_pub_key(wp_Ecc *ecc, const OSSL_PARAM params[],
 static int wp_ecc_set_params_pub(wp_Ecc *ecc, const OSSL_PARAM params[])
 {
     int ok = 1;
-    int set = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_set_params_pub");
 
-    if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_X,
-            ecc->key.pubkey.x, &set)) {
+    if (!wp_ecc_set_params_pub_xy(ecc, params)) {
         ok = 0;
     }
-    if (ok && (set == 1)) {
-        if (mp_iszero(ecc->key.pubkey.x)) {
-            ok = 0;
-        }
-        if (ok) {
-            ecc->key.type = ECC_PUBLICKEY;
-            ecc->hasPub = 1;
-        }
-    }
-    if (!wp_params_get_mp(params, OSSL_PKEY_PARAM_EC_PUB_Y,
-            ecc->key.pubkey.y, NULL)) {
+    if (ok && (wp_ecc_set_params_enc_pub_key(ecc, params,
+            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY) != 1)) {
         ok = 0;
     }
-    if (wp_ecc_set_params_enc_pub_key(ecc, params,
-            OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY) != 1) {
-        ok = 0;
-    }
-    if (wp_ecc_set_params_enc_pub_key(ecc, params,
-        OSSL_PKEY_PARAM_PUB_KEY) != 1) {
+    if (ok && (wp_ecc_set_params_enc_pub_key(ecc, params,
+            OSSL_PKEY_PARAM_PUB_KEY) != 1)) {
         ok = 0;
     }
 
@@ -686,10 +833,10 @@ static const OSSL_PARAM *wp_ecc_gettable_params(WOLFPROV_CTX* provCtx)
         OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_EC_POINT_CONVERSION_FORMAT, NULL,
             0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0),
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_EC_PUB_X, NULL, 0),
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_EC_PUB_Y, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_EC_PUB_X, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_EC_PUB_Y, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
-        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
+        OSSL_PARAM_BN(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
         OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_USE_COFACTOR_ECDH, NULL),
         OSSL_PARAM_END
