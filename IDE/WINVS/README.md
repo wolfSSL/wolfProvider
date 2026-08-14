@@ -15,8 +15,7 @@ Four configurations, x64 only:
 | `Static Debug\|x64` | same, debug CRT |
 
 The static library exists only so the unit tests can link wolfProvider
-internals. A `.lib` cannot act as a provider: OpenSSL loads one with
-`LoadLibraryA` followed by a lookup of `OSSL_provider_init`.
+internals. A `.lib` cannot act as a provider.
 
 
 Prerequisites
@@ -24,6 +23,9 @@ Prerequisites
 
 - Visual Studio 2022 with the C++ toolset (v143) and MASM (`ml64.exe`).
 - Perl, NASM and git, to build OpenSSL. Strawberry Perl includes NASM.
+
+Run everything below from a Developer Command Prompt, or after `vcvars64.bat`.
+`msbuild` and `nmake` are not on `PATH` otherwise.
 
 No `configure` step is involved anywhere on Windows.
 
@@ -52,6 +54,9 @@ Building
     perl Configure VC-WIN64A shared no-tests --prefix=C:\out\openssl --openssldir=C:\out\openssl\ssl
     nmake
     nmake install_sw
+    nmake install_ssldirs
+
+`install_sw` alone does not write `openssl.cnf`.
 
 Two paths come out of this and they are not interchangeable. The **build tree**
 (`C:\src\openssl`) is `openSslDir` and must hold `libcrypto.lib` directly. The
@@ -89,8 +94,20 @@ does not add the module's own directory to the search path, so **putting
 `wolfssl.dll` beside `libwolfprov.dll` does not work.** Put it on the loading
 process's `PATH`:
 
-    $env:PATH = "C:\src\wolfssl\DLL Release\x64;$env:PATH"
+    $env:PATH = "C:\src\wolfssl\DLL Release\x64;C:\out\openssl\bin;$env:PATH"
     openssl list -providers -provider-path "C:\src\wolfProvider\IDE\WINVS\DLL Release\x64" -provider libwolfprov
+
+Under FIPS the dependency is `wolfssl-fips.dll`, inside the bundle:
+
+    $env:PATH = "C:\src\wolfssl-fips\IDE\WIN10\DLL Release\x64;$env:PATH"
+
+In `openssl.cnf`, use forward slashes in the `module` path.
+
+The module is `libwolfprov` but the property it registers is `provider=wolfprov`
+(plus `fips=yes` under FIPS):
+
+    openssl dgst -sha256 -provider-path "...\DLL Release\x64" ^
+        -provider libwolfprov -propquery "provider=wolfprov" file.bin
 
 
 User macros
@@ -113,25 +130,56 @@ FIPS
 ----
 
 A FIPS build is wolfSSL's standard Windows FIPS procedure, then wolfProvider
-pointed at the bundle. wolfSSL is linked **shared**, including FIPS; the module
-passes its in-core integrity check that way.
+pointed at the bundle. Unpack it alongside the other trees; the commands below
+assume `C:\src\wolfssl-fips`. `DLL Release|x64` and `DLL Debug|x64` are the
+approved FIPS configurations.
 
+Enable FIPS near the top of the bundle's `IDE\WIN10\user_settings.h`: for a
+commercial bundle set the `#if 0` over `HAVE_FIPS_VERSION 5` to `#if 1`, for
+FIPS-Ready uncomment `/* #define WOLFSSL_FIPS_READY */`. Each is tested on the
+line below it, so define it there and nowhere else in the file.
+
+Copy `user_settings-fips.h` from this directory next to it and include it after
+the `#endif` closing `_WIN_USER_SETTINGS_H_`:
+
+    #include "user_settings-fips.h"
+
+Build the FIPS DLL and the test app that reports its hash. Both are pinned to
+`v110`, so retarget on the command line, and name the `.vcxproj` files rather
+than `wolfssl-fips.sln`, which MSBuild 17 cannot load (`MSB4025`).
+
+    cd C:\src\wolfssl-fips\IDE\WIN10
+    msbuild wolfssl-fips.vcxproj /p:Configuration="DLL Release" /p:Platform=x64 ^
+        /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0
+    msbuild test.vcxproj /p:Configuration="DLL Release" /p:Platform=x64 ^
+        /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0
+
+Leave the project's optimiser and linker settings as shipped.
+
+Run `test.exe` from `DLL Release\x64\` and follow wolfSSL's `verifyCore`
+procedure with the hash it prints. The hash covers only the wolfSSL DLL, so
+rebuilding wolfProvider never invalidates it.
+
+Then build wolfProvider against the bundle, from the wolfProvider root:
+
+    cd C:\src\wolfProvider
     msbuild IDE\WINVS\wolfprovider.sln /p:Configuration="DLL Release" /p:Platform=x64 ^
         /p:wolfCryptDir="C:\src\wolfssl-fips" ^
         /p:userSettingsDir="C:\src\wolfssl-fips\IDE\WIN10" ^
         /p:wolfCryptDllRelease64="C:\src\wolfssl-fips\IDE\WIN10\DLL Release\x64" ^
         /p:wolfSslLib=wolfssl-fips.lib
 
-wolfSSL and wolfProvider must compile against the **same** `user_settings.h`, so
-`userSettingsDir` points at the bundle's copy. A layout-changing macro going
-asymmetric between the two builds is silent and fatal.
+Both builds must compile against the same `user_settings.h`, which is why
+`userSettingsDir` points at the bundle's copy.
 
 
 Unit tests
 ----------
 
 Build `Static Release|x64` and run `IDE\WINVS\Static Release\x64\unit-test.exe`
-with the wolfSSL and OpenSSL DLL directories on `PATH`. `WP_UNIT_STATIC_PROVIDER`
+with the wolfSSL DLL directory and `C:\out\openssl\bin` on `PATH`. Against a
+FIPS bundle pass the same overrides as the provider build, `wolfCryptDllRelease64`
+included — the Static configurations link it too. `WP_UNIT_STATIC_PROVIDER`
 is defined in the Static configurations only, so the test registers the linked-in
 provider instead of loading the DLL; defining it elsewhere would put two copies
 of wolfProvider in one process.
@@ -150,4 +198,3 @@ Known limitations
 - SEED-SRC is not supported on Windows.
 - A `WOLFPROV_DEBUG` unit-test build does not compile; `test_logging.c` uses
   `setenv()`.
-- No automated Windows CI yet.
