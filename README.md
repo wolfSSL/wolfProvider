@@ -104,6 +104,13 @@ only at the wolfCrypt boundary. LMS signing, key generation, private-key
 import, and streaming operations are not exposed because OpenSSL's LMS
 provider is verification-only for SP 800-208 software modules.
 
+Because wolfProvider only verifies, wolfSSL must be built without LMS key
+generation or signing. Configure wolfSSL with
+`--enable-lms=verify-only,sha256-192,shake256` (which defines
+`WOLFSSL_LMS_VERIFY_ONLY`) so the private-key operations are absent rather than
+built but unused. The bundled `build-wolfprovider.sh --enable-lms` flow already
+builds wolfSSL this way.
+
 The PQC KAT workflow runs OpenSSL's 320 LMS verification vectors, including
 valid and corrupted messages, signatures, and key encodings. Focused unit
 tests cover public-key import/export, XDR decoding, selection handling, and

@@ -85,7 +85,7 @@ sudo make install
 | `--enable-hmac-copy` | Faster repeated HMAC with same key (wolfSSL 5.7.8+) |
 | `--enable-sp=yes,asm --enable-sp-math-all` | SP Integer maths |
 | `--enable-mlkem --enable-mldsa` | ML-KEM and ML-DSA post-quantum algorithms (wolfSSL v5.9.2-stable or later). The `build-wolfprovider.sh --enable-pqc` flag sets these automatically. |
-| `--enable-lms=sha256-192,shake256` | LMS verification with the SHA-256 and SHAKE256 parameter families used by the OpenSSL vectors. The `build-wolfprovider.sh --enable-lms` flag sets this automatically. |
+| `--enable-lms=verify-only,sha256-192,shake256` | LMS verification with the SHA-256 and SHAKE256 parameter families used by the OpenSSL vectors. `verify-only` defines `WOLFSSL_LMS_VERIFY_ONLY` so keygen and signing are not built, matching wolfProvider's verification-only surface. The `build-wolfprovider.sh --enable-lms` flag sets this automatically. |
 
 **Optional CPPFLAGS:**
 
@@ -186,7 +186,9 @@ uses wolfSSL's `wc_LmsKey_ImportPubRaw()` and `wc_LmsKey_Verify()` APIs and
 accepts OpenSSL's raw XDR public-key representation. OpenSSL removes the
 single-level HSS header from LMS public keys and signatures, so wolfProvider
 restores that wrapper only while calling wolfCrypt. The provider does not
-generate, import, or sign with LMS private keys.
+generate, import, or sign with LMS private keys, so wolfSSL should be built
+verify-only (`--enable-lms=verify-only,...`) to keep the keygen and signing
+code out of the build entirely.
 
 ### Usage Example
 

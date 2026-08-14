@@ -182,7 +182,7 @@ AC_ARG_ENABLE([mldsa],
     [ ENABLED_MLDSA= ]
     )
 AC_ARG_ENABLE([lms],
-    [AS_HELP_STRING([--enable-lms],[Enable LMS verification (default: disabled).])],
+    [AS_HELP_STRING([--enable-lms],[Enable LMS verification only; requires wolfSSL built verify-only, without LMS keygen or signing (default: disabled).])],
     [ ENABLED_LMS=$enableval ],
     [ ENABLED_LMS=no ]
     )
@@ -269,6 +269,6 @@ echo "   * Dynamic provider:           $ENABLED_DYNAMIC_PROVIDER"
 echo "   * Replace default:            $ENABLED_REPLACE_DEFAULT"
 echo "   * ML-KEM (FIPS 203):          $ENABLED_MLKEM"
 echo "   * ML-DSA (FIPS 204):          $ENABLED_MLDSA"
-echo "   * LMS verification:           $ENABLED_LMS"
+echo "   * LMS verification only:      $ENABLED_LMS"
 echo ""
 echo "---"

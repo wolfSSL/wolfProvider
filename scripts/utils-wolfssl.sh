@@ -63,7 +63,9 @@ if [ "$WOLFPROV_MLDSA" = "1" ]; then
     WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-mldsa"
 fi
 if [ "$WOLFPROV_LMS" = "1" ]; then
-    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-lms=sha256-192,shake256"
+    # wolfProvider exposes LMS verification only; build wolfSSL without keygen
+    # or signing so those private-key operations are not present.
+    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-lms=verify-only,sha256-192,shake256"
 fi
 WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS}${WOLFSSL_PQC_CONFIG_OPTS}"
 
