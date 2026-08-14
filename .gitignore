@@ -3,6 +3,12 @@
 *.swo
 
 
+# SBOM output artefacts (produced by `make sbom`). Built per-release, not source.
+/wolfprovider-*.cdx.json
+/wolfprovider-*.spdx.json
+/wolfprovider-*.spdx
+/_sbom_staging/
+
 # Ignore all things produced by autoreconf
 /Makefile.in
 /aclocal.m4

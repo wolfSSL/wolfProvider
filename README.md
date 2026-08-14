@@ -89,6 +89,50 @@ Without an enable flag no PQC code is compiled, regardless of what wolfSSL enabl
 * ML-DSA (FIPS 204): ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
 
 
+## SBOM / EU CRA Compliance
+
+wolfProvider generates a Software Bill of Materials (SBOM) in CycloneDX 1.6 and
+SPDX 2.3 formats to support compliance with the EU Cyber Resilience Act (CRA).
+The generator is the vendored [wolfGlass](https://github.com/wolfSSL/wolfGlass)
+toolkit under `tools/sbom/`. The SBOM records the configured build options,
+hashes the built `libwolfprov` library artifact (shared or static; ELF, Mach-O,
+or PE), and lists both wolfSSL and OpenSSL as dependencies so vulnerability
+scanners can associate wolfSSL and OpenSSL advisories with a wolfProvider
+deployment. Output is reproducible: set `SOURCE_DATE_EPOCH` (or build from a
+git checkout, which uses the last commit time) and repeated runs are
+byte-identical.
+
+```sh
+make sbom
+```
+
+Requires `python3` and `pyspdxtools` (`pip install spdx-tools`). The generator
+is vendored, so you do not need a wolfSSL source tree to run `make sbom`. Set
+`WOLFSSL_DIR` only when you want the SBOM to read the linked wolfSSL version
+from `wolfssl/version.h`.
+
+Output: `wolfprovider-<version>.cdx.json`, `wolfprovider-<version>.spdx.json`, `wolfprovider-<version>.spdx`
+
+Optional overrides:
+
+- `SBOM_LICENSE_OVERRIDE` - SPDX expression to use instead of the licence
+  parsed from `COPYING` (e.g. `LicenseRef-wolfSSL-Commercial` for commercial
+  licensees). Defaults to `GPL-3.0-or-later` (the per-file header licence).
+- `SBOM_LICENSE_TEXT` - path to the licence text for any `LicenseRef-*` used in
+  `SBOM_LICENSE_OVERRIDE` (required by SPDX 2.3).
+- `SBOM_WOLFSSL_VERSION` - version recorded for the wolfSSL dependency;
+  auto-detected from `WOLFSSL_DIR/wolfssl/version.h` (or wolfSSL's `pkg-config`
+  entry) when unset.
+- `SBOM_OPENSSL_VERSION` - version recorded for the OpenSSL dependency;
+  resolved via OpenSSL's `pkg-config` entry when unset.
+
+```sh
+make install-sbom    # installs to $(datadir)/doc/wolfprov/
+make uninstall-sbom
+```
+
+For further CRA guidance see [wolfssl/doc/CRA.md](https://github.com/wolfSSL/wolfssl/blob/master/doc/CRA.md).
+
 ## Support
 
 - [GitHub Issues](https://github.com/wolfssl/wolfProvider/issues)

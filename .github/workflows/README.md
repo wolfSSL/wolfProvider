@@ -68,7 +68,7 @@ per-app workflows stay untouched.
 
 | Label | Effect |
 |-------|--------|
-| `ci:<name>` | Run that one job (e.g. `ci:hostap`, `ci:curl`, `ci:static-analysis`). Add several to run several. |
+| `ci:<name>` | Run that one job (e.g. `ci:hostap`, `ci:curl`, `ci:static-analysis`, `ci:sbom`). Add several to run several. |
 | `ci:all` | Run the whole fan-out (all 43 jobs). |
 | (no label) | Nothing runs — a normal PR is unaffected. |
 
@@ -176,6 +176,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `debian-package.yml` | End-to-end check: builds the wolfprov `.deb`s and confirms they install cleanly on a fresh container and the provider loads. |
 | `openssl-version.yml` | Sweeps every upstream `openssl-3.X.Y` release tag — catches breakage from OpenSSL point releases before they hit our matrix defaults. |
 | `static-analysis.yml` | cppcheck, clang scan-build, Facebook Infer. Heavy enough that it lives in the nightly fan-out rather than per-PR. |
+| `sbom.yml` | Full `make sbom` with the vendored wolfGlass toolkit: SPDX validation, CycloneDX identity, wolfSSL/OpenSSL dependency recording, reproducibility. Builds the OpenSSL + wolfSSL + wolfProvider stack, so it is nightly + `ci:sbom` rather than every PR. |
 
 Sanitizers (ASan+UBSan, TSan) run on every PR/push — see the PR table
 above. They're fast enough with caching to gate merges, so they don't
@@ -384,6 +385,7 @@ can run it on demand:
 gh workflow run nightly-osp.yml --ref <branch>
 gh workflow run sanitizers.yml --ref <branch>
 gh workflow run static-analysis.yml --ref <branch>
+gh workflow run sbom.yml --ref <branch>
 gh workflow run hostap.yml --ref <branch>   # single OSP
 ```
 

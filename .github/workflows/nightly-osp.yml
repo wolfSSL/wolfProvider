@@ -4,7 +4,7 @@ name: Nightly OSP Suite
 # wolfssl stable). Stays dynamic across version bumps.
 # Wave 2 = v5.8.4-stable pinned (back-compat line), gated on wave1-done
 # with if: always() so a single Wave 1 failure doesn't skip the
-# older-line coverage. multi-compiler and static-analysis run once
+# older-line coverage. multi-compiler, static-analysis, and sbom run once
 # outside the waves.
 # nginx-pqc is Wave 1 only: PQC has a v5.9.2-stable floor, so the
 # v5.8.4-stable Wave 2 line has no eligible ref to run.
@@ -169,3 +169,4 @@ jobs:
   # === Out-of-wave: not wolfssl-version-split ===
   static-analysis: { uses: ./.github/workflows/static-analysis.yml }
   multi-compiler:  { uses: ./.github/workflows/nightly-multi-compiler.yml }
+  sbom:            { uses: ./.github/workflows/sbom.yml }
