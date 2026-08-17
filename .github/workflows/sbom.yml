@@ -120,7 +120,8 @@ jobs:
           assert cdx['specVersion'] == '1.6', cdx.get('specVersion')
           m = cdx['metadata']['component']
           assert m['name'] == 'wolfprovider', m['name']
-          assert m['purl'].startswith('pkg:github/wolfSSL/wolfprovider@'), m['purl']
+          # purl-spec: github namespace and name are lowercased.
+          assert m['purl'].startswith('pkg:github/wolfssl/wolfprovider@'), m['purl']
           # Default override must land as GPL-3.0-or-later (matches source headers).
           ids = [l.get('license', {}).get('id') for l in m.get('licenses', [])]
           assert 'GPL-3.0-or-later' in ids, ids
