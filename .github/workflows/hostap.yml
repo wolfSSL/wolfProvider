@@ -214,12 +214,12 @@ jobs:
           echo "KERNELDIR=$GITHUB_WORKSPACE/linux" >> vm/vm-config
 
           # Run smoke tests
-          SMOKE_TESTS="ap_open ap_wpa2_psk discovery"
-          timeout 3m ./vm/parallel-vm.py --nocurses $(nproc) $SMOKE_TESTS || SMOKE_RES=$?
+          SMOKE_TESTS="ap_open ap_wpa2_psk_disable_enable sae_password_id_only discovery"
+          timeout 4m ./vm/parallel-vm.py --nocurses $(nproc) $SMOKE_TESTS || SMOKE_RES=$?
 
-          # Run EAP tests (excluding MSCHAPv2 - requires MD4/DES not in wolfSSL)
-          TLS_EAP_TESTS="ap_wpa2_eap_tls ap_wpa2_eap_ttls_eap_gtc ap_wpa2_eap_peap_eap_tls"
-          timeout 5m ./vm/parallel-vm.py --nocurses $(nproc) $TLS_EAP_TESTS || TLS_RES=$?
+          # FIPS-clean EAP methods only (MSCHAPv2/LEAP/EAP-MD5 need MD4/MD5/DES)
+          TLS_EAP_TESTS="ap_wpa2_eap_tls ap_wpa2_eap_psk ap_wpa2_eap_ttls_eap_gtc ap_wpa2_eap_peap_eap_tls ap_wpa2_eap_peap_eap_gtc ap_wpa2_eap_fast_gtc_auth_prov"
+          timeout 8m ./vm/parallel-vm.py --nocurses $(nproc) $TLS_EAP_TESTS || TLS_RES=$?
 
           # Evaluate results
           FINAL_RES=0
