@@ -905,6 +905,7 @@ typedef struct LmsProviderResult {
     int decodedEqual;
     int validResult;
     int tamperedResult;
+    int badMessageResult;
     int shortResult;
     int longResult;
 } LmsProviderResult;
@@ -922,11 +923,14 @@ static int lms_collect_provider_result(OSSL_LIB_CTX* libCtx,
     const void* exported = NULL;
     size_t exportedLen = 0;
     unsigned char badSig[sizeof(lmsVerifySig)];
+    unsigned char badMsg[sizeof(lmsVerifyMsg)];
     unsigned char longSig[sizeof(lmsVerifySig) + 1];
 
     XMEMSET(result, 0, sizeof(*result));
     XMEMCPY(badSig, lmsVerifySig, sizeof(badSig));
     badSig[sizeof(badSig) / 2] ^= 1;
+    XMEMCPY(badMsg, lmsVerifyMsg, sizeof(badMsg));
+    badMsg[sizeof(badMsg) / 2] ^= 1;
     XMEMCPY(longSig, lmsVerifySig, sizeof(lmsVerifySig));
     longSig[sizeof(longSig) - 1] = 0;
 
@@ -965,6 +969,8 @@ static int lms_collect_provider_result(OSSL_LIB_CTX* libCtx,
             sizeof(lmsVerifySig), lmsVerifyMsg, sizeof(lmsVerifyMsg));
         result->tamperedResult = EVP_PKEY_verify(ctx, badSig,
             sizeof(badSig), lmsVerifyMsg, sizeof(lmsVerifyMsg));
+        result->badMessageResult = EVP_PKEY_verify(ctx, lmsVerifySig,
+            sizeof(lmsVerifySig), badMsg, sizeof(badMsg));
         result->shortResult = EVP_PKEY_verify(ctx, lmsVerifySig,
             sizeof(lmsVerifySig) - 1, lmsVerifyMsg, sizeof(lmsVerifyMsg));
         result->longResult = EVP_PKEY_verify(ctx, longSig,
@@ -998,7 +1004,8 @@ int test_lms_provider_ab(void* data)
                 sizeof(lmsVerifyPub)) != 0 ||
             wpResult.decodedEqual != 1 ||
             wpResult.validResult != 1 || wpResult.tamperedResult == 1 ||
-            wpResult.shortResult == 1 || wpResult.longResult == 1;
+            wpResult.badMessageResult == 1 || wpResult.shortResult == 1 ||
+            wpResult.longResult == 1;
     }
     if (err != 0) {
         PRINT_ERR_MSG("wolfProvider/OpenSSL LMS A/B result mismatch");
@@ -1006,11 +1013,14 @@ int test_lms_provider_ab(void* data)
             wpResult.stage, osslResult.stage);
         PRINT_ERR_MSG("export length wolfProvider=%zu OpenSSL=%zu",
             wpResult.rawPubLen, osslResult.rawPubLen);
-        PRINT_ERR_MSG("verify wolfProvider=%d/%d/%d/%d OpenSSL=%d/%d/%d/%d",
+        PRINT_ERR_MSG("verify wolfProvider=%d/%d/%d/%d/%d "
+            "OpenSSL=%d/%d/%d/%d/%d",
             wpResult.validResult, wpResult.tamperedResult,
-            wpResult.shortResult, wpResult.longResult,
+            wpResult.badMessageResult, wpResult.shortResult,
+            wpResult.longResult,
             osslResult.validResult, osslResult.tamperedResult,
-            osslResult.shortResult, osslResult.longResult);
+            osslResult.badMessageResult, osslResult.shortResult,
+            osslResult.longResult);
         PRINT_ERR_MSG("key equality wolfProvider=%d OpenSSL=%d",
             wpResult.decodedEqual, osslResult.decodedEqual);
     }
