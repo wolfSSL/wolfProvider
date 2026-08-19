@@ -133,7 +133,8 @@ jobs:
         with:
           repository: torvalds/linux
           path: linux
-          ref: master
+          # Pin a release so upstream merge-window breakage cannot disrupt CI.
+          ref: v7.2
 
       - name: Compile linux
         run: |
