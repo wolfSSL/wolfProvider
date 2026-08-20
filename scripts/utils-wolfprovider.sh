@@ -96,6 +96,13 @@ install_wolfprov() {
     printf "\tConfigure wolfProvider ... "
     if [ ! -e "${WOLFPROV_SOURCE_DIR}/configure" ]; then
         ./autogen.sh >>$LOG_FILE 2>&1
+        RET=$?
+        if [ $RET != 0 ]; then
+            printf "\n\nERROR: autogen.sh failed.\n"
+            tail -n 40 $LOG_FILE
+            do_cleanup
+            exit 1
+        fi
     fi
 
     if [ "$WOLFPROV_DEBUG" = "1" ]; then

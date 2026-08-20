@@ -191,6 +191,10 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' static-analysis ')
     uses: ./.github/workflows/static-analysis.yml
+  sbom:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' sbom ')
+    uses: ./.github/workflows/sbom.yml
   stunnel:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' stunnel ')
