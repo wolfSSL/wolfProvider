@@ -338,18 +338,13 @@ extern const OSSL_DISPATCH wp_sha224_functions[];
 extern const OSSL_DISPATCH wp_sha256_functions[];
 extern const OSSL_DISPATCH wp_sha384_functions[];
 extern const OSSL_DISPATCH wp_sha512_functions[];
-/* SHA-512/224 and SHA-512/256 are outside the FIPS module boundary. Guards must
- * match the IMPLEMENT_DIGEST() guards in wp_digests.c. */
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-#if !defined(WOLFSSL_NOSHA512_224) && \
-    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
+/* Guards match the IMPLEMENT_DIGEST() guards in wp_digests.c. */
+#ifdef WP_HAVE_SHA512_224
 extern const OSSL_DISPATCH wp_sha512_224_functions[];
-#endif /* !WOLFSSL_NOSHA512_224 && !HAVE_FIPS && !HAVE_SELFTEST */
-#if !defined(WOLFSSL_NOSHA512_256) && \
-    !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
+#endif /* WP_HAVE_SHA512_224 */
+#ifdef WP_HAVE_SHA512_256
 extern const OSSL_DISPATCH wp_sha512_256_functions[];
-#endif /* !WOLFSSL_NOSHA512_256 && !HAVE_FIPS && !HAVE_SELFTEST */
-#endif /* LIBWOLFSSL_VERSION_HEX >= 0x05000000 */
+#endif /* WP_HAVE_SHA512_256 */
 
 extern const OSSL_DISPATCH wp_sha3_224_functions[];
 extern const OSSL_DISPATCH wp_sha3_256_functions[];
