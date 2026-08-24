@@ -900,9 +900,14 @@ int test_lms_verify(void* data)
 
 typedef struct LmsProviderResult {
     unsigned char rawPub[LMS_XDR_MAX_SZ];
+    unsigned char rawPubKey[LMS_XDR_MAX_SZ];
     size_t rawPubLen;
+    size_t rawPubKeyLen;
     int stage;
     int decodedEqual;
+    int dupEqual;
+    int checkResult;
+    int publicCheckResult;
     int validResult;
     int tamperedResult;
     int badMessageResult;
@@ -916,12 +921,15 @@ static int lms_collect_provider_result(OSSL_LIB_CTX* libCtx,
     int err = 0;
     EVP_PKEY* key = NULL;
     EVP_PKEY* decodedKey = NULL;
+    EVP_PKEY* keyDup = NULL;
     EVP_PKEY_CTX* ctx = NULL;
+    EVP_PKEY_CTX* checkCtx = NULL;
     EVP_SIGNATURE* signature = NULL;
     OSSL_PARAM* params = NULL;
     const OSSL_PARAM* param = NULL;
     const void* exported = NULL;
     size_t exportedLen = 0;
+    size_t rawLen = 0;
     unsigned char badSig[sizeof(lmsVerifySig)];
     unsigned char badMsg[sizeof(lmsVerifyMsg)];
     unsigned char longSig[sizeof(lmsVerifySig) + 1];
@@ -977,10 +985,32 @@ static int lms_collect_provider_result(OSSL_LIB_CTX* libCtx,
             sizeof(longSig), lmsVerifyMsg, sizeof(lmsVerifyMsg));
         result->stage = 6;
     }
+    /* Duplication, check, public-check, and raw public-key export must match
+     * OpenSSL. LMS bits/security-bits/size, the ENCODED_PUBLIC_KEY param, and a
+     * strict private-key check are wolfProvider extensions that OpenSSL's LMS
+     * provider does not report, so they stay covered by test_lms_import_export
+     * rather than cross-checked here. */
+    if (err == 0) {
+        keyDup = EVP_PKEY_dup(key);
+        result->dupEqual = (keyDup != NULL) && (EVP_PKEY_eq(key, keyDup) == 1);
+        checkCtx = EVP_PKEY_CTX_new_from_pkey(libCtx, key, NULL);
+        err = (checkCtx == NULL);
+    }
+    if (err == 0) {
+        result->checkResult = EVP_PKEY_check(checkCtx);
+        result->publicCheckResult = EVP_PKEY_public_check(checkCtx);
+        rawLen = sizeof(result->rawPubKey);
+        if (EVP_PKEY_get_raw_public_key(key, result->rawPubKey, &rawLen) == 1) {
+            result->rawPubKeyLen = rawLen;
+        }
+        result->stage = 7;
+    }
 
     OSSL_PARAM_free(params);
     EVP_SIGNATURE_free(signature);
+    EVP_PKEY_CTX_free(checkCtx);
     EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(keyDup);
     EVP_PKEY_free(decodedKey);
     EVP_PKEY_free(key);
     return err;
@@ -1005,7 +1035,12 @@ int test_lms_provider_ab(void* data)
             wpResult.decodedEqual != 1 ||
             wpResult.validResult != 1 || wpResult.tamperedResult == 1 ||
             wpResult.badMessageResult == 1 || wpResult.shortResult == 1 ||
-            wpResult.longResult == 1;
+            wpResult.longResult == 1 ||
+            wpResult.dupEqual != 1 || wpResult.checkResult != 1 ||
+            wpResult.publicCheckResult != 1 ||
+            wpResult.rawPubKeyLen != sizeof(lmsVerifyPub) ||
+            XMEMCMP(wpResult.rawPubKey, lmsVerifyPub,
+                sizeof(lmsVerifyPub)) != 0;
     }
     if (err != 0) {
         PRINT_ERR_MSG("wolfProvider/OpenSSL LMS A/B result mismatch");
@@ -1023,6 +1058,12 @@ int test_lms_provider_ab(void* data)
             osslResult.longResult);
         PRINT_ERR_MSG("key equality wolfProvider=%d OpenSSL=%d",
             wpResult.decodedEqual, osslResult.decodedEqual);
+        PRINT_ERR_MSG("meta wolfProvider dup=%d check=%d/%d raw=%zu "
+            "OpenSSL dup=%d check=%d/%d raw=%zu",
+            wpResult.dupEqual, wpResult.checkResult,
+            wpResult.publicCheckResult, wpResult.rawPubKeyLen,
+            osslResult.dupEqual, osslResult.checkResult,
+            osslResult.publicCheckResult, osslResult.rawPubKeyLen);
     }
     ERR_clear_error();
     return err;
