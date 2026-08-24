@@ -249,7 +249,7 @@ int test_lms_import_export(void* data)
     }
     if (err == 0) {
         checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, key1, NULL);
-        err = (checkCtx == NULL) || (EVP_PKEY_check(checkCtx) == 1) ||
+        err = (checkCtx == NULL) || (EVP_PKEY_check(checkCtx) != 1) ||
             (EVP_PKEY_public_check(checkCtx) != 1) ||
             (EVP_PKEY_private_check(checkCtx) == 1);
         if (err != 0) {
@@ -415,9 +415,9 @@ int test_lms_decode(void* data)
     }
     if (err == 0) {
         err = lms_decode_data(lmsPub1, sizeof(lmsPub1), EVP_PKEY_KEYPAIR,
-            &key, NULL) == 0;
+            &key, NULL) != 0;
         if (err != 0) {
-            PRINT_ERR_MSG("LMS XDR decoder accepted keypair selection");
+            PRINT_ERR_MSG("LMS XDR decoder rejected keypair selection");
         }
     }
     if (err != 0) {

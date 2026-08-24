@@ -169,9 +169,21 @@ static int wp_lms_match(const wp_Lms* lms1, const wp_Lms* lms2,
 
 static int wp_lms_validate(const wp_Lms* lms, int selection, int checkType)
 {
+    int ok;
+
     (void)checkType;
 
-    return wp_lms_has(lms, selection);
+    /* LMS is verify-only: a private-key-only request has nothing to check,
+     * while a keypair request is satisfied by validating the public key. */
+    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) == 0)) {
+        ok = 0;
+    }
+    else {
+        ok = wp_lms_has(lms, OSSL_KEYMGMT_SELECT_PUBLIC_KEY);
+    }
+
+    return ok;
 }
 
 static int wp_lms_import(wp_Lms* lms, int selection,
@@ -543,7 +555,10 @@ static void wp_lms_dec_free(wp_LmsDecCtx* ctx)
 
 static int wp_lms_selection_ok(int selection)
 {
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+    /* LMS is verify-only: a keypair request resolves to the public key (as in
+     * wp_lms_import), so reject only a private-key-only selection. */
+    if (((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) == 0)) {
         return 0;
     }
     return 1;
