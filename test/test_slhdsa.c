@@ -1778,15 +1778,23 @@ static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
     unsigned char* osslPriv = NULL;
     unsigned char* wpSig = NULL;
     unsigned char* osslSig = NULL;
+    unsigned char* wpSig2 = NULL;
+    unsigned char* osslSig2 = NULL;
+    unsigned char entropy[32];
     size_t seedLen = (set->pubKeySize / 2) * 3;
+    size_t entLen = set->pubKeySize / 2;
     size_t wpPubLen = 0;
     size_t osslPubLen = 0;
     size_t wpPrivLen = 0;
     size_t osslPrivLen = 0;
     size_t wpSigLen = 0;
     size_t osslSigLen = 0;
+    size_t wpSig2Len = 0;
+    size_t osslSig2Len = 0;
     OSSL_PARAM params[2];
+    OSSL_PARAM ctxEntParams[5];
     int deterministic = 1;
+    int encRaw = 0;
     size_t i;
 
     PRINT_MSG("wolfProvider/OpenSSL A/B %s", set->name);
@@ -1850,8 +1858,37 @@ static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
             osslSigLen) != 1;
     }
 
+    /* The context-string plus test-entropy path must also match OpenSSL. */
+    if (err == 0) {
+        XMEMSET(entropy, 0xA5, sizeof(entropy));
+        ctxEntParams[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_CONTEXT_STRING, (void*)"ctx-A", 5);
+        ctxEntParams[1] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_TEST_ENTROPY, entropy, entLen);
+        ctxEntParams[2] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_DETERMINISTIC, &deterministic);
+        ctxEntParams[3] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, &encRaw);
+        ctxEntParams[4] = OSSL_PARAM_construct_end();
+        err = slhdsa_sign_with_ex(wpLibCtx, wpKey, ctxEntParams, &wpSig2,
+            &wpSig2Len);
+    }
+    if (err == 0) {
+        err = slhdsa_sign_with_ex(osslLibCtx, osslKey, ctxEntParams, &osslSig2,
+            &osslSig2Len);
+    }
+    if (err == 0) {
+        err = (wpSig2Len != osslSig2Len) ||
+            (XMEMCMP(wpSig2, osslSig2, wpSig2Len) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Context/test-entropy wolfProvider/OpenSSL signatures differ");
+        }
+    }
+
     OPENSSL_free(wpSig);
     OPENSSL_free(osslSig);
+    OPENSSL_free(wpSig2);
+    OPENSSL_free(osslSig2);
     OPENSSL_clear_free(wpPriv, wpPrivLen);
     OPENSSL_clear_free(osslPriv, osslPrivLen);
     OPENSSL_free(wpPub);
