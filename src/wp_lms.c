@@ -135,7 +135,8 @@ static int wp_lms_has(const wp_Lms* lms, int selection)
 {
     int ok = wolfssl_prov_is_running() && (lms != NULL);
 
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) == 0)) {
         ok = 0;
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
@@ -150,7 +151,8 @@ static int wp_lms_match(const wp_Lms* lms1, const wp_Lms* lms2,
 {
     int ok = wolfssl_prov_is_running() && (lms1 != NULL) && (lms2 != NULL);
 
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)) {
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
+            ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) == 0)) {
         ok = 0;
     }
     if (ok && ((lms1->pubLen == 0) || (lms2->pubLen == 0))) {
