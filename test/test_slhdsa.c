@@ -1780,6 +1780,8 @@ static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
     unsigned char* osslSig = NULL;
     unsigned char* wpSig2 = NULL;
     unsigned char* osslSig2 = NULL;
+    unsigned char* wpSig3 = NULL;
+    unsigned char* osslSig3 = NULL;
     unsigned char entropy[32];
     size_t seedLen = (set->pubKeySize / 2) * 3;
     size_t entLen = set->pubKeySize / 2;
@@ -1791,15 +1793,23 @@ static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
     size_t osslSigLen = 0;
     size_t wpSig2Len = 0;
     size_t osslSig2Len = 0;
+    size_t wpSig3Len = 0;
+    size_t osslSig3Len = 0;
     OSSL_PARAM params[2];
-    OSSL_PARAM ctxEntParams[5];
+    OSSL_PARAM ctxParams[3];
+    OSSL_PARAM entParams[3];
     int deterministic = 1;
     int encRaw = 0;
     size_t i;
 
     PRINT_MSG("wolfProvider/OpenSSL A/B %s", set->name);
-    for (i = 0; i < seedLen; i++) {
-        seed[i] = (unsigned char)i;
+    if ((seedLen > sizeof(seed)) || (entLen > sizeof(entropy))) {
+        err = 1;
+    }
+    if (err == 0) {
+        for (i = 0; i < seedLen; i++) {
+            seed[i] = (unsigned char)i;
+        }
     }
     err = slhdsa_keygen_ex(wpLibCtx, NULL, set->name, seed, seedLen,
         &wpKey);
@@ -1858,30 +1868,49 @@ static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
             osslSigLen) != 1;
     }
 
-    /* The context-string plus test-entropy path must also match OpenSSL. */
+    /* Context string is only applied in encoded mode, so exercise it without
+     * MESSAGE_ENCODING and require it to match OpenSSL. */
     if (err == 0) {
-        XMEMSET(entropy, 0xA5, sizeof(entropy));
-        ctxEntParams[0] = OSSL_PARAM_construct_octet_string(
+        ctxParams[0] = OSSL_PARAM_construct_octet_string(
             OSSL_SIGNATURE_PARAM_CONTEXT_STRING, (void*)"ctx-A", 5);
-        ctxEntParams[1] = OSSL_PARAM_construct_octet_string(
-            OSSL_SIGNATURE_PARAM_TEST_ENTROPY, entropy, entLen);
-        ctxEntParams[2] = OSSL_PARAM_construct_int(
+        ctxParams[1] = OSSL_PARAM_construct_int(
             OSSL_SIGNATURE_PARAM_DETERMINISTIC, &deterministic);
-        ctxEntParams[3] = OSSL_PARAM_construct_int(
-            OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, &encRaw);
-        ctxEntParams[4] = OSSL_PARAM_construct_end();
-        err = slhdsa_sign_with_ex(wpLibCtx, wpKey, ctxEntParams, &wpSig2,
+        ctxParams[2] = OSSL_PARAM_construct_end();
+        err = slhdsa_sign_with_ex(wpLibCtx, wpKey, ctxParams, &wpSig2,
             &wpSig2Len);
     }
     if (err == 0) {
-        err = slhdsa_sign_with_ex(osslLibCtx, osslKey, ctxEntParams, &osslSig2,
+        err = slhdsa_sign_with_ex(osslLibCtx, osslKey, ctxParams, &osslSig2,
             &osslSig2Len);
     }
     if (err == 0) {
         err = (wpSig2Len != osslSig2Len) ||
             (XMEMCMP(wpSig2, osslSig2, wpSig2Len) != 0);
         if (err) {
-            PRINT_ERR_MSG("Context/test-entropy wolfProvider/OpenSSL signatures differ");
+            PRINT_ERR_MSG("Context-string wolfProvider/OpenSSL signatures differ");
+        }
+    }
+
+    /* The raw-message test-entropy path must also match OpenSSL. */
+    if (err == 0) {
+        XMEMSET(entropy, 0xA5, sizeof(entropy));
+        entParams[0] = OSSL_PARAM_construct_octet_string(
+            OSSL_SIGNATURE_PARAM_TEST_ENTROPY, entropy, entLen);
+        entParams[1] = OSSL_PARAM_construct_int(
+            OSSL_SIGNATURE_PARAM_MESSAGE_ENCODING, &encRaw);
+        entParams[2] = OSSL_PARAM_construct_end();
+        err = slhdsa_sign_with_ex(wpLibCtx, wpKey, entParams, &wpSig3,
+            &wpSig3Len);
+    }
+    if (err == 0) {
+        err = slhdsa_sign_with_ex(osslLibCtx, osslKey, entParams, &osslSig3,
+            &osslSig3Len);
+    }
+    if (err == 0) {
+        err = (wpSig3Len != osslSig3Len) ||
+            (XMEMCMP(wpSig3, osslSig3, wpSig3Len) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Test-entropy wolfProvider/OpenSSL signatures differ");
         }
     }
 
@@ -1889,6 +1918,8 @@ static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
     OPENSSL_free(osslSig);
     OPENSSL_free(wpSig2);
     OPENSSL_free(osslSig2);
+    OPENSSL_free(wpSig3);
+    OPENSSL_free(osslSig3);
     OPENSSL_clear_free(wpPriv, wpPrivLen);
     OPENSSL_clear_free(osslPriv, osslPrivLen);
     OPENSSL_free(wpPub);
