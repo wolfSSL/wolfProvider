@@ -80,7 +80,7 @@ static CTX* name##_newctx(WOLFPROV_CTX* provCtx)                               \
 static void name##_freectx(CTX* ctx)                                           \
 {                                                                              \
     free(ctx);                                                                 \
-    OPENSSL_free(ctx);                                                         \
+    OPENSSL_clear_free(ctx, sizeof(*ctx));                                     \
 }
 
 /** Implement duplicating a digest object. */
@@ -96,13 +96,13 @@ static CTX* name##_dupctx(CTX* src)                                            \
 {                                                                              \
     CTX* dst = NULL;                                                           \
     if (wolfssl_prov_is_running()) {                                           \
-        dst = OPENSSL_malloc(sizeof(*src));                                    \
+        dst = OPENSSL_zalloc(sizeof(*dst));                                    \
     }                                                                          \
     if (dst != NULL) {                                                         \
         int rc;                                                                \
         rc = copy(src, dst);                                                   \
         if (rc != 0) {                                                         \
-            OPENSSL_free(dst);                                                 \
+            OPENSSL_clear_free(dst, sizeof(*dst));                             \
             dst = NULL;                                                        \
         }                                                                      \
     }                                                                          \
@@ -670,7 +670,7 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
 static void name##_freectx(CTX* ctx)                                           \
 {                                                                              \
     free(&ctx->obj);                                                           \
-    OPENSSL_free(ctx);                                                         \
+    OPENSSL_clear_free(ctx, sizeof(*ctx));                                     \
 }
 
 /** Implement duplicating an XOF object. */
@@ -686,14 +686,14 @@ static CTX* name##_dupctx(CTX* src)                                            \
 {                                                                              \
     CTX* dst = NULL;                                                           \
     if (wolfssl_prov_is_running()) {                                           \
-        dst = OPENSSL_malloc(sizeof(*src));                                    \
+        dst = OPENSSL_zalloc(sizeof(*dst));                                    \
     }                                                                          \
     if (dst != NULL) {                                                         \
         int rc;                                                                \
         rc = copy(&src->obj, &dst->obj);                                       \
         if (rc != 0) {                                                         \
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #copy, rc);  \
-            OPENSSL_free(dst);                                                 \
+            OPENSSL_clear_free(dst, sizeof(*dst));                             \
             dst = NULL;                                                        \
         }                                                                      \
         else {                                                                 \
@@ -807,4 +807,3 @@ IMPLEMENT_XOF(shake, wp_shake_256, wc_Shake, wp_ShakeCtx,
               wc_Shake256_Copy, wc_Shake256_Free)
 
 #endif
-

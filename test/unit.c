@@ -212,6 +212,9 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_SHAKE_256
     TEST_DECL(test_shake_256, NULL),
 #endif
+#ifdef WP_HAVE_DIGEST
+    TEST_DECL(test_digest_dupctx, NULL),
+#endif
     TEST_DECL(test_digest_multi_update, NULL),
 #ifdef WP_HAVE_HMAC
     TEST_DECL(test_hmac_create, NULL),
@@ -252,6 +255,7 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_DES3CBC
     #if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
         TEST_DECL(test_des3_cbc, NULL),
+        TEST_DECL(test_des3_cbc_reinit, NULL),
         TEST_DECL(test_des3_cbc_stream, NULL),
         TEST_DECL(test_des3_cbc_bad_pad, NULL),
         TEST_DECL(test_des3_cbc_large_update, NULL),
