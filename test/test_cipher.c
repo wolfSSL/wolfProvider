@@ -444,6 +444,215 @@ int test_des3_cbc(void *data)
 
 /******************************************************************************/
 
+int test_des3_cbc_reinit(void *data)
+{
+    unsigned char key[24];
+    unsigned char iv[8];
+    unsigned char iv2[8];
+    unsigned char zeroIv[8] = { 0 };
+    unsigned char msg[16];
+    unsigned char expected[sizeof(msg)];
+    unsigned char expected2[sizeof(msg)];
+    unsigned char expectedZero[sizeof(msg)];
+    unsigned char encrypted[sizeof(msg)];
+    unsigned char decrypted[sizeof(msg)];
+    EVP_CIPHER *ocipher = NULL;
+    EVP_CIPHER *wcipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    int outLen = 0;
+    int finalLen = 0;
+    int err = 0;
+    size_t i;
+
+    (void)data;
+
+    for (i = 0; i < sizeof(key); i++) {
+        key[i] = (unsigned char)(i + 1);
+    }
+    for (i = 0; i < sizeof(iv); i++) {
+        iv[i] = (unsigned char)(i + 9);
+        iv2[i] = (unsigned char)(i + 33);
+    }
+    for (i = 0; i < sizeof(msg); i++) {
+        msg[i] = (unsigned char)(i + 17);
+    }
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "DES-EDE3-CBC", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "DES-EDE3-CBC", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+    if (err == 0) {
+        err = test_cipher_enc(ocipher, key, iv, msg, sizeof(msg), expected,
+            0);
+    }
+    if (err == 0) {
+        err = test_cipher_enc(ocipher, key, iv2, msg, sizeof(msg), expected2,
+            0);
+    }
+    if (err == 0) {
+        err = test_cipher_enc(ocipher, key, zeroIv, msg, sizeof(msg),
+            expectedZero, 0);
+    }
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, wcipher, NULL, NULL, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, encrypted, &outLen, msg,
+            sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, encrypted + outLen, &finalLen) != 1;
+    }
+    if ((err == 0) && ((outLen + finalLen != (int)sizeof(expected)) ||
+            (memcmp(encrypted, expected, sizeof(expected)) != 0))) {
+        PRINT_ERR_MSG("DES3-CBC split encrypt mismatch");
+        err = 1;
+    }
+    outLen = 0;
+    finalLen = 0;
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, encrypted, &outLen, msg,
+            sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, encrypted + outLen, &finalLen) != 1;
+    }
+    if ((err == 0) && ((outLen + finalLen != (int)sizeof(expected)) ||
+            (memcmp(encrypted, expected, sizeof(expected)) != 0))) {
+        PRINT_ERR_MSG("DES3-CBC reinit encrypt mismatch");
+        err = 1;
+    }
+    outLen = 0;
+    finalLen = 0;
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv2) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, encrypted, &outLen, msg,
+            sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, encrypted + outLen, &finalLen) != 1;
+    }
+    if ((err == 0) && ((outLen + finalLen != (int)sizeof(expected2)) ||
+            (memcmp(encrypted, expected2, sizeof(expected2)) != 0))) {
+        PRINT_ERR_MSG("DES3-CBC new IV mismatch");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+    outLen = 0;
+    finalLen = 0;
+
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, wcipher, NULL, NULL, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, decrypted, &outLen, expected,
+            sizeof(expected)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, decrypted + outLen, &finalLen) != 1;
+    }
+    if ((err == 0) && ((outLen + finalLen != (int)sizeof(msg)) ||
+            (memcmp(decrypted, msg, sizeof(msg)) != 0))) {
+        PRINT_ERR_MSG("DES3-CBC split decrypt mismatch");
+        err = 1;
+    }
+    outLen = 0;
+    finalLen = 0;
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, decrypted, &outLen, expected,
+            sizeof(expected)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, decrypted + outLen, &finalLen) != 1;
+    }
+    if ((err == 0) && ((outLen + finalLen != (int)sizeof(msg)) ||
+            (memcmp(decrypted, msg, sizeof(msg)) != 0))) {
+        PRINT_ERR_MSG("DES3-CBC reinit decrypt mismatch");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+    outLen = 0;
+    finalLen = 0;
+
+    if (err == 0) {
+        ctx = EVP_CIPHER_CTX_new();
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, wcipher, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_set_padding(ctx, 0) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, encrypted, &outLen, msg,
+            sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, encrypted + outLen, &finalLen) != 1;
+    }
+    if ((err == 0) && ((outLen + finalLen != (int)sizeof(expectedZero)) ||
+            (memcmp(encrypted, expectedZero, sizeof(expectedZero)) != 0))) {
+        PRINT_ERR_MSG("DES3-CBC zero IV mismatch");
+        err = 1;
+    }
+    outLen = 0;
+    finalLen = 0;
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, encrypted, &outLen, msg,
+            sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, encrypted + outLen, &finalLen) != 1;
+    }
+    if ((err == 0) && ((outLen + finalLen != (int)sizeof(expectedZero)) ||
+            (memcmp(encrypted, expectedZero, sizeof(expectedZero)) != 0))) {
+        PRINT_ERR_MSG("DES3-CBC zero IV reinit mismatch");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+    return err;
+}
+
+/******************************************************************************/
+
 int test_des3_cbc_stream(void *data)
 {
     int err;
