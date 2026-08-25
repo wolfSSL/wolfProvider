@@ -1811,8 +1811,10 @@ static int slhdsa_provider_ab_set(const slhdsa_test_set* set)
             seed[i] = (unsigned char)i;
         }
     }
-    err = slhdsa_keygen_ex(wpLibCtx, NULL, set->name, seed, seedLen,
-        &wpKey);
+    if (err == 0) {
+        err = slhdsa_keygen_ex(wpLibCtx, NULL, set->name, seed, seedLen,
+            &wpKey);
+    }
     if (err == 0) {
         err = slhdsa_keygen_ex(osslLibCtx, "provider=default", set->name,
             seed, seedLen, &osslKey);
