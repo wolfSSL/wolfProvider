@@ -99,6 +99,17 @@ OSSL_PARAM_BN(OSSL_PKEY_PARAM_RSA_COEFFICIENT1, NULL, 0)
     #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 
+/** SHA-224 Algorithm ID DER encoding in PSS parameters. */
+static const byte sha224AlgId[] = {
+    0xa0, 0x0d, 0x30, 0x0b, 0x06, 0x09, 0x60, 0x86,
+    0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04
+};
+/** SHA-224 Algorithm ID with NULL DER encoding in PSS parameters. */
+static const byte sha224AlgIdNull[] = {
+    0xa0, 0x0f, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86,
+    0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04, 0x05,
+    0x00
+};
 /** SHA-256 Algorithm ID DER encoding in PSS parameters. */
 static const byte sha256AlgId[] = {
     0xa0, 0x0d, 0x30, 0x0b, 0x06, 0x09, 0x60, 0x86,
@@ -133,6 +144,20 @@ static const byte sha512AlgIdNull[] = {
     0x00
 };
 
+/** MGF1 SHA-224 Algorithm ID DER encoding in PSS parameters. */
+static const byte mgf1Sha224AlgId[] = {
+    0xa1, 0x1a, 0x30, 0x18, 0x06, 0x09, 0x2a, 0x86,
+    0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x08, 0x30,
+    0x0b, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65,
+    0x03, 0x04, 0x02, 0x04
+};
+/** MGF1 SHA-224 Algorithm ID with NULL DER encoding in PSS parameters. */
+static const byte mgf1Sha224AlgIdNull[] = {
+    0xa1, 0x1c, 0x30, 0x1a, 0x06, 0x09, 0x2a, 0x86,
+    0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x08, 0x30,
+    0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65,
+    0x03, 0x04, 0x02, 0x04, 0x05, 0x00
+};
 /** MGF1 SHA-256 Algorithm ID DER encoding in PSS parameters. */
 static const byte mgf1Sha256AlgId[] = {
     0xa1, 0x1a, 0x30, 0x18, 0x06, 0x09, 0x2a, 0x86,
@@ -624,8 +649,9 @@ static int wp_rsa_pss_params_set_pss_defaults(wp_RsaPssParams* pss)
 
     pss->hashType = WP_RSA_PSS_DIGEST_DEF;
     pss->mgf = WP_RSA_PSS_MGF_DEF;
-    XSTRNCPY(pss->mdName, "SHA-1", sizeof(pss->mdName));
-    XSTRNCPY(pss->mgfMdName, "SHA-1", sizeof(pss->mgfMdName));
+    XSTRNCPY(pss->mdName, OSSL_DIGEST_NAME_SHA1, sizeof(pss->mdName));
+    XSTRNCPY(pss->mgfMdName, OSSL_DIGEST_NAME_SHA1,
+        sizeof(pss->mgfMdName));
     pss->saltLen = WP_RSA_DEFAULT_SALT_LEN;
     pss->derTrailer = 1; /* Default: RFC8017 A.2.3 */
 
@@ -647,13 +673,17 @@ static int wp_rsa_pss_params_setup_mgf1_md(wp_RsaPssParams* pss,
     const char* mdName, const char* mdProps, OSSL_LIB_CTX* libCtx)
 {
     int ok = 1;
+    int mgf;
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_pss_params_setup_mgf1_md");
 
-    OPENSSL_strlcpy(pss->mgfMdName, mdName, sizeof(pss->mgfMdName));
-    pss->mgf = wp_name_to_wc_mgf(libCtx, mdName, mdProps);
-    if (pss->mgf == WC_MGF1NONE) {
+    mgf = wp_name_to_wc_mgf(libCtx, mdName, mdProps);
+    if (mgf == WC_MGF1NONE) {
         ok = 0;
+    }
+    else {
+        OPENSSL_strlcpy(pss->mgfMdName, mdName, sizeof(pss->mgfMdName));
+        pss->mgf = mgf;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -956,6 +986,10 @@ static int wp_digest_to_ossl_digest(enum wc_HashType hashType,
         *osslDigest = OSSL_DIGEST_NAME_SHA1;
         break;
 
+    case WC_HASH_TYPE_SHA224:
+        *osslDigest = OSSL_DIGEST_NAME_SHA2_224;
+        break;
+
     case WC_HASH_TYPE_SHA256:
         *osslDigest = OSSL_DIGEST_NAME_SHA2_256;
         break;
@@ -971,7 +1005,6 @@ static int wp_digest_to_ossl_digest(enum wc_HashType hashType,
     case WC_HASH_TYPE_NONE:
     case WC_HASH_TYPE_MD2:
     case WC_HASH_TYPE_MD4:
-    case WC_HASH_TYPE_SHA224:
     case WC_HASH_TYPE_MD5_SHA:
     case WC_HASH_TYPE_SHA3_224:
     case WC_HASH_TYPE_SHA3_256:
@@ -1019,8 +1052,9 @@ static int wp_rsa_get_params_pss(wp_RsaPssParams* pss,  OSSL_PARAM params[])
 
     if (pss->hashType != WP_RSA_PSS_DIGEST_DEF) {
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_RSA_DIGEST);
-        if ((p != NULL) && wp_digest_to_ossl_digest(pss->hashType, &osslDigest)
-                && !OSSL_PARAM_set_utf8_string(p, osslDigest)) {
+        if ((p != NULL) &&
+            (!wp_digest_to_ossl_digest(pss->hashType, &osslDigest) ||
+             !OSSL_PARAM_set_utf8_string(p, osslDigest))) {
             ok = 0;
         }
     }
@@ -1030,31 +1064,36 @@ static int wp_rsa_get_params_pss(wp_RsaPssParams* pss,  OSSL_PARAM params[])
         p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_RSA_MGF1_DIGEST);
         if (p != NULL) {
             const char* mgfName = NULL;
-            /* Convert mgf type to OpenSSL name via wp_digest_to_ossl_digest. */
-            if (pss->mgf != WP_RSA_PSS_MGF_DEF) {
-                enum wc_HashType mgfHash = WC_HASH_TYPE_NONE;
-                switch (pss->mgf) {
-                    case WC_MGF1SHA256: mgfHash = WC_HASH_TYPE_SHA256; break;
-                    case WC_MGF1SHA384: mgfHash = WC_HASH_TYPE_SHA384; break;
-                    case WC_MGF1SHA512: mgfHash = WC_HASH_TYPE_SHA512; break;
-                    default: break;
-                }
-                if (mgfHash != WC_HASH_TYPE_NONE) {
-                    if (!wp_digest_to_ossl_digest(mgfHash, &mgfName)) {
-                        ok = 0;
-                    }
-                }
+            enum wc_HashType mgfHash = WC_HASH_TYPE_NONE;
+
+            switch (pss->mgf) {
+            case WC_MGF1SHA1:
+                mgfHash = WC_HASH_TYPE_SHA;
+                break;
+
+            case WC_MGF1SHA224:
+                mgfHash = WC_HASH_TYPE_SHA224;
+                break;
+
+            case WC_MGF1SHA256:
+                mgfHash = WC_HASH_TYPE_SHA256;
+                break;
+
+            case WC_MGF1SHA384:
+                mgfHash = WC_HASH_TYPE_SHA384;
+                break;
+
+            case WC_MGF1SHA512:
+                mgfHash = WC_HASH_TYPE_SHA512;
+                break;
+
+            default:
+                break;
             }
-            /* Fall back to signing digest if MGF1 not explicitly set. */
-            if (ok && mgfName == NULL) {
-                if (!wp_digest_to_ossl_digest(pss->hashType, &mgfName)) {
-                    ok = 0;
-                }
-            }
-            if (ok && mgfName != NULL) {
-                if (!OSSL_PARAM_set_utf8_string(p, mgfName)) {
-                    ok = 0;
-                }
+            if ((mgfHash == WC_HASH_TYPE_NONE) ||
+                !wp_digest_to_ossl_digest(mgfHash, &mgfName) ||
+                !OSSL_PARAM_set_utf8_string(p, mgfName)) {
+                ok = 0;
             }
         }
     }
@@ -2465,7 +2504,11 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
     word32 idx = 0;
     wp_RsaPssParams* pss = &rsa->pssParams;
 
-    ok = wp_rsa_find_oid(data, len, rsa_pkcs1_oid, RSA_PKCS1_OID_SZ, &idx);
+    ok = wp_rsa_pss_params_set_pss_defaults(pss);
+    if (ok) {
+        ok = wp_rsa_find_oid(data, len, rsa_pkcs1_oid, RSA_PKCS1_OID_SZ,
+            &idx);
+    }
     if (ok) {
         /* Step over PSS algorithm. */
         idx += 11;
@@ -2498,7 +2541,19 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
     }
     if (ok && (data[idx] == 0xa0)) {
         /* Hash algorithm */
-        if (XMEMCMP(data + idx, sha256AlgId, sizeof(sha256AlgId)) == 0) {
+        if (XMEMCMP(data + idx, sha224AlgId, sizeof(sha224AlgId)) == 0) {
+            pss->hashType = WC_HASH_TYPE_SHA224;
+            XSTRNCPY(pss->mdName, "SHA224", sizeof(pss->mdName));
+            idx += sizeof(sha224AlgId);
+        }
+        else if (XMEMCMP(data + idx, sha224AlgIdNull,
+                         sizeof(sha224AlgIdNull)) == 0) {
+            pss->hashType = WC_HASH_TYPE_SHA224;
+            XSTRNCPY(pss->mdName, "SHA224", sizeof(pss->mdName));
+            idx += sizeof(sha224AlgIdNull);
+        }
+        else if (XMEMCMP(data + idx, sha256AlgId,
+                         sizeof(sha256AlgId)) == 0) {
             pss->hashType = WC_HASH_TYPE_SHA256;
             XSTRNCPY(pss->mdName, "SHA256", sizeof(pss->mdName));
             idx += sizeof(sha256AlgId);
@@ -2537,7 +2592,19 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
     }
     if (ok && (data[idx] == 0xa1)) {
         /* MGF algorithm */
-        if (XMEMCMP(data + idx, mgf1Sha256AlgId,
+        if (XMEMCMP(data + idx, mgf1Sha224AlgId,
+                    sizeof(mgf1Sha224AlgId)) == 0) {
+            pss->mgf = WC_MGF1SHA224;
+            XSTRNCPY(pss->mgfMdName, "SHA224", sizeof(pss->mgfMdName));
+            idx += sizeof(mgf1Sha224AlgId);
+        }
+        else if (XMEMCMP(data + idx, mgf1Sha224AlgIdNull,
+                         sizeof(mgf1Sha224AlgIdNull)) == 0) {
+            pss->mgf = WC_MGF1SHA224;
+            XSTRNCPY(pss->mgfMdName, "SHA224", sizeof(pss->mgfMdName));
+            idx += sizeof(mgf1Sha224AlgIdNull);
+        }
+        else if (XMEMCMP(data + idx, mgf1Sha256AlgId,
                     sizeof(mgf1Sha256AlgId)) == 0) {
             pss->mgf = WC_MGF1SHA256;
             XSTRNCPY(pss->mgfMdName, "SHA256", sizeof(pss->mgfMdName));
@@ -2595,8 +2662,6 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
     }
     /* TODO: handle optional trailer: 0xa3. */
     if (ok) {
-        /* Default trailer is 1. */
-        pss->derTrailer = 1;
         /* PSS parameters have been seen and set. */
         rsa->pssDefSet = 1;
     }
@@ -2899,7 +2964,7 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
 {
     int ok = 1;
     int i = 0;
-    int hashLen = 0;
+    int hashLen = WP_RSA_DEFAULT_SALT_LEN;
     const byte rsa_pss_oid[11] = {
         0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d,
         0x01, 0x01, 0x0a
@@ -2929,7 +2994,18 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
 
     /* Digest */
     if (XSTRNCMP(mdName, "SHA1", 5) != 0) {
-        if ((XMEMCMP(mdName, "SHA256", 7) == 0) ||
+        if ((XSTRCASECMP(mdName, "SHA224") == 0) ||
+            (XSTRCASECMP(mdName, OSSL_DIGEST_NAME_SHA2_224) == 0)) {
+            if (pssAlgId != NULL) {
+                XMEMCPY(pssAlgId + i, sha224AlgIdNull,
+                    sizeof(sha224AlgIdNull));
+                pssAlgId[seq1LenIdx] += sizeof(sha224AlgIdNull);
+                pssAlgId[seq2LenIdx] += sizeof(sha224AlgIdNull);
+            }
+            i += sizeof(sha224AlgIdNull);
+            hashLen = 28;
+        }
+        else if ((XMEMCMP(mdName, "SHA256", 7) == 0) ||
             (XMEMCMP(mdName, "sha256", 7) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, sha256AlgIdNull, sizeof(sha256AlgIdNull));
@@ -2963,7 +3039,17 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
     }
     /* MGF algorithm - assumes MGF1 with a digest. */
     if (XSTRNCMP(mgf1MdName, "SHA1", 5) != 0) {
-        if ((XMEMCMP(mgf1MdName, "SHA256", 7) == 0) ||
+        if ((XSTRCASECMP(mgf1MdName, "SHA224") == 0) ||
+            (XSTRCASECMP(mgf1MdName, OSSL_DIGEST_NAME_SHA2_224) == 0)) {
+            if (pssAlgId != NULL) {
+                XMEMCPY(pssAlgId + i, mgf1Sha224AlgIdNull,
+                    sizeof(mgf1Sha224AlgIdNull));
+                pssAlgId[seq1LenIdx] += sizeof(mgf1Sha224AlgIdNull);
+                pssAlgId[seq2LenIdx] += sizeof(mgf1Sha224AlgIdNull);
+            }
+            i += sizeof(mgf1Sha224AlgIdNull);
+        }
+        else if ((XMEMCMP(mgf1MdName, "SHA256", 7) == 0) ||
             (XMEMCMP(mgf1MdName, "sha256", 7) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, mgf1Sha256AlgIdNull,
@@ -3023,8 +3109,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
         saltLen = hashLen;
     }
 #endif
-    /* Encode salt length if not 0. */
-    if (saltLen != 0) {
+    /* Encode salt length if not the default. */
+    if (saltLen != WP_RSA_DEFAULT_SALT_LEN) {
         if (saltLen < 0x80) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, saltLenDer, sizeof(saltLenDer));

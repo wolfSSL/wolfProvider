@@ -2658,16 +2658,28 @@ int test_rsa_kem_prefix_match(void* data)
     return err;
 }
 
-static int test_rsa_pss_mgf1_get_params_helper(OSSL_LIB_CTX *libCtx)
+static int test_rsa_pss_mgf1_get_params_helper(OSSL_LIB_CTX *libCtx,
+    const EVP_MD *md, const EVP_MD *mgf1Md, int roundTrip)
 {
     int err = 0;
     EVP_PKEY *pkey = NULL;
+    EVP_PKEY *decoded = NULL;
     EVP_PKEY_CTX *pkeyCtx = NULL;
-    OSSL_PARAM params[2];
+    OSSL_PARAM params[4];
+    EVP_MD *gotMd = NULL;
+    EVP_MD *gotMgf1Md = NULL;
+    char mdName[64] = "";
     char mgfMdName[64] = "";
-    char *pmgfMdName = mgfMdName;
+    unsigned char *der = NULL;
+    unsigned char *encoded = NULL;
+    const unsigned char *p;
+    int derLen = 0;
+    int encodedLen = 0;
+    int saltLen = 0;
+    int defaultMd = EVP_MD_is_a(md, OSSL_DIGEST_NAME_SHA1);
+    int defaultMgf1Md = EVP_MD_is_a(mgf1Md, OSSL_DIGEST_NAME_SHA1);
+    OSSL_LIB_CTX *checkCtx = libCtx;
 
-    /* Generate RSA-PSS key with SHA-256 for signing, SHA-384 for MGF1. */
     pkeyCtx = EVP_PKEY_CTX_new_from_name(libCtx, "RSA-PSS", NULL);
     if (pkeyCtx == NULL) {
         PRINT_ERR_MSG("Failed to create RSA-PSS context");
@@ -2680,11 +2692,11 @@ static int test_rsa_pss_mgf1_get_params_helper(OSSL_LIB_CTX *libCtx)
         err = EVP_PKEY_CTX_set_rsa_keygen_bits(pkeyCtx, 2048) <= 0;
     }
     if (err == 0) {
-        err = EVP_PKEY_CTX_set_rsa_pss_keygen_md(pkeyCtx, EVP_sha256()) <= 0;
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_md(pkeyCtx, md) <= 0;
     }
     if (err == 0) {
         err = EVP_PKEY_CTX_set_rsa_pss_keygen_mgf1_md(pkeyCtx,
-                EVP_sha384()) <= 0;
+                mgf1Md) <= 0;
     }
     if (err == 0) {
         err = EVP_PKEY_keygen(pkeyCtx, &pkey) <= 0;
@@ -2692,32 +2704,118 @@ static int test_rsa_pss_mgf1_get_params_helper(OSSL_LIB_CTX *libCtx)
     EVP_PKEY_CTX_free(pkeyCtx);
     pkeyCtx = NULL;
 
-    /* Now retrieve the MGF1 digest param and verify it's SHA-384 not SHA-256. */
-    if (err == 0) {
-        params[0] = OSSL_PARAM_construct_utf8_string(
-            OSSL_PKEY_PARAM_RSA_MGF1_DIGEST, pmgfMdName, sizeof(mgfMdName));
-        params[1] = OSSL_PARAM_construct_end();
-        err = EVP_PKEY_get_params(pkey, params) != 1;
+    if ((err == 0) && roundTrip) {
+        derLen = i2d_PUBKEY(pkey, &der);
+        err = derLen <= 0;
     }
-    if (err == 0) {
-        /* The fix ensures MGF1 digest (SHA-384) is returned, not the
-         * signing digest (SHA-256). Verify it contains "384" and not "256". */
-        if (strstr(mgfMdName, "384") == NULL) {
-            PRINT_ERR_MSG("MGF1 digest should contain '384' but got: %s",
-                          mgfMdName);
+    if ((err == 0) && roundTrip) {
+        p = der;
+        decoded = d2i_PUBKEY_ex(NULL, &p, derLen, wpLibCtx, NULL);
+        err = decoded == NULL;
+    }
+    if ((err == 0) && roundTrip && defaultMd && defaultMgf1Md) {
+        encodedLen = i2d_PUBKEY(decoded, &encoded);
+        if ((encodedLen != derLen) ||
+            (memcmp(encoded, der, (size_t)derLen) != 0)) {
+            PRINT_ERR_MSG("RSA-PSS public key encoding mismatch");
             err = 1;
         }
-        else if (strstr(mgfMdName, "256") != NULL) {
-            PRINT_ERR_MSG("MGF1 digest should not contain '256' but got: %s",
-                          mgfMdName);
+    }
+    if ((err == 0) && roundTrip) {
+        EVP_PKEY_free(pkey);
+        pkey = decoded;
+        decoded = NULL;
+        checkCtx = wpLibCtx;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_RSA_DIGEST,
+            mdName, sizeof(mdName));
+        params[1] = OSSL_PARAM_construct_utf8_string(
+            OSSL_PKEY_PARAM_RSA_MGF1_DIGEST, mgfMdName, sizeof(mgfMdName));
+        params[2] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_RSA_PSS_SALTLEN,
+            &saltLen);
+        params[3] = OSSL_PARAM_construct_end();
+        err = EVP_PKEY_get_params(pkey, params) != 1;
+    }
+    if ((err == 0) && !defaultMd) {
+        gotMd = EVP_MD_fetch(checkCtx, mdName, NULL);
+        if ((gotMd == NULL) ||
+            !EVP_MD_is_a(gotMd, EVP_MD_get0_name(md))) {
+            PRINT_ERR_MSG("Unexpected RSA-PSS digest: %s", mdName);
+            err = 1;
+        }
+    }
+    if ((err == 0) && defaultMd && OSSL_PARAM_modified(&params[0])) {
+        PRINT_ERR_MSG("Unexpected RSA-PSS digest: %s", mdName);
+        err = 1;
+    }
+    if ((err == 0) && roundTrip && (saltLen != 20)) {
+        PRINT_ERR_MSG("Unexpected RSA-PSS salt length: %d", saltLen);
+        err = 1;
+    }
+    if (err == 0) {
+        gotMgf1Md = EVP_MD_fetch(checkCtx, mgfMdName, NULL);
+        if ((gotMgf1Md == NULL) ||
+            !EVP_MD_is_a(gotMgf1Md, EVP_MD_get0_name(mgf1Md))) {
+            PRINT_ERR_MSG("Unexpected RSA-PSS MGF1 digest: %s", mgfMdName);
             err = 1;
         }
         else {
-            PRINT_MSG("MGF1 digest correctly returned: %s", mgfMdName);
+            PRINT_MSG("RSA-PSS digests: %s, %s", mdName, mgfMdName);
         }
     }
 
+    EVP_MD_free(gotMgf1Md);
+    EVP_MD_free(gotMd);
+    OPENSSL_free(encoded);
+    OPENSSL_free(der);
+    EVP_PKEY_free(decoded);
     EVP_PKEY_free(pkey);
+    return err;
+}
+
+static int test_rsa_pss_mgf1_rejected(void)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    EVP_MD *mgf1Md = NULL;
+    char mgf1Name[64] = "";
+    size_t mgf1NameLen = 0;
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "RSA-PSS", NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_md(ctx, EVP_sha256()) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_rsa_pss_keygen_mgf1_md(ctx,
+            EVP_sha3_256()) > 0;
+        ERR_clear_error();
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen(ctx, &pkey) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_utf8_string_param(pkey,
+            OSSL_PKEY_PARAM_RSA_MGF1_DIGEST, mgf1Name, sizeof(mgf1Name),
+            &mgf1NameLen) != 1;
+    }
+    if (err == 0) {
+        mgf1Md = EVP_MD_fetch(wpLibCtx, mgf1Name, NULL);
+        err = (mgf1Md == NULL) || !EVP_MD_is_a(mgf1Md,
+            OSSL_DIGEST_NAME_SHA2_256);
+    }
+
+    EVP_MD_free(mgf1Md);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
     return err;
 }
 
@@ -2728,10 +2826,55 @@ int test_rsa_pss_mgf1_get_params(void *data)
     (void)data;
 
     PRINT_MSG("Test OpenSSL RSA-PSS MGF1 digest get_params");
-    err = test_rsa_pss_mgf1_get_params_helper(osslLibCtx);
+    err = test_rsa_pss_mgf1_get_params_helper(osslLibCtx, EVP_sha256(),
+        EVP_sha384(), 0);
     if (err == 0) {
         PRINT_MSG("Test wolfProvider RSA-PSS MGF1 digest get_params");
-        err = test_rsa_pss_mgf1_get_params_helper(wpLibCtx);
+        err = test_rsa_pss_mgf1_get_params_helper(wpLibCtx, EVP_sha256(),
+            EVP_sha384(), 0);
+    }
+#ifdef WP_HAVE_SHA224
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(wpLibCtx, EVP_sha224(),
+            EVP_sha256(), 1);
+    }
+#endif
+#ifdef WP_HAVE_SHA1
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(wpLibCtx, EVP_sha256(),
+            EVP_sha1(), 0);
+    }
+#endif
+#ifdef WP_HAVE_SHA224
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(wpLibCtx, EVP_sha256(),
+            EVP_sha224(), 1);
+    }
+#endif
+#ifdef WP_HAVE_SHA1
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(osslLibCtx, EVP_sha1(),
+            EVP_sha256(), 0);
+    }
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(wpLibCtx, EVP_sha1(),
+            EVP_sha256(), 0);
+    }
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(osslLibCtx, EVP_sha256(),
+            EVP_sha1(), 1);
+    }
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(osslLibCtx, EVP_sha1(),
+            EVP_sha256(), 1);
+    }
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_get_params_helper(osslLibCtx, EVP_sha1(),
+            EVP_sha1(), 1);
+    }
+#endif
+    if (err == 0) {
+        err = test_rsa_pss_mgf1_rejected();
     }
 
     return err;
