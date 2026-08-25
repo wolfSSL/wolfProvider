@@ -11,6 +11,8 @@ on:
 jobs:
   discover_versions:
     uses: ./.github/workflows/_discover-versions.yml
+    with:
+      resolve_fips: true
 
   perf_nonfips:
     needs: discover_versions
@@ -64,7 +66,7 @@ jobs:
 
   perf_fips:
     needs: [discover_versions, require_fips_resolved]
-    name: Overhead regression (FIPS ${{ fromJson(needs.discover_versions.outputs.fips_ready_version_map)[needs.discover_versions.outputs.fips_ready_latest] }})
+    name: Overhead regression (FIPS Ready ${{ needs.discover_versions.outputs.fips_ready_latest }})
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:
@@ -81,14 +83,29 @@ jobs:
           fetch-depth: 1
 
       - name: Download FIPS Ready Bundle
-        run: |
-          BUNDLE_DIR=$(./scripts/fetch-fips-ready.sh "${{ matrix.wolfssl_bundle_ref }}")
-          echo "FIPS_BUNDLE_PATH=$BUNDLE_DIR" >> $GITHUB_ENV
+        uses: ./.github/actions/fetch-fips-bundle
+        with:
+          version: ${{ matrix.wolfssl_bundle_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wolfProvider with FIPS Ready Bundle
         run: |
           OPENSSL_TAG=${{ matrix.openssl_ref }} ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
             --fips-check=ready --wolfssl-ver=v${{ matrix.wolfssl_bundle_ref }}-stable
+
+      - name: Report resolved FIPS module version
+        run: |
+          # Authoritative source: the FIPS version wolfSSL's own build resolved
+          # `ready` to, read from HAVE_FIPS_VERSION_MAJOR rather than guessed
+          # from the bundle version.
+          OPTS="wolfssl-install/include/wolfssl/options.h"
+          if [ -f "$OPTS" ]; then
+            MAJ=$(grep -oE '#define +HAVE_FIPS_VERSION_MAJOR +[0-9]+' "$OPTS" | awk '{print $3}')
+            echo "Bundle ${{ matrix.wolfssl_bundle_ref }} builds FIPS module v${MAJ:-unknown}"
+            echo "FIPS module v${MAJ:-unknown} from bundle ${{ matrix.wolfssl_bundle_ref }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::wolfSSL options.h not found at $OPTS; cannot read HAVE_FIPS_VERSION_MAJOR"
+          fi
 
       - name: Run overhead regression
         run: |

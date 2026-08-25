@@ -26,9 +26,74 @@ jobs:
       - name: Run network-free resolver tests
         run: ./scripts/test-fetch-fips-ready.sh
 
-  discover_versions:
+  # Mirror every hosted FIPS Ready bundle into ghcr so the test jobs (and
+  # fips-ready.yml, perf-regression.yml) pull from ghcr, not wolfssl.com. This
+  # is the only job that touches wolfssl.com; a new bundle is published once and
+  # then served by ghcr digest. Skips bundles already present, so steady-state
+  # it is just existence checks. Dispatch this workflow once to seed ghcr.
+  publish_fips_ready:
+    name: Publish new FIPS Ready bundles to ghcr
+    # Any non-PR run may publish, into its own owner's ghcr namespace: upstream
+    # seeds ghcr.io/wolfssl/..., a fork seeds ghcr.io/<owner>/... so it can be
+    # tested end to end via workflow_dispatch. Fork PRs get a read-only token
+    # and are excluded here anyway.
+    if: github.event_name != 'pull_request'
     needs: test_fetch_script
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    timeout-minutes: 45
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install ORAS
+        run: |
+          set -euo pipefail
+          ORAS_VERSION="1.2.2"
+          ORAS_CHECKSUM="bff970346470e5ef888e9f2c0bf7f8ee47283f5a45207d6e7a037da1fb0eae0d"
+          tgz="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/${tgz}"
+          echo "${ORAS_CHECKSUM}  ${tgz}" | sha256sum -c -
+          sudo tar xzf "$tgz" -C /usr/local/bin/ oras
+          rm -f "$tgz"
+          oras version
+      - name: Publish bundles not yet in ghcr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | oras login --username "${{ github.actor }}" \
+            --password-stdin ghcr.io
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="ghcr.io/$OWNER/wolfprovider/fips-ready"
+          HOSTED=$(./scripts/fetch-fips-ready.sh --list) || {
+            echo "::error::could not list hosted FIPS Ready bundles"
+            exit 1
+          }
+          for ver in $HOSTED; do
+            if oras manifest fetch "$REPO:$ver" >/dev/null 2>&1; then
+              echo "already in ghcr: $ver"
+              continue
+            fi
+            echo "publishing new bundle: $ver"
+            # fetch-fips-ready.sh verifies the download before it returns.
+            DIR=$(./scripts/fetch-fips-ready.sh "$ver" --dest "$GITHUB_WORKSPACE")
+            ./scripts/oras-build-deps.sh push "$REPO:$ver" "$DIR"
+            rm -rf "$DIR"
+          done
+
+  discover_versions:
+    # After publish so a just-published bundle is listed the same night. The if
+    # lets discovery still run when publish is skipped (PR-label runs), where
+    # ghcr is already seeded.
+    needs: [test_fetch_script, publish_fips_ready]
+    if: ${{ !cancelled() && needs.test_fetch_script.result == 'success' }}
     uses: ./.github/workflows/_discover-versions.yml
+    with:
+      resolve_fips: true
 
   # See fips-ready.yml for why this can't be left to a silent floor fallback.
   require_fips_resolved:
@@ -45,7 +110,7 @@ jobs:
 
   fips_ready_test:
     needs: [discover_versions, require_fips_resolved]
-    name: Nightly FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (FIPS ${{ fromJson(needs.discover_versions.outputs.fips_ready_version_map)[matrix.wolfssl_bundle_ref] }}, ${{ matrix.openssl_ref }})
+    name: Nightly FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -76,10 +141,10 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download FIPS Ready Bundle
-        run: |
-          BUNDLE_DIR=$(./scripts/fetch-fips-ready.sh "${{ matrix.wolfssl_bundle_ref }}")
-          echo "FIPS_BUNDLE_PATH=$BUNDLE_DIR" >> $GITHUB_ENV
-          echo "Found FIPS bundle directory at: $BUNDLE_DIR"
+        uses: ./.github/actions/fetch-fips-bundle
+        with:
+          version: ${{ matrix.wolfssl_bundle_ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wolfProvider with FIPS Ready Bundle
         run: |
@@ -89,6 +154,20 @@ jobs:
           WOLFPROV_FIPS_FORCE_FAIL=1 \
           ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
           --fips-check=ready --wolfssl-ver=v${{matrix.wolfssl_bundle_ref}}-stable
+
+      - name: Report resolved FIPS module version
+        run: |
+          # Authoritative source: the FIPS version wolfSSL's own build resolved
+          # `ready` to, read from HAVE_FIPS_VERSION_MAJOR rather than guessed
+          # from the bundle version.
+          OPTS="wolfssl-install/include/wolfssl/options.h"
+          if [ -f "$OPTS" ]; then
+            MAJ=$(grep -oE '#define +HAVE_FIPS_VERSION_MAJOR +[0-9]+' "$OPTS" | awk '{print $3}')
+            echo "Bundle ${{ matrix.wolfssl_bundle_ref }} builds FIPS module v${MAJ:-unknown}"
+            echo "FIPS module v${MAJ:-unknown} from bundle ${{ matrix.wolfssl_bundle_ref }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::wolfSSL options.h not found at $OPTS; cannot read HAVE_FIPS_VERSION_MAJOR"
+          fi
 
       - name: Push build dependencies
         uses: ./.github/actions/oras-build-deps-push

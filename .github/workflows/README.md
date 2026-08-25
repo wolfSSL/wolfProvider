@@ -30,7 +30,7 @@ ready_for_review) and on every push to `master`, `main`, or
 | `simple.yml` | Builds wolfProvider against the matrix of supported wolfSSL + OpenSSL refs and runs `make check`. The baseline "did anything obvious break" check. |
 | `smoke-test.yml` | Minimal end-to-end: build, load the provider into stock OpenSSL, run `openssl list -providers` and a handful of `openssl` subcommands. Catches link-time and provider-registration regressions. |
 | `cmdline.yml` | Runs `scripts/cmd_test/do-cmd-tests.sh` — exercises every `openssl` CLI verb (genrsa, pkeyutl, enc, dgst, …) through wolfProvider. |
-| `fips-ready.yml` | Downloads FIPS Ready bundles from wolfssl.com (via `scripts/fetch-fips-ready.sh`) and builds wolfSSL with `--enable-fips=ready` against each. Matrix resolved at run time from `_discover-versions.yml`'s `fips_ready_pr_array`: the back-compat anchors plus the newest bundle. `ready` is not a fixed FIPS version: v7 through bundle 5.9.1, v8 from 5.9.2 on. |
+| `fips-ready.yml` | Pulls FIPS Ready bundles from ghcr (`ghcr.io/wolfssl/wolfprovider/fips-ready:<ver>`, published by `nightly-fips-ready.yml`) and builds wolfSSL with `--enable-fips=ready` against each. Matrix resolved at run time from `_discover-versions.yml`'s `fips_ready_pr_array` (opt-in via `resolve_fips`, listed from ghcr tags): the back-compat anchors plus the newest bundle. The resolved FIPS module version (`ready` is v7 through 5.9.1, v8 from 5.9.2 on) is read from `HAVE_FIPS_VERSION_MAJOR` at build time and shown in the job summary. |
 | `seed-src.yml` | Builds with `--enable-seed-src` (entropy seed source variant) and `-DWP_TEST_SECCOMP_SANDBOX`, then runs the unit tests including the OpenSSH fork+seccomp-sandbox regression suite. |
 | `multi-compiler.yml` | Cross-compiler sweep: gcc-9 through gcc-14 and clang-12 through latest. Catches toolchain-specific warnings / UB. |
 | `codespell.yml` | Spell-check on tracked source. `*.patch` is excluded because OSP patches mirror upstream source whose original spelling we shouldn't silently rewrite. |
@@ -61,8 +61,12 @@ in our unit tests.
 
 `nightly-fips-ready.yml` rides along out-of-wave, running the same steps
 as `fips-ready.yml` over `fips_ready_all_array`: every FIPS Ready bundle
-hosted at or above the 5.8.2 floor, restoring the versions the PR set
-leaves out.
+in ghcr at or above the 5.8.2 floor, restoring the versions the PR set
+leaves out. It also carries the `publish_fips_ready` job, the only place
+that touches wolfssl.com: it mirrors any newly hosted bundle into
+`ghcr.io/wolfssl/wolfprovider/fips-ready` (skipping ones already there),
+so new releases join every FIPS workflow automatically with no PR to
+merge. Dispatch this workflow once to seed ghcr.
 
 ### Running a nightly job on a PR (label toggles)
 
