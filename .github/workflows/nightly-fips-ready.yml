@@ -156,15 +156,21 @@ jobs:
         run: |
           # Authoritative source: the FIPS version wolfSSL's own build resolved
           # `ready` to, read from HAVE_FIPS_VERSION_MAJOR rather than guessed
-          # from the bundle version.
+          # from the bundle version. A missing file or macro means the FIPS
+          # build did not install as expected, so fail rather than report
+          # "unknown".
           OPTS="wolfssl-install/include/wolfssl/options.h"
-          if [ -f "$OPTS" ]; then
-            MAJ=$(grep -oE '#define +HAVE_FIPS_VERSION_MAJOR +[0-9]+' "$OPTS" | awk '{print $3}')
-            echo "Bundle ${{ matrix.wolfssl_bundle_ref }} builds FIPS module v${MAJ:-unknown}"
-            echo "FIPS module v${MAJ:-unknown} from bundle ${{ matrix.wolfssl_bundle_ref }}" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::wolfSSL options.h not found at $OPTS; cannot read HAVE_FIPS_VERSION_MAJOR"
+          if [ ! -f "$OPTS" ]; then
+            echo "::error::wolfSSL options.h not found at $OPTS; FIPS build did not install as expected"
+            exit 1
           fi
+          MAJ=$(grep -oE '#define +HAVE_FIPS_VERSION_MAJOR +[0-9]+' "$OPTS" | awk '{print $3}')
+          if [ -z "$MAJ" ]; then
+            echo "::error::HAVE_FIPS_VERSION_MAJOR not found in $OPTS"
+            exit 1
+          fi
+          echo "Bundle ${{ matrix.wolfssl_bundle_ref }} builds FIPS module v$MAJ"
+          echo "FIPS module v$MAJ from bundle ${{ matrix.wolfssl_bundle_ref }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Push build dependencies
         uses: ./.github/actions/oras-build-deps-push
