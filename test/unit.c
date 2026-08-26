@@ -382,6 +382,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_weak_group_rejected, NULL),
     TEST_DECL(test_dh_param_check_q, NULL),
     TEST_DECL(test_dh_pgen_controls, NULL),
+    TEST_DECL(test_dh_export_named_group_params, NULL),
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif

@@ -439,6 +439,7 @@ int test_dh_pgen_min_bits(void *data);
 int test_dh_weak_group_rejected(void *data);
 int test_dh_param_check_q(void *data);
 int test_dh_pgen_controls(void *data);
+int test_dh_export_named_group_params(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC

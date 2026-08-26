@@ -2143,7 +2143,7 @@ static int test_dh_pgen_generator(int gen, int expectOk)
     return err;
 }
 
-/* Build a DH parameters key for the group the generator tests use. */
+/* Build a DH parameters key for the ffdhe2048 group. */
 static int test_dh_params_from_group(EVP_PKEY **keyParams)
 {
     int err;
@@ -2326,6 +2326,51 @@ int test_dh_pgen_controls(void *data)
     }
     EVP_PKEY_CTX_free(ctx);
 
+    return err;
+}
+
+/* A parameter-only named-group key needs no data buffer: its group is
+ * exported as a string. Export must succeed and carry the group name. */
+int test_dh_export_named_group_params(void *data)
+{
+    int err;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM *exported = NULL;
+    const OSSL_PARAM *p = NULL;
+    const char *name = NULL;
+
+    (void)data;
+
+    PRINT_MSG("Testing export of parameter-only named group DH key");
+
+    err = test_dh_params_from_group(&pkey);
+    if (err != 0) {
+        PRINT_ERR_MSG("DH group import failed for valid group name");
+    }
+    if (err == 0) {
+        err = EVP_PKEY_todata(pkey, EVP_PKEY_KEY_PARAMETERS, &exported) != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("Export of parameter-only named group key failed");
+        }
+    }
+    if (err == 0) {
+        p = OSSL_PARAM_locate(exported, OSSL_PKEY_PARAM_GROUP_NAME);
+        if (p == NULL) {
+            PRINT_ERR_MSG("Exported parameters carry no group name");
+            err = 1;
+        }
+    }
+    if ((err == 0) && (OSSL_PARAM_get_utf8_string_ptr(p, &name) != 1)) {
+        PRINT_ERR_MSG("Exported group name is not a readable string");
+        err = 1;
+    }
+    if ((err == 0) && (strcmp(name, "ffdhe2048") != 0)) {
+        PRINT_ERR_MSG("Exported group name does not match the imported group");
+        err = 1;
+    }
+
+    OSSL_PARAM_free(exported);
+    EVP_PKEY_free(pkey);
     return err;
 }
 
