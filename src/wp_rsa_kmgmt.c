@@ -3804,6 +3804,27 @@ static int wp_rsa_export_object(wp_RsaEncDecCtx* ctx, wp_Rsa* rsa, size_t size,
     return wp_rsa_export(rsa, ctx->selection, exportCb, exportCbArg);
 }
 
+/**
+ * Create an RSA key object and import the key data into it.
+ *
+ * @param [in] ctx        RSA encoder/decoder context object.
+ * @param [in] selection  Parts of key to import.
+ * @param [in] params     Array of parameters with key data.
+ * @return  New RSA key object on success.
+ * @return  NULL on failure.
+ */
+static wp_Rsa* wp_rsa_import_object(wp_RsaEncDecCtx* ctx, int selection,
+    const OSSL_PARAM params[])
+{
+    wp_Rsa* rsa = wp_rsa_base_new(ctx->provCtx, ctx->type);
+
+    if ((rsa != NULL) && (!wp_rsa_import(rsa, selection, params))) {
+        wp_rsa_free(rsa);
+        rsa = NULL;
+    }
+    return rsa;
+}
+
 /*
  * RSA SubjectPublicKeyInfo
  */
@@ -3885,7 +3906,7 @@ const OSSL_DISPATCH wp_rsa_spki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -3914,7 +3935,7 @@ const OSSL_DISPATCH wp_rsa_spki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4000,7 +4021,7 @@ const OSSL_DISPATCH wp_rsa_pki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4029,7 +4050,7 @@ const OSSL_DISPATCH wp_rsa_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4062,7 +4083,7 @@ const OSSL_DISPATCH wp_rsa_epki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4091,7 +4112,7 @@ const OSSL_DISPATCH wp_rsa_epki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4207,7 +4228,7 @@ const OSSL_DISPATCH wp_rsa_kp_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_kp_does_selection       },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4238,7 +4259,7 @@ const OSSL_DISPATCH wp_rsa_kp_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_kp_does_selection       },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4296,7 +4317,7 @@ const OSSL_DISPATCH wp_rsapss_spki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4325,7 +4346,7 @@ const OSSL_DISPATCH wp_rsapss_spki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4383,7 +4404,7 @@ const OSSL_DISPATCH wp_rsapss_pki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };
@@ -4412,7 +4433,7 @@ const OSSL_DISPATCH wp_rsapss_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_rsa_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_rsa_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_rsa_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_rsa_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_rsa_free                    },
     { 0, NULL }
 };

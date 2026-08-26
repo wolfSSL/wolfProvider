@@ -3959,4 +3959,51 @@ int test_ec_tls_group_p192(void *data)
     return err;
 }
 
+
+#ifdef WP_HAVE_EC_P256
+/*
+ * Encoding a key that another provider manages goes through the encoder's
+ * import-object: OpenSSL hands it the encoder context and uses the key object
+ * it returns.
+ */
+int test_ecc_encoder_import_object(void *data)
+{
+    int err;
+    EVP_PKEY* pkey = NULL;
+
+    (void)data;
+
+    pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, "EC", "P-256");
+    err = (pkey == NULL);
+    if (err == 0) {
+        err = test_encoder_import_object("EC",
+            "output=pem,structure=SubjectPublicKeyInfo", pkey,
+            EVP_PKEY_PUBLIC_KEY);
+    }
+    if (err == 0) {
+        err = test_encoder_import_object("EC",
+            "output=der,structure=PrivateKeyInfo", pkey, EVP_PKEY_KEYPAIR);
+    }
+    EVP_PKEY_free(pkey);
+
+#ifndef OPENSSL_NO_EC2M
+    /* wolfSSL has no binary curves. */
+    pkey = NULL;
+    if (err == 0) {
+        pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, "EC", "sect233k1");
+        err = (pkey == NULL);
+    }
+    if (err == 0) {
+        err = test_encoder_import_object_rejected("EC",
+            "output=pem,structure=SubjectPublicKeyInfo", pkey,
+            EVP_PKEY_PUBLIC_KEY);
+    }
+    EVP_PKEY_free(pkey);
+#endif
+
+    return err;
+}
+
+#endif /* WP_HAVE_EC_P256 */
+
 #endif /* WP_HAVE_ECC */
