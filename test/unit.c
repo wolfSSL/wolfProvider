@@ -231,6 +231,7 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_CMAC
     TEST_DECL(test_cmac_create, &flags),
     TEST_DECL(test_cmac_multi_update, &flags),
+    TEST_DECL(test_cmac_reinit, &flags),
     TEST_DECL(test_cmac_dup, &flags),
     TEST_DECL(test_cmac_size_query, &flags),
     TEST_DECL(test_cmac_large_buffer, &flags),
