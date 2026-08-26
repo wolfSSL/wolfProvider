@@ -20,18 +20,8 @@ runs:
     - name: Install ORAS (if needed)
       shell: bash
       run: |
-        set -euo pipefail
-        if command -v oras >/dev/null 2>&1 || [ -x "$GITHUB_WORKSPACE/.bin/oras" ]; then
-          exit 0
-        fi
-        ORAS_VERSION="1.2.2"
-        ORAS_CHECKSUM="bff970346470e5ef888e9f2c0bf7f8ee47283f5a45207d6e7a037da1fb0eae0d"
-        tgz="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
-        curl -fsSLO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/${tgz}"
-        echo "${ORAS_CHECKSUM}  ${tgz}" | sha256sum -c -
-        mkdir -p "$GITHUB_WORKSPACE/.bin"
-        tar xzf "$tgz" -C "$GITHUB_WORKSPACE/.bin/" oras
-        rm -f "$tgz"
+        "$GITHUB_WORKSPACE/scripts/install-oras.sh" \
+          --dest "$GITHUB_WORKSPACE/.bin" --skip-if-present
 
     - name: Pull bundle from ghcr
       id: pull
