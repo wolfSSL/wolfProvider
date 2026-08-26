@@ -22,6 +22,9 @@
 #include <openssl/encoder.h>
 #include <openssl/decoder.h>
 #include <openssl/err.h>
+#include <openssl/core_dispatch.h>
+#include <openssl/params.h>
+#include <openssl/bn.h>
 
 int test_digest_sign(EVP_PKEY *pkey, OSSL_LIB_CTX* libCtx, unsigned char *data,
     size_t len, const char *md, const EVP_MD *mgf1Md, unsigned char *sig,
@@ -558,6 +561,296 @@ int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
     OPENSSL_free(data);
     EVP_PKEY_free(badKey);
     EVP_PKEY_free(pkey2);
+
+    return err;
+}
+
+/**
+ * Get a provider's query-operation upcall.
+ *
+ * @param [in] prov  Provider to look in.
+ * @return  Query operation function on success.
+ * @return  NULL when the provider does not offer one.
+ */
+static OSSL_FUNC_provider_query_operation_fn* test_prov_query(
+    OSSL_PROVIDER* prov)
+{
+    OSSL_FUNC_provider_query_operation_fn* query = NULL;
+    const OSSL_DISPATCH* d = OSSL_PROVIDER_get0_dispatch(prov);
+
+    if (d != NULL) {
+        for (; d->function_id != 0; d++) {
+            if (d->function_id == OSSL_FUNC_PROVIDER_QUERY_OPERATION) {
+                query = OSSL_FUNC_provider_query_operation(d);
+                break;
+            }
+        }
+    }
+
+    return query;
+}
+
+/**
+ * Find an implementation in a provider's operation table.
+ *
+ * @param [in] prov   Provider to query.
+ * @param [in] opId   Operation identifier, e.g. OSSL_OP_ENCODER.
+ * @param [in] name   Algorithm name to match, e.g. "RSA".
+ * @param [in] props  Substring the properties must contain. May be NULL.
+ * @return  Dispatch table of the implementation on success.
+ * @return  NULL when no implementation matches.
+ */
+static const OSSL_DISPATCH* test_prov_find(OSSL_PROVIDER* prov, int opId,
+    const char* name, const char* props)
+{
+    const OSSL_DISPATCH* impl = NULL;
+    const OSSL_ALGORITHM* algs = NULL;
+    OSSL_FUNC_provider_query_operation_fn* query = test_prov_query(prov);
+    int noCache = 0;
+    size_t nameLen = XSTRLEN(name);
+    const char* p;
+
+    if (query != NULL) {
+        algs = query(OSSL_PROVIDER_get0_provider_ctx(prov), opId, &noCache);
+    }
+    for (; (impl == NULL) && (algs != NULL) && (algs->algorithm_names != NULL);
+            algs++) {
+        if ((props != NULL) && ((algs->property_definition == NULL) ||
+                (strstr(algs->property_definition, props) == NULL))) {
+            continue;
+        }
+        /* Algorithm names are a colon separated list - match one whole name. */
+        for (p = algs->algorithm_names; p != NULL; p = strchr(p, ':')) {
+            if (p[0] == ':') {
+                p++;
+            }
+            if ((strncmp(p, name, nameLen) == 0) &&
+                    ((p[nameLen] == '\0') || (p[nameLen] == ':'))) {
+                impl = algs->implementation;
+                break;
+            }
+        }
+    }
+
+    return impl;
+}
+
+/**
+ * Get a function out of a dispatch table.
+ *
+ * @param [in] disp  Dispatch table to search.
+ * @param [in] id    Function identifier to find.
+ * @return  Function pointer on success.
+ * @return  NULL when not in the table.
+ */
+static void (*test_disp_get(const OSSL_DISPATCH* disp, int id))(void)
+{
+    void (*fp)(void) = NULL;
+
+    for (; (fp == NULL) && (disp != NULL) && (disp->function_id != 0); disp++) {
+        if (disp->function_id == id) {
+            fp = disp->function;
+        }
+    }
+
+    return fp;
+}
+
+/** Comparison state passed to the key-management export callback. */
+typedef struct {
+    /** Parameters the key was imported from. */
+    const OSSL_PARAM* expected;
+    /** Number of parameters that were compared and matched. */
+    int matched;
+    /** Set when an exported parameter differs from the imported one. */
+    int err;
+} TEST_EXPORT_CMP;
+
+/**
+ * Compare one exported parameter with the value it was imported from.
+ *
+ * @param [in]      got  Exported parameter.
+ * @param [in]      exp  Parameter the key was imported from.
+ * @param [in, out] cmp  Comparison state.
+ */
+static void test_param_cmp(const OSSL_PARAM* got, const OSSL_PARAM* exp,
+    TEST_EXPORT_CMP* cmp)
+{
+    BIGNUM* gotBn = NULL;
+    BIGNUM* expBn = NULL;
+
+    if ((got->data_type == OSSL_PARAM_UNSIGNED_INTEGER) ||
+            (got->data_type == OSSL_PARAM_INTEGER)) {
+        if ((OSSL_PARAM_get_BN(got, &gotBn) != 1) ||
+                (OSSL_PARAM_get_BN(exp, &expBn) != 1) ||
+                (BN_cmp(gotBn, expBn) != 0)) {
+            PRINT_ERR_MSG("Imported key parameter differs: %s", got->key);
+            cmp->err = 1;
+        }
+        else {
+            cmp->matched++;
+        }
+        BN_free(gotBn);
+        BN_free(expBn);
+    }
+    else if ((got->data_type == OSSL_PARAM_OCTET_STRING) ||
+             (got->data_type == OSSL_PARAM_UTF8_STRING)) {
+        /* A zero size means the string is NUL terminated - not a match. */
+        if ((got->data_size == 0) || (got->data_size != exp->data_size) ||
+                (memcmp(got->data, exp->data, got->data_size) != 0)) {
+            PRINT_ERR_MSG("Imported key parameter differs: %s", got->key);
+            cmp->err = 1;
+        }
+        else {
+            cmp->matched++;
+        }
+    }
+}
+
+/**
+ * Key-management export callback - compare against the imported parameters.
+ *
+ * @param [in] params  Parameters exported from the imported key.
+ * @param [in] arg     Comparison state.
+ * @return  1 always - failures are recorded in the comparison state.
+ */
+static int test_export_cmp_cb(const OSSL_PARAM params[], void* arg)
+{
+    TEST_EXPORT_CMP* cmp = (TEST_EXPORT_CMP*)arg;
+    const OSSL_PARAM* exp;
+    int i;
+
+    for (i = 0; (params != NULL) && (params[i].key != NULL); i++) {
+        exp = OSSL_PARAM_locate_const(cmp->expected, params[i].key);
+        if ((exp != NULL) && (exp->data_type == params[i].data_type)) {
+            test_param_cmp(&params[i], exp, cmp);
+        }
+    }
+
+    return 1;
+}
+
+/**
+ * Check an encoder's OSSL_FUNC_ENCODER_IMPORT_OBJECT implementation.
+ *
+ * This is the path OpenSSL takes when it encodes a key that another provider
+ * manages: it hands the encoder context to import-object and uses the returned
+ * key object. Drive it directly so the check does not depend on which encoder
+ * OpenSSL would pick.
+ *
+ * @param [in] algName   Algorithm name of the encoder, e.g. "RSA".
+ * @param [in] encProps  Substring of the encoder properties selecting the
+ *                       structure and output, in the order the provider
+ *                       registers them, e.g. "output=pem,structure=SPKI".
+ * @param [in] pkey      Key held by another provider.
+ * @param [in] selection  Parts of the key to import.
+ * @return  0 on success, non-zero on failure.
+ */
+int test_encoder_import_object(const char* algName, const char* encProps,
+    EVP_PKEY* pkey, int selection)
+{
+    int err = 0;
+    const OSSL_DISPATCH* encDisp = NULL;
+    const OSSL_DISPATCH* kmDisp = NULL;
+    OSSL_FUNC_encoder_newctx_fn* newCtx = NULL;
+    OSSL_FUNC_encoder_freectx_fn* freeCtx = NULL;
+    OSSL_FUNC_encoder_import_object_fn* importObj = NULL;
+    OSSL_FUNC_encoder_free_object_fn* freeObj = NULL;
+    OSSL_FUNC_keymgmt_export_fn* kmExport = NULL;
+    OSSL_PARAM* params = NULL;
+    void* encCtx = NULL;
+    void* key = NULL;
+    int keyOk = 0;
+    TEST_EXPORT_CMP cmp;
+
+    XMEMSET(&cmp, 0, sizeof(cmp));
+
+    PRINT_MSG("Encoder import-object contract: %s (%s)", algName, encProps);
+
+    encDisp = test_prov_find(wpProv, OSSL_OP_ENCODER, algName, encProps);
+    err = (encDisp == NULL);
+    if (err) {
+        PRINT_ERR_MSG("No %s encoder with properties %s", algName, encProps);
+    }
+    if (err == 0) {
+        kmDisp = test_prov_find(wpProv, OSSL_OP_KEYMGMT, algName, NULL);
+        err = (kmDisp == NULL);
+        if (err) {
+            PRINT_ERR_MSG("No %s key management", algName);
+        }
+    }
+    if (err == 0) {
+        newCtx = (OSSL_FUNC_encoder_newctx_fn*)test_disp_get(encDisp,
+            OSSL_FUNC_ENCODER_NEWCTX);
+        freeCtx = (OSSL_FUNC_encoder_freectx_fn*)test_disp_get(encDisp,
+            OSSL_FUNC_ENCODER_FREECTX);
+        importObj = (OSSL_FUNC_encoder_import_object_fn*)test_disp_get(encDisp,
+            OSSL_FUNC_ENCODER_IMPORT_OBJECT);
+        freeObj = (OSSL_FUNC_encoder_free_object_fn*)test_disp_get(encDisp,
+            OSSL_FUNC_ENCODER_FREE_OBJECT);
+        kmExport = (OSSL_FUNC_keymgmt_export_fn*)test_disp_get(kmDisp,
+            OSSL_FUNC_KEYMGMT_EXPORT);
+        err = (newCtx == NULL) || (freeCtx == NULL) || (importObj == NULL) ||
+              (freeObj == NULL) || (kmExport == NULL);
+        if (err) {
+            PRINT_ERR_MSG("Encoder is missing a dispatch entry");
+        }
+    }
+    /* The parameters OpenSSL hands to import-object come from the other
+     * provider's key management export. */
+    if (err == 0) {
+        err = EVP_PKEY_todata(pkey, selection, &params) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Failed to get key data");
+        }
+    }
+    if (err == 0) {
+        encCtx = newCtx(OSSL_PROVIDER_get0_provider_ctx(wpProv));
+        err = (encCtx == NULL);
+        if (err) {
+            PRINT_ERR_MSG("Failed to create encoder context");
+        }
+    }
+    if (err == 0) {
+        key = importObj(encCtx, selection, params);
+        err = (key == NULL);
+        if (err) {
+            PRINT_ERR_MSG("Import object returned no key object");
+        }
+    }
+    if (err == 0) {
+        /* A key-management import returning 1/0 lands here as 1, and the
+         * encoder context is not a key object either. */
+        keyOk = (key != encCtx) && (key != (void*)1);
+        err = !keyOk;
+        if (err) {
+            PRINT_ERR_MSG("Import object did not return a key object");
+        }
+    }
+    if (err == 0) {
+        cmp.expected = params;
+        err = kmExport(key, selection, test_export_cmp_cb, &cmp) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Failed to export the imported key");
+        }
+    }
+    if (err == 0) {
+        err = cmp.err || (cmp.matched == 0);
+        if (err) {
+            PRINT_ERR_MSG("Imported key does not hold the key data");
+        }
+    }
+
+    if (keyOk) {
+        freeObj(key);
+    }
+    if (encCtx != NULL) {
+        freeCtx(encCtx);
+    }
+    OSSL_PARAM_free(params);
+    if (err) {
+        ERR_print_errors_fp(stderr);
+    }
 
     return err;
 }

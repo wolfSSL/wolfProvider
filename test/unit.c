@@ -349,6 +349,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_param_check_explicit, NULL),
     TEST_DECL(test_dh_import_group_no_nul, NULL),
     TEST_DECL(test_dh_pgen_min_bits, NULL),
+    TEST_DECL(test_dh_encoder_import_object, NULL),
 #ifndef WOLFPROV_QUICKTEST
     TEST_DECL(test_dh_get_params, NULL),
 #endif
@@ -392,6 +393,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_pss_mgf1_get_params, NULL),
     TEST_DECL(test_rsa_kem, NULL),
     TEST_DECL(test_rsa_key_integrity, NULL),
+    TEST_DECL(test_rsa_encoder_import_object, NULL),
 #endif /* WP_HAVE_RSA */
 #ifdef WP_HAVE_EC_P192
     #ifdef WP_HAVE_ECKEYGEN
@@ -519,6 +521,9 @@ TEST_CASE test_case[] = {
 
 #ifdef WP_HAVE_ECC
     TEST_DECL(test_ec_tls_group_p192, NULL),
+    #ifdef WP_HAVE_EC_P256
+        TEST_DECL(test_ecc_encoder_import_object, NULL),
+    #endif
 #endif /* WP_HAVE_ECC */
 
 #ifdef WP_HAVE_PBE
@@ -549,6 +554,10 @@ TEST_CASE test_case[] = {
 #endif
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
     TEST_DECL(test_ecx_x_security_bits, NULL),
+#endif
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
+    defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
+    TEST_DECL(test_ecx_encoder_import_object, NULL),
 #endif
 
     TEST_DECL(test_pkcs7_x509_sign_verify, NULL),
@@ -605,6 +614,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mldsa_reinit_null_key, NULL),
     TEST_DECL(test_mldsa_encode_decode, NULL),
     TEST_DECL(test_mldsa_x509_sign_verify, NULL),
+    TEST_DECL(test_mldsa_encoder_import_object, NULL),
 #endif
 };
 #define TEST_CASE_CNT   (int)(sizeof(test_case) / sizeof(*test_case))
