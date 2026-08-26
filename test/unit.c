@@ -225,6 +225,8 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_hmac_multi_update, NULL),
     TEST_DECL(test_hmac_dup, NULL),
     TEST_DECL(test_hmac_size_query, NULL),
+    TEST_DECL(test_hmac_tls_data_size, NULL),
+    TEST_DECL(test_hmac_tls_dummy_blocks, NULL),
     TEST_DECL(test_mac_key_match, NULL),
     TEST_DECL(test_mac_sig_dup, NULL),
 #endif
@@ -295,11 +297,14 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_cfb_stream, NULL),
     TEST_DECL(test_aes192_cfb_stream, NULL),
     TEST_DECL(test_aes256_cfb_stream, NULL),
+    TEST_DECL(test_aes128_cfb_reinit, NULL),
     TEST_DECL(test_aes_cfb_large_update, NULL),
 #endif
 #ifdef WP_HAVE_AESCTS
     TEST_DECL(test_aes128_cts, NULL),
     TEST_DECL(test_aes256_cts, NULL),
+    TEST_DECL(test_aes128_cts_one_block, NULL),
+    TEST_DECL(test_aes128_cts_split_init, NULL),
 #endif
     TEST_DECL(test_cipher_null_zero, NULL),
 #ifdef WP_HAVE_AESGCM

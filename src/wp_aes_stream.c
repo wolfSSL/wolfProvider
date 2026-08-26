@@ -48,6 +48,8 @@ typedef struct wp_AesStreamCtx {
 
     /** Operation being performed is encryption. */
     unsigned int enc:1;
+    /** An IV has been set. */
+    unsigned int ivSet:1;
 
     /** Current IV. */
     unsigned char iv[AES_BLOCK_SIZE];
@@ -268,6 +270,7 @@ static int wp_aes_init_iv(wp_AesStreamCtx *ctx, const unsigned char *iv,
     if (ok) {
         XMEMCPY(ctx->iv, iv, ivLen);
         XMEMCPY(ctx->oiv, iv, ivLen);
+        ctx->ivSet = 1;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -308,6 +311,13 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
     if (ok && (iv != NULL) && (!wp_aes_init_iv(ctx, iv, ivLen))) {
         ok = 0;
     }
+    if (ok && (iv == NULL) && ctx->ivSet &&
+            ((ctx->mode == EVP_CIPH_CBC_MODE) ||
+             (ctx->mode == EVP_CIPH_CFB_MODE))) {
+        if (!wp_aes_init_iv(ctx, ctx->oiv, ctx->ivLen)) {
+            ok = 0;
+        }
+    }
 
     if (ok && (key != NULL)) {
         if (keyLen != ctx->keyLen) {
@@ -321,7 +331,7 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
             }
 #endif
             WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
-            rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
+            rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, ctx->iv,
                 dir);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesSetKey", rc);
@@ -404,11 +414,24 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
      * the existing wolfSSL AES_CTS APIs with FIPS, so the implementation is
      * effectively copied here from wolfSSL internals. */
 
+    if (inLen == AES_BLOCK_SIZE) {
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        rc = wc_AesCbcEncrypt(&ctx->aes, out, in, AES_BLOCK_SIZE);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcEncrypt", rc);
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        }
+        return ok;
+    }
+
     blocks = (int)((inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE);
     blocks -= 2;
     XMEMSET(ctsBlock, 0, AES_BLOCK_SIZE * 2);
+    XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
     if (ok && blocks > 0) {
-        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         rc = wc_AesCbcEncrypt(&ctx->aes, out, in, blocks * AES_BLOCK_SIZE);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcEncrypt", rc);
@@ -457,6 +480,19 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     /* Since AES-CTS is not a FIPS approved algo, we will never be able to call
      * the existing wolfSSL AES_CTS APIs with FIPS, so the implementation is
      * effectively copied here from wolfSSL internals. */
+
+    if (inLen == AES_BLOCK_SIZE) {
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        rc = wc_AesCbcDecrypt(&ctx->aes, out, in, AES_BLOCK_SIZE);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcDecrypt", rc);
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        }
+        return ok;
+    }
 
     partialSz = inLen % AES_BLOCK_SIZE;
     if (partialSz == 0) {

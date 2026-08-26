@@ -288,6 +288,9 @@ int wp_decode_should_skip(int castType, const unsigned char* der, word32 len,
     const int* allowedNids, size_t nAllowed);
 #endif /* HAVE_FIPS */
 
+int wp_hmac_tls_dummy_blocks(enum wc_HashType hashType, size_t macSize,
+    size_t tlsDataSize, size_t dataLen);
+
 byte wp_ct_byte_mask_eq(byte a, byte b);
 byte wp_ct_byte_mask_ne(byte a, byte b);
 byte wp_ct_int_mask_gte(int a, int b);
