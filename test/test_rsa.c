@@ -4476,4 +4476,82 @@ int test_rsa_concurrent_ops(void *data)
 
 #endif /* HAVE_PTHREAD && !WP_SINGLE_THREADED */
 
+int test_rsa_encoder_import_object(void *data)
+{
+    static const char* names[] = {
+        "RSA",
+#ifdef WP_RSA_PSS_ENCODING
+        "RSA-PSS",
+#endif
+    };
+    int err = 0;
+    EVP_PKEY_CTX* ctx = NULL;
+    EVP_PKEY* pkey;
+    size_t bits = 2048;
+    OSSL_PARAM params[2];
+    OSSL_PARAM_BLD* bld = NULL;
+    OSSL_PARAM* pubParams = NULL;
+    BIGNUM* n = NULL;
+    BIGNUM* e = NULL;
+    size_t i;
+
+    (void)data;
+
+    params[0] = OSSL_PARAM_construct_size_t(OSSL_PKEY_PARAM_RSA_BITS, &bits);
+    params[1] = OSSL_PARAM_construct_end();
+
+    /* EVP_PKEY_Q_keygen() rejects RSA-PSS before OpenSSL 3.5. */
+    for (i = 0; (err == 0) && (i < ARRAY_SIZE(names)); i++) {
+        pkey = NULL;
+        err = test_pkey_keygen_params(osslLibCtx, names[i], params, &pkey);
+        if (err == 0) {
+            err = test_encoder_import_object(names[i], pkey);
+        }
+        EVP_PKEY_free(pkey);
+    }
+
+    /* wolfProvider imports a modulus of at most 8192 bits. */
+    pkey = NULL;
+    if (err == 0) {
+        n = BN_new();
+        e = BN_new();
+        bld = OSSL_PARAM_BLD_new();
+        err = (n == NULL) || (e == NULL) || (bld == NULL);
+    }
+    if (err == 0) {
+        err = (BN_set_bit(n, 16383) != 1) || (BN_set_bit(n, 0) != 1) ||
+              (BN_set_word(e, 65537) != 1);
+    }
+    if (err == 0) {
+        err = (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_N, n) != 1) ||
+              (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_E, e) != 1);
+    }
+    if (err == 0) {
+        err = (pubParams = OSSL_PARAM_BLD_to_param(bld)) == NULL;
+    }
+    if (err == 0) {
+        err = (ctx = EVP_PKEY_CTX_new_from_name(osslLibCtx, "RSA", NULL))
+            == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_PUBLIC_KEY, pubParams)
+            != 1;
+    }
+    if (err == 0) {
+        err = test_encoder_import_object_rejected("RSA", pkey);
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OSSL_PARAM_free(pubParams);
+    OSSL_PARAM_BLD_free(bld);
+    BN_free(e);
+    BN_free(n);
+
+    return err;
+}
+
 #endif /* WP_HAVE_RSA */

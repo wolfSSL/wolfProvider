@@ -372,6 +372,10 @@ int test_pki_cipher_encrypts(EVP_PKEY* pkey, const char* fmt,
     const char* encProp, OSSL_LIB_CTX* decLibCtx, int cmpKey);
 int test_epki_encode_decode(EVP_PKEY* pkey, const char* fmt,
                   const char* encProp, OSSL_LIB_CTX* decLibCtx);
+int test_encoder_import_object(const char* algName, EVP_PKEY* pkey);
+int test_encoder_import_object_rejected(const char* algName, EVP_PKEY* pkey);
+int test_pkey_keygen_params(OSSL_LIB_CTX* libCtx, const char* name,
+                  const OSSL_PARAM params[], EVP_PKEY** pkey);
 
 #ifdef WP_HAVE_RSA
 int test_pkey_enc_rsa(EVP_PKEY *pkey, unsigned char *msg, size_t msgLen,
@@ -415,6 +419,7 @@ int test_rsa_pss_mgf1_get_params(void *data);
 int test_rsa_kem(void *data);
 int test_rsa_key_integrity(void* data);
 int test_rsa_concurrent_ops(void *data);
+int test_rsa_encoder_import_object(void *data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH
@@ -428,6 +433,7 @@ int test_dh_encode_epki(void *data);
 int test_dh_decode(void *data);
 int test_dh_decode_big_g(void *data);
 int test_dh_get_params(void *data);
+int test_dh_encoder_import_object(void *data);
 int test_dh_krb5_keygen(void *data);
 int test_dh_pad(void *data);
 int test_dh_derive_small_buffer(void *data);
@@ -595,6 +601,7 @@ int test_ec_tls_group_p192(void* data);
 #ifdef WP_HAVE_EC_P256
 int test_ec_print_public(void* data);
 int test_ec_fromdata_oversize(void* data);
+int test_ecc_encoder_import_object(void *data);
 #endif
 
 #endif /* WP_HAVE_ECC */
@@ -628,6 +635,11 @@ int test_ecx_shared_key_first_use(void *data);
 
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
 int test_ecx_x_security_bits(void *data);
+#endif
+
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
+    defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
+int test_ecx_encoder_import_object(void *data);
 #endif
 
 int test_pkcs7_x509_sign_verify(void *data);
@@ -694,6 +706,7 @@ int test_mldsa_empty_message(void *data);
 int test_mldsa_reinit_null_key(void *data);
 int test_mldsa_encode_decode(void *data);
 int test_mldsa_x509_sign_verify(void *data);
+int test_mldsa_encoder_import_object(void *data);
 #endif
 
 #if defined(WP_HAVE_SLHDSA) && defined(WP_SLHDSA_TEST_SETS)
