@@ -1,5 +1,7 @@
 dist_noinst_SCRIPTS += scripts/build-wolfprovider.sh
 dist_noinst_SCRIPTS += scripts/env-setup
+dist_noinst_SCRIPTS += scripts/fetch-fips-ready.sh
+dist_noinst_SCRIPTS += scripts/test-fetch-fips-ready.sh
 dist_noinst_SCRIPTS += scripts/patch-libcrypto-exports.sh
 dist_noinst_SCRIPTS += scripts/patch-openssl-fips.sh
 dist_noinst_SCRIPTS += scripts/resolve-ref.sh

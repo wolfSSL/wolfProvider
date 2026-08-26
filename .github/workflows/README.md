@@ -30,7 +30,7 @@ ready_for_review) and on every push to `master`, `main`, or
 | `simple.yml` | Builds wolfProvider against the matrix of supported wolfSSL + OpenSSL refs and runs `make check`. The baseline "did anything obvious break" check. |
 | `smoke-test.yml` | Minimal end-to-end: build, load the provider into stock OpenSSL, run `openssl list -providers` and a handful of `openssl` subcommands. Catches link-time and provider-registration regressions. |
 | `cmdline.yml` | Runs `scripts/cmd_test/do-cmd-tests.sh` — exercises every `openssl` CLI verb (genrsa, pkeyutl, enc, dgst, …) through wolfProvider. |
-| `fips-ready.yml` | Same as `simple` but builds wolfSSL with `--enable-fips=ready`. Sanity check that FIPS-ready compiles and basic tests pass without the full FIPS bundle. |
+| `fips-ready.yml` | Pulls FIPS Ready bundles from ghcr (`ghcr.io/<owner>/wolfprovider/fips-ready:<ver>`, published by `nightly-fips-ready.yml`) and builds wolfSSL with `--enable-fips=ready` against each. Matrix resolved at run time from `_discover-versions.yml`'s `fips_ready_pr_array` (opt-in via `resolve_fips`, listed from ghcr tags): the back-compat anchors plus the newest bundle. The resolved FIPS module version (`ready` is v7 through 5.9.1, v8 from 5.9.2 on) is read from `HAVE_FIPS_VERSION_MAJOR` at build time and shown in the job summary. |
 | `seed-src.yml` | Builds with `--enable-seed-src` (entropy seed source variant) and `-DWP_TEST_SECCOMP_SANDBOX`, then runs the unit tests including the OpenSSH fork+seccomp-sandbox regression suite. |
 | `multi-compiler.yml` | Cross-compiler sweep: gcc-9 through gcc-14 and clang-12 through latest. Catches toolchain-specific warnings / UB. |
 | `codespell.yml` | Spell-check on tracked source. `*.patch` is excluded because OSP patches mirror upstream source whose original spelling we shouldn't silently rewrite. |
@@ -59,6 +59,15 @@ push and dominate the merge queue. Nightly is the right cadence for
 catching regressions in third-party integration that wouldn't show up
 in our unit tests.
 
+`nightly-fips-ready.yml` rides along out-of-wave, running the same steps
+as `fips-ready.yml` over `fips_ready_all_array`: every FIPS Ready bundle
+in ghcr at or above the 5.8.2 floor, restoring the versions the PR set
+leaves out. It also carries the `publish_fips_ready` job, the only place
+that touches wolfssl.com: it mirrors any newly hosted bundle into
+`ghcr.io/wolfssl/wolfprovider/fips-ready` (skipping ones already there),
+so new releases join every FIPS workflow automatically with no PR to
+merge. Dispatch this workflow once to seed ghcr.
+
 ### Running a nightly job on a PR (label toggles)
 
 `pr-osp-select.yml` lets you pull any nightly job into a PR on demand —
@@ -69,7 +78,7 @@ per-app workflows stay untouched.
 | Label | Effect |
 |-------|--------|
 | `ci:<name>` | Run that one job (e.g. `ci:hostap`, `ci:curl`, `ci:static-analysis`). Add several to run several. |
-| `ci:all` | Run the whole fan-out (all 43 jobs). |
+| `ci:all` | Run the whole fan-out (all 44 jobs). |
 | (no label) | Nothing runs — a normal PR is unaffected. |
 
 `<name>` is the job key in the table below (the workflow base name, e.g.
@@ -96,8 +105,9 @@ gh workflow run pr-osp-select.yml --ref <branch> -f jobs="all"
 
 ### What runs in the nightly fan-out
 
-43 workflows total: 40 third-party OSS integrations, 2 internal
-validations, and the static-analysis suite. Every one of these patches
+44 workflows total: 40 third-party OSS integrations, 3 internal
+validations (including nightly-fips-ready.yml, reachable via
+`ci:fips-ready`), and the static-analysis suite. Every one of these patches
 the upstream project (where needed) via `osp/wolfProvider/<app>/*.patch`
 from [wolfssl/osp](https://github.com/wolfssl/osp), builds it against
 the replace-default wolfProvider `.deb` stack, and runs the project's
@@ -176,6 +186,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `debian-package.yml` | End-to-end check: builds the wolfprov `.deb`s and confirms they install cleanly on a fresh container and the provider loads. |
 | `openssl-version.yml` | Sweeps every upstream `openssl-3.X.Y` release tag — catches breakage from OpenSSL point releases before they hit our matrix defaults. |
 | `static-analysis.yml` | cppcheck, clang scan-build, Facebook Infer. Heavy enough that it lives in the nightly fan-out rather than per-PR. |
+| `nightly-fips-ready.yml` | Builds and tests every resolved FIPS Ready bundle — the nightly superset of the per-PR `fips-ready.yml` gate. Toggle on a PR with `ci:fips-ready`. |
 
 Sanitizers (ASan+UBSan, TSan) run on every PR/push — see the PR table
 above. They're fast enough with caching to gate merges, so they don't

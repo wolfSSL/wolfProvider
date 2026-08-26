@@ -139,6 +139,8 @@ int test_sha224(void *data);
 int test_sha256(void *data);
 int test_sha384(void *data);
 int test_sha512(void *data);
+int test_sha512_224(void *data);
+int test_sha512_256(void *data);
 int test_sha3_224(void *data);
 int test_sha3_256(void *data);
 int test_sha3_384(void *data);
@@ -343,6 +345,8 @@ int test_rsa_pkey_keygen(void *data);
 int test_rsa_pkey_invalid_key_size(void *data);
 int test_rsa_get_params(void *data);
 int test_rsa_sig_alg_id(void *data);
+int test_rsa_sha512_224_dupctx(void *data);
+int test_rsa_sha512_256_dupctx(void *data);
 int test_rsa_pss_salt(void *date);
 int test_rsa_pss_restrictions(void *data);
 

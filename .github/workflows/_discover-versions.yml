@@ -2,6 +2,12 @@ name: Discover wolfSSL + OpenSSL versions
 
 on:
   workflow_call:
+    inputs:
+      resolve_fips:
+        description: 'Resolve FIPS Ready bundle versions too. Only the FIPS workflows set this; every other caller skips the FIPS work it never uses.'
+        required: false
+        default: false
+        type: boolean
     outputs:
       wolfssl_ref:
         description: 'Plain string, actual wolfSSL version in the wolfprov nonfips .deb on ghcr (e.g. v5.8.4-stable)'
@@ -30,6 +36,18 @@ on:
       openssl_all_releases_array:
         description: 'JSON array of every upstream openssl-3.X.Y release tag, sorted ascending. Used by openssl-version.yml so the sweep tracks upstream automatically.'
         value: ${{ jobs.discover.outputs.openssl_all_releases_array }}
+      fips_ready_latest:
+        description: 'Plain string, newest hosted FIPS Ready bundle version (e.g. 5.9.2)'
+        value: ${{ jobs.discover.outputs.fips_ready_latest }}
+      fips_ready_pr_array:
+        description: 'JSON array of FIPS Ready bundle versions for PR runs: the back-compat anchors plus the newest'
+        value: ${{ jobs.discover.outputs.fips_ready_pr_array }}
+      fips_ready_all_array:
+        description: 'JSON array of every hosted FIPS Ready bundle version at or above the floor. Used by the nightly sweep.'
+        value: ${{ jobs.discover.outputs.fips_ready_all_array }}
+      fips_ready_resolved:
+        description: '"true" if FIPS Ready bundle discovery succeeded, "false" if the outputs above are a degraded floor-only fallback. FIPS-specific callers must fail on "false" rather than silently testing a stale matrix.'
+        value: ${{ jobs.discover.outputs.fips_ready_resolved }}
 
 jobs:
   discover:
@@ -49,6 +67,10 @@ jobs:
       openssl_latest_ref: ${{ steps.resolve.outputs.openssl_latest_ref }}
       openssl_latest_ref_array: ${{ steps.resolve.outputs.openssl_latest_ref_array }}
       openssl_all_releases_array: ${{ steps.resolve.outputs.openssl_all_releases_array }}
+      fips_ready_latest: ${{ steps.resolve.outputs.fips_ready_latest }}
+      fips_ready_pr_array: ${{ steps.resolve.outputs.fips_ready_pr_array }}
+      fips_ready_all_array: ${{ steps.resolve.outputs.fips_ready_all_array }}
+      fips_ready_resolved: ${{ steps.resolve.outputs.fips_ready_resolved }}
     steps:
       - name: Install ORAS (best-effort)
         run: |
@@ -85,6 +107,8 @@ jobs:
 
       - name: Resolve versions
         id: resolve
+        env:
+          RESOLVE_FIPS: ${{ inputs.resolve_fips }}
         run: |
           set -euo pipefail
 
@@ -169,6 +193,45 @@ jobs:
           OSSL_ALL_JSON=$(printf '%s\n' "$OSSL_ALL" | jq -R . | jq -s -c .)
           OSSL_LATEST=$(echo "$OSSL_ALL" | tail -n 1)
 
+          # FIPS Ready bundle versions are the tags published to ghcr by the
+          # FIPS Ready publish job (nightly-fips-ready.yml), so this lists ghcr
+          # tags instead of scraping wolfssl.com. Only the FIPS workflows opt in
+          # through resolve_fips; the ~40 other callers skip it entirely and
+          # never carry FIPS outputs they don't use.
+          if [ "${RESOLVE_FIPS:-false}" = "true" ]; then
+            FR_FLOOR="5.8.2"
+            FR_OK=true
+            FR_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+            FR_REPO="ghcr.io/$FR_OWNER/wolfprovider/fips-ready"
+            FLOOR_KEY=$(printf '%s' "$FR_FLOOR" | awk -F. '{printf "%05d.%05d.%05d",$1,$2,$3}')
+            FR_ALL=$(oras repo tags "$FR_REPO" 2>/dev/null \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | awk -F. -v fk="$FLOOR_KEY" \
+                  '{k=sprintf("%05d.%05d.%05d",$1,$2,$3); if (k>=fk) print k" "$0}' \
+              | sort | awk '{print $2}') || true
+            if [ -z "${FR_ALL:-}" ]; then
+              # ghcr empty or unreachable: refuse to report green on a
+              # near-empty matrix. FR_OK lets the FIPS callers fail loudly.
+              echo "::warning::No FIPS Ready bundle tags in $FR_REPO; falling back to $FR_FLOOR (FIPS callers will fail this run; run the FIPS Ready publish job to seed ghcr)"
+              FR_ALL="$FR_FLOOR"
+              FR_OK=false
+            fi
+            FR_ALL_JSON=$(printf '%s\n' "$FR_ALL" | jq -R . | jq -s -c .)
+            FR_LATEST=$(echo "$FR_ALL" | tail -n 1)
+            # 5.8.4 and 5.9.1 are the back-compat anchors: the last two bundles
+            # where --enable-fips=ready still meant FIPS v7, which 5.9.2 moved to v8.
+            # Intersected with the hosted set so a delisted anchor drops out.
+            FR_PR_JSON=$(printf '%s\n' "5.8.4" "5.9.1" "$FR_LATEST" | jq -R . \
+              | jq -s -c --argjson all "$FR_ALL_JSON" \
+                  '[.[] | select(. as $v | $all | index($v))] | unique_by(split(".")|map(tonumber))')
+            if [ "$FR_PR_JSON" = "[]" ]; then
+              FR_PR_JSON="[\"$FR_LATEST\"]"
+            fi
+            echo "FIPS Ready latest bundle:           $FR_LATEST"
+            echo "FIPS Ready PR set:                  $FR_PR_JSON"
+            echo "FIPS Ready full set (floor $FR_FLOOR):  $FR_ALL_JSON"
+          fi
+
           echo "wolfSSL .deb ref (actual ghcr deb):  $WOLFSSL_DEB_REF"
           echo "wolfSSL upstream latest -stable:    $WOLFSSL_LATEST"
           echo "OpenSSL Bookworm stock:             openssl-$OSSL (raw: $OSSL_RAW)"
@@ -186,4 +249,10 @@ jobs:
             echo "openssl_latest_ref=$OSSL_LATEST"
             echo "openssl_latest_ref_array=[\"$OSSL_LATEST\"]"
             echo "openssl_all_releases_array=$OSSL_ALL_JSON"
+            if [ "${RESOLVE_FIPS:-false}" = "true" ]; then
+              echo "fips_ready_latest=$FR_LATEST"
+              echo "fips_ready_pr_array=$FR_PR_JSON"
+              echo "fips_ready_all_array=$FR_ALL_JSON"
+              echo "fips_ready_resolved=$FR_OK"
+            fi
           } >> "$GITHUB_OUTPUT"

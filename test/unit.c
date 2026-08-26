@@ -197,6 +197,12 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_SHA512
     TEST_DECL(test_sha512, NULL),
 #endif
+#ifdef WP_HAVE_SHA512_224
+    TEST_DECL(test_sha512_224, NULL),
+#endif
+#ifdef WP_HAVE_SHA512_256
+    TEST_DECL(test_sha512_256, NULL),
+#endif
 #ifdef WP_HAVE_SHA3_224
     TEST_DECL(test_sha3_224, NULL),
 #endif
@@ -362,6 +368,12 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_get_params, NULL),
 #endif
     TEST_DECL(test_rsa_sig_alg_id, NULL),
+#ifdef WP_HAVE_SHA512_224
+    TEST_DECL(test_rsa_sha512_224_dupctx, NULL),
+#endif
+#ifdef WP_HAVE_SHA512_256
+    TEST_DECL(test_rsa_sha512_256_dupctx, NULL),
+#endif
     TEST_DECL(test_rsa_pss_salt, NULL),
     TEST_DECL(test_rsa_pss_restrictions, NULL),
     TEST_DECL(test_rsa_load_key, NULL),

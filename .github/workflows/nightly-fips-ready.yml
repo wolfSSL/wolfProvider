@@ -1,32 +1,20 @@
-name: FIPS Ready Bundle Test
+name: Nightly FIPS Ready Bundle Tests
 
-# START OF COMMON SECTION
+# Sweeps EVERY hosted FIPS Ready bundle at or above the floor. PR-time
+# fips-ready.yml runs the narrower fips_ready_pr_array (the back-compat
+# anchors plus the newest) to keep PR turnaround short; this restores the
+# versions it drops. Both sets are resolved at run time by
+# _discover-versions.yml, so a new FIPS Ready release joins the sweep on its
+# own.
+
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE*'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/dependabot.yml'
-      - '.gitignore'
-      - 'AUTHORS'
-      - 'COPYING'
-      - 'README*'
-      - 'CHANGELOG*'
+  workflow_call: {}
+  workflow_dispatch: {}
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-# END OF COMMON SECTION
+# No concurrency group: github.workflow is the caller's here, so any group collides with sibling calls.
 
 jobs:
   test_fetch_script:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Test fetch-fips-ready.sh
     runs-on: ubuntu-22.04
     timeout-minutes: 5
@@ -38,19 +26,75 @@ jobs:
       - name: Run network-free resolver tests
         run: ./scripts/test-fetch-fips-ready.sh
 
+  # Mirror every hosted FIPS Ready bundle into ghcr so the test jobs (and
+  # fips-ready.yml, perf-regression.yml) pull from ghcr, not wolfssl.com. This
+  # is the only job that touches wolfssl.com; a new bundle is published once and
+  # then served by ghcr digest. Skips bundles already present, so steady-state
+  # it is just existence checks. Dispatch this workflow once to seed ghcr.
+  publish_fips_ready:
+    name: Publish new FIPS Ready bundles to ghcr
+    # Any non-PR run may publish, into its own owner's ghcr namespace: upstream
+    # seeds ghcr.io/wolfssl/..., a fork seeds ghcr.io/<owner>/... so it can be
+    # tested end to end via workflow_dispatch. Fork PRs get a read-only token
+    # and are excluded here anyway.
+    if: github.event_name != 'pull_request'
+    needs: test_fetch_script
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    timeout-minutes: 45
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install ORAS
+        run: ./scripts/install-oras.sh --dest /usr/local/bin
+      - name: Publish bundles not yet in ghcr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | oras login --username "${{ github.actor }}" \
+            --password-stdin ghcr.io
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="ghcr.io/$OWNER/wolfprovider/fips-ready"
+          HOSTED=$(./scripts/fetch-fips-ready.sh --list) || {
+            echo "::error::could not list hosted FIPS Ready bundles"
+            exit 1
+          }
+          for ver in $HOSTED; do
+            if oras manifest fetch "$REPO:$ver" >/dev/null 2>&1; then
+              echo "already in ghcr: $ver"
+              continue
+            fi
+            echo "publishing new bundle: $ver"
+            # fetch-fips-ready.sh verifies the download before it returns.
+            DIR=$(./scripts/fetch-fips-ready.sh "$ver" --dest "$GITHUB_WORKSPACE")
+            # oras-build-deps.sh push is best-effort (never fails the job), so
+            # confirm the tag actually landed rather than trusting its exit.
+            ./scripts/oras-build-deps.sh push "$REPO:$ver" "$DIR"
+            if ! oras manifest fetch "$REPO:$ver" >/dev/null 2>&1; then
+              echo "::error::publish of $ver to $REPO failed (tag absent after push)"
+              exit 1
+            fi
+            rm -rf "$DIR"
+          done
+
+  # Independent of publish_fips_ready on purpose: coupling them made a skipped
+  # publish (PR runs) propagate a skip onto require_fips_resolved, silently
+  # passing a degraded matrix. A bundle published this run is listed the next
+  # nightly instead, which is fine.
   discover_versions:
     needs: test_fetch_script
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_discover-versions.yml
     with:
       resolve_fips: true
 
-  # A resolution failure makes discover_versions fall back to testing only
-  # the floor version. Fine for the ~40 unrelated workflows sharing that
-  # job, but here it would report green while skipping most of the matrix.
+  # See fips-ready.yml for why this can't be left to a silent floor fallback.
   require_fips_resolved:
     needs: discover_versions
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Require FIPS Ready bundle discovery succeeded
     runs-on: ubuntu-22.04
     timeout-minutes: 2
@@ -63,8 +107,7 @@ jobs:
 
   fips_ready_test:
     needs: [discover_versions, require_fips_resolved]
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
+    name: Nightly FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -73,9 +116,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wolfssl_bundle_ref: ${{ fromJson(needs.discover_versions.outputs.fips_ready_pr_array) }}
+        wolfssl_bundle_ref: ${{ fromJson(needs.discover_versions.outputs.fips_ready_all_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
-        # force_fail collapsed into sequential runs in the test step
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -141,7 +183,6 @@ jobs:
 
       - name: Run FIPS Command Tests
         run: |
-          # Run cmd tests to verify functionality
           export WOLFSSL_ISFIPS=1
           source scripts/env-setup
 
@@ -153,9 +194,6 @@ jobs:
 
       - name: Run FIPS Status Test
         run: |
-          # Exercises the FIPS-status gate in wolfssl_prov_is_running(). In a
-          # FIPS build the test fails unless the forced-failure branch actually
-          # ran, so the exit status is the whole check.
           export WOLFSSL_ISFIPS=1
           source scripts/env-setup
           ./test/standalone/tests/fips_status/run.sh

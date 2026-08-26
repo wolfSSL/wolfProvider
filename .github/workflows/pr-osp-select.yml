@@ -223,6 +223,10 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' multi-compiler ')
     uses: ./.github/workflows/nightly-multi-compiler.yml
+  fips-ready:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' fips-ready ')
+    uses: ./.github/workflows/nightly-fips-ready.yml
   perf:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' perf ')
