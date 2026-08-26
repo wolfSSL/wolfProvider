@@ -255,6 +255,7 @@ int test_aes192_gcm(void *data);
 int test_aes256_gcm(void *data);
 int test_aes128_gcm_fixed(void *data);
 int test_aes128_gcm_tls(void *data);
+int test_aes_gcm_tls_multi_record(void *data);
 int test_aes128_gcm_set_iv_inv(void *data);
 int test_aes128_gcm_key_then_iv(void *data);
 int test_aes_gcm_bad_tag(void *data);

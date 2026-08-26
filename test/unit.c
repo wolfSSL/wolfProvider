@@ -306,6 +306,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes256_gcm, NULL),
     TEST_DECL(test_aes128_gcm_fixed, NULL),
     TEST_DECL(test_aes128_gcm_tls, NULL),
+    TEST_DECL(test_aes_gcm_tls_multi_record, NULL),
     TEST_DECL(test_aes128_gcm_set_iv_inv, NULL),
     TEST_DECL(test_aes128_gcm_key_then_iv, NULL),
     TEST_DECL(test_aes_gcm_bad_tag, NULL),

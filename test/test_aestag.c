@@ -1044,6 +1044,98 @@ int test_aes128_gcm_tls(void *data)
 
 /******************************************************************************/
 
+int test_aes_gcm_tls_multi_record(void *data)
+{
+    int err;
+    int i;
+    int j;
+    int outLen;
+    unsigned char aad[EVP_AEAD_TLS1_AAD_LEN] = {0,};
+    unsigned char msg[24];
+    unsigned char rec[4][48];
+    unsigned char key[16];
+    unsigned char iv[EVP_GCM_TLS_FIXED_IV_LEN];
+    unsigned char expIv[EVP_GCM_TLS_EXPLICIT_IV_LEN];
+    int numRec = (int)(sizeof(rec) / sizeof(rec[0]));
+    EVP_CIPHER* ocipher = NULL;
+    EVP_CIPHER* wcipher = NULL;
+    EVP_CIPHER_CTX* ctx = NULL;
+
+    (void)data;
+
+    aad[8]  = 23; /* Content type */
+    aad[9]  = 3;  /* Protocol major version */
+    aad[10] = 3;  /* Protocol minor version */
+    aad[12] = sizeof(rec[0]) - EVP_GCM_TLS_TAG_LEN;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-GCM", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+
+    if (err == 0) {
+        err = (RAND_bytes(key, (int)sizeof(key)) != 1) ||
+              (RAND_bytes(iv, (int)sizeof(iv)) != 1) ||
+              (RAND_bytes(msg, (int)sizeof(msg)) != 1);
+    }
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, wcipher, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                                  (int)sizeof(iv), iv) != 1;
+    }
+
+    for (i = 0; (err == 0) && (i < numRec); i++) {
+        memset(rec[i], 0, sizeof(rec[i]));
+        memcpy(rec[i] + EVP_GCM_TLS_EXPLICIT_IV_LEN, msg, sizeof(msg));
+        aad[7] = (unsigned char)i;
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_TLS1_AAD,
+                                  EVP_AEAD_TLS1_AAD_LEN, aad) !=
+                                  EVP_GCM_TLS_TAG_LEN;
+        if (err == 0) {
+            err = EVP_CipherUpdate(ctx, rec[i], &outLen, rec[i],
+                                   (int)sizeof(rec[i])) != 1;
+        }
+        if (err == 0) {
+            err = outLen != (int)sizeof(rec[i]);
+        }
+        if (err == 0) {
+            PRINT_BUFFER("Explicit IV", rec[i], EVP_GCM_TLS_EXPLICIT_IV_LEN);
+        }
+    }
+
+    for (i = 1; (err == 0) && (i < numRec); i++) {
+        memcpy(expIv, rec[i - 1], sizeof(expIv));
+        for (j = (int)sizeof(expIv) - 1; (j >= 0) && (++expIv[j] == 0); j--) {
+            /* Nothing to do. */
+        }
+        err = memcmp(rec[i], expIv, sizeof(expIv)) != 0;
+    }
+
+    aad[12] = sizeof(rec[0]);
+    for (i = 0; (err == 0) && (i < numRec); i++) {
+        aad[7] = (unsigned char)i;
+        PRINT_MSG("Decrypt with OpenSSL - TLS record %d", i);
+        err = test_aes_tag_tls_dec(ocipher, key, iv, (int)sizeof(iv), aad,
+                                   rec[i], (int)sizeof(rec[i]), 0);
+        if (err == 0) {
+            err = memcmp(rec[i] + EVP_GCM_TLS_EXPLICIT_IV_LEN, msg,
+                         sizeof(msg)) != 0;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+/******************************************************************************/
+
 /* Test that OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV correctly sets the
  * explicit/random portion of the IV on the decrypt side via the OSSL_PARAM
  * interface. This exercises the fix in wp_aead_set_ctx_params where the

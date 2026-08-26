@@ -893,6 +893,35 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
  */
 
 /**
+ * Increment the 64-bit invocation field at the end of the IV/nonce.
+ *
+ * @param [in, out] ctx  AEAD context object.
+ */
+static int wp_aesgcm_iv_inc(wp_AeadCtx* ctx)
+{
+    int ok = 1;
+    int i;
+    unsigned char* p;
+
+    /* Invocation field is the trailing 8 bytes; fail on a too-short IV. */
+    if (ctx->ivLen < 8) {
+        ok = 0;
+    }
+    else {
+        p = ctx->iv + ctx->ivLen - 8;
+
+        /* Big-endian increment of the invocation field, carrying on wrap. */
+        for (i = 7; i >= 0; i--) {
+            if ((++p[i]) != 0) {
+                break;
+            }
+        }
+    }
+
+    return ok;
+}
+
+/**
  * Get the random part of the IV/nonce.
  *
  * FIPS 140 requires the encryptor to generate a random part for the IV.
@@ -936,13 +965,8 @@ static int wp_aesgcm_get_rand_iv(wp_AeadCtx* ctx, unsigned char* out,
 #ifndef WOLFSSL_AESGCM_STREAM
         XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
 #endif
-        if (inc) {
-            int i;
-            unsigned char* p = ctx->iv + ctx->ivLen - 8;
-
-            for (i = 7; i >= 0 && (++p[i]) == 0; i--) {
-                /* Nothing to do. */
-            }
+        if (inc && (!wp_aesgcm_iv_inc(ctx))) {
+            ok = 0;
         }
         ctx->ivState = IV_STATE_COPIED;
     }
@@ -1270,6 +1294,9 @@ static int wp_aesgcm_tls_cipher(wp_AeadCtx* ctx, unsigned char* out,
                     ctx->buf, EVP_AEAD_TLS1_AAD_LEN);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmEncrypt", rc);
+                ok = 0;
+            }
+            if (!wp_aesgcm_iv_inc(ctx)) {
                 ok = 0;
             }
         }
