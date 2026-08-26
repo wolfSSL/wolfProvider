@@ -51,6 +51,11 @@ typedef struct wp_HmacCtx {
     unsigned char* key;
     /** Length of private key in bytes. */
     size_t keyLen;
+
+    /** Length of the padded TLS record including MAC and padding. */
+    size_t tlsDataSize;
+    /** Total number of bytes passed to update since initialization. */
+    size_t tlsHashedLen;
 } wp_HmacCtx;
 
 
@@ -205,6 +210,8 @@ static wp_HmacCtx* wp_hmac_dup(wp_HmacCtx* src)
         dst->type = src->type;
         dst->size = src->size;
         dst->provCtx = src->provCtx;
+        dst->tlsDataSize = src->tlsDataSize;
+        dst->tlsHashedLen = src->tlsHashedLen;
 
         /* Copy the Hmac struct directly to preserve in-progress state.
          * wc_HmacCopy is not available in all wolfSSL versions. */
@@ -249,6 +256,7 @@ static int wp_hmac_init(wp_HmacCtx* macCtx, const unsigned char* key,
     }
     if (ok) {
         macCtx->size = wc_HmacSizeByType(macCtx->type);
+        macCtx->tlsHashedLen = 0;
         if ((key != NULL) && (!wp_hmac_set_key(macCtx, key, keyLen, 1))) {
             ok = 0;
         }
@@ -256,6 +264,108 @@ static int wp_hmac_init(wp_HmacCtx* macCtx, const unsigned char* key,
 
     WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
+}
+
+/** Length of the TLS record header hashed before the record data. */
+#define WP_TLS_HMAC_HEADER_SZ   13
+
+/**
+ * Check the digest pads the way the block count calculation assumes.
+ *
+ * The calculation needs a block size that is a power of two and a message
+ * length appended in the last block.
+ *
+ * @param [in] hashType  wolfSSL digest type.
+ * @return  1 when the digest is supported.
+ * @return  0 when it is not.
+ */
+static int wp_hmac_tls_hash_supported(enum wc_HashType hashType)
+{
+    int ok;
+
+    switch ((int)hashType) {
+        case WC_HASH_TYPE_MD5:
+        case WC_HASH_TYPE_SHA:
+        case WC_HASH_TYPE_SHA224:
+        case WC_HASH_TYPE_SHA256:
+        case WC_HASH_TYPE_SHA384:
+        case WC_HASH_TYPE_SHA512:
+#ifndef WOLFSSL_NOSHA512_224
+        case WC_HASH_TYPE_SHA512_224:
+#endif
+#ifndef WOLFSSL_NOSHA512_256
+        case WC_HASH_TYPE_SHA512_256:
+#endif
+#ifdef WOLFSSL_SM3
+        case WC_HASH_TYPE_SM3:
+#endif
+            ok = 1;
+            break;
+        default:
+            ok = 0;
+            break;
+    }
+
+    return ok;
+}
+
+/**
+ * Count the blocks a hash processes for a message of the given length.
+ *
+ * @param [in] len        Length of message in bytes.
+ * @param [in] blockBits  Log base 2 of the hash block size.
+ * @param [in] blockMask  Hash block size minus one.
+ * @param [in] padSz      Bytes of padding the hash appends to the message.
+ * @return  Number of blocks processed.
+ */
+static int wp_hmac_blocks(word32 len, int blockBits, word32 blockMask,
+    word32 padSz)
+{
+    return (int)(len >> blockBits) +
+        (wp_ct_int_mask_lt((int)((len + padSz) & blockMask), (int)padSz) & 1);
+}
+
+/**
+ * Calculate the number of dummy blocks to hash when finalizing a TLS record.
+ *
+ * @param [in] hashType     wolfSSL digest type.
+ * @param [in] macSize      Output size of the digest in bytes.
+ * @param [in] tlsDataSize  Length of the padded record including MAC and
+ *                          padding.
+ * @param [in] hashedLen    Total bytes passed to update, header included.
+ * @return  Number of dummy blocks to hash. At least one.
+ */
+int wp_hmac_tls_dummy_blocks(enum wc_HashType hashType, size_t macSize,
+    size_t tlsDataSize, size_t hashedLen)
+{
+    int blockSizeRet = wc_HashGetBlockSize(hashType);
+    word32 blockSz;
+    word32 blockMask;
+    word32 padSz;
+    word32 realSz;
+    word32 maxSz;
+    int blockBits = 0;
+
+    if ((blockSizeRet <= 0) || (tlsDataSize <= macSize)) {
+        return 1;
+    }
+
+    blockSz = (word32)blockSizeRet;
+    blockMask = blockSz - 1;
+    while (((word32)1 << blockBits) < blockSz) {
+        blockBits++;
+    }
+    padSz = blockSz >> 3;
+
+    realSz = (word32)hashedLen;
+    maxSz = WP_TLS_HMAC_HEADER_SZ + (word32)(tlsDataSize - 1 - macSize);
+
+    if (realSz > maxSz) {
+        return 1;
+    }
+
+    return 1 + wp_hmac_blocks(maxSz, blockBits, blockMask, padSz) -
+        wp_hmac_blocks(realSz, blockBits, blockMask, padSz);
 }
 
 /**
@@ -273,6 +383,8 @@ static int wp_hmac_update(wp_HmacCtx* macCtx, const unsigned char* data,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_hmac_update");
+
+    macCtx->tlsHashedLen += dataLen;
 
     while (ok && (dataLen > 0)) {
         word32 chunk = (!WP_FITS_WORD32(dataLen)) ?
@@ -315,6 +427,10 @@ static int wp_hmac_final(wp_HmacCtx* macCtx, unsigned char* out, size_t* outl,
     if (ok && (outSize < macCtx->size)) {
         ok = 0;
     }
+    if (ok && (macCtx->tlsDataSize > 0) &&
+            (!wp_hmac_tls_hash_supported(macCtx->type))) {
+        ok = 0;
+    }
 
     if (ok) {
         rc = wc_HmacFinal(&macCtx->hmac, out);
@@ -323,7 +439,41 @@ static int wp_hmac_final(wp_HmacCtx* macCtx, unsigned char* out, size_t* outl,
             ok = 0;
         }
     }
+    if (ok && (macCtx->tlsDataSize > 0)) {
+        wc_HashAlg dummyHash;
+        unsigned char dummy[WC_MAX_BLOCK_SIZE];
+        int blockSz = wc_HashGetBlockSize(macCtx->type);
+        int dummyBlocks = wp_hmac_tls_dummy_blocks(macCtx->type, macCtx->size,
+            macCtx->tlsDataSize, macCtx->tlsHashedLen);
+        int i;
+
+        if (blockSz <= 0) {
+            ok = 0;
+        }
+        if (ok) {
+            rc = wc_HashInit_ex(&dummyHash, macCtx->type, NULL, INVALID_DEVID);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_HashInit_ex",
+                    rc);
+                ok = 0;
+            }
+        }
+        if (ok) {
+            XMEMSET(dummy, 0, sizeof(dummy));
+            for (i = 0; ok && (i < dummyBlocks); i++) {
+                rc = wc_HashUpdate(&dummyHash, macCtx->type, dummy,
+                    (word32)blockSz);
+                if (rc != 0) {
+                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                        "wc_HashUpdate", rc);
+                    ok = 0;
+                }
+            }
+            wc_HashFree(&dummyHash, macCtx->type);
+        }
+    }
     if (ok) {
+        macCtx->tlsHashedLen = 0;
         *outl = macCtx->size;
     }
 
@@ -402,6 +552,7 @@ static const OSSL_PARAM* wp_hmac_settable_ctx_params(wp_HmacCtx* macCtx,
     static const OSSL_PARAM wp_hmac_supported_settable_ctx_params[] = {
         OSSL_PARAM_utf8_string(OSSL_MAC_PARAM_DIGEST, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_MAC_PARAM_KEY, NULL, 0),
+        OSSL_PARAM_size_t(OSSL_MAC_PARAM_TLS_DATA_SIZE, NULL),
         OSSL_PARAM_END
     };
     (void)macCtx;
@@ -440,6 +591,15 @@ static int wp_hmac_set_ctx_params(wp_HmacCtx* macCtx, const OSSL_PARAM params[])
             }
             if (ok && (keyData != NULL) && (!wp_hmac_set_key(macCtx, keyData,
                     keyLen, 1))) {
+                ok = 0;
+            }
+        }
+
+        if (ok) {
+            const OSSL_PARAM* p = OSSL_PARAM_locate_const(params,
+                OSSL_MAC_PARAM_TLS_DATA_SIZE);
+            if ((p != NULL) && (!OSSL_PARAM_get_size_t(p,
+                    &macCtx->tlsDataSize))) {
                 ok = 0;
             }
         }

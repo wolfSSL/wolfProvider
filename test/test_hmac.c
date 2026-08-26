@@ -20,6 +20,9 @@
 
 #include <openssl/evp.h>
 #include <openssl/core_names.h>
+#include <openssl/params.h>
+
+#include <wolfprovider/internal.h>
 
 #include "unit.h"
 
@@ -424,6 +427,69 @@ int test_hmac_multi_update(void *data)
     return err;
 }
 
+/* A second init on the same context, with no key supplied, must reproduce the
+ * first MAC. */
+static int test_hmac_reinit_helper(OSSL_LIB_CTX *libCtx)
+{
+    int err;
+    EVP_MAC *emac = NULL;
+    EVP_MAC_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+    char digest[] = "SHA-256";
+    unsigned char key[] = "test-hmac-reinit-key";
+    unsigned char data[128];
+    unsigned char macOne[32];
+    unsigned char macTwo[32];
+    size_t macOneSz = sizeof(macOne);
+    size_t macTwoSz = sizeof(macTwo);
+
+    memset(data, 0x41, sizeof(data));
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
+        digest, 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    err = (emac = EVP_MAC_fetch(libCtx, "HMAC", NULL)) == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, key, sizeof(key), params) != 1
+           || EVP_MAC_update(ctx, data, sizeof(data)) != 1
+           || EVP_MAC_final(ctx, macOne, &macOneSz, sizeof(macOne)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1
+           || EVP_MAC_update(ctx, data, sizeof(data)) != 1
+           || EVP_MAC_final(ctx, macTwo, &macTwoSz, sizeof(macTwo)) != 1;
+    }
+    if (err == 0 && ((macOneSz != macTwoSz) ||
+            (memcmp(macOne, macTwo, macOneSz) != 0))) {
+        PRINT_ERR_MSG("MAC after re-init doesn't match the first MAC");
+        err = 1;
+    }
+
+    EVP_MAC_CTX_free(ctx);
+    EVP_MAC_free(emac);
+    return err;
+}
+
+int test_hmac_reinit(void *data)
+{
+    int err;
+
+    (void)data;
+
+    PRINT_MSG("HMAC re-init with OpenSSL");
+    err = test_hmac_reinit_helper(osslLibCtx);
+    if (err == 0) {
+        PRINT_MSG("HMAC re-init with wolfProvider");
+        err = test_hmac_reinit_helper(wpLibCtx);
+    }
+    return err;
+}
+
 int test_hmac_dup(void *data)
 {
     int ret = 0;
@@ -764,6 +830,169 @@ int test_hmac_size_query(void *data)
 
     EVP_MD_CTX_free(ctx);
     EVP_PKEY_free(pkey);
+
+    return ret;
+}
+
+static int test_hmac_tls_record_mac(EVP_PKEY* pkey,
+    const unsigned char* header, const unsigned char* msg, size_t msgLen,
+    size_t tlsDataSize, unsigned char* mac, size_t* macLen)
+{
+    int ret;
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    EVP_PKEY_CTX* pctx = NULL;
+
+    ret = ctx == NULL;
+    if (ret == 0) {
+        ret = EVP_DigestSignInit_ex(ctx, &pctx, "SHA-256", wpLibCtx, NULL,
+            pkey, NULL) != 1;
+    }
+    if ((ret == 0) && (tlsDataSize > 0)) {
+        OSSL_PARAM params[2];
+
+        params[0] = OSSL_PARAM_construct_size_t(OSSL_MAC_PARAM_TLS_DATA_SIZE,
+            &tlsDataSize);
+        params[1] = OSSL_PARAM_construct_end();
+        ret = EVP_PKEY_CTX_set_params(pctx, params) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignUpdate(ctx, header, 13) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignUpdate(ctx, msg, msgLen) != 1;
+    }
+    if (ret == 0) {
+        ret = EVP_DigestSignFinal(ctx, mac, macLen) != 1;
+    }
+
+    EVP_MD_CTX_free(ctx);
+
+    return ret;
+}
+
+/* Setting TLS_DATA_SIZE must not change the record MAC. */
+int test_hmac_tls_data_size(void *data)
+{
+    int ret = 0;
+    unsigned char key[32];
+    unsigned char header[13];
+    /* Whole record: 100 bytes of data, 32 byte MAC and 12 bytes of padding. */
+    unsigned char record[144];
+    size_t msgLen = 100;
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    unsigned char macTls[EVP_MAX_MD_SIZE];
+    size_t macSz = sizeof(mac);
+    size_t macTlsSz = sizeof(macTls);
+    EVP_PKEY* pkey = NULL;
+    EVP_MAC* hmacAlg = NULL;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(header, 0x03, sizeof(header));
+    memset(record, 0x41, sizeof(record));
+
+    PRINT_MSG("Testing HMAC with OSSL_MAC_PARAM_TLS_DATA_SIZE");
+
+    hmacAlg = EVP_MAC_fetch(wpLibCtx, "HMAC", NULL);
+    if (hmacAlg == NULL) {
+        ret = 1;
+    }
+    else {
+        const OSSL_PARAM* settable = EVP_MAC_settable_ctx_params(hmacAlg);
+
+        if ((settable == NULL) || (OSSL_PARAM_locate_const(settable,
+                OSSL_MAC_PARAM_TLS_DATA_SIZE) == NULL)) {
+            PRINT_MSG("TLS_DATA_SIZE is not settable");
+            ret = 1;
+        }
+        EVP_MAC_free(hmacAlg);
+    }
+    if (ret == 0) {
+        pkey = EVP_PKEY_new_raw_private_key_ex(wpLibCtx, "HMAC", NULL, key,
+            sizeof(key));
+        if (pkey == NULL) {
+            ret = 1;
+        }
+    }
+    if (ret == 0) {
+        ret = test_hmac_tls_record_mac(pkey, header, record, msgLen, 0, mac,
+            &macSz);
+    }
+    if (ret == 0) {
+        ret = test_hmac_tls_record_mac(pkey, header, record, msgLen,
+            sizeof(record), macTls, &macTlsSz);
+    }
+    if (ret == 0) {
+        if ((macSz != macTlsSz) || (memcmp(mac, macTls, macSz) != 0)) {
+            PRINT_MSG("MAC differs when TLS_DATA_SIZE is set");
+            ret = 1;
+        }
+    }
+    if (ret == 0) {
+        PRINT_BUFFER("MAC", macTls, (int)macTlsSz);
+    }
+
+    EVP_PKEY_free(pkey);
+
+    return ret;
+}
+
+/* Blocks a hash processes for a message of len bytes, including the block
+ * holding the padding and encoded length. */
+static int test_hmac_hash_blocks(size_t len, size_t blockSz, size_t lenSz)
+{
+    return (int)(len / blockSz) + 1 +
+        (((len % blockSz) >= (blockSz - lenSz)) ? 1 : 0);
+}
+
+/* The dummy blocks hashed in final must make the total number of blocks the
+ * same for every data length in a record of a fixed padded size. */
+int test_hmac_tls_dummy_blocks(void *data)
+{
+    static const struct {
+        enum wc_HashType type;
+        size_t macSize;
+        size_t blockSz;
+        size_t lenSz;
+    } hashes[] = {
+        { WC_HASH_TYPE_SHA256, 32, 64,  8  },
+#ifdef WP_HAVE_SHA384
+        { WC_HASH_TYPE_SHA384, 48, 128, 16 },
+#endif
+    };
+    int ret = 0;
+    size_t h;
+
+    (void)data;
+
+    PRINT_MSG("Testing TLS record MAC block equalization");
+
+    for (h = 0; (ret == 0) && (h < sizeof(hashes) / sizeof(*hashes)); h++) {
+        size_t tlsDataSize = hashes[h].macSize + 1 + 300;
+        size_t maxLen = tlsDataSize - hashes[h].macSize;
+        size_t dataLen;
+        int total = 0;
+
+        /* Sweeping every data length covers both sides of each padding
+         * boundary of the hash. */
+        for (dataLen = 0; dataLen <= maxLen; dataLen++) {
+            int blocks = test_hmac_hash_blocks(13 + dataLen, hashes[h].blockSz,
+                hashes[h].lenSz);
+            int dummy = wp_hmac_tls_dummy_blocks(hashes[h].type,
+                hashes[h].macSize, tlsDataSize, 13 + dataLen);
+
+            if (dataLen == 0) {
+                total = blocks + dummy;
+            }
+            else if (blocks + dummy != total) {
+                PRINT_ERR_MSG("Data length %d hashes %d blocks, expected %d",
+                    (int)dataLen, blocks + dummy, total);
+                ret = 1;
+                break;
+            }
+        }
+    }
 
     return ret;
 }
