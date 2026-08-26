@@ -47,15 +47,14 @@ runs:
         VER="${{ inputs.version }}"
         DIR="$GITHUB_WORKSPACE/wolfssl-$VER-gplv3-fips-ready"
         REF="ghcr.io/$OWNER/wolfprovider/fips-ready:$VER"
-        # Prefer the ghcr copy (integrity from the registry digest). Until the
-        # publish job has seeded ghcr, fall back to a verified download from
-        # wolfssl.com so the build is never blocked on the bootstrap.
-        if "$GITHUB_WORKSPACE/scripts/oras-build-deps.sh" pull "$REF" "$DIR"; then
-          echo "Pulled FIPS bundle from ghcr: $DIR"
-        else
-          echo "$VER not in ghcr ($REF); falling back to a verified wolfssl.com download"
-          DIR=$("$GITHUB_WORKSPACE/scripts/fetch-fips-ready.sh" "$VER" \
-            --dest "$GITHUB_WORKSPACE")
+        # Integrity is the ghcr registry digest. A miss means the bundle was
+        # never published, so fail loudly rather than silently reaching back to
+        # wolfssl.com; the publish job (nightly, or a wolfSSL/wolfProvider
+        # branch) is what seeds ghcr.
+        if ! "$GITHUB_WORKSPACE/scripts/oras-build-deps.sh" pull "$REF" "$DIR"; then
+          echo "::error::FIPS Ready bundle $VER is not in ghcr ($REF); run the FIPS Ready publish job to seed it."
+          exit 1
         fi
         echo "FIPS_BUNDLE_PATH=$DIR" >> "$GITHUB_ENV"
         echo "bundle_path=$DIR" >> "$GITHUB_OUTPUT"
+        echo "Pulled FIPS bundle from ghcr: $DIR"

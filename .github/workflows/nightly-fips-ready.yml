@@ -81,7 +81,13 @@ jobs:
             echo "publishing new bundle: $ver"
             # fetch-fips-ready.sh verifies the download before it returns.
             DIR=$(./scripts/fetch-fips-ready.sh "$ver" --dest "$GITHUB_WORKSPACE")
+            # oras-build-deps.sh push is best-effort (never fails the job), so
+            # confirm the tag actually landed rather than trusting its exit.
             ./scripts/oras-build-deps.sh push "$REPO:$ver" "$DIR"
+            if ! oras manifest fetch "$REPO:$ver" >/dev/null 2>&1; then
+              echo "::error::publish of $ver to $REPO failed (tag absent after push)"
+              exit 1
+            fi
             rm -rf "$DIR"
           done
 
