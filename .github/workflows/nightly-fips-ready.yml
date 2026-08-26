@@ -85,12 +85,12 @@ jobs:
             rm -rf "$DIR"
           done
 
+  # Independent of publish_fips_ready on purpose: coupling them made a skipped
+  # publish (PR runs) propagate a skip onto require_fips_resolved, silently
+  # passing a degraded matrix. A bundle published this run is listed the next
+  # nightly instead, which is fine.
   discover_versions:
-    # After publish so a just-published bundle is listed the same night. The if
-    # lets discovery still run when publish is skipped (PR-label runs), where
-    # ghcr is already seeded.
-    needs: [test_fetch_script, publish_fips_ready]
-    if: ${{ !cancelled() && needs.test_fetch_script.result == 'success' }}
+    needs: test_fetch_script
     uses: ./.github/workflows/_discover-versions.yml
     with:
       resolve_fips: true
