@@ -319,8 +319,8 @@ static int wp_aead_cache_aad(wp_AeadCtx *ctx, const unsigned char *in,
  * Cache more input data in AEAD context object.
  *
  * @param [in, out] ctx    AEAD context object.
- * @param [in]      in     More AAD data.
- * @param [in]      inLen  Length of new AAD data.
+ * @param [in]      in     More input data.
+ * @param [in]      inLen  Length of new input data.
  * @return  1 on success.
  * @return  0 on failure.
  */
