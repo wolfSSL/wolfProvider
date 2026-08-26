@@ -1041,10 +1041,16 @@ static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
         }
         if (ctx->enc) {
             int rc;
+        #ifndef WP_SINGLE_THREADED
+            int locked = 0;
+        #endif
 
         #ifndef WP_SINGLE_THREADED
             if (!wp_provctx_lock_rng(ctx->provCtx)) {
                 ok = 0;
+            }
+            else {
+                locked = 1;
             }
         #endif
             if (ok) {
@@ -1056,7 +1062,9 @@ static int wp_aesgcm_tls_iv_set_fixed(wp_AeadCtx* ctx, unsigned char* iv,
                 }
             }
         #ifndef WP_SINGLE_THREADED
-            wp_provctx_unlock_rng(ctx->provCtx);
+            if (locked) {
+                wp_provctx_unlock_rng(ctx->provCtx);
+            }
         #endif
             if (ok && len > 0) {
                 XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
