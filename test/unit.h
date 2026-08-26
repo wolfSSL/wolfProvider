@@ -170,6 +170,7 @@ int test_cmac_size_query(void *data);
 
 #ifdef WP_HAVE_GMAC
 int test_gmac_create(void *data);
+int test_gmac_reinit(void *data);
 int test_gmac_dup(void *data);
 #endif /* WP_HAVE_GMAC */
 
