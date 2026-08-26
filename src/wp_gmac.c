@@ -295,7 +295,7 @@ static int wp_gmac_final(wp_GmacCtx* macCtx, unsigned char* out, size_t* outl,
     if (ok) {
         /* One-shot API for creating GMAC. */
         rc = wc_GmacUpdate(&macCtx->gmac, macCtx->iv, (word32)macCtx->ivLen,
-            macCtx->data, (word32)macCtx->dataLen, out, (word32)outSize);
+            macCtx->data, (word32)macCtx->dataLen, out, AES_BLOCK_SIZE);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_GmacUpdate", rc);
             ok = 0;

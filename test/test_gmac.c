@@ -271,4 +271,46 @@ int test_gmac_dup(void *data)
     return ret;
 }
 
+int test_gmac_large_buffer(void *data)
+{
+    int ret;
+    unsigned char in[] = "I'm gonna break my rusty cage and run";
+    unsigned char key[] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+    };
+    unsigned char iv[] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03
+    };
+    unsigned char exp[EVP_MAX_MD_SIZE];
+    int expLen = sizeof(exp);
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    int macLen = sizeof(mac);
+
+    (void)data;
+
+    ret = test_gmac_gen_mac(osslLibCtx, "AES-128-GCM", iv, (int)sizeof(iv),
+        key, (int)sizeof(key), in, (int)sizeof(in), exp, &expLen);
+    if (ret != 0) {
+        PRINT_MSG("Generate MAC into large buffer using OpenSSL failed");
+    }
+    if (ret == 0) {
+        memset(mac, 0, sizeof(mac));
+        ret = test_gmac_gen_mac(wpLibCtx, "AES-128-GCM", iv, (int)sizeof(iv),
+            key, (int)sizeof(key), in, (int)sizeof(in), mac, &macLen);
+        if (ret != 0) {
+            PRINT_MSG("Generate MAC into large buffer using wolfSSL failed");
+        }
+    }
+    if (ret == 0) {
+        if ((macLen != expLen) || (memcmp(mac, exp, expLen) != 0)) {
+            PRINT_MSG("Large buffer MAC does not match expected");
+            ret = -1;
+        }
+    }
+
+    return ret;
+}
+
 #endif /* WP_HAVE_GMAC */
