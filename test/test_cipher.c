@@ -958,6 +958,72 @@ int test_aes256_cfb_stream(void *data)
     return err;
 }
 
+/******************************************************************************/
+
+/* Reinitializing with a NULL IV must restore the original IV, so the second
+ * run produces the same output as the first and as OpenSSL. */
+int test_aes128_cfb_reinit(void *data)
+{
+    int err;
+    int enc;
+    unsigned char key[16];
+    unsigned char iv[16];
+    unsigned char msg[32];
+    unsigned char oout[sizeof(msg)];
+    unsigned char out1[sizeof(msg)];
+    unsigned char out2[sizeof(msg)];
+    int outlen;
+    EVP_CIPHER *ocipher = NULL;
+    EVP_CIPHER *wcipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(iv, 0x0c, sizeof(iv));
+    memset(msg, 0x0d, sizeof(msg));
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-CFB", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-CFB", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+
+    for (enc = 1; (err == 0) && (enc >= 0); enc--) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        if (err == 0) {
+            err = EVP_CipherInit_ex(ctx, ocipher, NULL, key, iv, enc) != 1
+               || EVP_CipherUpdate(ctx, oout, &outlen, msg, sizeof(msg)) != 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+
+        if (err == 0) {
+            err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        }
+        if (err == 0) {
+            err = EVP_CipherInit_ex(ctx, wcipher, NULL, key, iv, enc) != 1
+               || EVP_CipherUpdate(ctx, out1, &outlen, msg, sizeof(msg)) != 1
+               || EVP_CipherInit_ex(ctx, NULL, NULL, NULL, NULL, enc) != 1
+               || EVP_CipherUpdate(ctx, out2, &outlen, msg, sizeof(msg)) != 1;
+        }
+        if (err == 0 && memcmp(out1, oout, sizeof(msg)) != 0) {
+            PRINT_MSG("CFB output differs from OpenSSL");
+            err = 1;
+        }
+        if (err == 0 && memcmp(out2, oout, sizeof(msg)) != 0) {
+            PRINT_MSG("CFB reinit with NULL IV did not restore the IV");
+            err = 1;
+        }
+
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
 #endif /* WP_HAVE_AESCFB */
 
 #ifdef WP_HAVE_AESCTS
@@ -1457,6 +1523,157 @@ int test_aes128_cts(void *data)
 int test_aes256_cts(void *data)
 {
     return test_cipher_cts(data, "AES-256-CBC-CTS", 32);
+}
+
+/* CTS of an input of exactly one block must match OpenSSL and must not write
+ * past the input length. */
+int test_aes128_cts_one_block(void *data)
+{
+    int err;
+    unsigned char key[16];
+    unsigned char iv[16];
+    unsigned char msg[16];
+    unsigned char oenc[16];
+    unsigned char wenc[16];
+    unsigned char dec[32];
+    size_t i;
+    EVP_CIPHER *ocipher = NULL;
+    EVP_CIPHER *wcipher = NULL;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(iv, 0x0c, sizeof(iv));
+    memset(msg, 0x0d, sizeof(msg));
+    memset(dec, 0xa5, sizeof(dec));
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-CBC-CTS", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-CBC-CTS", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+
+    if (err == 0) {
+        err = test_cipher_cts_krb_enc(ocipher, key, iv, msg, sizeof(msg), oenc);
+    }
+    if (err == 0) {
+        err = test_cipher_cts_krb_dec(wcipher, key, iv, msg, sizeof(msg), oenc,
+            sizeof(oenc), dec);
+    }
+    for (i = sizeof(msg); i < sizeof(dec); i++) {
+        if (dec[i] != 0xa5) {
+            PRINT_MSG("One block CTS decrypt wrote past the input length");
+            err = 1;
+            break;
+        }
+    }
+    if (err == 0) {
+        err = test_cipher_cts_krb_enc(wcipher, key, iv, msg, sizeof(msg), wenc);
+    }
+    if (err == 0 && memcmp(oenc, wenc, sizeof(oenc)) != 0) {
+        PRINT_MSG("One block CTS ciphertext differs from OpenSSL");
+        err = 1;
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+/* CTS must use the cached IV when the key and IV are set by separate init
+ * calls, in either order. */
+int test_aes128_cts_split_init(void *data)
+{
+    int err;
+    int keyFirst;
+    unsigned char key[16];
+    unsigned char iv[16];
+    unsigned char msg[17];
+    unsigned char ref[sizeof(msg) + 16];
+    unsigned char enc[sizeof(msg) + 16];
+    unsigned char dec[sizeof(msg) + 16];
+    int outlen;
+    int finallen;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER *ocipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(iv, 0x0c, sizeof(iv));
+    memset(msg, 0x0d, sizeof(msg));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-CBC-CTS", "");
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-CBC-CTS", "");
+    err = (cipher == NULL) || (ocipher == NULL);
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        OSSL_PARAM params[2];
+
+        params[0] = OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE,
+            (char *)"CS3", 0);
+        params[1] = OSSL_PARAM_construct_end();
+
+        err = EVP_CipherInit_ex2(ctx, ocipher, key, iv, 1, params) != 1
+           || EVP_CipherUpdate(ctx, ref, &outlen, msg, sizeof(msg)) != 1
+           || EVP_CipherFinal_ex(ctx, ref + outlen, &finallen) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    for (keyFirst = 0; err == 0 && keyFirst < 2; keyFirst++) {
+        unsigned char *k1 = keyFirst ? key : NULL;
+        unsigned char *v1 = keyFirst ? NULL : iv;
+        unsigned char *k2 = keyFirst ? NULL : key;
+        unsigned char *v2 = keyFirst ? iv : NULL;
+
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        if (err == 0) {
+            err = EVP_EncryptInit_ex(ctx, cipher, NULL, k1, v1) != 1
+               || EVP_EncryptInit_ex(ctx, NULL, NULL, k2, v2) != 1
+               || EVP_EncryptUpdate(ctx, enc, &outlen, msg, sizeof(msg)) != 1
+               || EVP_EncryptFinal_ex(ctx, enc + outlen, &finallen) != 1;
+        }
+        if (err == 0 && (outlen + finallen != (int)sizeof(msg))) {
+            PRINT_MSG("Split init CTS encrypt length mismatch");
+            err = 1;
+        }
+        if (err == 0 && memcmp(enc, ref, sizeof(msg)) != 0) {
+            PRINT_MSG("Split init CTS ciphertext differs from OpenSSL");
+            err = 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+
+        if (err == 0) {
+            err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        }
+        if (err == 0) {
+            err = EVP_DecryptInit_ex(ctx, cipher, NULL, k1, v1) != 1
+               || EVP_DecryptInit_ex(ctx, NULL, NULL, k2, v2) != 1
+               || EVP_DecryptUpdate(ctx, dec, &outlen, enc, sizeof(msg)) != 1
+               || EVP_DecryptFinal_ex(ctx, dec + outlen, &finallen) != 1;
+        }
+        if (err == 0 && (outlen + finallen != (int)sizeof(msg))) {
+            PRINT_MSG("Split init CTS decrypt length mismatch");
+            err = 1;
+        }
+        if (err == 0 && memcmp(dec, msg, sizeof(msg)) != 0) {
+            PRINT_MSG("Split init CTS round trip failed");
+            err = 1;
+        }
+
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    EVP_CIPHER_free(ocipher);
+    EVP_CIPHER_free(cipher);
+
+    return err;
 }
 
 #endif /* WP_HAVE_AESCTS */
