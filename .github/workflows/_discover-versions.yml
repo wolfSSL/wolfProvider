@@ -72,6 +72,12 @@ jobs:
       fips_ready_all_array: ${{ steps.resolve.outputs.fips_ready_all_array }}
       fips_ready_resolved: ${{ steps.resolve.outputs.fips_ready_resolved }}
     steps:
+      - name: Checkout wolfProvider
+        if: inputs.resolve_fips
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Install ORAS (best-effort)
         run: |
           set -uo pipefail
@@ -210,9 +216,16 @@ jobs:
                   '{k=sprintf("%05d.%05d.%05d",$1,$2,$3); if (k>=fk) print k" "$0}' \
               | sort | awk '{print $2}') || true
             if [ -z "${FR_ALL:-}" ]; then
-              # An empty/unreachable ghcr repo must not report green on a
-              # near-empty matrix: FR_OK lets the FIPS callers fail loudly.
-              echo "::warning::No FIPS Ready bundle tags in $FR_REPO; falling back to $FR_FLOOR (FIPS callers will fail this run; run the FIPS Ready publish job to seed ghcr)"
+              # ghcr not seeded yet (bootstrap, or a fork with no publish run):
+              # fall back to the wolfssl.com list so the matrix is still real.
+              # The build step falls back to a verified download the same way.
+              echo "::warning::No FIPS Ready bundle tags in $FR_REPO; falling back to the wolfssl.com list until the publish job seeds ghcr"
+              FR_ALL=$(./scripts/fetch-fips-ready.sh --list --floor "$FR_FLOOR") || true
+            fi
+            if [ -z "${FR_ALL:-}" ]; then
+              # Neither ghcr nor wolfssl.com yielded anything: refuse to report
+              # green on a near-empty matrix.
+              echo "::warning::Could not resolve any FIPS Ready bundles; falling back to $FR_FLOOR (FIPS callers will fail this run)"
               FR_ALL="$FR_FLOOR"
               FR_OK=false
             fi
