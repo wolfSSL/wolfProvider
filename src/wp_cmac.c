@@ -280,7 +280,7 @@ static int wp_cmac_final(wp_CmacCtx* macCtx, unsigned char* out, size_t* outl,
     }
 
     if (ok) {
-        outSz = (word32)outSize;
+        outSz = (word32)macCtx->size;
         rc = wc_CmacFinal(&macCtx->cmac, out, &outSz);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_CmacFinal", rc);

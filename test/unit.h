@@ -168,6 +168,7 @@ int test_cmac_create(void *data);
 int test_cmac_multi_update(void *data);
 int test_cmac_dup(void *data);
 int test_cmac_size_query(void *data);
+int test_cmac_large_buffer(void *data);
 #endif /* WP_HAVE_CMAC */
 
 #ifdef WP_HAVE_GMAC

@@ -233,6 +233,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_cmac_multi_update, &flags),
     TEST_DECL(test_cmac_dup, &flags),
     TEST_DECL(test_cmac_size_query, &flags),
+    TEST_DECL(test_cmac_large_buffer, &flags),
 #endif
 #ifdef WP_HAVE_GMAC
     TEST_DECL(test_gmac_create, &flags),
