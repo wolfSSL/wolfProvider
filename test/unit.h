@@ -261,6 +261,12 @@ int test_aes_gcm_tls_multi_record(void *data);
 int test_aes128_gcm_set_iv_inv(void *data);
 int test_aes128_gcm_key_then_iv(void *data);
 int test_aes_gcm_bad_tag(void *data);
+int test_aes_gcm_decrypt_ctx_reuse(void *data);
+int test_aes_gcm_iv_gen_short(void *data);
+int test_aes_gcm_set_iv_inv_short(void *data);
+int test_aes_gcm_reuse_tag_bypass(void *data);
+int test_aes_gcm_encrypt_reuse_no_iv(void *data);
+int test_aes_gcm_encrypt_partial_reuse_no_iv(void *data);
 int test_aes_gcm_tls_iv_fixed_oversized(void *data);
 int test_aes_gcm_tag_len_undersized(void *data);
 
@@ -273,6 +279,7 @@ int test_aes192_ccm(void *data);
 int test_aes256_ccm(void *data);
 int test_aes128_ccm_tls(void *data);
 int test_aes_ccm_bad_tag(void *data);
+int test_aes_ccm_ctx_reuse(void *data);
 int test_aes_ccm_tag_len_undersized(void *data);
 
 #endif /* WP_HAVE_AESCCM */
