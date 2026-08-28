@@ -168,11 +168,13 @@ int test_cmac_create(void *data);
 int test_cmac_multi_update(void *data);
 int test_cmac_dup(void *data);
 int test_cmac_size_query(void *data);
+int test_cmac_large_buffer(void *data);
 #endif /* WP_HAVE_CMAC */
 
 #ifdef WP_HAVE_GMAC
 int test_gmac_create(void *data);
 int test_gmac_dup(void *data);
+int test_gmac_large_buffer(void *data);
 #endif /* WP_HAVE_GMAC */
 
 #ifdef WP_HAVE_TLS1_PRF
@@ -255,9 +257,16 @@ int test_aes192_gcm(void *data);
 int test_aes256_gcm(void *data);
 int test_aes128_gcm_fixed(void *data);
 int test_aes128_gcm_tls(void *data);
+int test_aes_gcm_tls_multi_record(void *data);
 int test_aes128_gcm_set_iv_inv(void *data);
 int test_aes128_gcm_key_then_iv(void *data);
 int test_aes_gcm_bad_tag(void *data);
+int test_aes_gcm_decrypt_ctx_reuse(void *data);
+int test_aes_gcm_iv_gen_short(void *data);
+int test_aes_gcm_set_iv_inv_short(void *data);
+int test_aes_gcm_reuse_tag_bypass(void *data);
+int test_aes_gcm_encrypt_reuse_no_iv(void *data);
+int test_aes_gcm_encrypt_partial_reuse_no_iv(void *data);
 int test_aes_gcm_tls_iv_fixed_oversized(void *data);
 int test_aes_gcm_tag_len_undersized(void *data);
 
@@ -270,6 +279,7 @@ int test_aes192_ccm(void *data);
 int test_aes256_ccm(void *data);
 int test_aes128_ccm_tls(void *data);
 int test_aes_ccm_bad_tag(void *data);
+int test_aes_ccm_ctx_reuse(void *data);
 int test_aes_ccm_tag_len_undersized(void *data);
 
 #endif /* WP_HAVE_AESCCM */

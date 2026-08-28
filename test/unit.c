@@ -233,10 +233,12 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_cmac_multi_update, &flags),
     TEST_DECL(test_cmac_dup, &flags),
     TEST_DECL(test_cmac_size_query, &flags),
+    TEST_DECL(test_cmac_large_buffer, &flags),
 #endif
 #ifdef WP_HAVE_GMAC
     TEST_DECL(test_gmac_create, &flags),
     TEST_DECL(test_gmac_dup, &flags),
+    TEST_DECL(test_gmac_large_buffer, &flags),
 #endif
 #ifdef WP_HAVE_TLS1_PRF
     TEST_DECL(test_tls1_prf, NULL),
@@ -306,9 +308,16 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes256_gcm, NULL),
     TEST_DECL(test_aes128_gcm_fixed, NULL),
     TEST_DECL(test_aes128_gcm_tls, NULL),
+    TEST_DECL(test_aes_gcm_tls_multi_record, NULL),
     TEST_DECL(test_aes128_gcm_set_iv_inv, NULL),
     TEST_DECL(test_aes128_gcm_key_then_iv, NULL),
     TEST_DECL(test_aes_gcm_bad_tag, NULL),
+    TEST_DECL(test_aes_gcm_decrypt_ctx_reuse, NULL),
+    TEST_DECL(test_aes_gcm_iv_gen_short, NULL),
+    TEST_DECL(test_aes_gcm_set_iv_inv_short, NULL),
+    TEST_DECL(test_aes_gcm_reuse_tag_bypass, NULL),
+    TEST_DECL(test_aes_gcm_encrypt_reuse_no_iv, NULL),
+    TEST_DECL(test_aes_gcm_encrypt_partial_reuse_no_iv, NULL),
     TEST_DECL(test_aes_gcm_tls_iv_fixed_oversized, NULL),
     TEST_DECL(test_aes_gcm_tag_len_undersized, NULL),
 #endif
@@ -319,6 +328,7 @@ TEST_CASE test_case[] = {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
     TEST_DECL(test_aes128_ccm_tls, NULL),
     TEST_DECL(test_aes_ccm_bad_tag, NULL),
+    TEST_DECL(test_aes_ccm_ctx_reuse, NULL),
     TEST_DECL(test_aes_ccm_tag_len_undersized, NULL),
 #endif
 #endif

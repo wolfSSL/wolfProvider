@@ -552,5 +552,43 @@ int test_cmac_size_query(void *data)
     return err;
 }
 
+int test_cmac_large_buffer(void *data)
+{
+    int err;
+    unsigned char key[16];
+    unsigned char msg[32];
+    unsigned char exp[EVP_MAX_MD_SIZE];
+    int expLen = sizeof(exp);
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    int macLen = sizeof(mac);
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(msg, 0x41, sizeof(msg));
+
+    err = test_cmac_gen_mac(osslLibCtx, "AES-128-CBC", key, (int)sizeof(key),
+        msg, (int)sizeof(msg), exp, &expLen);
+    if (err != 0) {
+        PRINT_MSG("Generate CMAC into large buffer using OpenSSL failed");
+    }
+    if (err == 0) {
+        memset(mac, 0, sizeof(mac));
+        err = test_cmac_gen_mac(wpLibCtx, "AES-128-CBC", key, (int)sizeof(key),
+            msg, (int)sizeof(msg), mac, &macLen);
+        if (err != 0) {
+            PRINT_MSG("Generate CMAC into large buffer using wolfSSL failed");
+        }
+    }
+    if (err == 0) {
+        if ((macLen != expLen) || (memcmp(mac, exp, expLen) != 0)) {
+            PRINT_MSG("Large buffer CMAC does not match expected");
+            err = 1;
+        }
+    }
+
+    return err;
+}
+
 #endif /* WP_HAVE_CMAC */
 

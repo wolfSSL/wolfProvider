@@ -1044,6 +1044,98 @@ int test_aes128_gcm_tls(void *data)
 
 /******************************************************************************/
 
+int test_aes_gcm_tls_multi_record(void *data)
+{
+    int err;
+    int i;
+    int j;
+    int outLen;
+    unsigned char aad[EVP_AEAD_TLS1_AAD_LEN] = {0,};
+    unsigned char msg[24];
+    unsigned char rec[4][48];
+    unsigned char key[16];
+    unsigned char iv[EVP_GCM_TLS_FIXED_IV_LEN];
+    unsigned char expIv[EVP_GCM_TLS_EXPLICIT_IV_LEN];
+    int numRec = (int)(sizeof(rec) / sizeof(rec[0]));
+    EVP_CIPHER* ocipher = NULL;
+    EVP_CIPHER* wcipher = NULL;
+    EVP_CIPHER_CTX* ctx = NULL;
+
+    (void)data;
+
+    aad[8]  = 23; /* Content type */
+    aad[9]  = 3;  /* Protocol major version */
+    aad[10] = 3;  /* Protocol minor version */
+    aad[12] = sizeof(rec[0]) - EVP_GCM_TLS_TAG_LEN;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-GCM", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+
+    if (err == 0) {
+        err = (RAND_bytes(key, (int)sizeof(key)) != 1) ||
+              (RAND_bytes(iv, (int)sizeof(iv)) != 1) ||
+              (RAND_bytes(msg, (int)sizeof(msg)) != 1);
+    }
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, wcipher, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                                  (int)sizeof(iv), iv) != 1;
+    }
+
+    for (i = 0; (err == 0) && (i < numRec); i++) {
+        memset(rec[i], 0, sizeof(rec[i]));
+        memcpy(rec[i] + EVP_GCM_TLS_EXPLICIT_IV_LEN, msg, sizeof(msg));
+        aad[7] = (unsigned char)i;
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_TLS1_AAD,
+                                  EVP_AEAD_TLS1_AAD_LEN, aad) !=
+                                  EVP_GCM_TLS_TAG_LEN;
+        if (err == 0) {
+            err = EVP_CipherUpdate(ctx, rec[i], &outLen, rec[i],
+                                   (int)sizeof(rec[i])) != 1;
+        }
+        if (err == 0) {
+            err = outLen != (int)sizeof(rec[i]);
+        }
+        if (err == 0) {
+            PRINT_BUFFER("Explicit IV", rec[i], EVP_GCM_TLS_EXPLICIT_IV_LEN);
+        }
+    }
+
+    for (i = 1; (err == 0) && (i < numRec); i++) {
+        memcpy(expIv, rec[i - 1], sizeof(expIv));
+        for (j = (int)sizeof(expIv) - 1; (j >= 0) && (++expIv[j] == 0); j--) {
+            /* Nothing to do. */
+        }
+        err = memcmp(rec[i], expIv, sizeof(expIv)) != 0;
+    }
+
+    aad[12] = sizeof(rec[0]);
+    for (i = 0; (err == 0) && (i < numRec); i++) {
+        aad[7] = (unsigned char)i;
+        PRINT_MSG("Decrypt with OpenSSL - TLS record %d", i);
+        err = test_aes_tag_tls_dec(ocipher, key, iv, (int)sizeof(iv), aad,
+                                   rec[i], (int)sizeof(rec[i]), 0);
+        if (err == 0) {
+            err = memcmp(rec[i] + EVP_GCM_TLS_EXPLICIT_IV_LEN, msg,
+                         sizeof(msg)) != 0;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+/******************************************************************************/
+
 /* Test that OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV correctly sets the
  * explicit/random portion of the IV on the decrypt side via the OSSL_PARAM
  * interface. This exercises the fix in wp_aead_set_ctx_params where the
@@ -1412,6 +1504,424 @@ int test_aes_gcm_bad_tag(void *data)
         PRINT_MSG("AES-256-GCM streaming decryption with tampered tag");
         err = test_aes_gcm_bad_tag_helper(wpLibCtx, "AES-256-GCM", 32);
     }
+
+    return err;
+}
+
+/******************************************************************************/
+
+int test_aes_gcm_decrypt_ctx_reuse(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[16];
+    unsigned char iv[12];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "GCM plaintext for reuse test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    unsigned char tag[16];
+    unsigned char dec[64];
+    int outLen = 0, fLen = 0;
+    int decLen = 0, decFinal = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag) != 1;
+    }
+
+    /* Run a decrypt that does not authenticate on this context. */
+    if (err == 0) {
+        tag[0] ^= 0x01;
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &fLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, dec, &fLen, ct, outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, dec + fLen, &fLen) == 1;
+    }
+
+    /* Reinitialize the same context (reusing the provider state, cipher NULL)
+     * and decrypt again. The context must remain usable. */
+    if (err == 0) {
+        tag[0] ^= 0x01;
+        err = EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &decLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        /* Clear so the plaintext check cannot pass on stale data. */
+        memset(dec, 0, sizeof(dec));
+        err = EVP_DecryptUpdate(ctx, dec, &decLen, ct, outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, dec + decLen, &decFinal) != 1;
+    }
+    if (err == 0) {
+        err = (decLen + decFinal != ptLen) || (memcmp(dec, pt, ptLen) != 0);
+        if (err) {
+            PRINT_MSG("Reinitialized context did not decrypt correctly");
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+
+    return err;
+}
+
+
+/* A GCM IV shorter than the explicit nonce has no invocation field to
+ * advance; generating a nonce must fail cleanly rather than write out of
+ * bounds. */
+int test_aes_gcm_iv_gen_short(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[16];
+    unsigned char fixed[4];
+    unsigned char out[16];
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(fixed, 0xBB, sizeof(fixed));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(fixed), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED, -1,
+                                  fixed) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_IV_GEN,
+                                  (int)sizeof(out), out) == 1;
+        if (err) {
+            PRINT_MSG("IV generation with short IV length should have failed");
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+
+    return err;
+}
+
+int test_aes_gcm_encrypt_partial_reuse_no_iv(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[16];
+    unsigned char iv[12];
+    unsigned char iv2[12];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "GCM plaintext for partial reuse test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    int outLen = 0, fLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(iv2, 0xCC, sizeof(iv2));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    /* Emit ciphertext, then abandon the operation without finalizing. */
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    /* Re-init the same context without a fresh IV. */
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, NULL) != 1;
+    }
+    /* Encrypting again must be rejected: it would repeat the nonce. */
+    if (err == 0) {
+        int r = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen);
+        if (r == 1) {
+            r = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen);
+        }
+        err = (r == 1);
+        if (err) {
+            PRINT_MSG("GCM reused the nonce after partial-op reinit");
+        }
+    }
+    /* A fresh IV restores normal operation. */
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, iv2) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+
+    return err;
+}
+
+int test_aes_gcm_encrypt_reuse_no_iv(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[16];
+    unsigned char iv[12];
+    unsigned char iv2[12];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "GCM plaintext for reuse-no-iv test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    unsigned char tag[16];
+    int outLen = 0, fLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(iv2, 0xCC, sizeof(iv2));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag) != 1;
+    }
+    /* Re-init on the same context without supplying a fresh IV. */
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, NULL) != 1;
+    }
+    /* A second encrypt must be rejected: it would repeat the nonce. */
+    if (err == 0) {
+        int r = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen);
+        if (r == 1) {
+            r = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen);
+        }
+        err = (r == 1);
+        if (err) {
+            PRINT_MSG("GCM encrypt reused the nonce without a fresh IV");
+        }
+    }
+    /* Re-init WITH a fresh IV must restore normal operation. */
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, iv2) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+
+    return err;
+}
+
+int test_aes_gcm_reuse_tag_bypass(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[16];
+    unsigned char iv[12];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "GCM plaintext for bypass test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    unsigned char dec[64];
+    unsigned char forged[16];
+    int outLen = 0, fLen = 0;
+    int decLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+    memset(forged, 0x00, sizeof(forged));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    /* Encrypt and deliberately never fetch the tag, leaving the internal
+     * tag-available flag set on the context. */
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, cipher, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+    }
+    /* Reuse the same context to decrypt the record with a forged tag. A stale
+     * tag-available flag must not skip authentication. */
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &decLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, dec, &decLen, ct, outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, forged) != 1;
+    }
+    if (err == 0) {
+        /* Forged tag: finalisation must fail, not silently succeed. */
+        err = EVP_DecryptFinal_ex(ctx, dec + decLen, &fLen) == 1;
+        if (err) {
+            PRINT_MSG("Forged tag accepted after context reuse (bypass)");
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+
+    return err;
+}
+
+int test_aes_gcm_set_iv_inv_short(void *data)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[16];
+    unsigned char fixed[4];
+    unsigned char inv[8];
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(fixed, 0xBB, sizeof(fixed));
+    memset(inv, 0xCC, sizeof(inv));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, NULL, NULL) != 1;
+    }
+    /* An IV shorter than the invocation field must reject SET_IV_INV, which
+     * would otherwise underflow ctx->iv + ctx->ivLen - inLen. */
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(fixed), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED, -1,
+                                  fixed) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_INV,
+                                  (int)sizeof(inv), inv) == 1;
+        if (err) {
+            PRINT_MSG("SET_IV_INV with short IV length should have failed");
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
 
     return err;
 }
@@ -1801,6 +2311,158 @@ static int test_aes_ccm_bad_tag_helper(OSSL_LIB_CTX *libCtx,
 
     EVP_CIPHER_CTX_free(ctx);
     EVP_CIPHER_free(cipher);
+    return err;
+}
+
+
+static int test_aes_ccm_ctx_reuse_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char iv[13];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "CCM plaintext for reuse test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    unsigned char tag[16];
+    unsigned char dec[64];
+    int outLen = 0, fLen = 0;
+    int decLen = 0;
+
+    memset(key, 0xAA, keyLen);
+    memset(iv, 0xBB, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    /* Encrypt with a fresh context. */
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, cipher, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, NULL, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+        outLen += fLen;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag) != 1;
+    }
+
+    /* Decrypt with a tampered tag -- must fail and poison the context. The
+     * NULL cipher keeps the same provider context so the reset is exercised. */
+    if (err == 0) {
+        tag[0] ^= 0x01;
+        err = EVP_DecryptInit(ctx, NULL, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &fLen, NULL, outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &fLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        int ret = EVP_DecryptUpdate(ctx, dec, &fLen, ct, outLen);
+        if (ret == 1) {
+            ret = EVP_DecryptFinal_ex(ctx, dec + fLen, &fLen);
+        }
+        if (ret == 1) {
+            PRINT_ERR_MSG("%s reuse: bad-tag decrypt should have failed",
+                          cipherName);
+            err = 1;
+        }
+    }
+
+    /* Reinitialize the SAME context with the correct tag. The poisoned auth
+     * state must not persist across re-init. */
+    if (err == 0) {
+        tag[0] ^= 0x01;
+        err = EVP_DecryptInit(ctx, NULL, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptInit(ctx, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &decLen, NULL, outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptUpdate(ctx, NULL, &decLen, aad,
+                                (int)(sizeof(aad) - 1)) != 1;
+    }
+    if (err == 0) {
+        memset(dec, 0, sizeof(dec));
+        err = EVP_DecryptUpdate(ctx, dec, &decLen, ct, outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DecryptFinal_ex(ctx, dec + decLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        err = (decLen != ptLen) || (memcmp(dec, pt, ptLen) != 0);
+        if (err) {
+            PRINT_ERR_MSG("%s reuse: reinitialized decrypt failed", cipherName);
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_ccm_ctx_reuse(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-CCM context reuse after authentication failure");
+    err = test_aes_ccm_ctx_reuse_helper(wpLibCtx, "AES-128-CCM", 16);
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM context reuse after authentication failure");
+        err = test_aes_ccm_ctx_reuse_helper(wpLibCtx, "AES-256-CCM", 32);
+    }
+
     return err;
 }
 
