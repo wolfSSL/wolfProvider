@@ -185,6 +185,9 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_ML_DSA_65      "ML-DSA-65:MLDSA65:2.16.840.1.101.3.4.3.18:id-ml-dsa-65"
 #define WP_NAMES_ML_DSA_87      "ML-DSA-87:MLDSA87:2.16.840.1.101.3.4.3.19:id-ml-dsa-87"
 
+/* LMS name (NIST SP 800-208 and RFC 8554). */
+#define WP_NAMES_LMS            "LMS"
+
 /* DRBG names. */
 #define WP_NAMES_SEED_SRC       "SEED-SRC"
 #define WP_NAMES_CTR_DRBG       "CTR-DRBG"
@@ -411,6 +414,7 @@ extern const OSSL_DISPATCH wp_ed448_signature_functions[];
 extern const OSSL_DISPATCH wp_hmac_signature_functions[];
 extern const OSSL_DISPATCH wp_cmac_signature_functions[];
 extern const OSSL_DISPATCH wp_mldsa_signature_functions[];
+extern const OSSL_DISPATCH wp_lms_signature_functions[];
 
 /* Asymmetric cipher implementations. */
 extern const OSSL_DISPATCH wp_rsa_asym_cipher_functions[];
@@ -435,6 +439,7 @@ extern const OSSL_DISPATCH wp_kdf_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mlkem512_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mlkem768_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mlkem1024_keymgmt_functions[];
+extern const OSSL_DISPATCH wp_lms_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mlx_x25519_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mlx_p256_keymgmt_functions[];
 extern const OSSL_DISPATCH wp_mlx_p384_keymgmt_functions[];
@@ -465,6 +470,7 @@ extern const OSSL_DISPATCH wp_rsapss_pki_decoder_functions[];
 extern const OSSL_DISPATCH wp_dh_type_specific_decoder_functions[];
 extern const OSSL_DISPATCH wp_dh_spki_decoder_functions[];
 extern const OSSL_DISPATCH wp_dh_pki_decoder_functions[];
+extern const OSSL_DISPATCH wp_lms_xdr_decoder_functions[];
 extern const OSSL_DISPATCH wp_ecc_type_specific_decoder_functions[];
 extern const OSSL_DISPATCH wp_ecc_spki_decoder_functions[];
 extern const OSSL_DISPATCH wp_ecc_pki_decoder_functions[];
@@ -565,4 +571,3 @@ extern const OSSL_DISPATCH wp_mldsa87_epki_pem_encoder_functions[];
 extern const OSSL_DISPATCH wp_file_store_functions[];
 
 #endif /* WP_ALG_FUNCS_H */
-

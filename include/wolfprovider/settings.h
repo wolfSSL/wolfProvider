@@ -260,6 +260,22 @@
 #if defined(WOLFPROV_HAVE_MLDSA) && !defined(WP_HAVE_MLDSA)
     #error "ML-DSA requested but unavailable: needs OpenSSL >= 3.6 and wolfSSL master or v5.9.2-stable+ with ML-DSA."
 #endif
+#if !defined(__has_include)
+    #define WP_LMS_HEADER
+#elif __has_include(<wolfssl/wolfcrypt/wc_lms.h>)
+    #define WP_LMS_HEADER
+#endif
+#if defined(WOLFPROV_HAVE_LMS) && defined(HAVE_FIPS)
+    #error "LMS is unavailable in FIPS builds until CAST integration is added."
+#endif
+#if defined(WOLFPROV_HAVE_LMS) && defined(WOLFSSL_HAVE_LMS) && \
+    defined(WP_LMS_HEADER) && defined(WP_WOLFSSL_PQC_CAPABLE) && \
+    (OPENSSL_VERSION_NUMBER >= 0x30600000L)
+    #define WP_HAVE_LMS
+#endif
+#if defined(WOLFPROV_HAVE_LMS) && !defined(WP_HAVE_LMS)
+    #error "LMS requested but unavailable: needs OpenSSL >= 3.6 and wolfSSL master or v5.9.2-stable+ with LMS."
+#endif
 #if !defined(NO_AES_CBC) && (defined(WP_HAVE_HMAC) || defined(WP_HAVE_CMAC))
     #define WP_HAVE_KBKDF
 #endif
@@ -268,4 +284,3 @@
 #endif
 
 #endif /* WOLFPROV_SETTINGS_H */
-

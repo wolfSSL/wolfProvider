@@ -6,9 +6,8 @@ name: wolfSSL Versions (PQC)
 # floor, then the build job runs three rows: pre-PQC floor, dynamically
 # resolved latest -stable, and master.
 #
-# PQC is opt-in (--enable-pqc). PQC_FLOOR is v5.9.1-stable: the wc_MlDsaKey_*
-# seed/message API wolfProvider's PQC code depends on lands post-v5.9.1-stable
-# (wolfSSL PR #10436), so v5.9.2-stable+ is the first PQC-eligible release.
+# PQC is opt-in (--enable-pqc). PQC_FLOOR is v5.9.2-stable, the first release
+# with the complete ML-KEM and ML-DSA interfaces required by wolfProvider.
 # PQC rows build with --enable-pqc against the latest OpenSSL (>= 3.6 required);
 # older/no-flag rows build without it and verify PQC is absent (opt-in).
 
@@ -60,21 +59,19 @@ jobs:
           echo "Latest OpenSSL: $OSSL"
           echo "latest-stable=$LATEST" >> "$GITHUB_OUTPUT"
           echo "openssl-tag=$OSSL" >> "$GITHUB_OUTPUT"
-          # Enable PQC when $LATEST is strictly newer than v5.9.1-stable
-          # (i.e. v5.9.2-stable, v5.10+, v6+, ...). Anything at or before
-          # the floor lacks the wc_MlDsaKey_* / wc_dilithium_sign_ctx_msg
-          # API and stays on the no-symbol path.
-          PQC_FLOOR="v5.9.1-stable"
+          # Enable PQC at v5.9.2-stable and later. Older releases stay on the
+          # no-symbol path.
+          PQC_FLOOR="v5.9.2-stable"
           if [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$LATEST" \
-                  | sort -V | tail -n1)" != "$PQC_FLOOR" ]; then
+                  | sort -V | head -n1)" = "$PQC_FLOOR" ]; then
             LATEST_PQC_ELIGIBLE=true
           else
             LATEST_PQC_ELIGIBLE=false
           fi
           echo "latest-stable PQC eligible: $LATEST_PQC_ELIGIBLE"
           # Each row carries the build flag (enable) and which PQC test families
-          # must result (expect: both | mlkem | mldsa | none). This exercises the
-          # combined, per-algorithm, and opt-in-absent paths.
+          # must result (expect: both | mlkem | mldsa | lms | none). This
+          # exercises the combined, per-algorithm, and opt-in-absent paths.
           MATRIX=$(jq -nc \
               --arg latest "$LATEST" \
               --argjson latest_pqc "$LATEST_PQC_ELIGIBLE" '{
@@ -91,7 +88,11 @@ jobs:
               {"name":"master (--enable-mlkem only)",
                "wolfssl-ref":"master","enable":"--enable-mlkem","expect":"mlkem"},
               {"name":"master (--enable-mldsa only)",
-               "wolfssl-ref":"master","enable":"--enable-mldsa","expect":"mldsa"}
+               "wolfssl-ref":"master","enable":"--enable-mldsa","expect":"mldsa"},
+              {"name":"master (--enable-lms only)",
+               "wolfssl-ref":"master","enable":"--enable-lms","expect":"lms"},
+              {"name":"v5.9.2-stable (--enable-lms only)",
+               "wolfssl-ref":"v5.9.2-stable","enable":"--enable-lms","expect":"lms"}
             ]
           }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -121,7 +122,7 @@ jobs:
         id: deps
         uses: ./.github/actions/oras-build-deps
         with:
-          variant: pqc
+          variant: ${{ matrix.expect == 'lms' && 'pqc-lms' || 'pqc' }}
           openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
           wolfssl_ref: ${{ matrix.wolfssl-ref }}
           extra_key: ${{ matrix.enable }}
@@ -143,24 +144,27 @@ jobs:
           wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
 
       # Opt-in is per-algorithm: assert exactly the expected PQC test families
-      # are present (both / mlkem / mldsa / none). This catches a leaked
+      # are present (both / mlkem / mldsa / lms / none). This catches a leaked
       # algorithm, a missing one, or PQC dragged in without a flag.
       - name: Verify PQC test presence matches opt-in (${{ matrix.expect }})
         run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           tests=$(./test/unit.test --list) || exit 1
-          kem=0; dsa=0
+          kem=0; dsa=0; lms=0
           printf '%s\n' "$tests" | grep -q 'test_mlkem_keygen' && kem=1
           printf '%s\n' "$tests" | grep -q 'test_mldsa_sign_verify' && dsa=1
-          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa"
+          printf '%s\n' "$tests" | grep -q 'test_lms_import_export' && lms=1
+          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa lms=$lms"
           case "${{ matrix.expect }}" in
-            both)  [ "$kem" = 1 ] && [ "$dsa" = 1 ] ;;
-            mlkem) [ "$kem" = 1 ] && [ "$dsa" = 0 ] ;;
-            mldsa) [ "$kem" = 0 ] && [ "$dsa" = 1 ] ;;
-            none)  [ "$kem" = 0 ] && [ "$dsa" = 0 ] ;;
+            both)  [ "$kem" = 1 ] && [ "$dsa" = 1 ] && [ "$lms" = 0 ] ;;
+            mlkem) [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$lms" = 0 ] ;;
+            mldsa) [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$lms" = 0 ] ;;
+            lms)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$lms" = 1 ] ;;
+            none)  [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$lms" = 0 ] ;;
             *) false ;;
           esac || { echo "ERROR: PQC test families do not match expect=${{ matrix.expect }}"; exit 1; }
 
-      # Run the ML-KEM / ML-DSA / hybrid unit tests: keygen, sign/verify,
+      # Run the ML-KEM / ML-DSA / LMS / hybrid unit tests: keygen, sign/verify,
       # encap/decap, PEM encoder/decoder round-trip, X.509 signing, and the
       # hybrid-group KEM. Selected by index from --list so it tracks however
       # many PQC tests are registered. LD_LIBRARY_PATH carries libwolfprov's
@@ -169,7 +173,7 @@ jobs:
         if: matrix.expect != 'none'
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
-          idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx' \
+          idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx|lms' \
               | grep -oE '^[0-9]+')
           if [ -z "$idxs" ]; then
             echo "::error::No PQC unit tests found"

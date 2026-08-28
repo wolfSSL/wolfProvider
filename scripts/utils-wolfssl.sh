@@ -46,6 +46,7 @@ WOLFSSL_FIPS_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-opensslcoexist '}
 WOLFSSL_FIPS_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWOLFSSL_OLD_OID_SUM -DWOLFSSL_DH_EXTRA"}
 WOLFSSL_CONFIG_OPTS=${WOLFSSL_CONFIG_OPTS:-'--enable-all-crypto --with-eccminsz=192 --with-max-ecc-bits=1024 --enable-opensslcoexist --enable-sha'}
 WOLFSSL_CONFIG_CFLAGS=${WOLFSSL_CONFIG_CFLAGS:-"-I${OPENSSL_INSTALL_DIR}/include -DWC_RSA_NO_PADDING -DWOLFSSL_PUBLIC_MP -DHAVE_PUBLIC_FFDHE -DHAVE_FFDHE_6144 -DHAVE_FFDHE_8192 -DWOLFSSL_PSS_LONG_SALT -DWOLFSSL_PSS_SALT_LEN_DISCOVER -DRSA_MIN_SIZE=1024 -DWOLFSSL_OLD_OID_SUM "}
+WOLFSSL_PQC_CONFIG_OPTS=""
 
 # Add WC_RNG_SEED_CB when SEED-SRC is enabled (allows custom seed callback for fork safety)
 if [ "$WOLFPROV_SEED_SRC" = "1" ]; then
@@ -56,11 +57,17 @@ fi
 # Enable ML-KEM and ML-DSA in wolfSSL when --enable-pqc is requested.
 # Use the canonical FIPS 203 / FIPS 204 flag names, per requested algorithm.
 if [ "$WOLFPROV_MLKEM" = "1" ]; then
-    WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS} --enable-mlkem"
+    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-mlkem"
 fi
 if [ "$WOLFPROV_MLDSA" = "1" ]; then
-    WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS} --enable-mldsa"
+    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-mldsa"
 fi
+if [ "$WOLFPROV_LMS" = "1" ]; then
+    # wolfProvider exposes LMS verification only; build wolfSSL without keygen
+    # or signing so those private-key operations are not present.
+    WOLFSSL_PQC_CONFIG_OPTS="${WOLFSSL_PQC_CONFIG_OPTS} --enable-lms=verify-only,sha256-192,shake256"
+fi
+WOLFSSL_CONFIG_OPTS="${WOLFSSL_CONFIG_OPTS}${WOLFSSL_PQC_CONFIG_OPTS}"
 
 WOLFSSL_DEBUG_ASN_TEMPLATE=${DWOLFSSL_DEBUG_ASN_TEMPLATE:-0}
 WOLFPROV_DISABLE_ERR_TRACE=${WOLFPROV_DISABLE_ERR_TRACE:-0}
@@ -124,11 +131,40 @@ clone_wolfssl() {
     fi
 }
 
+check_wolfssl_feature() {
+    local requested="$1"
+    local macro="$2"
+    local name="$3"
+    local options="${WOLFSSL_INSTALL_DIR}/include/wolfssl/options.h"
+
+    if [ "${requested}" = "1" ] && [ -d "${WOLFSSL_INSTALL_DIR}" ] &&
+            ! grep -Eq "^[[:space:]]*#define[[:space:]]+${macro}([[:space:]]|$)" \
+                "${options}" 2>/dev/null; then
+        printf "ERROR: existing wolfSSL install was built without %s.\n" \
+            "${name}"
+        printf "Fix: ./scripts/build-wolfprovider.sh --distclean\n"
+        exit 1
+    fi
+}
+
+check_wolfssl_feature_mismatch() {
+    check_wolfssl_feature "${WOLFPROV_MLKEM}" WOLFSSL_HAVE_MLKEM ML-KEM
+    check_wolfssl_feature "${WOLFPROV_MLDSA}" WOLFSSL_HAVE_MLDSA ML-DSA
+    check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_HAVE_LMS LMS
+    check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_LMS_SHA256_192 \
+        "LMS SHA-256/192 parameter sets"
+    check_wolfssl_feature "${WOLFPROV_LMS}" WOLFSSL_LMS_SHAKE256 \
+        "LMS SHAKE256 parameter sets"
+}
+
 install_wolfssl() {
     # Check if libwolfssl and libwolfssl-dev packages are already installed
     # This is allowed only for wolfSSL, but not for OpenSSL because we want to
     # use the custom OpenSSL built with wolfProvider.
-    if command -v dpkg >/dev/null 2>&1; then
+    if [ "$WOLFPROV_PQC" != "1" ] && [ "$WOLFPROV_MLKEM" != "1" ] &&
+            [ "$WOLFPROV_MLDSA" != "1" ] &&
+            [ "$WOLFPROV_LMS" != "1" ] &&
+            command -v dpkg >/dev/null 2>&1; then
         if dpkg -l | grep -q "^ii.*libwolfssl[[:space:]]" && dpkg -l | grep -q "^ii.*libwolfssl-dev[[:space:]]"; then
             # Check if there is a FIPS mismatch
             # If the system wolfSSL is FIPS, we need to be doing a FIPS build
@@ -153,6 +189,7 @@ install_wolfssl() {
 
     printf "\nInstalling wolfSSL ${WOLFSSL_TAG} ...\n"
     clone_wolfssl
+    check_wolfssl_feature_mismatch
     cd ${WOLFSSL_SOURCE_DIR}
 
     if [ ! -d ${WOLFSSL_INSTALL_DIR} ]; then
@@ -374,4 +411,3 @@ init_wolfssl() {
       export LD_LIBRARY_PATH="$WOLFSSL_INSTALL_DIR/lib:$LD_LIBRARY_PATH"
     fi
 }
-

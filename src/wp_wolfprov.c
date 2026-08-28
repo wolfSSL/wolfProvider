@@ -700,6 +700,9 @@ static const OSSL_ALGORITHM wolfprov_keymgmt[] = {
     { WP_NAMES_ML_DSA_87, WOLFPROV_PROPERTIES,
       wp_mldsa87_keymgmt_functions, "" },
 #endif
+#ifdef WP_HAVE_LMS
+    { WP_NAMES_LMS, WOLFPROV_PROPERTIES, wp_lms_keymgmt_functions, "" },
+#endif
 
     { NULL, NULL, NULL, NULL }
 };
@@ -767,6 +770,9 @@ static const OSSL_ALGORITHM wolfprov_signature[] = {
       wp_mldsa_signature_functions, "" },
     { WP_NAMES_ML_DSA_87, WOLFPROV_PROPERTIES,
       wp_mldsa_signature_functions, "" },
+#endif
+#ifdef WP_HAVE_LMS
+    { WP_NAMES_LMS, WOLFPROV_PROPERTIES, wp_lms_signature_functions, "" },
 #endif
 
     { NULL, NULL, NULL, NULL }
@@ -1242,6 +1248,10 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
     { WP_NAMES_ML_DSA_87, WP_DECODER_PROPERTIES(PrivateKeyInfo),
       wp_mldsa87_pki_decoder_functions,
       "" },
+#endif
+#ifdef WP_HAVE_LMS
+    { WP_NAMES_LMS, WOLFPROV_PROPERTIES ",input=xdr,structure=lms",
+      wp_lms_xdr_decoder_functions, "" },
 #endif
 
     /* Dummy decoder added to match PKI bit not match EPKI from context.

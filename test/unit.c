@@ -578,6 +578,14 @@ TEST_CASE test_case[] = {
     #endif
 #endif
 
+#ifdef WP_HAVE_LMS
+    TEST_DECL(test_lms_verify, NULL),
+    TEST_DECL(test_lms_import_export, NULL),
+    TEST_DECL(test_lms_decode, NULL),
+    TEST_DECL(test_lms_provider_ab, NULL),
+    TEST_DECL(test_lms_unsupported_operations, NULL),
+#endif
+
 #ifdef WP_HAVE_MLKEM
     TEST_DECL(test_mlkem_keygen, NULL),
     TEST_DECL(test_mlkem_import_export_roundtrip, NULL),

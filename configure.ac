@@ -181,6 +181,14 @@ AC_ARG_ENABLE([mldsa],
     [ ENABLED_MLDSA=$enableval ],
     [ ENABLED_MLDSA= ]
     )
+AC_ARG_ENABLE([lms],
+    [AS_HELP_STRING([--enable-lms],[Enable LMS verification only; requires wolfSSL built verify-only, without LMS keygen or signing (default: disabled).])],
+    [ ENABLED_LMS=$enableval ],
+    [ ENABLED_LMS=no ]
+    )
+if test "x$ENABLED_LMS" != "xyes" && test "x$ENABLED_LMS" != "xno"; then
+    AC_MSG_ERROR([--enable-lms accepts only yes or no])
+fi
 
 # --enable-pqc is shorthand for both ML-KEM and ML-DSA, unless one was
 # explicitly disabled (--enable-pqc --disable-mldsa keeps ML-DSA off).
@@ -193,6 +201,9 @@ if test "x$ENABLED_MLKEM" = "xyes"; then
 fi
 if test "x$ENABLED_MLDSA" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_MLDSA"
+fi
+if test "x$ENABLED_LMS" = "xyes"; then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_LMS"
 fi
 
 # Set OpenSSL lib directory for installing libdefault.so
@@ -251,11 +262,13 @@ echo "   * Debug silent mode:          $ENABLED_DEBUG_SILENT"
 echo
 test "x$ENABLED_MLKEM" = "xyes" || ENABLED_MLKEM=no
 test "x$ENABLED_MLDSA" = "xyes" || ENABLED_MLDSA=no
+test "x$ENABLED_LMS" = "xyes" || ENABLED_LMS=no
 echo "   Features "
 echo "   * User settings:              $ENABLED_USERSETTINGS"
 echo "   * Dynamic provider:           $ENABLED_DYNAMIC_PROVIDER"
 echo "   * Replace default:            $ENABLED_REPLACE_DEFAULT"
 echo "   * ML-KEM (FIPS 203):          $ENABLED_MLKEM"
 echo "   * ML-DSA (FIPS 204):          $ENABLED_MLDSA"
+echo "   * LMS verification only:      $ENABLED_LMS"
 echo ""
 echo "---"

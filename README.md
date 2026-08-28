@@ -88,6 +88,34 @@ Without an enable flag no PQC code is compiled, regardless of what wolfSSL enabl
 * ML-KEM (FIPS 203): ML-KEM-512, ML-KEM-768, ML-KEM-1024 (key encapsulation)
 * ML-DSA (FIPS 204): ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
 
+### LMS (RFC 8554 / NIST SP 800-208)
+LMS verification is independently opt-in and requires wolfSSL 5.9.2-stable or
+newer and OpenSSL 3.6 or newer:
+
+```bash
+./scripts/build-wolfprovider.sh --enable-lms
+```
+
+wolfProvider follows OpenSSL's LMS provider contract: it imports and exports
+raw XDR public keys and supports one-shot verification through
+`EVP_PKEY_verify_message_init()` followed by `EVP_PKEY_verify()`. The OpenSSL
+wire format omits the single-level HSS header; wolfProvider adds that wrapper
+only at the wolfCrypt boundary. LMS signing, key generation, private-key
+import, and streaming operations are not exposed because OpenSSL's LMS
+provider is verification-only for SP 800-208 software modules.
+
+Because wolfProvider only verifies, wolfSSL must be built without LMS key
+generation or signing. Configure wolfSSL with
+`--enable-lms=verify-only,sha256-192,shake256` (which defines
+`WOLFSSL_LMS_VERIFY_ONLY`) so the private-key operations are absent rather than
+built but unused. The bundled `build-wolfprovider.sh --enable-lms` flow already
+builds wolfSSL this way.
+
+The PQC KAT workflow runs OpenSSL's 320 LMS verification vectors, including
+valid and corrupted messages, signatures, and key encodings. Focused unit
+tests cover public-key import/export, XDR decoding, selection handling, and
+the unsupported stateful operations.
+
 
 ## Support
 
