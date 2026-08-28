@@ -2313,7 +2313,15 @@ static int wp_aesccm_cipher(wp_AeadCtx *ctx, unsigned char *out,
     }
     if (ok) {
         *outLen = 0;
-        if (in != NULL) {
+        /* Single-shot CCM: a both-NULL pass before the encrypt (tagAvail clear)
+         * is only the one-shot total-length declaration and must not finalise,
+         * or the payload encrypt that follows is rejected. After the encrypt it
+         * is a trailing finalise and falls through so IV_STATE_FINISHED is set
+         * against nonce reuse. */
+        if ((in == NULL) && (out == NULL) && (!ctx->tagAvail)) {
+            *outLen = inLen;
+        }
+        else if (in != NULL) {
             ok = wp_aesccm_stream_update(ctx, out, outLen, outSize, in, inLen);
         }
         else {
