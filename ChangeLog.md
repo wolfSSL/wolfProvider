@@ -1,3 +1,59 @@
+# wolfProvider version 1.2.2 (August 27, 2026)
+
+Release 1.2.2 has been developed according to wolfSSL's development and QA
+process and successfully passed the quality criteria.
+
+PR stands for Pull Request, and PR <NUMBER> references a GitHub pull request
+number where the code change was added.
+
+## New Feature Additions
+* Add a Windows/Visual Studio 2022 port that builds libwolfprov.dll against a
+  user_settings.h-configured wolfSSL and OpenSSL 3.x, for both non-FIPS and FIPS
+  (PR 464).
+* Encrypt PKCS#8 private keys when a cipher is set on the PrivateKeyInfo encoder,
+  with CLI coverage (PR 453).
+
+## Enhancements and Optimizations
+* Restore the default FIPS policy mask in WOLFSSL_USER_SETTINGS builds, add
+  portable FIPS CAST-mutex initialization, and balance wolfCrypt init and
+  cleanup (PR 464).
+* Stop advertising SHA-512/224 and SHA-512/256 in FIPS and self-test builds
+  (PR 464).
+* Match OpenSSL ML-KEM NULL output handling (PR 458).
+* Tighten PKCS#8 feature guards and expand PKCS#8 cipher-rejection test coverage.
+* Expand the hostap smoke and EAP test coverage in CI and pin the UML kernel to
+  Linux 7.2 (PR 469).
+* Run PQC workflows when pull requests become ready and skip them on drafts
+  (PR 456).
+* Add IVs to PBES2 test parameters and wait for OpenSSL test-server readiness in
+  CI.
+* Add CONTRIBUTING.md covering the contributor agreement and PR process (PR 466).
+
+## Vulnerabilities
+* [High] CVE-2026-81019 - AES-GCM explicit nonce reuse on TLS 1.2 and DTLS 1.2
+  records. The 8-byte explicit nonce was generated when the fixed IV was
+  configured and was not incremented for each record, so successive AES-GCM
+  records processed by the same encryption context reused the same key and
+  nonce. Reusing a GCM key and nonce weakens confidentiality (identical keystream
+  across records) and integrity (authentication tag forgery). AES-CCM, TLS 1.3,
+  and non-TLS use of AES-GCM are not affected. Affects wolfProvider 1.0.0 through
+  1.2.1, FIPS and non-FIPS. Update to 1.2.2.
+
+## Bug Fixes
+* Validate the X25519 public key length before reading the input buffer
+  (PR 457).
+* Keep declarations first in the X25519 blinding skip.
+* Fix ECX/ECC get_params to size the export buffer from data_size (PR 447).
+* Address PKCS#8 security-review findings.
+* Use fixed GMAC and CMAC tag lengths in the final operation.
+* Correct the AEAD input-cache parameter documentation.
+* Release the RNG mutex only when it was acquired during fixed-IV setup.
+* Reset AEAD authentication error state on decrypt reinitialization so a
+  poisoned context can be recovered.
+* Reset the AEAD tag-available state on reinitialization so a reused context
+  cannot skip tag verification.
+* Additional AES-AEAD IV bounds and authentication-state hardening.
+
 # wolfProvider version 1.2.1 (July 16, 2026)
 
 Release 1.2.1 has been developed according to wolfSSL's development and QA
