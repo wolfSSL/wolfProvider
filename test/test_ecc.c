@@ -1045,6 +1045,139 @@ int test_ecc_encode_epki(void *data)
 }
 #endif /* WP_HAVE_EPKI_TEST */
 
+/* Sink BIO that accepts one byte per write and keeps every byte it is given.
+ * It reproduces a short-writing BIO so a truncated encoding is detectable. */
+typedef struct {
+    unsigned char buf[4096];
+    size_t len;
+} ShortWriteSink;
+
+static int short_write_bio_write(BIO* b, const char* data, int len)
+{
+    ShortWriteSink* sink = (ShortWriteSink*)BIO_get_data(b);
+
+    BIO_clear_retry_flags(b);
+    if ((sink == NULL) || (len <= 0) || (sink->len >= sizeof(sink->buf))) {
+        return 0;
+    }
+    /* Take a single byte so the writer must loop to make progress. */
+    sink->buf[sink->len++] = (unsigned char)data[0];
+    return 1;
+}
+
+static long short_write_bio_ctrl(BIO* b, int cmd, long num, void* ptr)
+{
+    (void)b;
+    (void)num;
+    (void)ptr;
+    return (cmd == BIO_CTRL_FLUSH) ? 1 : 0;
+}
+
+static int short_write_bio_create(BIO* b)
+{
+    BIO_set_init(b, 1);
+    return 1;
+}
+
+/* Encode pkey twice with the same wolfProvider encoder: once via
+ * OSSL_ENCODER_to_data (a normal full-writing sink) for a reference, and once
+ * through a one-byte-at-a-time BIO. The two encodings must be identical. */
+static int test_ecc_encode_short_write(EVP_PKEY* pkey, int selection,
+    const char* format, const char* structure)
+{
+    int err = 0;
+    OSSL_ENCODER_CTX* ectx = NULL;
+    unsigned char* refData = NULL;
+    size_t refLen = 0;
+    BIO_METHOD* meth = NULL;
+    BIO* bio = NULL;
+    ShortWriteSink sink;
+
+    memset(&sink, 0, sizeof(sink));
+
+    ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, selection, format, structure,
+        "provider=libwolfprov");
+    err = (ectx == NULL);
+    if (err == 0) {
+        err = (OSSL_ENCODER_to_data(ectx, &refData, &refLen) != 1);
+    }
+    OSSL_ENCODER_CTX_free(ectx);
+    ectx = NULL;
+    if (err == 0) {
+        err = (refLen == 0);
+    }
+
+    if (err == 0) {
+        meth = BIO_meth_new(BIO_get_new_index() | BIO_TYPE_SOURCE_SINK,
+            "short-write");
+        err = (meth == NULL);
+    }
+    if (err == 0) {
+        BIO_meth_set_write(meth, short_write_bio_write);
+        BIO_meth_set_ctrl(meth, short_write_bio_ctrl);
+        BIO_meth_set_create(meth, short_write_bio_create);
+        bio = BIO_new(meth);
+        err = (bio == NULL);
+    }
+    if (err == 0) {
+        BIO_set_data(bio, &sink);
+        ectx = OSSL_ENCODER_CTX_new_for_pkey(pkey, selection, format, structure,
+            "provider=libwolfprov");
+        err = (ectx == NULL);
+    }
+    if (err == 0) {
+        err = (OSSL_ENCODER_to_bio(ectx, bio) != 1);
+    }
+    if (err == 0) {
+        err = (sink.len != refLen);
+        if (err) {
+            PRINT_ERR_MSG("Short write truncated output: %lu of %lu bytes",
+                (unsigned long)sink.len, (unsigned long)refLen);
+        }
+    }
+    if (err == 0) {
+        err = (memcmp(sink.buf, refData, refLen) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Short-write output does not match the reference");
+        }
+    }
+
+    OSSL_ENCODER_CTX_free(ectx);
+    BIO_free(bio);
+    BIO_meth_free(meth);
+    OPENSSL_free(refData);
+
+    return err;
+}
+
+int test_ecc_encode_short_write_bio(void *data)
+{
+    int err = 0;
+    const unsigned char* p = ecc_key_der_256;
+    EVP_PKEY* pkey = NULL;
+
+    (void)data;
+
+    pkey = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
+        wpLibCtx, NULL);
+    err = (pkey == NULL);
+
+    if (err == 0) {
+        PRINT_MSG("SubjectPublicKeyInfo DER survives a short-writing BIO");
+        err = test_ecc_encode_short_write(pkey, EVP_PKEY_PUBLIC_KEY, "DER",
+            "SubjectPublicKeyInfo");
+    }
+    if (err == 0) {
+        PRINT_MSG("SubjectPublicKeyInfo PEM survives a short-writing BIO");
+        err = test_ecc_encode_short_write(pkey, EVP_PKEY_PUBLIC_KEY, "PEM",
+            "SubjectPublicKeyInfo");
+    }
+
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
 int test_ecdh_invalid_kdf_strings(void *data)
 {
     int err = 0;
