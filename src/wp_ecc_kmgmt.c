@@ -3090,10 +3090,7 @@ static int wp_ecc_encode(wp_EccEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
         }
     }
     if (ok) {
-        rc = BIO_write(out, keyData, (int)keyLen);
-        if (rc <= 0) {
-            ok = 0;
-        }
+        ok = wp_write_bio(out, keyData, keyLen);
     }
 
     if (private) {

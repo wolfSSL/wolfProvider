@@ -1448,6 +1448,46 @@ int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
 }
 
 /**
+ * Write all data to a BIO.
+ *
+ * BIO_write may write fewer bytes than requested. Loop until all data is
+ * written so that a short write does not silently truncate the output.
+ *
+ * @param [in] bio   BIO to write to.
+ * @param [in] data  Data to write.
+ * @param [in] len   Length of data in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_write_bio(BIO* bio, const unsigned char* data, size_t len)
+{
+    int ok = 1;
+    size_t off = 0;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_write_bio");
+
+    if ((bio == NULL) || (data == NULL)) {
+        ok = 0;
+    }
+
+    while (ok && (off < len)) {
+        int rc = BIO_write(bio, data + off, (int)(len - off));
+        if (rc > 0) {
+            off += (size_t)rc;
+        }
+        else {
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_write error (%d) in %s:%d",
+                rc, __FILE__, __LINE__);
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__),
+        ok);
+    return ok;
+}
+
+/**
  * Get the underlying BIO object from the core BIO.
  *
  * @param [in]  coreBio  Core BIO.
