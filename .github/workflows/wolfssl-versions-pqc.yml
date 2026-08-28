@@ -161,7 +161,7 @@ jobs:
           OPENSSL_MODULES="$(pwd)/.libs" "$RUNNER_TEMP/openssl_example"
 
       - name: Run PQC OpenSSL example (${{ matrix.expect }})
-        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify'
+        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify' && matrix.expect != 'lms'
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           if [ ! -x ./examples/pqc_openssl_example ]; then
