@@ -988,4 +988,137 @@ int test_mlx_encap_decap(void* data)
     return err;
 }
 
+/* EVP_PKEY_dup roundtrip for the hybrid groups. */
+int test_mlx_dup(void* data)
+{
+    int err = 0;
+    size_t i;
+    EVP_PKEY* k = NULL;
+    EVP_PKEY* d = NULL;
+    EVP_PKEY_CTX* ectx = NULL;
+    EVP_PKEY_CTX* dctx = NULL;
+    unsigned char* pub1 = NULL;
+    unsigned char* pub2 = NULL;
+    unsigned char* ct = NULL;
+    unsigned char* ss1 = NULL;
+    unsigned char* ss2 = NULL;
+    unsigned char* ss3 = NULL;
+    size_t pub1Len = 0;
+    size_t pub2Len = 0;
+    size_t ctLen = 0;
+    size_t ss1Len = 0;
+    size_t ss2Len = 0;
+    size_t ss3Len = 0;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < MLX_NAME_COUNT); i++) {
+        const char* name = mlx_names[i];
+        PRINT_MSG("Dup %s", name);
+
+        err = wp_test_mlx_keygen(name, &k);
+
+        if (err == 0) {
+            d = EVP_PKEY_dup(k);
+            err = (d == NULL);
+            if (err) {
+                PRINT_ERR_MSG("EVP_PKEY_dup failed");
+            }
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_octet_string_param(k, OSSL_PKEY_PARAM_PUB_KEY,
+                NULL, 0, &pub1Len) != 1;
+        }
+        if (err == 0) {
+            pub1 = (unsigned char*)OPENSSL_malloc(pub1Len);
+            err = (pub1 == NULL) || EVP_PKEY_get_octet_string_param(k,
+                OSSL_PKEY_PARAM_PUB_KEY, pub1, pub1Len, &pub1Len) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_get_octet_string_param(d, OSSL_PKEY_PARAM_PUB_KEY,
+                NULL, 0, &pub2Len) != 1;
+        }
+        if (err == 0) {
+            pub2 = (unsigned char*)OPENSSL_malloc(pub2Len);
+            err = (pub2 == NULL) || EVP_PKEY_get_octet_string_param(d,
+                OSSL_PKEY_PARAM_PUB_KEY, pub2, pub2Len, &pub2Len) != 1;
+            if (err) {
+                PRINT_ERR_MSG("Dup public key retrieval failed");
+            }
+        }
+        if (err == 0) {
+            err = (pub1Len != pub2Len) || (memcmp(pub1, pub2, pub1Len) != 0);
+            if (err) {
+                PRINT_ERR_MSG("Dup pub byte mismatch");
+            }
+        }
+
+        if (err == 0) {
+            ectx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, d, NULL);
+            err = (ectx == NULL) || (EVP_PKEY_encapsulate_init(ectx, NULL) != 1);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_encapsulate(ectx, NULL, &ctLen, NULL, &ss1Len) != 1;
+        }
+        if (err == 0) {
+            err = (ctLen == 0) || (ss1Len == 0);
+        }
+        if (err == 0) {
+            ct = (unsigned char*)OPENSSL_malloc(ctLen);
+            ss1 = (unsigned char*)OPENSSL_malloc(ss1Len);
+            ss2 = (unsigned char*)OPENSSL_malloc(ss1Len);
+            ss3 = (unsigned char*)OPENSSL_malloc(ss1Len);
+            err = (ct == NULL) || (ss1 == NULL) || (ss2 == NULL) ||
+                (ss3 == NULL);
+        }
+        if (err == 0) {
+            err = EVP_PKEY_encapsulate(ectx, ct, &ctLen, ss1, &ss1Len) != 1;
+        }
+        if (err == 0) {
+            dctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, k, NULL);
+            err = (dctx == NULL) || (EVP_PKEY_decapsulate_init(dctx, NULL) != 1);
+        }
+        if (err == 0) {
+            ss2Len = ss1Len;
+            err = EVP_PKEY_decapsulate(dctx, ss2, &ss2Len, ct, ctLen) != 1;
+        }
+        if (err == 0) {
+            err = (ss1Len != ss2Len) || (memcmp(ss1, ss2, ss1Len) != 0);
+            if (err) {
+                PRINT_ERR_MSG("Dup secret mismatch");
+            }
+        }
+
+        if (err == 0) {
+            EVP_PKEY_CTX_free(dctx);
+            dctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, d, NULL);
+            err = (dctx == NULL) || (EVP_PKEY_decapsulate_init(dctx, NULL) != 1);
+        }
+        if (err == 0) {
+            ss3Len = ss1Len;
+            err = EVP_PKEY_decapsulate(dctx, ss3, &ss3Len, ct, ctLen) != 1;
+        }
+        if (err == 0) {
+            err = (ss1Len != ss3Len) || (memcmp(ss1, ss3, ss1Len) != 0);
+            if (err) {
+                PRINT_ERR_MSG("Dup private key decap mismatch");
+            }
+        }
+
+        OPENSSL_free(pub1); pub1 = NULL; pub1Len = 0;
+        OPENSSL_free(pub2); pub2 = NULL; pub2Len = 0;
+        OPENSSL_free(ct); ct = NULL;
+        OPENSSL_free(ss1); ss1 = NULL;
+        OPENSSL_free(ss2); ss2 = NULL;
+        OPENSSL_free(ss3); ss3 = NULL;
+        EVP_PKEY_CTX_free(ectx); ectx = NULL;
+        EVP_PKEY_CTX_free(dctx); dctx = NULL;
+        EVP_PKEY_free(d); d = NULL;
+        EVP_PKEY_free(k); k = NULL;
+        ctLen = 0; ss1Len = 0; ss2Len = 0; ss3Len = 0;
+    }
+
+    return err;
+}
+
 #endif /* WP_HAVE_MLKEM */

@@ -599,6 +599,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mlkem_get_params, NULL),
     TEST_DECL(test_mlkem_import_mismatched_pubpriv, NULL),
     TEST_DECL(test_mlx_encap_decap, NULL),
+    TEST_DECL(test_mlx_dup, NULL),
 #endif
 
 #ifdef WP_HAVE_MLDSA

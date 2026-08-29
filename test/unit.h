@@ -615,6 +615,7 @@ int test_mlkem_decap_size_query(void *data);
 int test_mlkem_get_params(void *data);
 int test_mlkem_import_mismatched_pubpriv(void *data);
 int test_mlx_encap_decap(void *data);
+int test_mlx_dup(void *data);
 #endif
 
 #ifdef WP_HAVE_MLDSA
