@@ -358,6 +358,225 @@ int test_cmac_multi_update(void *data)
     return err;
 }
 
+/**
+ * Test that one CMAC context can be reset by calling EVP_MAC_init() with no
+ * key, both after EVP_MAC_final() and mid-stream, reusing the cached key.
+ */
+static int test_cmac_reinit_helper(OSSL_LIB_CTX *libCtx, unsigned char *macA,
+    unsigned char *macB)
+{
+    int err;
+    EVP_MAC *emac = NULL;
+    EVP_MAC_CTX *ctx = NULL;
+    OSSL_PARAM params[3];
+    char cipher[] = "AES-256-CBC";
+    unsigned char key[32] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+    };
+    unsigned char msgA[32];
+    unsigned char msgB[21];
+    unsigned char macC[AES_BLOCK_SIZE];
+    unsigned char macD[AES_BLOCK_SIZE];
+    size_t macASz = AES_BLOCK_SIZE;
+    size_t macBSz = AES_BLOCK_SIZE;
+    size_t macCSz = sizeof(macC);
+    size_t macDSz = sizeof(macD);
+
+    memset(msgA, 0x41, sizeof(msgA));
+    memset(msgB, 0x5a, sizeof(msgB));
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_CIPHER,
+        cipher, 0);
+    params[1] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        (void *)key, sizeof(key));
+    params[2] = OSSL_PARAM_construct_end();
+
+    err = (emac = EVP_MAC_fetch(libCtx, "CMAC", NULL)) == NULL;
+    if (err == 0) {
+        err = (ctx = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_MAC_CTX_set_params(ctx, params) != 1;
+    }
+
+    /* First round with installed key by EVP_MAC_CTX_set_params() above. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgA, sizeof(msgA)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macA, &macASz, AES_BLOCK_SIZE) != 1;
+    }
+
+    /* Reset after final and MAC a different message with the cached key. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgB, sizeof(msgB)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macB, &macBSz, AES_BLOCK_SIZE) != 1;
+    }
+
+    /* The first message must produce the first MAC again. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgA, sizeof(msgA)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macC, &macCSz, sizeof(macC)) != 1;
+    }
+    if ((err == 0) && ((macCSz != macASz) ||
+            (memcmp(macC, macA, macASz) != 0))) {
+        PRINT_ERR_MSG("CMAC after reset doesn't match the first MAC");
+        err = 1;
+    }
+
+    /* A reset mid-stream must discard the data buffered so far. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgA, sizeof(msgA)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgB, sizeof(msgB)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macD, &macDSz, sizeof(macD)) != 1;
+    }
+    if ((err == 0) && ((macDSz != macBSz) ||
+            (memcmp(macD, macB, macBSz) != 0))) {
+        PRINT_ERR_MSG("CMAC after mid-stream reset covers stale data");
+        err = 1;
+    }
+
+    EVP_MAC_CTX_free(ctx);
+    EVP_MAC_free(emac);
+    return err;
+}
+
+/**
+ * A key that never made it into the CMAC object must not be usable on a
+ * later keyless restart.
+ */
+static int test_cmac_reinit_stale_key(OSSL_LIB_CTX *libCtx)
+{
+    int err;
+    EVP_MAC *emac = NULL;
+    EVP_MAC_CTX *ctx = NULL;
+    OSSL_PARAM keyOnly[2];
+    OSSL_PARAM cipherOnly[2];
+    char cipher[] = "AES-128-CBC";
+    unsigned char key[32];
+    unsigned char msg[32];
+    unsigned char mac[AES_BLOCK_SIZE];
+    size_t macSz = sizeof(mac);
+
+    memset(key, 0x0b, sizeof(key));
+    memset(msg, 0x41, sizeof(msg));
+
+    keyOnly[0] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        (void *)key, sizeof(key));
+    keyOnly[1] = OSSL_PARAM_construct_end();
+    cipherOnly[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_CIPHER,
+        cipher, 0);
+    cipherOnly[1] = OSSL_PARAM_construct_end();
+
+    err = (emac = EVP_MAC_fetch(libCtx, "CMAC", NULL)) == NULL;
+    if (err == 0) {
+        err = (ctx = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    /* No cipher is set yet, so installing the key cannot succeed. */
+    if (err == 0) {
+        err = EVP_MAC_CTX_set_params(ctx, keyOnly) == 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("Setting a CMAC key with no cipher succeeded");
+        }
+    }
+    if (err == 0) {
+        err = EVP_MAC_CTX_set_params(ctx, cipherOnly) != 1;
+    }
+    /* The rejected key must not be picked up by a keyless restart. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, NULL) == 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("CMAC restarted with a key that was never set");
+        }
+    }
+    if ((err == 0) && (EVP_MAC_update(ctx, msg, sizeof(msg)) == 1) &&
+            (EVP_MAC_final(ctx, mac, &macSz, sizeof(mac)) == 1)) {
+        PRINT_ERR_MSG("CMAC produced a MAC from a key that was never set");
+        err = 1;
+    }
+
+    /* EVP_MAC_final on its own must fail the same way. */
+    if (err == 0) {
+        EVP_MAC_CTX_free(ctx);
+        err = (ctx = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_MAC_CTX_set_params(ctx, cipherOnly) != 1;
+    }
+    if (err == 0) {
+        macSz = sizeof(mac);
+        err = EVP_MAC_final(ctx, mac, &macSz, sizeof(mac)) == 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("CMAC finalized with a key that was never set");
+        }
+    }
+
+    EVP_MAC_CTX_free(ctx);
+    EVP_MAC_free(emac);
+    return err;
+}
+
+int test_cmac_reinit(void *data)
+{
+    int err;
+    unsigned char osslMacA[AES_BLOCK_SIZE];
+    unsigned char osslMacB[AES_BLOCK_SIZE];
+    unsigned char wpMacA[AES_BLOCK_SIZE];
+    unsigned char wpMacB[AES_BLOCK_SIZE];
+
+    (void)data;
+
+    PRINT_MSG("CMAC context reset with OpenSSL");
+    err = test_cmac_reinit_helper(osslLibCtx, osslMacA, osslMacB);
+    if (err == 0) {
+        PRINT_MSG("CMAC context reset with wolfProvider");
+        err = test_cmac_reinit_helper(wpLibCtx, wpMacA, wpMacB);
+    }
+    if ((err == 0) && (memcmp(osslMacA, wpMacA, AES_BLOCK_SIZE) != 0)) {
+        PRINT_ERR_MSG("First CMAC doesn't match OpenSSL");
+        err = 1;
+    }
+    if ((err == 0) && (memcmp(osslMacB, wpMacB, AES_BLOCK_SIZE) != 0)) {
+        PRINT_ERR_MSG("CMAC after reset doesn't match OpenSSL");
+        err = 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("CMAC keyless restart with a rejected key, OpenSSL");
+        err = test_cmac_reinit_stale_key(osslLibCtx);
+    }
+    if (err == 0) {
+        PRINT_MSG("CMAC keyless restart with a rejected key, wolfProvider");
+        err = test_cmac_reinit_stale_key(wpLibCtx);
+    }
+    return err;
+}
+
 int test_cmac_dup(void *data)
 {
     int ret = 0;
