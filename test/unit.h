@@ -398,6 +398,8 @@ int test_dh_fromdata_oversize(void *data);
 int test_dh_param_check_explicit(void *data);
 int test_dh_import_group_no_nul(void *data);
 int test_dh_pgen_min_bits(void *data);
+int test_dh_weak_group_rejected(void *data);
+int test_dh_param_check_q(void *data);
 #endif /* WP_HAVE_DH */
 
 #ifdef WP_HAVE_ECC
