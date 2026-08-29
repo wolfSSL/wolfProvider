@@ -3472,4 +3472,62 @@ int test_rsa_sha512_256_dupctx(void *data)
 }
 #endif /* WP_HAVE_SHA512_256 */
 
+/*
+ * Encoding a key that another provider manages goes through the encoder's
+ * import-object: OpenSSL hands it the encoder context and uses the key object
+ * it returns.
+ */
+int test_rsa_encoder_import_object(void *data)
+{
+    static const char* names[] = {
+        "RSA",
+#ifdef WP_RSA_PSS_ENCODING
+        "RSA-PSS",
+#endif
+    };
+    int err = 0;
+    EVP_PKEY_CTX* ctx;
+    EVP_PKEY* pkey;
+    size_t bits = 2048;
+    OSSL_PARAM params[2];
+    size_t i;
+
+    (void)data;
+
+    params[0] = OSSL_PARAM_construct_size_t(OSSL_PKEY_PARAM_RSA_BITS, &bits);
+    params[1] = OSSL_PARAM_construct_end();
+
+    /* Both key types the encoder context can carry reach wp_rsa_base_new.
+     * EVP_PKEY_Q_keygen() rejects RSA-PSS before OpenSSL 3.5. */
+    for (i = 0; (err == 0) && (i < sizeof(names) / sizeof(*names)); i++) {
+        ctx = NULL;
+        pkey = NULL;
+
+        err = (ctx = EVP_PKEY_CTX_new_from_name(osslLibCtx, names[i], NULL))
+            == NULL;
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_CTX_set_params(ctx, params) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_generate(ctx, &pkey) != 1;
+        }
+        if (err) {
+            PRINT_ERR_MSG("Failed to generate %s key", names[i]);
+        }
+        if (err == 0) {
+            err = test_encoder_import_object(names[i],
+                "output=pem,structure=SubjectPublicKeyInfo", pkey,
+                OSSL_KEYMGMT_SELECT_PUBLIC_KEY);
+        }
+
+        EVP_PKEY_free(pkey);
+        EVP_PKEY_CTX_free(ctx);
+    }
+
+    return err;
+}
+
 #endif /* WP_HAVE_RSA */

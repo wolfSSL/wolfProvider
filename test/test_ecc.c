@@ -3316,4 +3316,36 @@ int test_ec_tls_group_p192(void *data)
     return err;
 }
 
+
+#ifdef WP_HAVE_EC_P256
+/*
+ * Encoding a key that another provider manages goes through the encoder's
+ * import-object: OpenSSL hands it the encoder context and uses the key object
+ * it returns.
+ */
+int test_ecc_encoder_import_object(void *data)
+{
+    int err;
+    EVP_PKEY* pkey = NULL;
+
+    (void)data;
+
+    pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, "EC", "P-256");
+    err = (pkey == NULL);
+    if (err == 0) {
+        /* Not ALL_PARAMETERS: that pulls in policy flags like the ECDH
+         * cofactor, which are not key material. */
+        err = test_encoder_import_object("EC",
+            "output=pem,structure=SubjectPublicKeyInfo", pkey,
+            OSSL_KEYMGMT_SELECT_PUBLIC_KEY |
+            OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS);
+    }
+
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
+#endif /* WP_HAVE_EC_P256 */
+
 #endif /* WP_HAVE_ECC */

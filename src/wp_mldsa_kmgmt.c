@@ -1669,6 +1669,30 @@ static int wp_mldsa_export_object(wp_MlDsaEncDecCtx* ctx, wp_MlDsa* mldsa,
 }
 
 /**
+ * Create an ML-DSA key object and import the key data into it.
+ *
+ * @param [in] ctx        ML-DSA encoder/decoder context object.
+ * @param [in] selection  Parts of key to import.
+ * @param [in] params     Array of parameters with key data.
+ * @return  New ML-DSA key object on success.
+ * @return  NULL on failure.
+ */
+static wp_MlDsa* wp_mldsa_import_object(wp_MlDsaEncDecCtx* ctx, int selection,
+    const OSSL_PARAM params[])
+{
+    wp_MlDsa* mldsa = NULL;
+
+    if (ctx->newKey != NULL) {
+        mldsa = ctx->newKey(ctx->provCtx);
+    }
+    if ((mldsa != NULL) && (!wp_mldsa_import(mldsa, selection, params))) {
+        wp_mldsa_free(mldsa);
+        mldsa = NULL;
+    }
+    return mldsa;
+}
+
+/**
  * Return whether the SPKI decoder/encoder handles this part of the key.
  *
  * @param [in] provCtx    Provider context. Unused.
@@ -1846,7 +1870,7 @@ const OSSL_DISPATCH wp_##alg##_##fmt##_##enc##_encoder_functions[] = {          
                                 (DFUNC)wp_mldsa_enc_dec_set_ctx_params       },\
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)dsel                        },  \
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_mldsa_encode               },\
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_mldsa_import               },\
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_mldsa_import_object        },\
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_mldsa_free                 },\
     { 0, NULL }                                                               \
 };

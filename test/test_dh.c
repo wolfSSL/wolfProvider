@@ -1735,4 +1735,47 @@ int test_dh_pgen_min_bits(void *data)
     return err;
 }
 
+
+/*
+ * Encoding a key that another provider manages goes through the encoder's
+ * import-object: OpenSSL hands it the encoder context and uses the key object
+ * it returns.
+ */
+int test_dh_encoder_import_object(void *data)
+{
+    int err;
+    EVP_PKEY_CTX* ctx = NULL;
+    EVP_PKEY* pkey = NULL;
+    OSSL_PARAM params[2];
+    char groupName[] = "ffdhe2048";
+
+    (void)data;
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+        groupName, 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    err = (ctx = EVP_PKEY_CTX_new_from_name(osslLibCtx, "DH", NULL)) == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_generate(ctx, &pkey) != 1;
+    }
+    if (err == 0) {
+        err = test_encoder_import_object("DH",
+            "output=der,structure=PrivateKeyInfo", pkey,
+            OSSL_KEYMGMT_SELECT_KEYPAIR |
+            OSSL_KEYMGMT_SELECT_ALL_PARAMETERS);
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
+
 #endif /* WP_HAVE_DH */
