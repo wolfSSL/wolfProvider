@@ -427,6 +427,10 @@ int test_eckeygen_x448(void *data);
 
 #endif /* WP_HAVE_ECKEYGEN */
 
+#ifdef WP_HAVE_EC_P256
+int test_ecc_encode_short_write_bio(void *data);
+#endif /* WP_HAVE_EC_P256 */
+
 #ifdef WP_HAVE_ECDH
 
 #ifdef WP_HAVE_ECKEYGEN
@@ -470,7 +474,6 @@ int test_ecdh_p224(void *data);
 #endif /* WP_HAVE_EC_P224 */
 #ifdef WP_HAVE_EC_P256
 int test_ecdh_invalid_kdf_strings(void *data);
-int test_ecc_encode_short_write_bio(void *data);
 #ifdef WP_HAVE_EPKI_TEST
 int test_ecc_encode_epki(void *data);
 #endif
