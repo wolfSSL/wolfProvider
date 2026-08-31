@@ -3005,8 +3005,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
             i += sizeof(sha224AlgIdNull);
             hashLen = 28;
         }
-        else if ((XMEMCMP(mdName, "SHA256", 7) == 0) ||
-            (XMEMCMP(mdName, "sha256", 7) == 0)) {
+        else if ((XSTRCASECMP(mdName, "SHA256") == 0) ||
+            (XSTRCASECMP(mdName, OSSL_DIGEST_NAME_SHA2_256) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, sha256AlgIdNull, sizeof(sha256AlgIdNull));
                 pssAlgId[seq1LenIdx] += sizeof(sha256AlgIdNull);
@@ -3015,8 +3015,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
             i += sizeof(sha256AlgIdNull);
             hashLen = 32;
         }
-        else if ((XMEMCMP(mdName, "SHA384", 7) == 0) ||
-                 (XMEMCMP(mdName, "sha384", 7) == 0)) {
+        else if ((XSTRCASECMP(mdName, "SHA384") == 0) ||
+            (XSTRCASECMP(mdName, OSSL_DIGEST_NAME_SHA2_384) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, sha384AlgIdNull, sizeof(sha384AlgIdNull));
                 pssAlgId[seq1LenIdx] += sizeof(sha384AlgIdNull);
@@ -3025,8 +3025,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
             i += sizeof(sha384AlgIdNull);
             hashLen = 48;
         }
-        else if ((XMEMCMP(mdName, "SHA512", 7) == 0) ||
-                 (XMEMCMP(mdName, "sha512", 7) == 0)) {
+        else if ((XSTRCASECMP(mdName, "SHA512") == 0) ||
+            (XSTRCASECMP(mdName, OSSL_DIGEST_NAME_SHA2_512) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, sha512AlgIdNull, sizeof(sha512AlgIdNull));
                 pssAlgId[seq1LenIdx] += sizeof(sha512AlgIdNull);
@@ -3049,8 +3049,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
             }
             i += sizeof(mgf1Sha224AlgIdNull);
         }
-        else if ((XMEMCMP(mgf1MdName, "SHA256", 7) == 0) ||
-            (XMEMCMP(mgf1MdName, "sha256", 7) == 0)) {
+        else if ((XSTRCASECMP(mgf1MdName, "SHA256") == 0) ||
+            (XSTRCASECMP(mgf1MdName, OSSL_DIGEST_NAME_SHA2_256) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, mgf1Sha256AlgIdNull,
                     sizeof(mgf1Sha256AlgIdNull));
@@ -3059,8 +3059,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
             }
             i += sizeof(mgf1Sha256AlgIdNull);
         }
-        else if ((XMEMCMP(mgf1MdName, "SHA384", 7) == 0) ||
-                 (XMEMCMP(mgf1MdName, "sha384", 7) == 0)) {
+        else if ((XSTRCASECMP(mgf1MdName, "SHA384") == 0) ||
+            (XSTRCASECMP(mgf1MdName, OSSL_DIGEST_NAME_SHA2_384) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, mgf1Sha384AlgIdNull,
                     sizeof(mgf1Sha384AlgIdNull));
@@ -3069,8 +3069,8 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
             }
             i += sizeof(mgf1Sha384AlgIdNull);
         }
-        else if ((XMEMCMP(mgf1MdName, "SHA512", 7) == 0) ||
-                 (XMEMCMP(mgf1MdName, "sha512", 7) == 0)) {
+        else if ((XSTRCASECMP(mgf1MdName, "SHA512") == 0) ||
+            (XSTRCASECMP(mgf1MdName, OSSL_DIGEST_NAME_SHA2_512) == 0)) {
             if (pssAlgId != NULL) {
                 XMEMCPY(pssAlgId + i, mgf1Sha512AlgIdNull,
                     sizeof(mgf1Sha512AlgIdNull));
