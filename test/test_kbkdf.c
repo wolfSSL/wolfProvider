@@ -581,6 +581,176 @@ done:
     return err;
 }
 
+/* Fill in the parameters for a KBKDF derive with the given MAC. */
+static void test_kbkdf_build_params(OSSL_PARAM* params, const char* mac,
+    const char* alg, char* mode, unsigned char* key, size_t keyLen,
+    unsigned char* label, size_t labelLen, unsigned char* context,
+    size_t contextLen)
+{
+    OSSL_PARAM* p = params;
+
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_MODE, mode, 0);
+    *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_MAC, (char*)mac, 0);
+    if (XSTRCMP(mac, "CMAC") == 0) {
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_CIPHER,
+            (char*)alg, 0);
+    }
+    else {
+        *p++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
+            (char*)alg, 0);
+    }
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, key, keyLen);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT, label,
+        labelLen);
+    *p++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, context,
+        contextLen);
+    *p = OSSL_PARAM_construct_end();
+}
+
+/* Changing the MAC type on a used context must release the object that was
+ * initialised, not the one the parameters now name. */
+static int test_kbkdf_mac_switch(void)
+{
+    int err = 0;
+    EVP_KDF* kdf = NULL;
+    EVP_KDF_CTX* kctx = NULL;
+    OSSL_PARAM params[7];
+    unsigned char out[16];
+    unsigned char key[] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+    };
+    unsigned char label[] = {
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18
+    };
+    unsigned char context[] = {
+        0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28
+    };
+    char counter[] = "COUNTER";
+    /* Each derive uses the MAC named here, on the context the previous one
+     * left behind, with and without an intervening reset. */
+    static const struct {
+        const char* mac;
+        const char* alg;
+        int reset;
+    } steps[] = {
+        { "HMAC", "SHA256",      0 },
+        { "CMAC", "AES-128-CBC", 0 },
+        { "HMAC", "SHA256",      1 },
+        { "CMAC", "AES-128-CBC", 1 },
+        { "CMAC", "AES-128-CBC", 0 },
+        { "HMAC", "SHA256",      0 }
+    };
+    size_t i;
+
+    PRINT_MSG("Test KBKDF MAC type switch on a used context");
+
+    kdf = EVP_KDF_fetch(wpLibCtx, "KBKDF", NULL);
+    if (kdf == NULL) {
+        PRINT_MSG("Failed to fetch KBKDF");
+        err = 1;
+        goto done;
+    }
+
+    kctx = EVP_KDF_CTX_new(kdf);
+    if (kctx == NULL) {
+        PRINT_MSG("Failed to create KBKDF context");
+        err = 1;
+        goto done;
+    }
+
+    for (i = 0; i < sizeof(steps) / sizeof(*steps); i++) {
+        if (steps[i].reset) {
+            EVP_KDF_CTX_reset(kctx);
+        }
+        test_kbkdf_build_params(params, steps[i].mac, steps[i].alg, counter,
+            key, sizeof(key), label, sizeof(label), context, sizeof(context));
+        if (EVP_KDF_derive(kctx, out, sizeof(out), params) <= 0) {
+            PRINT_MSG("Derive with %s failed at step %d", steps[i].mac,
+                (int)i);
+            err = 1;
+            goto done;
+        }
+    }
+
+done:
+    EVP_KDF_free(kdf);
+    EVP_KDF_CTX_free(kctx);
+    return err;
+}
+
+/* A derive that fails must leave the context reusable, and must not carry a
+ * MAC object into the reset or the free. */
+static int test_kbkdf_failed_derive_reuse(void)
+{
+    int err = 0;
+    EVP_KDF* kdf = NULL;
+    EVP_KDF_CTX* kctx = NULL;
+    OSSL_PARAM params[7];
+    unsigned char out[16];
+    unsigned char key[] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+    };
+    unsigned char label[] = {
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18
+    };
+    unsigned char context[] = {
+        0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28
+    };
+    char counter[] = "COUNTER";
+
+    PRINT_MSG("Test KBKDF reuse after a failed derive");
+
+    kdf = EVP_KDF_fetch(wpLibCtx, "KBKDF", NULL);
+    if (kdf == NULL) {
+        PRINT_MSG("Failed to fetch KBKDF");
+        err = 1;
+        goto done;
+    }
+
+    kctx = EVP_KDF_CTX_new(kdf);
+    if (kctx == NULL) {
+        PRINT_MSG("Failed to create KBKDF context");
+        err = 1;
+        goto done;
+    }
+
+    /* An unusable digest fails the derive part way through. */
+    test_kbkdf_build_params(params, "HMAC", "NOSUCHDIGEST", counter, key,
+        sizeof(key), label, sizeof(label), context, sizeof(context));
+    if (EVP_KDF_derive(kctx, out, sizeof(out), params) > 0) {
+        PRINT_MSG("Derive with an unusable digest unexpectedly succeeded");
+        err = 1;
+        goto done;
+    }
+
+    /* Switching MAC after the failure must still derive and still free the
+     * right object. */
+    test_kbkdf_build_params(params, "CMAC", "AES-128-CBC", counter, key,
+        sizeof(key), label, sizeof(label), context, sizeof(context));
+    if (EVP_KDF_derive(kctx, out, sizeof(out), params) <= 0) {
+        PRINT_MSG("Derive after a failed derive failed");
+        err = 1;
+        goto done;
+    }
+
+    EVP_KDF_CTX_reset(kctx);
+
+    test_kbkdf_build_params(params, "HMAC", "SHA256", counter, key,
+        sizeof(key), label, sizeof(label), context, sizeof(context));
+    if (EVP_KDF_derive(kctx, out, sizeof(out), params) <= 0) {
+        PRINT_MSG("Derive after reset failed");
+        err = 1;
+        goto done;
+    }
+
+done:
+    EVP_KDF_free(kdf);
+    EVP_KDF_CTX_free(kctx);
+    return err;
+}
+
 int test_kbkdf(void *data)
 {
     int err = 0;
@@ -602,6 +772,12 @@ int test_kbkdf(void *data)
     }
     if (err == 0) {
         err = test_kbkdf_reset_reuse("HMAC", "SHA256");
+    }
+    if (err == 0) {
+        err = test_kbkdf_mac_switch();
+    }
+    if (err == 0) {
+        err = test_kbkdf_failed_derive_reuse();
     }
 
     return err;

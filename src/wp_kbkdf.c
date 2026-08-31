@@ -71,8 +71,8 @@ typedef struct wp_KbkdfCtx {
     /** Mode and parameters */
     int mode;
     int mac;
-    /** MAC object holds a key schedule and needs releasing. */
-    int macInited;
+    /** MAC type whose object is initialised, 0 when none is. */
+    int macInitedType;
     /** Cipher name */
     char cipher[16];
     /** Digest name */
@@ -476,7 +476,7 @@ static int wp_kbkdf_init_mac(wp_KbkdfCtx* ctx, unsigned char* key,
         ok = 0;
     }
     else {
-        ctx->macInited = 1;
+        ctx->macInitedType = ctx->mac;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -538,15 +538,13 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
     return ok;
 }
 
+/* Dispatch on the type that was initialised. Parameters can change ctx->mac
+ * after a MAC object is live, so that field must not select the object. */
 static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
 {
     int ret = 0;
 
-    if (!ctx->macInited) {
-        return;
-    }
-
-    switch(ctx->mac) {
+    switch(ctx->macInitedType) {
 #ifdef WP_HAVE_HMAC
         case WP_MAC_TYPE_HMAC:
             wc_HmacFree(&ctx->hmacCtx);
@@ -561,7 +559,7 @@ static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
 #endif
     }
 
-    ctx->macInited = 0;
+    ctx->macInitedType = 0;
     (void)ret;
 }
 
@@ -731,6 +729,9 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
         written += toWrite;
         wp_kbkdf_mac_free(ctx);
     }
+
+    /* A failed block breaks out with the MAC still live. */
+    wp_kbkdf_mac_free(ctx);
 
     /* k_i holds derived key block(s) (and feedback state). */
     OPENSSL_cleanse(k_i, sizeof(k_i));
