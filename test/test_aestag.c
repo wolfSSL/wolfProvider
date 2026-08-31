@@ -2467,7 +2467,7 @@ int test_aes_ccm_ctx_reuse(void *data)
 }
 
 static int test_aes_ccm_oneshot_enc_helper(OSSL_LIB_CTX *libCtx,
-    const char *cipherName)
+    const char *cipherName, int getTagBeforeFinal)
 {
     int err = 0;
     EVP_CIPHER *cipher = NULL;
@@ -2521,6 +2521,14 @@ static int test_aes_ccm_oneshot_enc_helper(OSSL_LIB_CTX *libCtx,
             PRINT_ERR_MSG("%s one-shot encrypt failed", cipherName);
         }
     }
+    /* The trailing NULL/NULL finalise must finalise the operation - so the nonce
+     * cannot be reused - whether the tag is fetched before or after it. GET_TAG
+     * clears the tag-available flag, which must not turn the finalise back into a
+     * length declaration. getTagBeforeFinal drives the GET_TAG-first order. */
+    if ((err == 0) && getTagBeforeFinal) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG,
+                                  (int)sizeof(tag), tag) != 1;
+    }
     if (err == 0) {
         /* Trailing no-op finalise must succeed and finalise the operation so
          * the nonce cannot be reused. */
@@ -2529,7 +2537,7 @@ static int test_aes_ccm_oneshot_enc_helper(OSSL_LIB_CTX *libCtx,
             PRINT_ERR_MSG("%s trailing finalise failed", cipherName);
         }
     }
-    if (err == 0) {
+    if ((err == 0) && (!getTagBeforeFinal)) {
         err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG,
                                   (int)sizeof(tag), tag) != 1;
     }
@@ -2589,10 +2597,18 @@ int test_aes_ccm_oneshot_encrypt(void *data)
     (void)data;
 
     PRINT_MSG("AES-128-CCM one-shot EVP_Cipher encrypt/decrypt");
-    err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-128-CCM");
+    err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-128-CCM", 0);
     if (err == 0) {
         PRINT_MSG("AES-256-CCM one-shot EVP_Cipher encrypt/decrypt");
-        err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-256-CCM");
+        err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-256-CCM", 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-128-CCM one-shot EVP_Cipher GET_TAG before finalise");
+        err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-128-CCM", 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM one-shot EVP_Cipher GET_TAG before finalise");
+        err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-256-CCM", 1);
     }
 
     return err;
