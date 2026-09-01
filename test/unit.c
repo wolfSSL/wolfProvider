@@ -329,6 +329,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_ccm_tls, NULL),
     TEST_DECL(test_aes_ccm_bad_tag, NULL),
     TEST_DECL(test_aes_ccm_ctx_reuse, NULL),
+    TEST_DECL(test_aes_ccm_oneshot_encrypt, NULL),
     TEST_DECL(test_aes_ccm_tag_len_undersized, NULL),
 #endif
 #endif

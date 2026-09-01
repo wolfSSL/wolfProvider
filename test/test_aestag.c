@@ -2466,6 +2466,154 @@ int test_aes_ccm_ctx_reuse(void *data)
     return err;
 }
 
+static int test_aes_ccm_oneshot_enc_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int getTagBeforeFinal)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char iv[13];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "CCM one-shot plaintext";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char ct[64];
+    unsigned char tag[16];
+    unsigned char dec[64];
+    unsigned char scratch[64];
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+
+    /* Encrypt through the one-shot EVP_Cipher() API a caller such as libacvp
+     * uses: a NULL/NULL total-length pass, an AAD pass, the payload, then a
+     * trailing NULL/NULL finalise. The length pass must not be mistaken for a
+     * finalise or the payload is rejected. */
+    if (err == 0) {
+        err = EVP_CipherInit(ctx, cipher, NULL, NULL, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG,
+                                  (int)sizeof(tag), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit(ctx, NULL, key, iv, 1) != 1;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(ctx, NULL, NULL, ptLen) < 0;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(ctx, NULL, aad, (int)(sizeof(aad) - 1)) < 0;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(ctx, ct, pt, ptLen) < 0;
+        if (err) {
+            PRINT_ERR_MSG("%s one-shot encrypt failed", cipherName);
+        }
+    }
+    /* The trailing NULL/NULL finalise must finalise the operation - so the nonce
+     * cannot be reused - whether the tag is fetched before or after it. GET_TAG
+     * clears the tag-available flag, which must not turn the finalise back into a
+     * length declaration. getTagBeforeFinal drives the GET_TAG-first order. */
+    if ((err == 0) && getTagBeforeFinal) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG,
+                                  (int)sizeof(tag), tag) != 1;
+    }
+    if (err == 0) {
+        /* Trailing no-op finalise must succeed and finalise the operation so
+         * the nonce cannot be reused. */
+        err = EVP_Cipher(ctx, NULL, NULL, 0) < 0;
+        if (err) {
+            PRINT_ERR_MSG("%s trailing finalise failed", cipherName);
+        }
+    }
+    if ((err == 0) && (!getTagBeforeFinal)) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG,
+                                  (int)sizeof(tag), tag) != 1;
+    }
+    if (err == 0) {
+        /* Reusing the finalised context without a fresh IV must be rejected. */
+        err = EVP_Cipher(ctx, scratch, pt, ptLen) >= 0;
+        if (err) {
+            PRINT_ERR_MSG("%s reuse after finalise not rejected", cipherName);
+        }
+    }
+
+    /* Decrypt the ciphertext through the same one-shot EVP_Cipher() path and
+     * confirm it round-trips to the plaintext. */
+    if (err == 0) {
+        err = EVP_CipherInit(ctx, NULL, NULL, NULL, 0) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG,
+                                  (int)sizeof(tag), tag) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit(ctx, NULL, key, iv, 0) != 1;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(ctx, NULL, NULL, ptLen) < 0;
+    }
+    if (err == 0) {
+        err = EVP_Cipher(ctx, NULL, aad, (int)(sizeof(aad) - 1)) < 0;
+    }
+    if (err == 0) {
+        memset(dec, 0, sizeof(dec));
+        err = EVP_Cipher(ctx, dec, ct, ptLen) < 0;
+        if (err) {
+            PRINT_ERR_MSG("%s one-shot decrypt failed", cipherName);
+        }
+    }
+    if (err == 0) {
+        err = memcmp(dec, pt, ptLen) != 0;
+        if (err) {
+            PRINT_ERR_MSG("%s one-shot round-trip mismatch", cipherName);
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_ccm_oneshot_encrypt(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-CCM one-shot EVP_Cipher encrypt/decrypt");
+    err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-128-CCM", 0);
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM one-shot EVP_Cipher encrypt/decrypt");
+        err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-256-CCM", 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-128-CCM one-shot EVP_Cipher GET_TAG before finalise");
+        err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-128-CCM", 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM one-shot EVP_Cipher GET_TAG before finalise");
+        err = test_aes_ccm_oneshot_enc_helper(wpLibCtx, "AES-256-CCM", 1);
+    }
+
+    return err;
+}
+
 int test_aes_ccm_bad_tag(void *data)
 {
     int err = 0;
