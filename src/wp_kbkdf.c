@@ -38,12 +38,15 @@
 /** Base set of parameters settable against context for KBKDF. */
 #define WP_KBKDF_BASE_SETTABLES                                          \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_PROPERTIES, NULL, 0),         \
+    OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_MODE, NULL, 0),               \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_DIGEST, NULL, 0),             \
     OSSL_PARAM_octet_string(OSSL_KDF_PARAM_KEY, NULL, 0),               \
     OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SALT, NULL, 0),              \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_MAC, NULL, 0),                \
     OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_CIPHER, NULL, 0),             \
-    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_LABEL, NULL, 0)
+    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_LABEL, NULL, 0),             \
+    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_SEED, NULL, 0),              \
+    OSSL_PARAM_octet_string(OSSL_KDF_PARAM_INFO, NULL, 0)
 
 /**
  * The KBKDF context structure.
@@ -68,6 +71,8 @@ typedef struct wp_KbkdfCtx {
     /** Mode and parameters */
     int mode;
     int mac;
+    /** MAC type whose object is initialised, 0 when none is. */
+    int macInitedType;
     /** Cipher name */
     char cipher[16];
     /** Digest name */
@@ -108,6 +113,9 @@ static wp_KbkdfCtx* wp_kdf_kbkdf_new(WOLFPROV_CTX* provCtx)
     return ctx;
 }
 
+/* Prototype for releasing the MAC object in use. */
+static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx);
+
 /**
  * Clear KBKDF context object.
  *
@@ -116,10 +124,11 @@ static wp_KbkdfCtx* wp_kdf_kbkdf_new(WOLFPROV_CTX* provCtx)
 static void wp_kdf_kbkdf_clear(wp_KbkdfCtx* ctx)
 {
     if (ctx != NULL) {
+        wp_kbkdf_mac_free(ctx);
         OPENSSL_clear_free(ctx->key, ctx->keySz);
-        OPENSSL_free(ctx->label);
-        OPENSSL_free(ctx->context);
-        OPENSSL_free(ctx->iv);
+        OPENSSL_clear_free(ctx->label, ctx->labelLen);
+        OPENSSL_clear_free(ctx->context, ctx->contextLen);
+        OPENSSL_clear_free(ctx->iv, ctx->ivLen);
     }
 }
 
@@ -132,7 +141,7 @@ static void wp_kdf_kbkdf_free(wp_KbkdfCtx* ctx)
 {
     if (ctx != NULL) {
         wp_kdf_kbkdf_clear(ctx);
-        OPENSSL_free(ctx);
+        OPENSSL_clear_free(ctx, sizeof(*ctx));
     }
 }
 
@@ -177,15 +186,18 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
                 if (!OSSL_PARAM_get_utf8_string_ptr(p, &mode)) {
                     ok = 0;
                 }
-                if (XSTRCMP(mode, "COUNTER") == 0) {
-                    ctx->mode = WP_KDF_MODE_COUNTER;
-                }
-                else if (XSTRCMP(mode, "FEEDBACK") == 0) {
-                    ctx->mode = WP_KDF_MODE_FEEDBACK;
-                }
-                else {
-                    WOLFPROV_MSG(WP_LOG_COMP_KDF, "Invalid KDF mode: %s", mode);
-                    ok = 0;
+                if (ok) {
+                    if (XSTRCMP(mode, "COUNTER") == 0) {
+                        ctx->mode = WP_KDF_MODE_COUNTER;
+                    }
+                    else if (XSTRCMP(mode, "FEEDBACK") == 0) {
+                        ctx->mode = WP_KDF_MODE_FEEDBACK;
+                    }
+                    else {
+                        WOLFPROV_MSG(WP_LOG_COMP_KDF, "Invalid KDF mode: %s",
+                            mode);
+                        ok = 0;
+                    }
                 }
             }
         }
@@ -245,7 +257,7 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_SALT);
             if ((p != NULL) && (p->data != NULL)) {
-                OPENSSL_free(ctx->label);
+                OPENSSL_clear_free(ctx->label, ctx->labelLen);
                 ctx->label = NULL;
                 if (!OSSL_PARAM_get_octet_string(p, (void**)&ctx->label, 0,
                         &ctx->labelLen)) {
@@ -257,7 +269,7 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_LABEL);
             if ((p != NULL) && (p->data != NULL)) {
-                OPENSSL_free(ctx->label);
+                OPENSSL_clear_free(ctx->label, ctx->labelLen);
                 ctx->label = NULL;
                 if (!OSSL_PARAM_get_octet_string(p, (void**)&ctx->label, 0,
                         &ctx->labelLen)) {
@@ -269,7 +281,7 @@ static int wp_kdf_kbkdf_set_ctx_params(wp_KbkdfCtx* ctx,
         if (ok) {
             p = OSSL_PARAM_locate((OSSL_PARAM*)params, OSSL_KDF_PARAM_INFO);
             if ((p != NULL) && (p->data != NULL)) {
-                OPENSSL_free(ctx->context);
+                OPENSSL_clear_free(ctx->context, ctx->contextLen);
                 ctx->context = NULL;
                 if (!OSSL_PARAM_get_octet_string(p, (void**)&ctx->context, 0,
                         &ctx->contextLen)) {
@@ -463,6 +475,9 @@ static int wp_kbkdf_init_mac(wp_KbkdfCtx* ctx, unsigned char* key,
     if (rc != 0) {
         ok = 0;
     }
+    else {
+        ctx->macInitedType = ctx->mac;
+    }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_KDF, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -523,10 +538,13 @@ static int wp_kbkdf_mac_update(wp_KbkdfCtx* ctx, const unsigned char *data,
     return ok;
 }
 
+/* Dispatch on the type that was initialised. Parameters can change ctx->mac
+ * after a MAC object is live, so that field must not select the object. */
 static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
 {
     int ret = 0;
-    switch(ctx->mac) {
+
+    switch(ctx->macInitedType) {
 #ifdef WP_HAVE_HMAC
         case WP_MAC_TYPE_HMAC:
             wc_HmacFree(&ctx->hmacCtx);
@@ -541,6 +559,7 @@ static void wp_kbkdf_mac_free(wp_KbkdfCtx* ctx)
 #endif
     }
 
+    ctx->macInitedType = 0;
     (void)ret;
 }
 
@@ -710,6 +729,9 @@ static int wp_kdf_kbkdf_derive(wp_KbkdfCtx* ctx, unsigned char* key,
         written += toWrite;
         wp_kbkdf_mac_free(ctx);
     }
+
+    /* A failed block breaks out with the MAC still live. */
+    wp_kbkdf_mac_free(ctx);
 
     /* k_i holds derived key block(s) (and feedback state). */
     OPENSSL_cleanse(k_i, sizeof(k_i));
