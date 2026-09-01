@@ -148,6 +148,7 @@ int test_sha3_512(void *data);
 #ifdef WP_HAVE_SHAKE_256
 int test_shake_256(void *data);
 #endif
+int test_digest_dupctx(void *data);
 
 #endif /* WP_HAVE_DIGEST */
 
@@ -199,6 +200,7 @@ int test_sshkdf(void *data);
 
 #ifdef WP_HAVE_DES3CBC
 int test_des3_cbc(void *data);
+int test_des3_cbc_reinit(void *data);
 int test_des3_cbc_stream(void *data);
 int test_des3_cbc_bad_pad(void *data);
 int test_des3_cbc_large_update(void *data);

@@ -306,7 +306,9 @@ static int wp_des3_block_init(wp_Des3BlockCtx *ctx, const unsigned char *key,
             ok = 0;
         }
         if (ok) {
-            int rc = wc_Des3_SetKey(&ctx->des3, key, iv,
+            int rc = wc_Des3_SetKey(&ctx->des3, key,
+                (ctx->ivSet && (ctx->mode == EVP_CIPH_CBC_MODE)) ?
+                    ctx->iv : NULL,
                 enc ? DES_ENCRYPTION : DES_DECRYPTION);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_Des3_SetKey", rc);
@@ -941,4 +943,3 @@ IMPLEMENT_DES3_BLOCK_NULL(cbc)
 
 #endif
 #endif /* WP_HAVE_DES3CBC */
-
