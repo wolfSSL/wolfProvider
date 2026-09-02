@@ -167,7 +167,7 @@ if test "x$ENABLED_SEED_SRC" = "xyes"; then
 fi
 
 AC_ARG_ENABLE([pqc],
-    [AS_HELP_STRING([--enable-pqc],[Enable both ML-KEM (FIPS 203) and ML-DSA (FIPS 204). Requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+ (default: disabled).])],
+    [AS_HELP_STRING([--enable-pqc],[Enable ML-KEM (FIPS 203), ML-DSA (FIPS 204) and SLH-DSA (FIPS 205). Requires wolfSSL master/v5.9.2+ and OpenSSL 3.6+ (default: disabled).])],
     [ ENABLED_PQC=$enableval ],
     [ ENABLED_PQC=no ]
     )
@@ -181,6 +181,11 @@ AC_ARG_ENABLE([mldsa],
     [ ENABLED_MLDSA=$enableval ],
     [ ENABLED_MLDSA= ]
     )
+AC_ARG_ENABLE([slhdsa],
+    [AS_HELP_STRING([--enable-slhdsa],[Enable SLH-DSA (FIPS 205) only (default: disabled).])],
+    [ ENABLED_SLHDSA=$enableval ],
+    [ ENABLED_SLHDSA= ]
+    )
 AC_ARG_ENABLE([lms],
     [AS_HELP_STRING([--enable-lms],[Enable LMS verification only; requires wolfSSL built verify-only, without LMS keygen or signing (default: disabled).])],
     [ ENABLED_LMS=$enableval ],
@@ -190,11 +195,12 @@ if test "x$ENABLED_LMS" != "xyes" && test "x$ENABLED_LMS" != "xno"; then
     AC_MSG_ERROR([--enable-lms accepts only yes or no])
 fi
 
-# --enable-pqc is shorthand for both ML-KEM and ML-DSA, unless one was
+# --enable-pqc is shorthand for every post-quantum algorithm, unless one was
 # explicitly disabled (--enable-pqc --disable-mldsa keeps ML-DSA off).
 if test "x$ENABLED_PQC" = "xyes"; then
     if test "x$ENABLED_MLKEM" != "xno"; then ENABLED_MLKEM=yes; fi
     if test "x$ENABLED_MLDSA" != "xno"; then ENABLED_MLDSA=yes; fi
+    if test "x$ENABLED_SLHDSA" != "xno"; then ENABLED_SLHDSA=yes; fi
 fi
 if test "x$ENABLED_MLKEM" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_MLKEM"
@@ -202,9 +208,42 @@ fi
 if test "x$ENABLED_MLDSA" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_MLDSA"
 fi
+if test "x$ENABLED_SLHDSA" = "xyes"; then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_SLHDSA"
+fi
 if test "x$ENABLED_LMS" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DWOLFPROV_HAVE_LMS"
 fi
+
+BUILD_SLHDSA_EXAMPLE=no
+if test "x$ENABLED_SLHDSA" = "xyes"; then
+    AC_MSG_CHECKING([whether wolfSSL SLH-DSA headers are usable])
+    AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/wc_slhdsa.h>
+        ]], [[]])],
+        [AC_MSG_RESULT([yes])],
+        [AC_MSG_RESULT([no])
+         AC_MSG_FAILURE([wolfSSL SLH-DSA headers cannot be compiled])])
+    AC_MSG_CHECKING([whether wolfSSL SLH-DSA private operations are enabled])
+    AC_COMPILE_IFELSE(
+        [AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/wc_slhdsa.h>
+#ifndef WOLFSSL_SLHDSA_VERIFY_ONLY
+#error wolfSSL SLH-DSA private operations are enabled
+#endif
+        ]], [[]])],
+        [BUILD_SLHDSA_EXAMPLE=no],
+        [BUILD_SLHDSA_EXAMPLE=yes])
+    AC_MSG_RESULT([$BUILD_SLHDSA_EXAMPLE])
+fi
+
+AM_CONDITIONAL([BUILD_PQC_EXAMPLE],
+    [test "x$ENABLED_MLKEM" = "xyes" ||
+     test "x$ENABLED_MLDSA" = "xyes" ||
+     test "x$BUILD_SLHDSA_EXAMPLE" = "xyes"])
 
 # Set OpenSSL lib directory for installing libdefault.so
 if test "x$ENABLED_REPLACE_DEFAULT" = "xyes"; then
@@ -262,6 +301,7 @@ echo "   * Debug silent mode:          $ENABLED_DEBUG_SILENT"
 echo
 test "x$ENABLED_MLKEM" = "xyes" || ENABLED_MLKEM=no
 test "x$ENABLED_MLDSA" = "xyes" || ENABLED_MLDSA=no
+test "x$ENABLED_SLHDSA" = "xyes" || ENABLED_SLHDSA=no
 test "x$ENABLED_LMS" = "xyes" || ENABLED_LMS=no
 echo "   Features "
 echo "   * User settings:              $ENABLED_USERSETTINGS"
@@ -269,6 +309,7 @@ echo "   * Dynamic provider:           $ENABLED_DYNAMIC_PROVIDER"
 echo "   * Replace default:            $ENABLED_REPLACE_DEFAULT"
 echo "   * ML-KEM (FIPS 203):          $ENABLED_MLKEM"
 echo "   * ML-DSA (FIPS 204):          $ENABLED_MLDSA"
+echo "   * SLH-DSA (FIPS 205):         $ENABLED_SLHDSA"
 echo "   * LMS verification only:      $ENABLED_LMS"
 echo ""
 echo "---"

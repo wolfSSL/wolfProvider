@@ -17,4 +17,16 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider.  If not, see <http://www.gnu.org/licenses/>.
 
-EXTRA_DIST += examples/openssl_example.c
+EXTRA_DIST += examples/openssl_example.c examples/pqc_openssl_example.c
+
+noinst_PROGRAMS += examples/openssl_example
+examples_openssl_example_SOURCES = examples/openssl_example.c
+examples_openssl_example_LDADD = libwolfprov.la
+DISTCLEANFILES += examples/.libs/openssl_example
+
+if BUILD_PQC_EXAMPLE
+noinst_PROGRAMS += examples/pqc_openssl_example
+examples_pqc_openssl_example_SOURCES = examples/pqc_openssl_example.c
+examples_pqc_openssl_example_LDADD = libwolfprov.la
+DISTCLEANFILES += examples/.libs/pqc_openssl_example
+endif

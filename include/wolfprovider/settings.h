@@ -216,12 +216,16 @@
 #if !defined(__has_include)
     #define WP_MLKEM_HEADER
     #define WP_MLDSA_HEADER
+    #define WP_SLHDSA_HEADER
 #else
     #if __has_include(<wolfssl/wolfcrypt/wc_mlkem.h>)
         #define WP_MLKEM_HEADER
     #endif
     #if __has_include(<wolfssl/wolfcrypt/wc_mldsa.h>)
         #define WP_MLDSA_HEADER
+    #endif
+    #if __has_include(<wolfssl/wolfcrypt/wc_slhdsa.h>)
+        #define WP_SLHDSA_HEADER
     #endif
 #endif
 /* wolfSSL must be master or v5.9.2-stable+: a release newer than v5.9.1, or a
@@ -251,6 +255,58 @@
     #define WP_HAVE_ML_DSA_65
     #define WP_HAVE_ML_DSA_87
 #endif
+#if defined(WOLFPROV_HAVE_SLHDSA) && defined(WOLFSSL_HAVE_SLHDSA) && \
+    defined(WP_SLHDSA_HEADER) && defined(WP_WOLFSSL_PQC_CAPABLE) && \
+    (OPENSSL_VERSION_NUMBER >= 0x30600000L)
+    #define WP_HAVE_SLHDSA
+    /* Pulled in for the parameter-set macros: wc_slhdsa.h resolves them from
+     * the NO_* defaults, so a user_settings.h wolfSSL may not carry them in
+     * options.h. Which sets exist decides which algorithms get registered. */
+    #include <wolfssl/wolfcrypt/wc_slhdsa.h>
+    /* A verify-only wolfSSL compiles out keygen, sign and every private-key
+     * entry point, so the provider offers verify only against it. */
+    #ifndef WOLFSSL_SLHDSA_VERIFY_ONLY
+        #define WP_HAVE_SLHDSA_PRIVATE
+    #endif
+    #ifdef WOLFSSL_SLHDSA_PARAM_128S
+        #define WP_HAVE_SLH_DSA_SHAKE_128S
+    #endif
+    #ifdef WOLFSSL_SLHDSA_PARAM_128F
+        #define WP_HAVE_SLH_DSA_SHAKE_128F
+    #endif
+    #ifdef WOLFSSL_SLHDSA_PARAM_192S
+        #define WP_HAVE_SLH_DSA_SHAKE_192S
+    #endif
+    #ifdef WOLFSSL_SLHDSA_PARAM_192F
+        #define WP_HAVE_SLH_DSA_SHAKE_192F
+    #endif
+    #ifdef WOLFSSL_SLHDSA_PARAM_256S
+        #define WP_HAVE_SLH_DSA_SHAKE_256S
+    #endif
+    #ifdef WOLFSSL_SLHDSA_PARAM_256F
+        #define WP_HAVE_SLH_DSA_SHAKE_256F
+    #endif
+    #ifdef WOLFSSL_SLHDSA_SHA2
+        #ifdef WOLFSSL_SLHDSA_PARAM_SHA2_128S
+            #define WP_HAVE_SLH_DSA_SHA2_128S
+        #endif
+        #ifdef WOLFSSL_SLHDSA_PARAM_SHA2_128F
+            #define WP_HAVE_SLH_DSA_SHA2_128F
+        #endif
+        #ifdef WOLFSSL_SLHDSA_PARAM_SHA2_192S
+            #define WP_HAVE_SLH_DSA_SHA2_192S
+        #endif
+        #ifdef WOLFSSL_SLHDSA_PARAM_SHA2_192F
+            #define WP_HAVE_SLH_DSA_SHA2_192F
+        #endif
+        #ifdef WOLFSSL_SLHDSA_PARAM_SHA2_256S
+            #define WP_HAVE_SLH_DSA_SHA2_256S
+        #endif
+        #ifdef WOLFSSL_SLHDSA_PARAM_SHA2_256F
+            #define WP_HAVE_SLH_DSA_SHA2_256F
+        #endif
+    #endif
+#endif
 /* Fail loudly if PQC was requested but the prerequisites are missing, so a
  * direct ./configure (bypassing the build script's version gate) does not
  * silently produce a non-PQC build. */
@@ -259,6 +315,9 @@
 #endif
 #if defined(WOLFPROV_HAVE_MLDSA) && !defined(WP_HAVE_MLDSA)
     #error "ML-DSA requested but unavailable: needs OpenSSL >= 3.6 and wolfSSL master or v5.9.2-stable+ with ML-DSA."
+#endif
+#if defined(WOLFPROV_HAVE_SLHDSA) && !defined(WP_HAVE_SLHDSA)
+    #error "SLH-DSA requested but unavailable: needs OpenSSL >= 3.6 and wolfSSL master or v5.9.2-stable+ with SLH-DSA."
 #endif
 #if !defined(__has_include)
     #define WP_LMS_HEADER

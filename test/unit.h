@@ -59,6 +59,24 @@
     #define WP_HAVE_EPKI_TEST
 #endif
 
+/* test_slhdsa.c selects a representative set and falls back to any enabled
+ * set when a custom wolfSSL build enables only one parameter set. */
+#if defined(WP_HAVE_SLH_DSA_SHA2_128F) || \
+    defined(WP_HAVE_SLH_DSA_SHA2_128S) || \
+    defined(WP_HAVE_SLH_DSA_SHA2_192F) || \
+    defined(WP_HAVE_SLH_DSA_SHA2_192S) || \
+    defined(WP_HAVE_SLH_DSA_SHA2_256F) || \
+    defined(WP_HAVE_SLH_DSA_SHA2_256S) || \
+    defined(WP_HAVE_SLH_DSA_SHAKE_128F) || \
+    defined(WP_HAVE_SLH_DSA_SHAKE_128S) || \
+    defined(WP_HAVE_SLH_DSA_SHAKE_192F) || \
+    defined(WP_HAVE_SLH_DSA_SHAKE_192S) || \
+    defined(WP_HAVE_SLH_DSA_SHAKE_256F) || \
+    defined(WP_HAVE_SLH_DSA_SHAKE_256S)
+    #define WP_SLHDSA_TEST_SETS
+#endif
+
+
 #ifdef TEST_MULTITHREADED
 #define PRINT_MSG(str)
 #define PRINT_ERR_MSG(str)
@@ -642,6 +660,41 @@ int test_mldsa_empty_message(void *data);
 int test_mldsa_reinit_null_key(void *data);
 int test_mldsa_encode_decode(void *data);
 int test_mldsa_x509_sign_verify(void *data);
+#endif
+
+#if defined(WP_HAVE_SLHDSA) && defined(WP_SLHDSA_TEST_SETS)
+int test_slhdsa_public_keymgmt(void *data);
+#ifdef WP_HAVE_SLHDSA_PRIVATE
+#ifdef WP_HAVE_EPKI_TEST
+int test_slhdsa_encode_epki(void *data);
+#endif
+int test_slhdsa_keygen(void *data);
+int test_slhdsa_all_set_metadata(void *data);
+int test_slhdsa_provider_ab(void *data);
+int test_slhdsa_validate_keypair(void *data);
+int test_slhdsa_import_export_roundtrip(void *data);
+int test_slhdsa_sign_verify(void *data);
+int test_slhdsa_verify_tampered_sig(void *data);
+int test_slhdsa_verify_tampered_msg(void *data);
+int test_slhdsa_verify_wrong_key(void *data);
+int test_slhdsa_dup(void *data);
+int test_slhdsa_match(void *data);
+int test_slhdsa_dupctx(void *data);
+int test_slhdsa_oneshot_sign_verify(void *data);
+int test_slhdsa_message_api(void *data);
+int test_slhdsa_reject_digest(void *data);
+int test_slhdsa_get_params(void *data);
+int test_slhdsa_pubonly_sign_fails(void *data);
+int test_slhdsa_import_mismatched_pubpriv(void *data);
+int test_slhdsa_empty_message(void *data);
+int test_slhdsa_reinit_null_key(void *data);
+int test_slhdsa_encode_decode(void *data);
+int test_slhdsa_sig_params(void *data);
+int test_slhdsa_undersized_sig(void *data);
+int test_slhdsa_midstream_params(void *data);
+int test_slhdsa_keygen_seed(void *data);
+int test_slhdsa_x509_sign_verify(void *data);
+#endif
 #endif
 
 #endif /* UNIT_H */

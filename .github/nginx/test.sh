@@ -7,13 +7,15 @@
 # chain, and that the page is served. Exits non-zero if any group fails; the CI
 # step inverts that under WOLFPROV_FORCE_FAIL=1.
 
-O=/opt/wolfProvider/openssl-install
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+WOLFPROV_ROOT=${WOLFPROV_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}
+O=${WOLFPROV_ROOT}/openssl-install
 CA=/opt/nginx/cacert/CA.crt
 PORT=4433
 # NB: not "GROUPS" -- that is a bash special array (the user's group IDs).
 KEX_GROUPS="X25519MLKEM768 SecP256r1MLKEM768 SecP384r1MLKEM1024 MLKEM512 MLKEM768 MLKEM1024"
 
-export LD_LIBRARY_PATH="/opt/wolfProvider/wolfprov-install/lib:/opt/wolfProvider/wolfssl-install/lib:${O}/lib:${O}/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="${WOLFPROV_ROOT}/wolfprov-install/lib:${WOLFPROV_ROOT}/wolfssl-install/lib:${O}/lib:${O}/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 echo "Quantum-safe groups under test: ${KEX_GROUPS}"
 /opt/nginx/sbin/nginx -c /opt/nginx/conf/nginx.conf

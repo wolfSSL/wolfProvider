@@ -39,8 +39,40 @@ if [ -z "$TEST_SUITE" ]; then
 fi
 
 if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
+    # ----- LIBACVP PQC -----
+    if [ "$TEST_SUITE" = "libacvp-pqc" ]; then
+        if [ "$TEST_RESULT" -ne 0 ] \
+            && [ -f "libacvp-pqc.log" ] \
+            && grep -q 'ml_kem_round_trip' libacvp-pqc.log \
+            && grep -q 'ml_dsa_round_trip' libacvp-pqc.log \
+            && grep -q 'slh_dsa_round_trip' libacvp-pqc.log; then
+            echo "PASS: libacvp PQC tests failed as expected with force fail enabled"
+            exit 0
+        elif [ "$TEST_RESULT" -eq 0 ]; then
+            echo "FAIL: libacvp PQC tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "FAIL: libacvp PQC test log does not show all PQC tests"
+            exit 1
+        fi
+    # ----- NGINX PQC -----
+    elif [ "$TEST_SUITE" = "nginx-pqc" ]; then
+        if [ "$TEST_RESULT" -ne 0 ] \
+            && [ -f "nginx-pqc.log" ] \
+            && grep -q '^FAIL:' nginx-pqc.log \
+            && grep -q '^One or more quantum-safe groups failed\.$' \
+                nginx-pqc.log; then
+            echo "PASS: nginx PQC groups failed as expected with force fail enabled"
+            exit 0
+        elif [ "$TEST_RESULT" -eq 0 ]; then
+            echo "FAIL: nginx PQC tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "FAIL: nginx PQC log does not show attempted group failures"
+            exit 1
+        fi
     # ----- CURL -----
-    if [ "$TEST_SUITE" = "curl" ]; then
+    elif [ "$TEST_SUITE" = "curl" ]; then
         # Under WOLFPROV_FORCE_FAIL=1, wolfProvider deliberately errors on
         # every call, so the curl test-suite is expected to fail somewhere.
         # We don't pin the exact test numbers (they drift across curl

@@ -1,17 +1,4 @@
-name: Nginx PQC Tests
-
-# Runs the open-quantum-safe oqs-demos nginx demo with wolfProvider swapped in
-# for liboqs + oqs-provider, then runs the connection test
-# (.github/nginx/test.sh): connect once per quantum-safe
-# group and assert ML-DSA (FIPS 204) certificate authentication plus an
-# ML-KEM / hybrid (FIPS 203) key exchange.
-#
-# Only the PQC path is exercised. Each wolfSSL ref runs in 4 modes:
-# replace-default and non-replace (wolfProvider loaded via provider.conf), each
-# in normal and force-fail. Versioning matches the other PQC workflows: wolfSSL
-# latest -stable (PQC floor v5.9.2-stable) and master, against the latest
-# OpenSSL 3.x release. nginx is pinned to a fixed release because upstream
-# master is unstable and non-reproducible.
+name: libacvp PQC Tests
 
 on:
   workflow_call:
@@ -67,17 +54,18 @@ jobs:
           else
             REFS=$(printf '%s\n%s\n' "master" "$LATEST")
           fi
-          # v5.9.2-stable is the first release with the complete PQC interfaces
-          # required by wolfProvider. master is always eligible. A
-          # pre-floor ref (e.g. v5.8.4-stable from Wave 2) is dropped -- it
-          # would just fail the --enable-pqc gate.
+          # PQC needs the wc_MlDsaKey_* seed/message API in v5.9.2-stable.
+          # master is always eligible; a stable ref must be at the floor or
+          # newer. A
+          # pre-floor ref (e.g. v5.8.4-stable from Wave 2) is dropped, since it
+          # would fail the --enable-pqc gate.
           PQC_FLOOR="v5.9.2-stable"
           ELIGIBLE=()
           for ref in $REFS; do
             if [ "$ref" = "master" ]; then
               ELIGIBLE+=("$ref")
             elif [ "$(printf '%s\n%s\n' "$PQC_FLOOR" "$ref" \
-                      | sort -V | head -n1)" = "$PQC_FLOOR" ]; then
+                     | sort -V | tail -n1)" = "$ref" ]; then
               ELIGIBLE+=("$ref")
             else
               echo "::notice::Skipping pre-PQC-floor wolfSSL ref $ref (floor $PQC_FLOOR)"
@@ -90,18 +78,15 @@ jobs:
           fi
           echo "Eligible wolfSSL refs: $REFS_JSON"
           # Each eligible wolfSSL ref expands to 4 rows: replace-default and
-          # non-replace, each in normal and force-fail anti-test mode. The
-          # matrix owns the replace-default and force-fail axes; the test step
-          # hands its raw result to check-workflow-result.sh which inverts the
-          # force-fail expectation.
+          # non-replace, each in normal and force-fail anti-test mode.
           MATRIX=$(jq -nc --argjson refs "$REFS_JSON" '
             def rows($ref; $lbl):
               [ {"replace":true,  "ff":"WOLFPROV_FORCE_FAIL=1",
                  "sfx":" [replace-default] [force-fail]"},
-                {"replace":true,  "ff":"", "sfx":" [replace-default]"},
+                {"replace":true,  "ff":"","sfx":" [replace-default]"},
                 {"replace":false, "ff":"WOLFPROV_FORCE_FAIL=1",
                  "sfx":" [non-replace] [force-fail]"},
-                {"replace":false, "ff":"", "sfx":" [non-replace]"} ]
+                {"replace":false, "ff":"","sfx":" [non-replace]"} ]
               | map({"name":($lbl+.sfx), "wolfssl-ref":$ref,
                      "replace":.replace, "force_fail":.ff});
             { include: ( $refs
@@ -110,7 +95,7 @@ jobs:
                 | add // [] ) }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
-  nginx-pqc:
+  libacvp-pqc:
     name: ${{ matrix.name }}
     needs: discover-versions
     runs-on: ubuntu-22.04
@@ -132,7 +117,7 @@ jobs:
         id: deps
         uses: ./.github/actions/oras-build-deps
         with:
-          variant: nginx-pqc-bookworm${{ matrix.replace && '-rd' || '' }}
+          variant: libacvp-pqc-bookworm${{ matrix.replace && '-rd' || '' }}
           openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
           wolfssl_ref: ${{ matrix.wolfssl-ref }}
           extra_key: --enable-pqc
@@ -158,59 +143,40 @@ jobs:
           openssl_source_hit: ${{ steps.deps.outputs.openssl_source_hit }}
           cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
 
-      - name: Build nginx 1.28.0
+      - name: Checkout libacvp v2.3.1
+        uses: actions/checkout@v4
+        with:
+          repository: cisco/libacvp
+          ref: v2.3.1
+          path: libacvp
+          fetch-depth: 1
+
+      - name: Checkout OSP
+        uses: actions/checkout@v4
+        with:
+          repository: wolfssl/osp
+          path: osp
+          fetch-depth: 1
+
+      - name: Build libacvp test suite
+        working-directory: libacvp
         run: |
-          wget -q https://nginx.org/download/nginx-1.28.0.tar.gz
-          tar -zxf nginx-1.28.0.tar.gz
-          cd nginx-1.28.0
-          ./configure --prefix=/opt/nginx --with-http_ssl_module \
-            --with-cc-opt="-I$GITHUB_WORKSPACE/openssl-install/include" \
-            --with-ld-opt="-L$GITHUB_WORKSPACE/openssl-install/lib -L$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib -Wl,-rpath,$GITHUB_WORKSPACE/openssl-install/lib64 -Wl,-rpath,$GITHUB_WORKSPACE/wolfprov-install/lib -Wl,-rpath,$GITHUB_WORKSPACE/wolfssl-install/lib"
+          PATCH=$($GITHUB_WORKSPACE/scripts/resolve-osp-patch.sh \
+            "$GITHUB_WORKSPACE/osp" libacvp v2.3.1 \
+            "${{ matrix.wolfssl-ref }}")
+          patch -p1 < "$PATCH"
+          autoreconf -fiv
+          ./configure --enable-unit-tests \
+            --with-ssl-dir="$GITHUB_WORKSPACE/openssl-install" \
+            --with-libcurl-dir=/usr
           make -j"$(nproc)"
-          make install
 
-      - name: Configure quantum-safe nginx
-        run: |
-          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/wolfprov-install/lib:$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64"
-          export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
-          if [ "${{ matrix.replace }}" = "true" ]; then
-            export OPENSSL_CONF="$GITHUB_WORKSPACE/openssl-install/ssl/openssl.cnf"
-          else
-            export OPENSSL_CONF="$GITHUB_WORKSPACE/provider.conf"
-          fi
-          cp .github/nginx/nginx.conf /opt/nginx/conf/nginx.conf
-          mkdir -p /opt/nginx/pki /opt/nginx/cacert /opt/nginx/logs /opt/nginx/html
-          echo "wolfProvider quantum-safe nginx" > /opt/nginx/html/index.html
-          O="$GITHUB_WORKSPACE/openssl-install/bin/openssl"
-          "$O" req -x509 -new -newkey ML-DSA-65 -nodes \
-            -keyout /opt/nginx/cacert/CA.key \
-            -out /opt/nginx/cacert/CA.crt \
-            -subj "/CN=wolfProvider PQC CA" -days 365 \
-            -addext basicConstraints=critical,CA:TRUE \
-            -addext keyUsage=critical,keyCertSign
-          "$O" genpkey -algorithm ML-DSA-65 \
-            -out /opt/nginx/pki/server.key
-          "$O" req -new -key /opt/nginx/pki/server.key \
-            -subj "/CN=oqs-nginx" \
-            -addext subjectAltName=DNS:localhost \
-            -out /opt/nginx/server.csr
-          "$O" x509 -req -in /opt/nginx/server.csr \
-            -CA /opt/nginx/cacert/CA.crt \
-            -CAkey /opt/nginx/cacert/CA.key -CAcreateserial \
-            -days 365 -copy_extensions copy \
-            -out /opt/nginx/pki/server.crt
-
-      # Run the connection test against the server. In normal
-      # mode every quantum-safe group must negotiate with an ML-DSA verified
-      # chain; in force-fail mode wolfProvider fails every operation so the
-      # handshakes break and check-workflow-result.sh inverts that to a pass,
-      # proving wolfProvider genuinely served the PQC crypto.
-      - name: Run oqs-demos nginx PQC connection test
+      - name: Run full libacvp suite with PQC coverage
+        working-directory: libacvp/test
         shell: bash
         run: |
           export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/wolfprov-install/lib:$GITHUB_WORKSPACE/wolfssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib:$GITHUB_WORKSPACE/openssl-install/lib64"
           export OPENSSL_MODULES="$GITHUB_WORKSPACE/wolfprov-install/lib"
-          export WOLFPROV_ROOT="$GITHUB_WORKSPACE"
           if [ "${{ matrix.replace }}" = "true" ]; then
             export OPENSSL_CONF="$GITHUB_WORKSPACE/openssl-install/ssl/openssl.cnf"
           else
@@ -220,7 +186,21 @@ jobs:
           if [ "${{ matrix.force_fail }}" = "WOLFPROV_FORCE_FAIL=1" ]; then
             export WOLFPROV_FORCE_FAIL=1
           fi
-          bash .github/nginx/test.sh 2>&1 | tee nginx-pqc.log
+          ./runtest -g APP_PQC_HANDLER -v 2>&1 | tee libacvp-pqc.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
-            $TEST_RESULT "${{ matrix.force_fail }}" nginx-pqc
+            $TEST_RESULT "${{ matrix.force_fail }}" libacvp-pqc
+          CHECK_RESULT=$?
+          if [ $CHECK_RESULT -ne 0 ]; then
+            exit $CHECK_RESULT
+          fi
+          if [ -z "${{ matrix.force_fail }}" ]; then
+            ./runtest -v 2>&1 | tee -a libacvp-pqc.log
+            TEST_RESULT=${PIPESTATUS[0]}
+            $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
+              $TEST_RESULT "" libacvp-pqc
+            CHECK_RESULT=$?
+            if [ $CHECK_RESULT -ne 0 ]; then
+              exit $CHECK_RESULT
+            fi
+          fi

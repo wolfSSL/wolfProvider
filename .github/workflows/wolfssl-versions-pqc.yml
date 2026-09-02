@@ -70,7 +70,7 @@ jobs:
           fi
           echo "latest-stable PQC eligible: $LATEST_PQC_ELIGIBLE"
           # Each row carries the build flag (enable) and which PQC test families
-          # must result (expect: both | mlkem | mldsa | lms | none). This
+          # must result (expect: all | mlkem | mldsa | slhdsa | lms | none). This
           # exercises the combined, per-algorithm, and opt-in-absent paths.
           MATRIX=$(jq -nc \
               --arg latest "$LATEST" \
@@ -80,19 +80,24 @@ jobs:
                "wolfssl-ref":"v5.8.0-stable","enable":"","expect":"none"},
               {"name":("latest stable (" + $latest + ")"),"wolfssl-ref":$latest,
                "enable":(if $latest_pqc then "--enable-pqc" else "" end),
-               "expect":(if $latest_pqc then "both" else "none" end)},
+               "expect":(if $latest_pqc then "all" else "none" end)},
               {"name":"master (--enable-pqc)",
-               "wolfssl-ref":"master","enable":"--enable-pqc","expect":"both"},
+               "wolfssl-ref":"master","enable":"--enable-pqc","expect":"all"},
               {"name":"master (no flag, opt-in check)",
                "wolfssl-ref":"master","enable":"","expect":"none"},
               {"name":"master (--enable-mlkem only)",
                "wolfssl-ref":"master","enable":"--enable-mlkem","expect":"mlkem"},
               {"name":"master (--enable-mldsa only)",
                "wolfssl-ref":"master","enable":"--enable-mldsa","expect":"mldsa"},
+              {"name":"master (--enable-slhdsa only)",
+               "wolfssl-ref":"master","enable":"--enable-slhdsa","expect":"slhdsa"},
               {"name":"master (--enable-lms only)",
                "wolfssl-ref":"master","enable":"--enable-lms","expect":"lms"},
               {"name":"v5.9.2-stable (--enable-lms only)",
-               "wolfssl-ref":"v5.9.2-stable","enable":"--enable-lms","expect":"lms"}
+               "wolfssl-ref":"v5.9.2-stable","enable":"--enable-lms","expect":"lms"},
+              {"name":"master (SLH-DSA verify-only)",
+               "wolfssl-ref":"master","enable":"--enable-slhdsa",
+               "slh-config":"yes,sha2,verify-only","expect":"slhdsa-verify"}
             ]
           }')
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -125,13 +130,15 @@ jobs:
           variant: ${{ matrix.expect == 'lms' && 'pqc-lms' || 'pqc' }}
           openssl_ref: ${{ needs.discover-versions.outputs.openssl-tag }}
           wolfssl_ref: ${{ matrix.wolfssl-ref }}
-          extra_key: ${{ matrix.enable }}
+          extra_key: ${{ matrix.enable }}-${{ matrix.slh-config }}
+          cache_openssl_source: ${{ matrix.expect == 'slhdsa-verify' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wolfProvider (${{ matrix.enable || 'no PQC flag' }})
         run: |
           OPENSSL_TAG=${{ needs.discover-versions.outputs.openssl-tag }} \
           WOLFSSL_TAG=${{ matrix.wolfssl-ref }} \
+          WOLFSSL_SLHDSA_CONFIG=${{ matrix.slh-config || 'yes,sha2' }} \
             ./scripts/build-wolfprovider.sh ${{ matrix.enable }}
 
       - name: Push build dependencies
@@ -140,27 +147,58 @@ jobs:
           registry: ${{ steps.deps.outputs.registry }}
           openssl_install_tag: ${{ steps.deps.outputs.openssl_install_tag }}
           wolfssl_install_tag: ${{ steps.deps.outputs.wolfssl_install_tag }}
+          openssl_source_tag: ${{ steps.deps.outputs.openssl_source_tag }}
           openssl_hit: ${{ steps.deps.outputs.openssl_hit }}
           wolfssl_hit: ${{ steps.deps.outputs.wolfssl_hit }}
+          openssl_source_hit: ${{ steps.deps.outputs.openssl_source_hit }}
+          cache_openssl_source: ${{ steps.deps.outputs.cache_openssl_source }}
+
+      - name: Run OpenSSL provider example
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          ./examples/openssl_example
+          cp ./examples/.libs/openssl_example "$RUNNER_TEMP/openssl_example"
+          OPENSSL_MODULES="$(pwd)/.libs" "$RUNNER_TEMP/openssl_example"
+
+      - name: Run PQC OpenSSL example (${{ matrix.expect }})
+        if: matrix.expect != 'none' && matrix.expect != 'slhdsa-verify' && matrix.expect != 'lms'
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          if [ ! -x ./examples/pqc_openssl_example ]; then
+            echo "::error::PQC OpenSSL example was not built"
+            exit 1
+          fi
+          ./examples/pqc_openssl_example
+          cp ./examples/.libs/pqc_openssl_example \
+            "$RUNNER_TEMP/pqc_openssl_example"
+          OPENSSL_MODULES="$(pwd)/.libs" \
+            "$RUNNER_TEMP/pqc_openssl_example"
 
       # Opt-in is per-algorithm: assert exactly the expected PQC test families
-      # are present (both / mlkem / mldsa / lms / none). This catches a leaked
+      # are present (all / mlkem / mldsa / slhdsa / lms / none). This catches a leaked
       # algorithm, a missing one, or PQC dragged in without a flag.
       - name: Verify PQC test presence matches opt-in (${{ matrix.expect }})
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
           tests=$(./test/unit.test --list) || exit 1
-          kem=0; dsa=0; lms=0
+          kem=0; dsa=0; slh=0; slhpriv=0; lms=0
           printf '%s\n' "$tests" | grep -q 'test_mlkem_keygen' && kem=1
           printf '%s\n' "$tests" | grep -q 'test_mldsa_sign_verify' && dsa=1
+          printf '%s\n' "$tests" | \
+            grep -qE 'test_slhdsa_(sign_verify|public_keymgmt)' && slh=1
+          # sign_verify is gated on WP_HAVE_SLHDSA_PRIVATE, so it is absent in a
+          # verify-only build. This is what separates the two SLH-DSA rows.
+          printf '%s\n' "$tests" | grep -q 'test_slhdsa_sign_verify' && slhpriv=1
           printf '%s\n' "$tests" | grep -q 'test_lms_import_export' && lms=1
-          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa lms=$lms"
+          echo "expect=${{ matrix.expect }} mlkem=$kem mldsa=$dsa slhdsa=$slh slhpriv=$slhpriv lms=$lms"
           case "${{ matrix.expect }}" in
-            both)  [ "$kem" = 1 ] && [ "$dsa" = 1 ] && [ "$lms" = 0 ] ;;
-            mlkem) [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$lms" = 0 ] ;;
-            mldsa) [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$lms" = 0 ] ;;
-            lms)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$lms" = 1 ] ;;
-            none)  [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$lms" = 0 ] ;;
+            all)    [ "$kem" = 1 ] && [ "$dsa" = 1 ] && [ "$slh" = 1 ] && [ "$lms" = 0 ] ;;
+            mlkem)  [ "$kem" = 1 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
+            mldsa)  [ "$kem" = 0 ] && [ "$dsa" = 1 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
+            slhdsa) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$slhpriv" = 1 ] && [ "$lms" = 0 ] ;;
+            slhdsa-verify) [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 1 ] && [ "$slhpriv" = 0 ] && [ "$lms" = 0 ] ;;
+            lms)    [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 1 ] ;;
+            none)   [ "$kem" = 0 ] && [ "$dsa" = 0 ] && [ "$slh" = 0 ] && [ "$lms" = 0 ] ;;
             *) false ;;
           esac || { echo "ERROR: PQC test families do not match expect=${{ matrix.expect }}"; exit 1; }
 
@@ -173,7 +211,7 @@ jobs:
         if: matrix.expect != 'none'
         run: |
           export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
-          idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx|lms' \
+          idxs=$(./test/unit.test --list | grep -iE 'mlkem|mldsa|mlx|slhdsa|lms' \
               | grep -oE '^[0-9]+')
           if [ -z "$idxs" ]; then
             echo "::error::No PQC unit tests found"
@@ -183,6 +221,34 @@ jobs:
             echo "== PQC unit test $i =="
             ./test/unit.test "$i" || exit 1
           done
+
+      - name: Run SLH-DSA verify-only KAT
+        if: matrix.expect == 'slhdsa-verify'
+        run: |
+          export LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64"
+          export OPENSSL_MODULES="$(pwd)/.libs"
+          vector=./openssl-source/test/recipes/30-test_evp_data/evppkey_slh_dsa_sigver.txt
+          if [ ! -x ./openssl-source/test/evp_test ]; then
+            echo "::error::OpenSSL evp_test is missing"
+            exit 1
+          fi
+          if [ ! -f "$vector" ]; then
+            echo "::error::SLH-DSA verification vectors are missing"
+            exit 1
+          fi
+          rc=0
+          out=$(./openssl-source/test/evp_test -config ./provider.conf \
+            "$vector" 2>&1) || rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
+          ran=$(printf '%s\n' "$out" | \
+            sed -n 's/.*Completed \([0-9][0-9]*\) tests.*/\1/p')
+          if [ -z "$ran" ] || [ "$ran" -eq 0 ]; then
+            echo "::error::SLH-DSA verify-only KAT executed no vectors"
+            exit 1
+          fi
 
       # Three-way interop: wolfProvider <-> OpenSSL default <-> wolfSSL direct.
       # Only runs on PQC-enabled rows; the latest OpenSSL (3.6+, the PQC floor)
@@ -194,7 +260,7 @@ jobs:
       # to the system libcrypto/libssl (Ubuntu 22.04 ships 3.0.2, which has
       # no ML-KEM/ML-DSA in the default provider).
       - name: Three-way PQC interop validation
-        if: matrix.expect == 'both'
+        if: matrix.expect == 'all'
         run: |
           LD_LIBRARY_PATH="$(pwd)/wolfssl-install/lib:$(pwd)/openssl-install/lib:$(pwd)/openssl-install/lib64" \
             ./test/pqc_interop.test

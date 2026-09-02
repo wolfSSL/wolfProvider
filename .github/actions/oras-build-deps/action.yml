@@ -98,7 +98,8 @@ runs:
         sh="${SCRIPTS_HASH:0:12}"
         # extra_key (sanitizer/PQC flags) only changes the wolfSSL build, so
         # fold it into the wolfSSL tag only - stock OpenSSL stays shared across
-        # flag values. Hash it (not a prefix) so flag strings cannot collide.
+        # flag values. Hash it (not a prefix) so flag strings cannot collide
+        # and commas in configure values remain valid actions/cache keys.
         wsh="$sh"
         [ -n "$EXTRA_KEY" ] && wsh="${sh}-$(printf '%s' "$EXTRA_KEY" | sha256sum | cut -c1-12)"
         {
@@ -235,4 +236,4 @@ runs:
       uses: actions/cache@v4
       with:
         path: wolfssl-install
-        key: wolfssl-install-${{ inputs.variant }}-${{ inputs.wolfssl_fixed_key || steps.wolfssl-ref.outputs.sha }}-${{ hashFiles('scripts/utils-*.sh', 'scripts/build-wolfprovider.sh', 'scripts/patch-*.sh', 'patches/**') }}${{ inputs.extra_key != '' && format('-{0}', inputs.extra_key) || '' }}
+        key: ${{ steps.tags.outputs.wolfssl_install_tag }}

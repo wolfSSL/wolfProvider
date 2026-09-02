@@ -83,6 +83,10 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' krb5 ')
     uses: ./.github/workflows/krb5.yml
+  libacvp-pqc:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libacvp-pqc ')
+    uses: ./.github/workflows/libacvp-pqc.yml
   libcryptsetup:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libcryptsetup ')

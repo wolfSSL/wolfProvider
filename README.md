@@ -78,15 +78,25 @@ Information on how to configure, build, and test wolfProvider can be found here:
 PQC is opt-in and requires wolfSSL master/v5.9.2-stable+ and OpenSSL 3.6+.
 
 * With the script: `./scripts/build-wolfprovider.sh --enable-pqc`
-  (or `--enable-mlkem` / `--enable-mldsa` for one only)
+  (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa` for one only).
+  `--enable-slhdsa` enables all 12 parameter sets by default. For SHAKE-only:
+  `WOLFSSL_SLHDSA_CONFIG=yes ./scripts/build-wolfprovider.sh --enable-slhdsa`.
 * Building wolfProvider directly: `./configure --enable-pqc`
-  (or `--enable-mlkem` / `--enable-mldsa`); build wolfSSL with the matching
-  `--enable-mlkem` / `--enable-mldsa` and link an OpenSSL 3.6+
+  (or `--enable-mlkem` / `--enable-mldsa` / `--enable-slhdsa`); build wolfSSL
+  with the matching options. Use wolfSSL's `--enable-slhdsa=yes,sha2` for all
+  12 parameter sets or plain `--enable-slhdsa` for SHAKE-only. Link an OpenSSL
+  3.6+.
 
 Without an enable flag no PQC code is compiled, regardless of what wolfSSL enables.
 
 * ML-KEM (FIPS 203): ML-KEM-512, ML-KEM-768, ML-KEM-1024 (key encapsulation)
 * ML-DSA (FIPS 204): ML-DSA-44, ML-DSA-65, ML-DSA-87 (signatures, pure mode with empty context per FIPS 204 sec 5.2)
+* SLH-DSA (FIPS 205): all 12 parameter sets, SLH-DSA-SHA2-{128,192,256}{s,f} and SLH-DSA-SHAKE-{128,192,256}{s,f} (signatures, pure mode)
+
+wolfProvider additionally supports streamed SLH-DSA sign and verify by
+buffering the message because wolfSSL has no streaming SLH-DSA API. This
+extension accepts messages up to 64 MiB; use the one-shot API for larger
+messages.
 
 ### LMS (RFC 8554 / NIST SP 800-208)
 LMS verification is independently opt-in and requires wolfSSL 5.9.2-stable or

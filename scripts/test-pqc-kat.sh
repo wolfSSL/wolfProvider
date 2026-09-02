@@ -17,8 +17,8 @@
 # You should have received a copy of the GNU General Public License
 # along with wolfProvider. If not, see <http://www.gnu.org/licenses/>.
 
-# Run OpenSSL's ML-KEM, ML-DSA, and LMS EVP KAT vectors through wolfProvider
-# using OpenSSL's evp_test harness.
+# Run OpenSSL's ML-KEM, ML-DSA, SLH-DSA, and LMS EVP KAT vectors through
+# wolfProvider using OpenSSL's evp_test harness.
 #
 # The script reports a raw result: exit 0 only when every vector file passes
 # and each selected family runs at least its known sub-test count. The caller
@@ -27,7 +27,8 @@
 # CI job inverts that via check-workflow-result.sh. wolfProvider (replace-default
 # or not) must already be built by a prior build-wolfprovider.sh step; this
 # script does not build it, only runs the KAT against it. WOLFPROV_PQC and
-# WOLFPROV_LMS select families; when both are unset, ML-KEM/ML-DSA is the default.
+# WOLFPROV_LMS select families; when both are unset, ML-KEM/ML-DSA/SLH-DSA is
+# the default.
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/utils-wolfprovider.sh"
@@ -38,6 +39,8 @@ MIN_MLKEM_FILES=11
 MIN_MLKEM_TESTS=1822
 MIN_MLDSA_FILES=9
 MIN_MLDSA_TESTS=780
+MIN_SLHDSA_FILES=3
+MIN_SLHDSA_TESTS=497
 MIN_LMS_FILES=1
 MIN_LMS_TESTS=320
 
@@ -132,6 +135,8 @@ run_pqc_kat() {
             "${VECTOR_DIR}"/evppkey_ml_kem_*.txt || bad=$((bad + 1))
         run_vector_family "ML-DSA" ${MIN_MLDSA_FILES} ${MIN_MLDSA_TESTS} \
             "${VECTOR_DIR}"/evppkey_ml_dsa_*.txt || bad=$((bad + 1))
+        run_vector_family "SLH-DSA" ${MIN_SLHDSA_FILES} ${MIN_SLHDSA_TESTS} \
+            "${VECTOR_DIR}"/evppkey_slh_dsa_*.txt || bad=$((bad + 1))
     fi
     if [ "${WOLFPROV_LMS:-0}" = "1" ]; then
         run_vector_family "LMS" ${MIN_LMS_FILES} ${MIN_LMS_TESTS} \
