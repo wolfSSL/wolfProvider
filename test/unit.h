@@ -178,6 +178,8 @@ int test_hmac_key_no_digest(void *data);
 int test_hmac_multi_update(void *data);
 int test_hmac_dup(void *data);
 int test_hmac_size_query(void *data);
+int test_hmac_tls_data_size(void *data);
+int test_hmac_tls_dummy_blocks(void *data);
 int test_mac_key_match(void *data);
 int test_mac_sig_dup(void *data);
 #endif /* WP_HAVE_HMAC */
@@ -264,6 +266,7 @@ int test_aes_ctr_large_update(void *data);
 int test_aes128_cfb_stream(void *data);
 int test_aes192_cfb_stream(void *data);
 int test_aes256_cfb_stream(void *data);
+int test_aes128_cfb_reinit(void *data);
 int test_aes_cfb_large_update(void *data);
 
 #endif
@@ -309,6 +312,8 @@ int test_aes_ccm_tag_len_undersized(void *data);
 
 int test_aes128_cts(void *data);
 int test_aes256_cts(void *data);
+int test_aes128_cts_one_block(void *data);
+int test_aes128_cts_split_init(void *data);
 
 #endif
 
