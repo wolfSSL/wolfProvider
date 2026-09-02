@@ -439,6 +439,7 @@ TEST_CASE test_case[] = {
     #endif
 #endif
 #ifdef WP_HAVE_EC_P256
+    TEST_DECL(test_ecc_encode_short_write_bio, NULL),
     #ifdef WP_HAVE_EPKI_TEST
         TEST_DECL(test_ecc_encode_epki, NULL),
     #endif

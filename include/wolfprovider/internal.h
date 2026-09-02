@@ -266,6 +266,7 @@ int wp_decrypt_key_pkcs8(unsigned char* data, word32* len,
 int wp_read_der_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len);
 int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
     unsigned char** data, word32* len);
+int wp_write_bio(BIO* bio, const unsigned char* data, size_t len);
 BIO* wp_corebio_get_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio);
 
 #ifdef HAVE_FIPS
