@@ -383,22 +383,8 @@ static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
         }
         len = (word32)sigSize;
 
-        if (!ed25519->pubKeySet) {
-            unsigned char pubKey[ED25519_PUB_KEY_SIZE];
-
-            rc = wc_ed25519_make_public(ed25519, pubKey, sizeof(pubKey));
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed25519_make_public", rc);
-                ok = 0;
-            }
-            if (ok) {
-                rc = wc_ed25519_import_public(pubKey, sizeof(pubKey), ed25519);
-                if (rc != 0) {
-                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed25519_import_public", rc);
-                    ok = 0;
-                }
-            }
-        }
+        /* EdDSA signs with the public half; make sure it is derived first. */
+        ok = wp_ecx_ensure_pub(ctx->ecx);
         if (ok && (!WP_FITS_WORD32(tbsLen))) {
             ok = 0;
         }
@@ -470,13 +456,22 @@ static int wp_ed25519_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
     }
     if (ok) {
         int res = 0;
-        int rc = wc_ed25519_verify_msg(sig, (word32)sigLen, tbs, (word32)tbsLen,
-                &res, wp_ecx_get_key(ctx->ecx));
-        if (rc != 0) {
+        int rc = 0;
+
+        /* Verify mutates the key (persistent SHA), so hold the key mutex. */
+        if (wp_lock(wp_ecx_get_mutex(ctx->ecx)) != 1) {
+            ok = 0;
+        }
+        else {
+            rc = wc_ed25519_verify_msg(sig, (word32)sigLen, tbs,
+                    (word32)tbsLen, &res, wp_ecx_get_key(ctx->ecx));
+            wp_unlock(wp_ecx_get_mutex(ctx->ecx));
+        }
+        if (ok && (rc != 0)) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed25519_verify_msg", rc);
             ok = 0;
         }
-        if (res == 0) {
+        if (ok && (res == 0)) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "Signature verification", rc);
             ok = 0;
         }
@@ -596,22 +591,8 @@ static int wp_ed448_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
         }
         len = (word32)sigSize;
 
-        if (!ed448->pubKeySet) {
-            unsigned char pubKey[ED448_PUB_KEY_SIZE];
-
-            rc = wc_ed448_make_public(ed448, pubKey, sizeof(pubKey));
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed448_make_public", rc);
-                ok = 0;
-            }
-            if (ok) {
-                rc = wc_ed448_import_public(pubKey, sizeof(pubKey), ed448);
-                if (rc != 0) {
-                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed448_import_public", rc);
-                    ok = 0;
-                }
-            }
-        }
+        /* EdDSA signs with the public half; make sure it is derived first. */
+        ok = wp_ecx_ensure_pub(ctx->ecx);
         if (ok && (!WP_FITS_WORD32(tbsLen))) {
             ok = 0;
         }
@@ -620,8 +601,8 @@ static int wp_ed448_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
                 ok = 0;
             }
             if (ok) {
-                rc = wc_ed448_sign_msg(tbs, (word32)tbsLen, sig, &len,
-                    (ed448_key*)wp_ecx_get_key(ctx->ecx), NULL, 0);
+                rc = wc_ed448_sign_msg(tbs, (word32)tbsLen, sig, &len, ed448,
+                    NULL, 0);
                 wp_unlock(wp_ecx_get_mutex(ctx->ecx));
                 if (rc != 0) {
                     WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed448_sign_msg", rc);
@@ -689,13 +670,22 @@ static int wp_ed448_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
     }
     if (ok) {
         int res = 0;
-        int rc = wc_ed448_verify_msg(sig, (word32)sigLen, tbs, (word32)tbsLen,
-                &res, wp_ecx_get_key(ctx->ecx), NULL, 0);
-        if (rc != 0) {
+        int rc = 0;
+
+        /* Verify mutates the key (persistent SHA), so hold the key mutex. */
+        if (wp_lock(wp_ecx_get_mutex(ctx->ecx)) != 1) {
+            ok = 0;
+        }
+        else {
+            rc = wc_ed448_verify_msg(sig, (word32)sigLen, tbs, (word32)tbsLen,
+                    &res, wp_ecx_get_key(ctx->ecx), NULL, 0);
+            wp_unlock(wp_ecx_get_mutex(ctx->ecx));
+        }
+        if (ok && (rc != 0)) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed448_verify_msg", rc);
             ok = 0;
         }
-        if (res == 0) {
+        if (ok && (res == 0)) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "Signature verification", rc);
             ok = 0;
         }

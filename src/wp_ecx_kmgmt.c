@@ -85,6 +85,8 @@ typedef int (*WP_ECX_IMPORT_PRIV)(const byte* priv, word32 privLen, void* key,
     int endian);
 /** Type for function that exports a private key from a wolfSSL key. */
 typedef int (*WP_ECX_EXPORT_PRIV)(void* key, const byte* out, word32* outLen);
+/** Type for function that derives the public key from the private key. */
+typedef int (*WP_ECX_DERIVE_PUB)(void* key);
 /** Type for a wolfSSL function that checks a public key. */
 typedef int (*WP_ECX_CHECK_PUB)(const byte* pub, word32 pubLen, int endian);
 /** Type for a wolfSSL function that checks a key. */
@@ -117,6 +119,8 @@ typedef struct wp_EcxData {
     WP_ECX_IMPORT_PRIV importPriv;
     /** Export private key from wolfSSL key object. */
     WP_ECX_EXPORT_PRIV exportPriv;
+    /** Derive the public key from the private key. NULL when not needed. */
+    WP_ECX_DERIVE_PUB  derivePub;
     /** wolfSSL check of public key value. */
     WP_ECX_CHECK_PUB   checkPub;
     /** wolfSSL check of public/private key. */
@@ -259,6 +263,48 @@ wolfSSL_Mutex* wp_ecx_get_mutex(wp_Ecx* ecx)
 }
 
 /**
+ * Make sure the public key is available in the wolfSSL key object.
+ *
+ * Ed25519 and Ed448 keys imported as a private key only have no public half
+ * until it is derived. Deriving writes into the wolfSSL key object, so the
+ * key mutex is held: threads that first use one shared key at the same time
+ * would otherwise sign or export with a partly written public key.
+ *
+ * Must not be called with the key mutex already held.
+ *
+ * @param [in, out] ecx  ECX key object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_ecx_ensure_pub(wp_Ecx* ecx)
+{
+    int ok = 1;
+
+    if ((ecx != NULL) && (ecx->data->derivePub != NULL)) {
+        int rc;
+
+    #ifndef WP_SINGLE_THREADED
+        if (wp_lock(&ecx->mutex) != 1) {
+            ok = 0;
+        }
+        if (ok) {
+    #endif
+            rc = (*ecx->data->derivePub)((void*)&ecx->key);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "derivePub",
+                    rc);
+                ok = 0;
+            }
+    #ifndef WP_SINGLE_THREADED
+            wp_unlock(&ecx->mutex);
+        }
+    #endif
+    }
+
+    return ok;
+}
+
+/**
  * Create a new ECX key object. Base function.
  *
  * @param [in] provCtx   Provider context.
@@ -363,6 +409,13 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
     if (wolfssl_prov_is_running()) {
         /* Create a new ecx object. */
         dst = wp_ecx_new(src->provCtx, src->data);
+    }
+    /* Cache the public half before the copy below: deriving it later writes
+     * into the source key object that is being read here. */
+    if ((dst != NULL) && src->hasPub &&
+            (!wp_ecx_ensure_pub((wp_Ecx*)src))) {
+        wp_ecx_free(dst);
+        dst = NULL;
     }
     if (dst != NULL) {
         dst->includePublic = src->includePublic;
@@ -552,9 +605,18 @@ static int wp_ecx_get_params_enc_pub_key(wp_Ecx* ecx, OSSL_PARAM params[],
         if (p->data == NULL) {
             outLen = ecx->data->len;
         }
+        else if (!wp_ecx_ensure_pub(ecx)) {
+            ok = 0;
+        }
+        else if (wp_lock(wp_ecx_get_mutex(ecx)) != 1) {
+            ok = 0;
+        }
         else {
+            /* Signing mutates the key (persistent SHA), so hold the key mutex
+             * while reading it. */
             int rc = (*ecx->data->exportPub)((void*)&ecx->key, p->data,
                 &outLen, ECX_LITTLE_ENDIAN);
+            wp_unlock(wp_ecx_get_mutex(ecx));
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPub", rc);
                 ok = 0;
@@ -775,21 +837,39 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
     XMEMSET(key2, 0, sizeof(key2));
     ok &= ecx1->hasPub && ecx2->hasPub;
     if (ok) {
+        ok = wp_ecx_ensure_pub((wp_Ecx*)ecx1) &&
+             wp_ecx_ensure_pub((wp_Ecx*)ecx2);
+    }
+    if (ok) {
+        /* Signing mutates the key (persistent SHA), so hold each key mutex
+         * while reading it. Lock one key at a time to avoid lock ordering. */
         len1 = ecx1->data->len;
-        rc = (*ecx1->data->exportPub)((void*)&ecx1->key, key1, &len1,
-            ECX_LITTLE_ENDIAN);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPub", rc);
+        if (wp_lock(wp_ecx_get_mutex((wp_Ecx*)ecx1)) != 1) {
             ok = 0;
+        }
+        else {
+            rc = (*ecx1->data->exportPub)((void*)&ecx1->key, key1, &len1,
+                ECX_LITTLE_ENDIAN);
+            wp_unlock(wp_ecx_get_mutex((wp_Ecx*)ecx1));
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPub", rc);
+                ok = 0;
+            }
         }
     }
     if (ok) {
         len2 = ecx2->data->len;
-        rc = (*ecx2->data->exportPub)((void*)&ecx2->key, key2, &len2,
-            ECX_LITTLE_ENDIAN);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPub", rc);
+        if (wp_lock(wp_ecx_get_mutex((wp_Ecx*)ecx2)) != 1) {
             ok = 0;
+        }
+        else {
+            rc = (*ecx2->data->exportPub)((void*)&ecx2->key, key2, &len2,
+                ECX_LITTLE_ENDIAN);
+            wp_unlock(wp_ecx_get_mutex((wp_Ecx*)ecx2));
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPub", rc);
+                ok = 0;
+            }
         }
     }
     if (ok && (len1 != len2)) {
@@ -1126,16 +1206,30 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
     int ok = 1;
     int rc;
     int i = *pIdx;
+    int locked = 0;
     word32 outLen;
 
     WOLFPROV_ENTER(WP_LOG_COMP_KE, "wp_ecx_export_keypair");
 
-    outLen = ecx->data->len;
-    rc = (*ecx->data->exportPub)((void*)&ecx->key, data + *idx, &outLen,
-        ECX_LITTLE_ENDIAN);
-    if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPub", rc);
-        ok = 0;
+    ok = wp_ecx_ensure_pub(ecx);
+    if (ok) {
+        /* Signing mutates the key (persistent SHA), so hold the key mutex
+         * while reading it. */
+        if (wp_lock(wp_ecx_get_mutex(ecx)) != 1) {
+            ok = 0;
+        }
+        else {
+            locked = 1;
+        }
+    }
+    if (ok) {
+        outLen = ecx->data->len;
+        rc = (*ecx->data->exportPub)((void*)&ecx->key, data + *idx, &outLen,
+            ECX_LITTLE_ENDIAN);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "exportPub", rc);
+            ok = 0;
+        }
     }
     if (ok) {
         wp_param_set_octet_string_ptr(&params[i++], OSSL_PKEY_PARAM_PUB_KEY,
@@ -1161,6 +1255,9 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
                 OSSL_PKEY_PARAM_PRIV_KEY, data + *idx, outLen);
             *idx += outLen;
         }
+    }
+    if (locked) {
+        wp_unlock(wp_ecx_get_mutex(ecx));
     }
 
     *pIdx = i;
@@ -1483,6 +1580,7 @@ static const wp_EcxData x25519Data = {
     (WP_ECX_EXPORT_PUB)&wc_curve25519_export_public_ex,
     (WP_ECX_IMPORT_PRIV)&wc_curve25519_import_private_ex,
     (WP_ECX_EXPORT_PRIV)&wp_curve25519_export_private_raw,
+    NULL,
     (WP_ECX_CHECK_PUB)&wc_curve25519_check_public,
     NULL,
 };
@@ -1565,6 +1663,7 @@ static const wp_EcxData x448Data = {
     (WP_ECX_EXPORT_PUB)&wc_curve448_export_public_ex,
     (WP_ECX_IMPORT_PRIV)&wc_curve448_import_private_ex,
     (WP_ECX_EXPORT_PRIV)&wp_curve448_export_private_raw,
+    NULL,
     (WP_ECX_CHECK_PUB)&wc_curve448_check_public,
     NULL,
 };
@@ -1650,19 +1749,32 @@ static int wp_ed25519_import_public(const byte* in, word32 inLen,
 static int wp_ed25519_export_public(ed25519_key* key, const byte* out,
     word32* outLen, int endian)
 {
-    int ret;
-
     (void)endian;
 
+    return wc_ed25519_export_public(key, (byte*)out, outLen);
+}
+
+/**
+ * Derive the Ed25519 public key from the private key and cache it.
+ *
+ * A private-only key (a seed-only PKCS#8) has no public half until it is
+ * derived. Callers must hold the key mutex - see wp_ecx_ensure_pub().
+ *
+ * @param [in, out] key  wolfSSL Ed25519 key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp_ed25519_derive_public(ed25519_key* key)
+{
+    int ret = 0;
+    byte pub[ED25519_PUB_KEY_SIZE];
+
     if (!key->pubKeySet) {
-        ret = wc_ed25519_make_public(key, (byte*)out, *outLen);
+        ret = wc_ed25519_make_public(key, pub, sizeof(pub));
         if (ret == 0) {
-            /* Store the generated public key in the key object for future use. */
-            ret = wc_ed25519_import_public((byte*)out, *outLen, key);
+            /* Only import_public stores the value and sets pubKeySet. */
+            ret = wc_ed25519_import_public(pub, sizeof(pub), key);
         }
-    }
-    else {
-        ret = wc_ed25519_export_public(key, (byte*)out, outLen);
     }
 
     return ret;
@@ -1698,6 +1810,7 @@ static const wp_EcxData ed25519Data = {
     (WP_ECX_EXPORT_PUB)&wp_ed25519_export_public,
     (WP_ECX_IMPORT_PRIV)&wp_ed25519_import_private,
     (WP_ECX_EXPORT_PRIV)&wc_ed25519_export_private_only,
+    (WP_ECX_DERIVE_PUB)&wp_ed25519_derive_public,
     NULL,
     (WP_ECX_CHECK_KEY)&wc_ed25519_check_key,
 };
@@ -1784,19 +1897,32 @@ static int wp_ed448_import_public(const byte* in, word32 inLen, ed448_key* key,
 static int wp_ed448_export_public(ed448_key* key, const byte* out,
     word32* outLen, int endian)
 {
-    int ret;
-
     (void)endian;
 
+    return wc_ed448_export_public(key, (byte*)out, outLen);
+}
+
+/**
+ * Derive the Ed448 public key from the private key and cache it.
+ *
+ * A private-only key (a seed-only PKCS#8) has no public half until it is
+ * derived. Callers must hold the key mutex - see wp_ecx_ensure_pub().
+ *
+ * @param [in, out] key  wolfSSL Ed448 key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp_ed448_derive_public(ed448_key* key)
+{
+    int ret = 0;
+    byte pub[ED448_PUB_KEY_SIZE];
+
     if (!key->pubKeySet) {
-        ret = wc_ed448_make_public(key, (byte*)out, *outLen);
+        ret = wc_ed448_make_public(key, pub, sizeof(pub));
         if (ret == 0) {
-            /* Store the generated public key in the key object for future use. */
-            ret = wc_ed448_import_public((byte*)out, *outLen, key);
+            /* Only import_public stores the value and sets pubKeySet. */
+            ret = wc_ed448_import_public(pub, sizeof(pub), key);
         }
-    }
-    else {
-        ret = wc_ed448_export_public(key, (byte*)out, outLen);
     }
 
     return ret;
@@ -1832,6 +1958,7 @@ static const wp_EcxData ed448Data = {
     (WP_ECX_EXPORT_PUB)&wp_ed448_export_public,
     (WP_ECX_IMPORT_PRIV)&wp_ed448_import_private,
     (WP_ECX_EXPORT_PRIV)&wc_ed448_export_private_only,
+    (WP_ECX_DERIVE_PUB)&wp_ed448_derive_public,
     NULL,
     (WP_ECX_CHECK_KEY)&wc_ed448_check_key,
 };
@@ -2240,6 +2367,12 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
 
     if (out == NULL) {
         ok = 0;
+    }
+
+    /* Only the public formats need the derived public half. Deriving for a
+     * private format would add the public key to the encoding. */
+    if (ok && (ctx->format == WP_ENC_FORMAT_SPKI)) {
+        ok = wp_ecx_ensure_pub((wp_Ecx*)ecx);
     }
 
     if (ok) {
@@ -2835,24 +2968,12 @@ const OSSL_DISPATCH wp_ed25519_spki_decoder_functions[] = {
 static int wp_Ed25519PublicKeyToDer(ed25519_key* key, byte* output,
     word32 inLen)
 {
-    int ok = 1;
+    int ok;
 
     WOLFPROV_ENTER(WP_LOG_COMP_KE, "wp_Ed25519PublicKeyToDer");
 
-    /* Check if this is private key only. */
-    if (!key->pubKeySet) {
-        int rc;
-        /* Make the public key to encode. */
-        rc = wc_ed25519_make_public(key, key->p, ED25519_PUB_KEY_SIZE);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed25519_make_public", rc);
-        }
-        ok = key->pubKeySet = (rc == 0);
-    }
-    if (ok) {
-        /* Always include the algorithm. */
-        ok = wc_Ed25519PublicKeyToDer(key, output, inLen, 1);
-    }
+    /* Always include the algorithm. */
+    ok = wc_Ed25519PublicKeyToDer(key, output, inLen, 1);
 
     WOLFPROV_LEAVE(WP_LOG_COMP_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -3485,24 +3606,12 @@ const OSSL_DISPATCH wp_ed448_spki_decoder_functions[] = {
  */
 static int wp_Ed448PublicKeyToDer(ed448_key* key, byte* output, word32 inLen)
 {
-    int ok = 1;
+    int ok;
 
     WOLFPROV_ENTER(WP_LOG_COMP_KE, "wp_Ed448PublicKeyToDer");
 
-    /* Check if this is private key only. */
-    if (!key->pubKeySet) {
-        int rc;
-        /* Make the public key to encode. */
-        rc = wc_ed448_make_public(key, key->p, ED448_PUB_KEY_SIZE);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ed448_make_public", rc);
-        }
-        ok = key->pubKeySet = (rc == 0);
-    }
-    if (ok) {
-        /* Always include the algorithm. */
-        ok = wc_Ed448PublicKeyToDer(key, output, inLen, 1);
-    }
+    /* Always include the algorithm. */
+    ok = wc_Ed448PublicKeyToDer(key, output, inLen, 1);
 
     WOLFPROV_LEAVE(WP_LOG_COMP_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
