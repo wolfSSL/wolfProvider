@@ -265,6 +265,7 @@ int wp_ecx_up_ref(wp_Ecx* ecx);
 void wp_ecx_free(wp_Ecx* ecx);
 void* wp_ecx_get_key(wp_Ecx* ecx);
 wolfSSL_Mutex* wp_ecx_get_mutex(wp_Ecx* ecx);
+int wp_ecx_ensure_pub(wp_Ecx* ecx);
 
 /* Internal ML-KEM types and functions. */
 typedef struct wp_MlKem wp_MlKem;

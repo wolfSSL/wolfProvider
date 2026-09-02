@@ -591,6 +591,7 @@ int test_ecx_import_zero_priv(void *data);
 int test_ecx_import_short_pub(void *data);
 #endif /* WP_HAVE_X25519 */
 int test_ecx_dup(void *data);
+int test_ecx_shared_key_first_use(void *data);
 #endif
 
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
