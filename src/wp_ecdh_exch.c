@@ -281,12 +281,22 @@ static int wp_ecdh_derive_secret(wp_EcdhCtx* ctx, unsigned char* secret,
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDH, "wp_ecdh_derive_secret");
 
+    if (ctx->peer == NULL) {
+        ok = 0;
+    }
 #ifdef HAVE_ECC_CDH
-    if (ctx->cofactor) {
+    if (ok && ctx->cofactor) {
         wc_ecc_set_flags(wp_ecc_get_key(ctx->key), WC_ECC_FLAG_COFACTOR);
     }
 #endif
-    if ((ok = wp_ecc_check_usage(ctx->key))) {
+    if (ok && (!wp_ecc_check_usage(ctx->key))) {
+        ok = 0;
+    }
+    /* Peer's key may have been changed since it was set - check it again. */
+    if (ok && (!wp_ecc_check_pub_point(ctx->peer))) {
+        ok = 0;
+    }
+    if (ok) {
         /* Calculate secret. */
         PRIVATE_KEY_UNLOCK();
         rc = wc_ecc_shared_secret(wp_ecc_get_key(ctx->key),
@@ -325,12 +335,15 @@ static int wp_ecdh_derive(wp_EcdhCtx* ctx, unsigned char* secret,
     unsigned char* out;
     size_t outLen;
     unsigned char* tmp = NULL;
-    size_t maxLen = (size_t)wp_ecc_get_size(ctx->key);
+    size_t maxLen = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECDH, "wp_ecdh_derive");
 
-    if (!wolfssl_prov_is_running()) {
+    if ((!wolfssl_prov_is_running()) || (ctx->key == NULL)) {
         ok = 0;
+    }
+    if (ok) {
+        maxLen = (size_t)wp_ecc_get_size(ctx->key);
     }
 
     /* No output buffer, return maximum size only. */
@@ -403,6 +416,9 @@ static int wp_ecdh_set_peer(wp_EcdhCtx* ctx, wp_Ecc* peer)
     WOLFPROV_ENTER(WP_LOG_COMP_ECDH, "wp_ecdh_set_peer");
 
     if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+    if (ok && (!wp_ecc_check_pub_key(peer))) {
         ok = 0;
     }
     if (ok && (ctx->peer != peer)) {

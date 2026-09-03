@@ -243,6 +243,110 @@ int wp_ecc_check_usage(wp_Ecc* ecc)
     return ret;
 }
 
+/**
+ * Check a point is usable with a curve.
+ *
+ * Rejects the point at infinity and, where wolfSSL provides the check, any
+ * point that is not on the curve. A point off the curve lies on a group whose
+ * order may be small enough to recover the other party's private key from a
+ * key exchange.
+ *
+ * @param [in] point    Public key point.
+ * @param [in] curveId  wolfSSL identifier of curve point must be on.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecc_check_point(ecc_point* point, int curveId)
+{
+    int ok = 1;
+    int idx = ECC_CURVE_INVALID;
+#ifdef USE_ECC_B_PARAM
+    int rc;
+#endif
+
+    WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_check_point");
+
+    idx = wc_ecc_get_curve_idx(curveId);
+    if (idx == ECC_CURVE_INVALID) {
+        ok = 0;
+    }
+    if (ok && wc_ecc_point_is_at_infinity(point)) {
+        ok = 0;
+    }
+#ifdef USE_ECC_B_PARAM
+    /* wolfSSL only builds the on-curve check when the curve b parameter is
+     * available. */
+    if (ok) {
+        rc = wc_ecc_point_is_on_curve(point, idx);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                "wc_ecc_point_is_on_curve", rc);
+            ok = 0;
+        }
+    }
+#endif
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Check the public key point is usable with the key's curve.
+ *
+ * @param [in] ecc  ECC key object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_ecc_check_pub_point(wp_Ecc* ecc)
+{
+    return (ecc != NULL) && wp_ecc_check_point(&ecc->key.pubkey, ecc->curveId);
+}
+
+/**
+ * Check the public key is valid for use with the key's curve.
+ *
+ * As well as the point being on the curve, the point must have the order of
+ * the curve. Any private key held alongside is ignored.
+ *
+ * @param [in] ecc  ECC key object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wp_ecc_check_pub_key(wp_Ecc* ecc)
+{
+    int ok = 1;
+    int origType;
+    int rc;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_check_pub_key");
+
+    if ((ecc == NULL) || (!ecc->hasPub)) {
+        ok = 0;
+    }
+    /* Fail closed if the key mutex can't be held for the check. */
+    if (ok && (wp_lock(wp_ecc_get_mutex(ecc)) != 1)) {
+        ok = 0;
+    }
+    if (ok) {
+        /* A private key may be present that does not match the public key,
+         * which is OK. Override the internal type to force a public key only
+         * check. */
+        origType = ecc->key.type;
+        ecc->key.type = ECC_PUBLICKEY;
+        rc = wc_ecc_check_key(&ecc->key);
+        ecc->key.type = origType;
+        wp_unlock(wp_ecc_get_mutex(ecc));
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_ecc_check_key",
+                rc);
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
 /*
  * ECC key
  */
@@ -1134,37 +1238,6 @@ static int wp_ecc_match(wp_Ecc* ecc1, wp_Ecc* ecc2, int selection)
     return ok;
 }
 
-#if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-/**
- * Quick validate the ECC public key.
- *
- * Check for infinity and point is on curve.
- *
- * @param [in] ecc        ECC key object.
- * @return  1 on success.
- * @return  0 on failure.
- */
-static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
-{
-    int ok = 1;
-
-    WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_validate_public_key_quick");
-
-    if (wc_ecc_point_is_at_infinity((ecc_point*)&ecc->key.pubkey)) {
-        ok = 0;
-    }
-#ifdef USE_ECC_B_PARAM
-    if (ok && (!wc_ecc_point_is_on_curve((ecc_point*)&ecc->key.pubkey,
-            ecc->curveId))) {
-        ok = 0;
-    }
-#endif
-
-    WOLFPROV_LEAVE(WP_LOG_COMP_ECC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-#endif
-
 /**
  * Validate the ECC key.
  *
@@ -1179,7 +1252,6 @@ static int wp_ecc_validate_public_key_quick(const wp_Ecc* ecc)
 static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
 {
     int ok = 1;
-    int origType;
     int rc;
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_validate");
@@ -1193,37 +1265,13 @@ static int wp_ecc_validate(const wp_Ecc* ecc, int selection, int checkType)
         ok = 0;
     }
     if (ok && (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
-    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-        /* TODO: Quick check for older versions? */
         if (checkType == OSSL_KEYMGMT_VALIDATE_QUICK_CHECK) {
-            if (!wp_ecc_validate_public_key_quick(ecc)) {
+            if (!wp_ecc_check_pub_point((wp_Ecc*)ecc)) {
                 ok = 0;
             }
         }
-        else
-    #else
-       (void)checkType;
-    #endif
-        {
-            /* Fail closed if the key mutex can't be held for the check. */
-            if (wp_lock(wp_ecc_get_mutex((wp_Ecc*)ecc)) != 1) {
-                ok = 0;
-            }
-            if (ok) {
-                /* We may have a private key inside that does not match the
-                 * public key that has been set, which is OK. Override the
-                 * internal type to force a public key only check */
-                origType = ecc->key.type;
-                ((wp_Ecc*)ecc)->key.type = ECC_PUBLICKEY;
-                rc = wc_ecc_check_key((ecc_key*)&ecc->key);
-                ((wp_Ecc*)ecc)->key.type = origType;
-                wp_unlock(wp_ecc_get_mutex((wp_Ecc*)ecc));
-                if (rc != 0) {
-                    WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
-                        "wc_ecc_check_key", rc);
-                    ok = 0;
-                }
-            }
+        else if (!wp_ecc_check_pub_key((wp_Ecc*)ecc)) {
+            ok = 0;
         }
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) &&
