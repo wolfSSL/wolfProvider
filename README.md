@@ -64,6 +64,14 @@ Information on how to configure, build, and test wolfProvider can be found here:
 * Key exchange
 * Key generation
 
+Parameter generation refuses a requested generator other than 2: wolfSSL
+derives the generator from the prime it generates, so `openssl dhparam -3`
+and `-5` fail. A request for 2, which `openssl dhparam` sends by default, is
+accepted, but the generator is still the one wolfSSL derives. Key generation
+from a named group or existing parameters accepts a generator only when the
+parameters already have it. A non-zero `priv_len` is refused because wolfSSL
+takes the private key length from the group.
+
 ### ECC
 * ECDSA (signing, verification)
 * ECDH (key exchange)
