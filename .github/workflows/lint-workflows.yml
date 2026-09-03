@@ -64,7 +64,8 @@ jobs:
               conc = wf.get('concurrency') or {}
               if not isinstance(conc, dict):
                   continue
-              # Anything not literally false counts: "true"/${{ }} still cancel.
+              # Anything not literally false counts - a "true" string or
+              # an unresolved expression still cancels.
               cip = conc.get('cancel-in-progress', False)
               if cip is not False and str(cip).strip().lower() != 'false':
                   bad.append(f"{path}: cancel-in-progress={cip!r} "
