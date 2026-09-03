@@ -408,6 +408,7 @@ int test_dh_invalid_kdf_strings(void *data);
 int test_dh_encode_epki(void *data);
 #endif
 int test_dh_decode(void *data);
+int test_dh_decode_big_g(void *data);
 int test_dh_get_params(void *data);
 int test_dh_krb5_keygen(void *data);
 int test_dh_pad(void *data);
