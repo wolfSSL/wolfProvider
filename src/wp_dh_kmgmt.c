@@ -100,9 +100,7 @@ typedef struct wp_DhGenCtx {
     char name[WP_MAX_DH_GROUP_NAME_SZ];
     /** Number of bits in prime. */
     int bits;
-    /** Length of private key to generate - value ignored. */
-    int privLen;
-    /** DH generator parameter to use in generation - value ignored. */
+    /** Generator requested by the caller. 0 when not requested. */
     int generator;
 } wp_DhGenCtx;
 
@@ -1585,7 +1583,6 @@ static wp_DhGenCtx* wp_dh_gen_init(WOLFPROV_CTX* provCtx,
             ctx->provCtx   = provCtx;
             ctx->selection = selection;
             ctx->bits      = 2048;
-            ctx->generator = 2;
         }
         if (ok) {
             if (!wp_dh_gen_set_params(ctx, params)) {
@@ -1652,6 +1649,8 @@ static int wp_dh_gen_set_params(wp_DhGenCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
     int bits;
+    int privLen;
+    int generator;
     const OSSL_PARAM* p;
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_gen_set_params");
@@ -1673,14 +1672,32 @@ static int wp_dh_gen_set_params(wp_DhGenCtx* ctx, const OSSL_PARAM params[])
     }
     if (ok) {
         p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_DH_PRIV_LEN);
-        if ((p != NULL) && (!OSSL_PARAM_get_int(p, &ctx->privLen))) {
-            return 0;
+        if (p != NULL) {
+            if (!OSSL_PARAM_get_int(p, &privLen)) {
+                ok = 0;
+            }
+            /* wolfSSL takes the private key length from q, or from the size
+             * of p when there is no q. A requested length cannot be applied. */
+            if (ok && (privLen != 0)) {
+                ERR_raise(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED);
+                ok = 0;
+            }
         }
     }
     if (ok) {
         p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_DH_GENERATOR);
-        if ((p != NULL) && (!OSSL_PARAM_get_int(p, &ctx->generator))) {
-            ok = 0;
+        if (p != NULL) {
+            if (!OSSL_PARAM_get_int(p, &generator)) {
+                ok = 0;
+            }
+            /* A generator below 2 is not usable. */
+            if (ok && (generator < 2)) {
+                ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_DATA);
+                ok = 0;
+            }
+            if (ok) {
+                ctx->generator = generator;
+            }
         }
     }
     if (ok && (!wp_params_get_utf8_string(params, OSSL_PKEY_PARAM_GROUP_NAME,
@@ -1707,10 +1724,19 @@ static int wp_dh_gen_parameters(wp_DhGenCtx *ctx, wp_Dh* dh)
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_gen_parameters");
 
-    rc = wc_DhGenerateParams(&ctx->rng, ctx->bits, &dh->key);
-    if (rc != 0) {
-        WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_DhGenerateParams", rc);
+    /* wc_DhGenerateParams picks the generator itself. OpenSSL applications
+     * send 2 when the caller named none, so only another value is refused. */
+    if ((ctx->generator != 0) && (ctx->generator != 2)) {
+        ERR_raise(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED);
         ok = 0;
+    }
+    if (ok) {
+        rc = wc_DhGenerateParams(&ctx->rng, ctx->bits, &dh->key);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_DhGenerateParams",
+                rc);
+            ok = 0;
+        }
     }
     if (ok) {
         dh->bits = mp_count_bits(&dh->key.p);
@@ -1723,7 +1749,8 @@ static int wp_dh_gen_parameters(wp_DhGenCtx *ctx, wp_Dh* dh)
 /**
  * Copy the group parameters into the DH key object.
  *
- * Use the template key if available. Otherwise use the group name.
+ * Use the template key if available. Otherwise use the group name. Fails
+ * when the caller asked for a generator the group does not have.
  *
  * @param [in]      ctx  DH generation context object.
  * @param [in, out] dh   DH key object.
@@ -1733,6 +1760,7 @@ static int wp_dh_gen_parameters(wp_DhGenCtx *ctx, wp_Dh* dh)
 static int wp_dh_gen_copy_parameters(wp_DhGenCtx *ctx, wp_Dh* dh)
 {
     int ok = 1;
+    mp_int gen;
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_gen_copy_parameters");
 
@@ -1767,6 +1795,23 @@ static int wp_dh_gen_copy_parameters(wp_DhGenCtx *ctx, wp_Dh* dh)
     }
     else {
         ok = 0;
+    }
+
+    /* A requested generator is met only when the group already has it. */
+    if (ok && (ctx->generator != 0)) {
+        if (mp_init(&gen) != MP_OKAY) {
+            ok = 0;
+        }
+        else {
+            if (mp_set_int(&gen, (unsigned long)ctx->generator) != MP_OKAY) {
+                ok = 0;
+            }
+            if (ok && (mp_cmp(&dh->key.g, &gen) != MP_EQ)) {
+                ERR_raise(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED);
+                ok = 0;
+            }
+            mp_clear(&gen);
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -1990,7 +2035,8 @@ static const OSSL_PARAM* wp_dh_gen_settable_params(wp_DhGenCtx* ctx,
     WOLFPROV_CTX* provCtx)
 {
     /**
-     * Supported settable parameters for DH generation context.
+     * Settable parameters for DH generation context. A value that wolfSSL
+     * cannot apply is rejected when set.
      */
     static OSSL_PARAM wp_dh_gen_supported_settable[] = {
         OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
