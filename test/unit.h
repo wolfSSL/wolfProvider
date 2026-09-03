@@ -380,6 +380,7 @@ int test_rsa_sha512_224_dupctx(void *data);
 int test_rsa_sha512_256_dupctx(void *data);
 int test_rsa_pss_salt(void *date);
 int test_rsa_pss_restrictions(void *data);
+int test_rsa_pss_no_params(void *data);
 
 int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);

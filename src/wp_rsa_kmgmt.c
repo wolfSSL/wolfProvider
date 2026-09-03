@@ -2407,9 +2407,15 @@ static int wp_rsa_enc_dec_set_ctx_params(wp_RsaEncDecCtx* ctx,
     return ok;
 }
 
-/** Common base of RSA PKCS #1.5 and PSS OID. */
+/** First ten bytes shared by the RSA PKCS #1.5 and PSS OIDs. The ninth
+ * content byte is deliberately absent to match RSA_PKCS1_5_BYTE or
+ * RSA_PKCS1_PSS_BYTE. */
 static const unsigned char rsa_pkcs1_oid[] = {
     0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01
+};
+/** Full RSA PKCS #1 PSS OID. */
+static const unsigned char rsa_pss_oid[] = {
+    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a
 };
 /** Size of RSA PKCS OID. */
 #define RSA_PKCS1_OID_SZ    sizeof(rsa_pkcs1_oid)
@@ -2501,45 +2507,45 @@ static int wp_rsa_determine_type(wp_Rsa* rsa, unsigned char* data, word32 len)
 static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
 {
     int ok;
+    int haveParams = 0;
     word32 idx = 0;
+    word32 algIdEnd = 0;
     wp_RsaPssParams* pss = &rsa->pssParams;
 
-    ok = wp_rsa_pss_params_set_pss_defaults(pss);
+    ok = wp_rsa_find_oid(data, len, rsa_pkcs1_oid, RSA_PKCS1_OID_SZ, &idx);
+    if (ok && ((idx < 2) || (data[idx - 2] != 0x30))) {
+        /* OID is not inside an AlgorithmIdentifier SEQUENCE. */
+        ok = 0;
+    }
     if (ok) {
-        ok = wp_rsa_find_oid(data, len, rsa_pkcs1_oid, RSA_PKCS1_OID_SZ,
-            &idx);
+        /* Length octet gives the end; a PSS AlgorithmIdentifier is
+         * always short form. */
+        algIdEnd = idx + data[idx - 1];
+        if (algIdEnd > len) {
+            ok = 0;
+        }
     }
     if (ok) {
         /* Step over PSS algorithm. */
-        idx += 11;
-
-        /* Step over BIT STRING field */
-        if (data[idx] == 0x03) {
-            idx++;
-            if (data[idx] < 0x80) {
-                idx += 2;
-            }
-            else if (data[idx] == 0x81) {
-                idx += 3;
-            }
-            else if (data[idx] == 0x82) {
-                idx += 4;
-            }
-            else {
-                ok = 0;
-            }
+        idx += RSA_PKCS1_OID_SZ + 1;
+        if (idx > algIdEnd) {
+            ok = 0;
         }
-
-        if (ok) {
+        /* Nothing after the OID means no restrictions. */
+        else if (idx < algIdEnd) {
             if (data[idx] != 0x30) {
                 ok = 0;
             }
             else {
+                haveParams = 1;
                 idx += 2;
             }
         }
     }
-    if (ok && (data[idx] == 0xa0)) {
+    if (ok && haveParams) {
+        ok = wp_rsa_pss_params_set_pss_defaults(pss);
+    }
+    if (ok && haveParams && (idx < algIdEnd) && (data[idx] == 0xa0)) {
         /* Hash algorithm */
         if (XMEMCMP(data + idx, sha224AlgId, sizeof(sha224AlgId)) == 0) {
             pss->hashType = WC_HASH_TYPE_SHA224;
@@ -2590,7 +2596,7 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
             ok = 0;
         }
     }
-    if (ok && (data[idx] == 0xa1)) {
+    if (ok && haveParams && (idx < algIdEnd) && (data[idx] == 0xa1)) {
         /* MGF algorithm */
         if (XMEMCMP(data + idx, mgf1Sha224AlgId,
                     sizeof(mgf1Sha224AlgId)) == 0) {
@@ -2644,7 +2650,7 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
             ok = 0;
         }
     }
-    if (ok && (data[idx] == 0xa2)) {
+    if (ok && haveParams && (idx < algIdEnd) && (data[idx] == 0xa2)) {
         /* Salt length. */
         if (XMEMCMP(data + idx, saltLenDer, sizeof(saltLenDer)) == 0) {
             idx += sizeof(saltLenDer);
@@ -2661,7 +2667,7 @@ static int wp_rsa_pss_get_params(wp_Rsa* rsa, unsigned char* data, word32 len)
         }
     }
     /* TODO: handle optional trailer: 0xa3. */
-    if (ok) {
+    if (ok && haveParams) {
         /* PSS parameters have been seen and set. */
         rsa->pssDefSet = 1;
     }
@@ -2949,7 +2955,8 @@ static int wp_rsa_decode(wp_RsaEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 /**
  * Encode the RSA-PSS Algorithm ID in DER
  *
- * @param [in]  rsa        RSA key object.
+ * @param [in]  rsa        RSA key object. May be NULL when saltLen is an
+ *                         explicit length.
  * @param [in]  mdName     Name of digest.
  * @param [in]  mgf1Name   Name of MGF algorithm's digest.
  * @param [in]  saltLen    Length of salt used.
@@ -2965,10 +2972,6 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
     int ok = 1;
     int i = 0;
     int hashLen = WP_RSA_DEFAULT_SALT_LEN;
-    const byte rsa_pss_oid[11] = {
-        0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d,
-        0x01, 0x01, 0x0a
-    };
     int seq1LenIdx;
     int seq2LenIdx;
 
@@ -3140,6 +3143,39 @@ int wp_rsa_pss_encode_alg_id(const wp_Rsa* rsa, const char* mdName,
 }
 
 /**
+ * Encode the AlgorithmIdentifier for an RSA-PSS key in DER.
+ *
+ * A key with no PSS restrictions encodes as the OID alone.
+ *
+ * @param [in]  rsa    RSA key object.
+ * @param [out] algId  Buffer to hold encoded AlgorithmIdentifier.
+ *                     May be NULL and only length calculated.
+ * @param [out] len    Length of encoding.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_rsa_pss_encode_key_alg_id(const wp_Rsa* rsa, byte* algId,
+    word32* len)
+{
+    int ok = 1;
+
+    if (!rsa->pssDefSet) {
+        if (algId != NULL) {
+            algId[0] = 0x30;
+            algId[1] = (byte)sizeof(rsa_pss_oid);
+            XMEMCPY(algId + 2, rsa_pss_oid, sizeof(rsa_pss_oid));
+        }
+        *len = (word32)(2 + sizeof(rsa_pss_oid));
+    }
+    else {
+        ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
+            rsa->pssParams.mgfMdName, rsa->pssParams.saltLen, algId, len);
+    }
+
+    return ok;
+}
+
+/**
  * Get the SubjectPublicKeyInfo encoding size for the key.
  *
  * @param [in]  rsa     RSA key object.
@@ -3175,8 +3211,7 @@ static int wp_rsa_encode_spki_size(const wp_Rsa* rsa, size_t* keyLen)
 #endif
     if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS)) {
         word32 pssLen = 0;
-        ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
-            rsa->pssParams.mgfMdName, rsa->pssParams.saltLen, NULL, &pssLen);
+        ok = wp_rsa_pss_encode_key_alg_id(rsa, NULL, &pssLen);
         if (ok) {
             *keyLen += pssLen;
         }
@@ -3220,21 +3255,17 @@ static int wp_rsa_encode_spki(const wp_Rsa* rsa, unsigned char* keyData,
             if (ok) {
                 i += 13;
                 /* Get length of encoded RSA-PSS Algorithm ID. */
-                ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
-                    rsa->pssParams.mgfMdName, rsa->pssParams.saltLen, NULL,
-                    &pssLen);
+                ok = wp_rsa_pss_encode_key_alg_id(rsa, NULL, &pssLen);
             }
             if (ok) {
                 /* Move rest of key to after RSA-PSS Algorithm ID. */
                 XMEMMOVE(keyData + 4 + pssLen, keyData + i, ret - i);
                 /* Encode RSA-PSS Algorithm ID. */
-                ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
-                    rsa->pssParams.mgfMdName, rsa->pssParams.saltLen,
-                    keyData + 4, &pssLen);
+                ok = wp_rsa_pss_encode_key_alg_id(rsa, keyData + 4, &pssLen);
             }
             if (ok) {
                 /* Update return length. */
-                ret += pssLen - i;
+                ret += (int)pssLen - (int)i;
                 *keyLen = ret + 4;
                 /* Update first sequence. */
                 keyData[2] = (byte)(ret >> 8);
@@ -3359,8 +3390,7 @@ static int wp_rsa_encode_pki_size(const wp_Rsa* rsa, size_t* keyLen, int algoId)
     }
     if (ok && (rsa->type == RSA_FLAG_TYPE_RSASSAPSS)) {
         word32 pssLen = 0;
-        ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
-            rsa->pssParams.mgfMdName, rsa->pssParams.saltLen, NULL, &pssLen);
+        ok = wp_rsa_pss_encode_key_alg_id(rsa, NULL, &pssLen);
         if (ok) {
             *keyLen += pssLen;
         }
@@ -3428,21 +3458,17 @@ static int wp_rsa_encode_pki(const wp_Rsa* rsa, unsigned char* keyData,
         if (ok) {
             i += 11;
             /* Get length of encoded RSA-PSS Algorithm ID. */
-            ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
-                rsa->pssParams.mgfMdName, rsa->pssParams.saltLen, NULL,
-                &pssLen);
+            ok = wp_rsa_pss_encode_key_alg_id(rsa, NULL, &pssLen);
         }
         if (ok) {
             /* Move rest of key to after RSA-PSS Algorithm ID. */
             XMEMMOVE(keyData + 7 + pssLen, keyData + i, ret - i);
             /* Encode RSA-PSS Algorithm ID. */
-            ok = wp_rsa_pss_encode_alg_id(rsa, rsa->pssParams.mdName,
-                rsa->pssParams.mgfMdName, rsa->pssParams.saltLen,
-                keyData + 7, &pssLen);
+            ok = wp_rsa_pss_encode_key_alg_id(rsa, keyData + 7, &pssLen);
         }
         if (ok) {
             /* Update return length. */
-            ret += pssLen - 13;
+            ret += (int)pssLen - 13;
             /* Update first sequence. */
             keyData[2] = (byte)((ret - 4) >> 8);
             keyData[3] = (byte)((ret - 4) & 0xff);
