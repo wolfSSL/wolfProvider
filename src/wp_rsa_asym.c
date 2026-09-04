@@ -311,12 +311,22 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
     }
     else {
         int rc = 0;
+        int locked = 0;
 
         if (outSize == (size_t)-1) {
             outSize = *outLen;
         }
-        if ((ctx->padMode == RSA_PKCS1_PADDING) ||
-            (ctx->padMode == RSA_PKCS1_WITH_TLS_PADDING)) {
+        if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
+            ok = 0;
+        }
+        else {
+            locked = 1;
+        }
+        if (!ok) {
+            /* Mutex not held - skip rather than run the operation unlocked. */
+        }
+        else if ((ctx->padMode == RSA_PKCS1_PADDING) ||
+                 (ctx->padMode == RSA_PKCS1_WITH_TLS_PADDING)) {
             rc = wc_RsaPublicEncrypt(in, (word32)inLen, out, (word32)outSize,
                 wp_rsa_get_key(ctx->rsa), &ctx->rng);
             if (rc < 0) {
@@ -353,6 +363,9 @@ static int wp_rsaa_encrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
         }
         else {
             ok = 0;
+        }
+        if (locked) {
+            wp_unlock(wp_rsa_get_mutex(ctx->rsa));
         }
         if (ok) {
             *outLen = rc;
@@ -433,31 +446,28 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
     }
     else {
         int rc = 0;
-#ifdef WC_RSA_BLINDING
         int locked = 0;
-#endif
 
         if (outSize == (size_t)-1) {
             outSize = *outLen;
         }
-#ifdef WC_RSA_BLINDING
-        /* Fail closed if the key mutex can't be held for the shared-key RNG. */
         if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
             ok = 0;
         }
         else {
             locked = 1;
+#ifdef WC_RSA_BLINDING
             rc = wc_RsaSetRNG(wp_rsa_get_key(ctx->rsa), &ctx->rng);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaSetRNG", rc);
                 ok = 0;
             }
+#endif /* WC_RSA_BLINDING */
         }
         if (!ok) {
+            /* Lock or RNG setup failed - skip the operation. */
         }
-        else
-#endif /* WC_RSA_BLINDING */
-        if (ctx->padMode == RSA_PKCS1_PADDING) {
+        else if (ctx->padMode == RSA_PKCS1_PADDING) {
             PRIVATE_KEY_UNLOCK();
             rc = wc_RsaPrivateDecrypt(in, (word32)inLen, out, (word32)outSize,
                 wp_rsa_get_key(ctx->rsa));
@@ -546,12 +556,12 @@ static int wp_rsaa_decrypt(wp_RsaAsymCtx* ctx, unsigned char* out,
         else {
             ok = 0;
         }
-#ifdef WC_RSA_BLINDING
         if (locked) {
+#ifdef WC_RSA_BLINDING
             wc_RsaSetRNG(wp_rsa_get_key(ctx->rsa), NULL);
+#endif
             wp_unlock(wp_rsa_get_mutex(ctx->rsa));
         }
-#endif
         if (ok) {
             *outLen = rc;
         }

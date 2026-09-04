@@ -260,7 +260,7 @@ struct wp_Rsa {
     RsaKey key;
 
 #ifndef WP_SINGLE_THREADED
-    /** Mutex for reference count updating. */
+    /** Held while refCnt changes and while a wolfCrypt call uses key. */
     wolfSSL_Mutex mutex;
 #endif
     /** Count of references to this object. */
@@ -1280,10 +1280,19 @@ static int wp_rsa_validate(const wp_Rsa* rsa, int selection, int checkType)
 
 #ifdef WOLFSSL_RSA_KEY_CHECK
     if (checkPub && checkPriv) {
-        int rc = wc_CheckRsaKey((RsaKey*)&rsa->key);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_CheckRsaKey", rc);
+        int rc = 0;
+
+        if (wp_lock(wp_rsa_get_mutex((wp_Rsa*)rsa)) != 1) {
             ok = 0;
+        }
+        if (ok) {
+            rc = wc_CheckRsaKey((RsaKey*)&rsa->key);
+            wp_unlock(wp_rsa_get_mutex((wp_Rsa*)rsa));
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_CheckRsaKey",
+                    rc);
+                ok = 0;
+            }
         }
 
         /* wc_CheckRsaKey runs the private key operation and only bounds-checks

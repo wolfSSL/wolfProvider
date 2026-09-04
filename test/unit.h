@@ -397,6 +397,7 @@ int test_rsa_kem_prefix_match(void* data);
 int test_rsa_pss_mgf1_get_params(void *data);
 int test_rsa_kem(void *data);
 int test_rsa_key_integrity(void* data);
+int test_rsa_concurrent_ops(void *data);
 #endif /* WP_HAVE_RSA */
 
 #ifdef WP_HAVE_DH
