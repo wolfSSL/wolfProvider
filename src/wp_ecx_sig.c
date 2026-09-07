@@ -456,14 +456,18 @@ static int wp_ed25519_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
     }
     if (ok) {
         int i;
+        byte gt = 0;  /* s > order found at a more-significant byte */
+        byte lt = 0;  /* s < order found at a more-significant byte */
+        /* Constant-time full-width magnitude compare, big-endian scan with no
+         * early break: reject iff s > order (accept when equal or less). */
         for (i = ED25519_KEY_SIZE - 1; i >= 0; i--) {
-            if (sig[ED25519_KEY_SIZE + i] > wp_ed25519_order[i]) {
-                ok = 0;
-            }
-            if (sig[ED25519_KEY_SIZE + i] != wp_ed25519_order[i]) {
-                break;
-            }
+            byte s = sig[ED25519_KEY_SIZE + i];
+            byte o = wp_ed25519_order[i];
+            byte eq = (byte)~(gt | lt);           /* still tied above */
+            gt |= (byte)(eq & wp_ct_int_mask_lt(o, s));  /* o < s => s > order */
+            lt |= (byte)(eq & wp_ct_int_mask_lt(s, o));  /* s < order          */
         }
+        ok &= (int)(1u & ~(unsigned int)gt);
     }
     if (ok && ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(tbsLen)))) {
         ok = 0;
@@ -675,14 +679,18 @@ static int wp_ed448_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
     }
     if (ok) {
         int i;
+        byte gt = 0;  /* s > order found at a more-significant byte */
+        byte lt = 0;  /* s < order found at a more-significant byte */
+        /* Constant-time full-width magnitude compare, big-endian scan with no
+         * early break: reject iff s > order (accept when equal or less). */
         for (i = ED448_KEY_SIZE - 1; i >= 0; i--) {
-            if (sig[ED448_KEY_SIZE + i] > wp_ed448_order[i]) {
-                ok = 0;
-            }
-            if (sig[ED448_KEY_SIZE + i] != wp_ed448_order[i]) {
-                break;
-            }
+            byte s = sig[ED448_KEY_SIZE + i];
+            byte o = wp_ed448_order[i];
+            byte eq = (byte)~(gt | lt);           /* still tied above */
+            gt |= (byte)(eq & wp_ct_int_mask_lt(o, s));  /* o < s => s > order */
+            lt |= (byte)(eq & wp_ct_int_mask_lt(s, o));  /* s < order          */
         }
+        ok &= (int)(1u & ~(unsigned int)gt);
     }
     if (ok && ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(tbsLen)))) {
         ok = 0;
