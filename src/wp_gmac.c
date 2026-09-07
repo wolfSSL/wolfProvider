@@ -218,6 +218,11 @@ static int wp_gmac_init(wp_GmacCtx* macCtx, const unsigned char* key,
     if (!wolfssl_prov_is_running()) {
         ok = 0;
     }
+    if (ok) {
+        OPENSSL_clear_free(macCtx->data, macCtx->dataLen);
+        macCtx->data = NULL;
+        macCtx->dataLen = 0;
+    }
     if (ok && (params != NULL) && (!wp_gmac_set_ctx_params(macCtx, params))) {
         ok = 0;
     }

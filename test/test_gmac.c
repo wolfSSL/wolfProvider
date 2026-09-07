@@ -157,6 +157,149 @@ int test_gmac_create(void *data)
     return ret;
 }
 
+/**
+ * Test that one GMAC context can be reset by calling EVP_MAC_init() again,
+ * both after EVP_MAC_final() and mid-stream, reusing the cached key.
+ */
+static int test_gmac_reinit_helper(OSSL_LIB_CTX* libCtx, unsigned char *macA,
+    unsigned char *macB)
+{
+    int err;
+    EVP_MAC *emac = NULL;
+    EVP_MAC_CTX *ctx = NULL;
+    OSSL_PARAM params[4];
+    OSSL_PARAM ivParams[2];
+    char cipher[] = "AES-256-GCM";
+    unsigned char key[] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+    };
+    unsigned char iv[] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03
+    };
+    unsigned char msgA[32];
+    unsigned char msgB[21];
+    unsigned char macC[AES_BLOCK_SIZE];
+    unsigned char macD[AES_BLOCK_SIZE];
+    size_t macASz = AES_BLOCK_SIZE;
+    size_t macBSz = AES_BLOCK_SIZE;
+    size_t macCSz = sizeof(macC);
+    size_t macDSz = sizeof(macD);
+
+    memset(msgA, 0x41, sizeof(msgA));
+    memset(msgB, 0x5a, sizeof(msgB));
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_CIPHER,
+        cipher, 0);
+    params[1] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        (void *)key, sizeof(key));
+    params[2] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_IV,
+        (void *)iv, sizeof(iv));
+    params[3] = OSSL_PARAM_construct_end();
+    /* The IV has to be set again on each init to restart the calculation. */
+    ivParams[0] = params[2];
+    ivParams[1] = OSSL_PARAM_construct_end();
+
+    err = (emac = EVP_MAC_fetch(libCtx, "GMAC", NULL)) == NULL;
+    if (err == 0) {
+        err = (ctx = EVP_MAC_CTX_new(emac)) == NULL;
+    }
+
+    /* First round with the cipher, key and IV installed by init. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgA, sizeof(msgA)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macA, &macASz, AES_BLOCK_SIZE) != 1;
+    }
+
+    /* Reset after final and MAC a different message with the cached key. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, ivParams) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgB, sizeof(msgB)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macB, &macBSz, AES_BLOCK_SIZE) != 1;
+    }
+
+    /* The first message must produce the first MAC again. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, ivParams) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgA, sizeof(msgA)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macC, &macCSz, sizeof(macC)) != 1;
+    }
+    if ((err == 0) && ((macCSz != macASz) ||
+            (memcmp(macC, macA, macASz) != 0))) {
+        PRINT_ERR_MSG("GMAC after reset doesn't match the first MAC");
+        err = 1;
+    }
+
+    /* A reset mid-stream must discard the data buffered so far. */
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, ivParams) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgA, sizeof(msgA)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_init(ctx, NULL, 0, ivParams) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_update(ctx, msgB, sizeof(msgB)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_MAC_final(ctx, macD, &macDSz, sizeof(macD)) != 1;
+    }
+    if ((err == 0) && ((macDSz != macBSz) ||
+            (memcmp(macD, macB, macBSz) != 0))) {
+        PRINT_ERR_MSG("GMAC after mid-stream reset covers stale data");
+        err = 1;
+    }
+
+    EVP_MAC_CTX_free(ctx);
+    EVP_MAC_free(emac);
+    return err;
+}
+
+int test_gmac_reinit(void *data)
+{
+    int err;
+    unsigned char osslMacA[AES_BLOCK_SIZE];
+    unsigned char osslMacB[AES_BLOCK_SIZE];
+    unsigned char wpMacA[AES_BLOCK_SIZE];
+    unsigned char wpMacB[AES_BLOCK_SIZE];
+
+    (void)data;
+
+    PRINT_MSG("GMAC context reset with OpenSSL");
+    err = test_gmac_reinit_helper(osslLibCtx, osslMacA, osslMacB);
+    if (err == 0) {
+        PRINT_MSG("GMAC context reset with wolfProvider");
+        err = test_gmac_reinit_helper(wpLibCtx, wpMacA, wpMacB);
+    }
+    if ((err == 0) && (memcmp(osslMacA, wpMacA, AES_BLOCK_SIZE) != 0)) {
+        PRINT_ERR_MSG("First GMAC doesn't match OpenSSL");
+        err = 1;
+    }
+    if ((err == 0) && (memcmp(osslMacB, wpMacB, AES_BLOCK_SIZE) != 0)) {
+        PRINT_ERR_MSG("GMAC after reset doesn't match OpenSSL");
+        err = 1;
+    }
+    return err;
+}
+
 int test_gmac_dup(void *data)
 {
     int ret = 0;
