@@ -14,7 +14,7 @@ Build-Depends:
 Package: libwolfprov
 Architecture: any
 Multi-Arch: same
-Depends: ${shlibs:Depends}, ${misc:Depends}, libssl3 (>= 3.0.3), libwolfssl (>= 5.8.2)
+Depends: ${shlibs:Depends}, ${misc:Depends}, libssl3 (>= 3.0.8), libwolfssl (>= 5.8.2)
 Recommends: openssl
 Provides: ${variant:provides}
 XB-Variant: ${variant}
