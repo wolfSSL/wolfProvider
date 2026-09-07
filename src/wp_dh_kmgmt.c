@@ -1498,6 +1498,11 @@ static int wp_dh_export(wp_Dh *dh, int selection, OSSL_CALLBACK *paramCb,
     if (ok && (dh == NULL)) {
         ok = 0;
     }
+    /* Nothing to export when the key has no domain parameters. */
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_ALL_PARAMETERS) != 0) &&
+            (!wp_dh_has(dh, OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS))) {
+        ok = 0;
+    }
     if (ok) {
         XMEMSET(params, 0, sizeof(params));
 
@@ -1506,9 +1511,12 @@ static int wp_dh_export(wp_Dh *dh, int selection, OSSL_CALLBACK *paramCb,
             sz += wp_dh_export_group_alloc_size(dh);
         }
 
-        data = OPENSSL_secure_malloc(sz);
-        if (data == NULL) {
-            ok = 0;
+        /* Named group parameters need no buffer - zero size is valid. */
+        if (sz > 0) {
+            data = OPENSSL_secure_malloc(sz);
+            if (data == NULL) {
+                ok = 0;
+            }
         }
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_ALL_PARAMETERS) != 0)) {
