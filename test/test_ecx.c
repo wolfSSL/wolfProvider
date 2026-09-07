@@ -1260,3 +1260,46 @@ int test_ecx_x_security_bits(void *data)
 
 #endif /* defined(WP_HAVE_X25519) || defined(WP_HAVE_X448) */
 
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
+    defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
+/*
+ * Encoding a key that another provider manages goes through the encoder's
+ * import-object: OpenSSL hands it the encoder context and uses the key object
+ * it returns. Cover every key type wp_ecx_new_by_type() handles.
+ */
+int test_ecx_encoder_import_object(void *data)
+{
+    static const char* names[] = {
+#ifdef WP_HAVE_X25519
+        "X25519",
+#endif
+#ifdef WP_HAVE_ED25519
+        "ED25519",
+#endif
+#ifdef WP_HAVE_X448
+        "X448",
+#endif
+#ifdef WP_HAVE_ED448
+        "ED448",
+#endif
+    };
+    int err = 0;
+    EVP_PKEY* pkey;
+    size_t i;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < ARRAY_SIZE(names)); i++) {
+        pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, names[i]);
+        err = (pkey == NULL);
+        if (err == 0) {
+            err = test_encoder_import_object(names[i],
+                "output=der,structure=PrivateKeyInfo", pkey,
+                OSSL_KEYMGMT_SELECT_KEYPAIR);
+        }
+        EVP_PKEY_free(pkey);
+    }
+
+    return err;
+}
+#endif
