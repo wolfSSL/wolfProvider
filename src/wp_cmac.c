@@ -104,7 +104,7 @@ static void wp_cmac_free(wp_CmacCtx* macCtx)
  * Allocates space for the key in the wolfSSL CMAC object.
  *
  * @param [in, out] macCtx   CMAC context object.
- * @param [in]      key      Key data to set.
+ * @param [in]      key      Key data to set. NULL restarts with the cached key.
  * @param [in]      keyLen   Length of key data in bytes.
  * @param [in]      restart  Restart CMAC calculation.
  * @return  1 on success.
@@ -117,33 +117,42 @@ static int wp_cmac_set_key(wp_CmacCtx* macCtx, const unsigned char* key,
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_cmac_set_key");
 
-    if (keyLen > AES_256_KEY_SIZE) {
+    /* A NULL key restarts with the key already cached. */
+    if (key == NULL) {
+        keyLen = macCtx->keyLen;
+    }
+
+    if (keyLen == 0) {
         ok = 0;
     }
-    if (ok && (macCtx->expKeySize != 0) && (keyLen != macCtx->expKeySize)) {
+    if (ok && (key != NULL) && (keyLen > AES_256_KEY_SIZE)) {
         ok = 0;
+    }
+    if (ok && (key != NULL) && (macCtx->expKeySize != 0) &&
+            (keyLen != macCtx->expKeySize)) {
+        ok = 0;
+    }
+    if (ok && (key != NULL)) {
+        /* The cached length stays zero until the key is installed. */
+        OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
+        macCtx->keyLen = 0;
+        XMEMCPY(macCtx->key, key, keyLen);
+    }
+    if (ok && restart) {
+    #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
+        int rc = wc_InitCmac_ex(&macCtx->cmac, macCtx->key, (word32)keyLen,
+            macCtx->type, NULL, NULL, INVALID_DEVID);
+    #else
+        int rc = wc_InitCmac(&macCtx->cmac, macCtx->key, (word32)keyLen,
+            macCtx->type, NULL);
+    #endif
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitCmac/wc_InitCmac_ex", rc);
+            ok = 0;
+        }
     }
     if (ok) {
-        if (macCtx->keyLen > 0) {
-            OPENSSL_cleanse(macCtx->key, macCtx->keyLen);
-        }
         macCtx->keyLen = keyLen;
-        XMEMCPY(macCtx->key, key, keyLen);
-
-        if (restart) {
-        #if LIBWOLFSSL_VERSION_HEX >= 0x05000000
-            int rc = wc_InitCmac_ex(&macCtx->cmac, macCtx->key,
-                (word32)macCtx->keyLen, macCtx->type, NULL, NULL,
-                INVALID_DEVID);
-        #else
-            int rc = wc_InitCmac(&macCtx->cmac, macCtx->key,
-                (word32)macCtx->keyLen, macCtx->type, NULL);
-        #endif
-            if (rc != 0) {
-                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_InitCmac/wc_InitCmac_ex", rc);
-                ok = 0;
-            }
-        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_MAC, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -190,7 +199,7 @@ static wp_CmacCtx* wp_cmac_dup(wp_CmacCtx* src)
  * Initializes an CMAC context object with a key and parameters.
  *
  * @param [in, out] macCtx  CMAC context object to initialize.
- * @param [in]      key     Key data to set.
+ * @param [in]      key     Key data to set. NULL restarts with the cached key.
  * @param [in]      keyLen  Length of key data in bytes.
  * @param [in]      params  Extra parameters to set.
  * @return  1 on success.
@@ -211,7 +220,7 @@ static int wp_cmac_init(wp_CmacCtx* macCtx, const unsigned char* key,
     }
     if (ok) {
         macCtx->size = AES_BLOCK_SIZE;
-        if ((key != NULL) && (!wp_cmac_set_key(macCtx, key, keyLen, 1))) {
+        if (!wp_cmac_set_key(macCtx, key, keyLen, 1)) {
             ok = 0;
         }
     }
@@ -235,6 +244,10 @@ static int wp_cmac_update(wp_CmacCtx* macCtx, const unsigned char* data,
     int ok = 1;
 
     WOLFPROV_ENTER(WP_LOG_COMP_MAC, "wp_cmac_update");
+
+    if (macCtx->keyLen == 0) {
+        ok = 0;
+    }
 
     while (ok && (dataLen > 0)) {
         word32 chunk = (!WP_FITS_WORD32(dataLen)) ?
@@ -276,6 +289,9 @@ static int wp_cmac_final(wp_CmacCtx* macCtx, unsigned char* out, size_t* outl,
         ok = 0;
     }
     if (ok && (outSize < macCtx->size)) {
+        ok = 0;
+    }
+    if (ok && (macCtx->keyLen == 0)) {
         ok = 0;
     }
 
