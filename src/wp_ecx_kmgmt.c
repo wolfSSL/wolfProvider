@@ -281,24 +281,18 @@ int wp_ecx_ensure_pub(wp_Ecx* ecx)
     int ok = 1;
 
     if ((ecx != NULL) && (ecx->data->derivePub != NULL)) {
-        int rc;
-
-    #ifndef WP_SINGLE_THREADED
-        if (wp_lock(&ecx->mutex) != 1) {
+        if (wp_lock(wp_ecx_get_mutex(ecx)) != 1) {
             ok = 0;
         }
-        if (ok) {
-    #endif
-            rc = (*ecx->data->derivePub)((void*)&ecx->key);
+        else {
+            int rc = (*ecx->data->derivePub)((void*)&ecx->key);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "derivePub",
                     rc);
                 ok = 0;
             }
-    #ifndef WP_SINGLE_THREADED
-            wp_unlock(&ecx->mutex);
+            wp_unlock(wp_ecx_get_mutex(ecx));
         }
-    #endif
     }
 
     return ok;
@@ -418,6 +412,16 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
         dst = NULL;
     }
     if (dst != NULL) {
+        /* Hold the source key mutex while reading src->key below: a concurrent
+         * sign can write the key object (for example the persistent SHA state
+         * when WOLFSSL_ED25519_PERSISTENT_SHA is set). wp_ecx_ensure_pub()
+         * above already released its lock, so this does not double-lock. */
+        if (wp_lock(wp_ecx_get_mutex((wp_Ecx*)src)) != 1) {
+            wp_ecx_free(dst);
+            dst = NULL;
+        }
+    }
+    if (dst != NULL) {
         dst->includePublic = src->includePublic;
 
         /* Copy the full key union to preserve internal wolfSSL state.
@@ -453,6 +457,7 @@ static wp_Ecx* wp_ecx_dup(const wp_Ecx* src, int selection)
                 }
             }
         }
+        wp_unlock(wp_ecx_get_mutex((wp_Ecx*)src));
     }
 
     return dst;
@@ -612,8 +617,9 @@ static int wp_ecx_get_params_enc_pub_key(wp_Ecx* ecx, OSSL_PARAM params[],
             ok = 0;
         }
         else {
-            /* Signing mutates the key (persistent SHA), so hold the key mutex
-             * while reading it. */
+            /* A concurrent sign can write the key object (for example the
+             * persistent SHA state when WOLFSSL_ED25519_PERSISTENT_SHA is set).
+             * Hold the key mutex while reading the public key. */
             int rc = (*ecx->data->exportPub)((void*)&ecx->key, p->data,
                 &outLen, ECX_LITTLE_ENDIAN);
             wp_unlock(wp_ecx_get_mutex(ecx));
@@ -841,8 +847,10 @@ static int wp_ecx_match_pub_key(const wp_Ecx* ecx1, const wp_Ecx* ecx2)
              wp_ecx_ensure_pub((wp_Ecx*)ecx2);
     }
     if (ok) {
-        /* Signing mutates the key (persistent SHA), so hold each key mutex
-         * while reading it. Lock one key at a time to avoid lock ordering. */
+        /* A concurrent sign can write a key object (for example the
+         * persistent SHA state when WOLFSSL_ED25519_PERSISTENT_SHA is set).
+         * Hold each key mutex while reading it. Lock one key at a time to
+         * avoid a lock-order problem. */
         len1 = ecx1->data->len;
         if (wp_lock(wp_ecx_get_mutex((wp_Ecx*)ecx1)) != 1) {
             ok = 0;
@@ -1213,8 +1221,9 @@ static int wp_ecx_export_keypair(wp_Ecx* ecx, OSSL_PARAM* params, int* pIdx,
 
     ok = wp_ecx_ensure_pub(ecx);
     if (ok) {
-        /* Signing mutates the key (persistent SHA), so hold the key mutex
-         * while reading it. */
+        /* A concurrent sign can write the key object (for example the
+         * persistent SHA state when WOLFSSL_ED25519_PERSISTENT_SHA is set).
+         * Hold the key mutex while reading the public key. */
         if (wp_lock(wp_ecx_get_mutex(ecx)) != 1) {
             ok = 0;
         }
@@ -1772,8 +1781,10 @@ static int wp_ed25519_derive_public(ed25519_key* key)
     if (!key->pubKeySet) {
         ret = wc_ed25519_make_public(key, pub, sizeof(pub));
         if (ret == 0) {
-            /* Only import_public stores the value and sets pubKeySet. */
-            ret = wc_ed25519_import_public(pub, sizeof(pub), key);
+            /* The public key was just derived from the private key, so it is
+             * trusted. import_public_ex stores key->p and sets pubKeySet, and
+             * trusted=1 skips the redundant public/private key check. */
+            ret = wc_ed25519_import_public_ex(pub, sizeof(pub), key, 1);
         }
     }
 
@@ -1920,8 +1931,10 @@ static int wp_ed448_derive_public(ed448_key* key)
     if (!key->pubKeySet) {
         ret = wc_ed448_make_public(key, pub, sizeof(pub));
         if (ret == 0) {
-            /* Only import_public stores the value and sets pubKeySet. */
-            ret = wc_ed448_import_public(pub, sizeof(pub), key);
+            /* The public key was just derived from the private key, so it is
+             * trusted. import_public_ex stores key->p and sets pubKeySet, and
+             * trusted=1 skips the redundant public/private key check. */
+            ret = wc_ed448_import_public_ex(pub, sizeof(pub), key, 1);
         }
     }
 
