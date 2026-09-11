@@ -304,6 +304,7 @@ int test_aes128_ccm_tls(void *data);
 int test_aes_ccm_bad_tag(void *data);
 int test_aes_ccm_ctx_reuse(void *data);
 int test_aes_ccm_oneshot_encrypt(void *data);
+int test_aes_ccm_iv_reuse(void *data);
 int test_aes_ccm_tag_len_undersized(void *data);
 int test_aes_ccm_key_no_iv(void *data);
 
