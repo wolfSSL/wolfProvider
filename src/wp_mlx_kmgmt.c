@@ -529,6 +529,9 @@ static wp_Mlx* wp_mlx_dup(const wp_Mlx* src, int selection)
             else {
                 rc = wc_ecc_import_private_key_ex(cPrivBuf, len, NULL, 0,
                     &dst->classical.ecc, src->data->curveId);
+                if (rc == 0) {
+                    rc = wc_ecc_make_pub(&dst->classical.ecc, NULL);
+                }
             }
             if (rc != 0) {
                 ok = 0;
