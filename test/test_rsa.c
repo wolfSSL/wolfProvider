@@ -3615,4 +3615,270 @@ int test_rsa_sha512_256_dupctx(void *data)
 }
 #endif /* WP_HAVE_SHA512_256 */
 
+/*
+ * Concurrency: many threads driving one shared EVP_PKEY. Exercises the
+ * per-key mutex on the verify, encrypt, decrypt and KEM paths. Run this
+ * under ThreadSanitizer - a plain pass proves little on its own.
+ */
+#if defined(HAVE_PTHREAD) && !defined(WP_SINGLE_THREADED)
+
+#include <pthread.h>
+
+#define WP_CONC_THREADS     4
+#define WP_CONC_ITERS       30
+#define WP_CONC_RSA_SZ      256
+
+/* Per-thread state; pkey is deliberately shared by every worker. */
+typedef struct {
+    EVP_PKEY *pkey;
+    int       id;
+    int       err;
+} WP_CONC_ARG;
+
+/* RSASVE encapsulate then decapsulate, checking the secret round-trips. */
+static int test_rsa_conc_kem(EVP_PKEY *pkey)
+{
+    int err;
+    EVP_PKEY_CTX *encCtx = NULL;
+    EVP_PKEY_CTX *decCtx = NULL;
+    unsigned char ct[WP_CONC_RSA_SZ];
+    unsigned char secret[WP_CONC_RSA_SZ];
+    unsigned char recovered[WP_CONC_RSA_SZ];
+    size_t ctLen = sizeof(ct);
+    size_t secretLen = sizeof(secret);
+    size_t recoveredLen = sizeof(recovered);
+    OSSL_PARAM params[2];
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_KEM_PARAM_OPERATION,
+        (char*)"RSASVE", 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    err = (encCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL)) == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate_init(encCtx, NULL) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_params(encCtx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate(encCtx, ct, &ctLen, secret, &secretLen) <= 0;
+    }
+    if (err == 0) {
+        err = (decCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey,
+            NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_decapsulate_init(decCtx, NULL) <= 0;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_params(decCtx, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_decapsulate(decCtx, recovered, &recoveredLen, ct,
+            ctLen) <= 0;
+    }
+    if (err == 0) {
+        err = (recoveredLen != secretLen) ||
+              (memcmp(recovered, secret, secretLen) != 0);
+    }
+
+    EVP_PKEY_CTX_free(decCtx);
+    EVP_PKEY_CTX_free(encCtx);
+
+    return err;
+}
+
+#ifdef WOLFSSL_RSA_KEY_CHECK
+/* Pairwise check runs wc_CheckRsaKey() through wp_rsa_validate(). */
+static int test_rsa_conc_check(EVP_PKEY *pkey)
+{
+    int err;
+    EVP_PKEY_CTX *ctx = NULL;
+
+    err = (ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL)) == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_pairwise_check(ctx) != 1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
+#endif /* WOLFSSL_RSA_KEY_CHECK */
+
+static void* test_rsa_conc_worker(void *arg)
+{
+    WP_CONC_ARG *a = (WP_CONC_ARG *)arg;
+    unsigned char hash[32];
+    unsigned char msg[32];
+    unsigned char sig[WP_CONC_RSA_SZ];
+    unsigned char ct[WP_CONC_RSA_SZ];
+    unsigned char nopad[WP_CONC_RSA_SZ];
+    size_t sigLen;
+    int err = 0;
+    int i;
+
+    /* Distinct data per thread so a crossed result is a mismatch. */
+    memset(hash, (unsigned char)(0x5A + a->id), sizeof(hash));
+    memset(msg, (unsigned char)(0xA5 - a->id), sizeof(msg));
+    /* Leading zero keeps the raw value below the modulus. */
+    memset(nopad, (unsigned char)(0x33 + a->id), sizeof(nopad));
+    nopad[0] = 0;
+
+    for (i = 0; (err == 0) && (i < WP_CONC_ITERS); i++) {
+        sigLen = sizeof(sig);
+        err = test_pkey_sign(a->pkey, wpLibCtx, hash, sizeof(hash), sig,
+            &sigLen, RSA_PKCS1_PADDING, NULL, NULL);
+        if (err == 0) {
+            err = test_pkey_verify(a->pkey, wpLibCtx, hash, sizeof(hash), sig,
+                sigLen, RSA_PKCS1_PADDING, NULL, NULL);
+        }
+        if (err == 0) {
+            err = test_pkey_verify_recover(a->pkey, wpLibCtx, hash,
+                sizeof(hash), sig, sigLen, RSA_PKCS1_PADDING);
+        }
+#ifdef WP_HAVE_SHA256
+        if (err == 0) {
+            sigLen = sizeof(sig);
+            err = test_digest_sign(a->pkey, wpLibCtx, msg, sizeof(msg),
+                "SHA256", EVP_sha256(), sig, &sigLen, RSA_PKCS1_PSS_PADDING, 0);
+        }
+        if (err == 0) {
+            err = test_digest_verify(a->pkey, wpLibCtx, msg, sizeof(msg),
+                "SHA256", EVP_sha256(), sig, sigLen, RSA_PKCS1_PSS_PADDING, 0);
+        }
+#endif /* WP_HAVE_SHA256 */
+        if (err == 0) {
+            err = test_pkey_enc(a->pkey, wpLibCtx, msg, sizeof(msg), ct,
+                sizeof(ct), RSA_PKCS1_PADDING, NULL, NULL);
+        }
+        if (err == 0) {
+            err = test_pkey_dec(a->pkey, wpLibCtx, msg, sizeof(msg), ct,
+                sizeof(ct), RSA_PKCS1_PADDING, NULL, NULL);
+        }
+#ifdef WP_HAVE_SHA256
+        if (err == 0) {
+            err = test_pkey_enc(a->pkey, wpLibCtx, msg, sizeof(msg), ct,
+                sizeof(ct), RSA_PKCS1_OAEP_PADDING, EVP_sha256(),
+                EVP_sha256());
+        }
+        if (err == 0) {
+            err = test_pkey_dec(a->pkey, wpLibCtx, msg, sizeof(msg), ct,
+                sizeof(ct), RSA_PKCS1_OAEP_PADDING, EVP_sha256(),
+                EVP_sha256());
+        }
+#endif /* WP_HAVE_SHA256 */
+        if (err == 0) {
+            err = test_rsa_conc_kem(a->pkey);
+        }
+#ifdef WP_HAVE_SHA256
+        if (err == 0) {
+            sigLen = sizeof(sig);
+            err = test_pkey_sign(a->pkey, wpLibCtx, hash, sizeof(hash), sig,
+                &sigLen, RSA_X931_PADDING, EVP_sha256(), EVP_sha256());
+        }
+        if (err == 0) {
+            err = test_pkey_verify(a->pkey, wpLibCtx, hash, sizeof(hash), sig,
+                sigLen, RSA_X931_PADDING, EVP_sha256(), EVP_sha256());
+        }
+#endif /* WP_HAVE_SHA256 */
+#ifdef WOLFSSL_RSA_KEY_CHECK
+        if (err == 0) {
+            err = test_rsa_conc_check(a->pkey);
+        }
+#endif /* WOLFSSL_RSA_KEY_CHECK */
+        if (err == 0) {
+            sigLen = sizeof(sig);
+            err = test_pkey_sign(a->pkey, wpLibCtx, nopad, sizeof(nopad), sig,
+                &sigLen, RSA_NO_PADDING, NULL, NULL);
+        }
+        if (err == 0) {
+            err = test_pkey_verify(a->pkey, wpLibCtx, nopad, sizeof(nopad), sig,
+                sigLen, RSA_NO_PADDING, NULL, NULL);
+        }
+    }
+
+    a->err = err;
+
+    return NULL;
+}
+
+int test_rsa_concurrent_ops(void *data)
+{
+    int err = 0;
+    int i;
+    int created = 0;
+    EVP_PKEY *pkey = NULL;
+    const unsigned char *p = rsa_key_der_2048;
+    WP_CONC_ARG args[WP_CONC_THREADS];
+    pthread_t threads[WP_CONC_THREADS];
+    unsigned char warm[32];
+    unsigned char warmSig[WP_CONC_RSA_SZ];
+    size_t warmLen;
+
+    (void)data;
+
+    PRINT_MSG("Load one RSA key to be shared by every thread");
+    pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
+    err = pkey == NULL;
+
+    if (err == 0) {
+        /* Buffers are fixed at WP_CONC_RSA_SZ and RSA_NO_PADDING needs
+         * an input of exactly the modulus size. */
+        err = EVP_PKEY_get_size(pkey) != WP_CONC_RSA_SZ;
+    }
+
+    if (err == 0) {
+        /* Populate the key's provider-side export cache before threading;
+         * OpenSSL's lazy legacy export is not what this test covers. */
+        memset(warm, 0x11, sizeof(warm));
+        warmLen = sizeof(warmSig);
+        err = test_pkey_sign(pkey, wpLibCtx, warm, sizeof(warm), warmSig,
+            &warmLen, RSA_PKCS1_PADDING, NULL, NULL);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Run concurrent sign/verify/recover/encrypt/decrypt/KEM");
+        for (i = 0; i < WP_CONC_THREADS; i++) {
+            args[i].pkey = pkey;
+            args[i].id = i;
+            args[i].err = 0;
+        }
+        for (i = 0; i < WP_CONC_THREADS; i++) {
+            if (pthread_create(&threads[i], NULL, test_rsa_conc_worker,
+                    &args[i]) != 0) {
+                err = 1;
+                break;
+            }
+            created++;
+        }
+        for (i = 0; i < created; i++) {
+            pthread_join(threads[i], NULL);
+        }
+        for (i = 0; i < created; i++) {
+            if (args[i].err != 0) {
+                PRINT_ERR_MSG("Concurrent thread %d failed", i);
+                err = args[i].err;
+            }
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
+#else
+
+int test_rsa_concurrent_ops(void *data)
+{
+    (void)data;
+
+    PRINT_MSG("No pthreads in this build - RSA concurrency test not run");
+
+    return 0;
+}
+
+#endif /* HAVE_PTHREAD && !WP_SINGLE_THREADED */
+
 #endif /* WP_HAVE_RSA */
