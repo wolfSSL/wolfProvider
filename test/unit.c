@@ -307,6 +307,7 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_AESCTS
     TEST_DECL(test_aes128_cts, NULL),
     TEST_DECL(test_aes256_cts, NULL),
+    TEST_DECL(test_aes_cts_modes, NULL),
     TEST_DECL(test_aes128_cts_one_block, NULL),
     TEST_DECL(test_aes128_cts_split_init, NULL),
 #endif

@@ -316,6 +316,7 @@ int test_aes_ccm_key_no_iv(void *data);
 
 int test_aes128_cts(void *data);
 int test_aes256_cts(void *data);
+int test_aes_cts_modes(void *data);
 int test_aes128_cts_one_block(void *data);
 int test_aes128_cts_split_init(void *data);
 
