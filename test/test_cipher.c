@@ -958,6 +958,72 @@ int test_aes256_cfb_stream(void *data)
     return err;
 }
 
+/******************************************************************************/
+
+/* Reinitializing with a NULL IV must restore the original IV, so the second
+ * run produces the same output as the first and as OpenSSL. */
+int test_aes128_cfb_reinit(void *data)
+{
+    int err;
+    int enc;
+    unsigned char key[16];
+    unsigned char iv[16];
+    unsigned char msg[32];
+    unsigned char oout[sizeof(msg)];
+    unsigned char out1[sizeof(msg)];
+    unsigned char out2[sizeof(msg)];
+    int outlen;
+    EVP_CIPHER *ocipher = NULL;
+    EVP_CIPHER *wcipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(iv, 0x0c, sizeof(iv));
+    memset(msg, 0x0d, sizeof(msg));
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-CFB", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-CFB", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+
+    for (enc = 1; (err == 0) && (enc >= 0); enc--) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        if (err == 0) {
+            err = EVP_CipherInit_ex(ctx, ocipher, NULL, key, iv, enc) != 1
+               || EVP_CipherUpdate(ctx, oout, &outlen, msg, sizeof(msg)) != 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+
+        if (err == 0) {
+            err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        }
+        if (err == 0) {
+            err = EVP_CipherInit_ex(ctx, wcipher, NULL, key, iv, enc) != 1
+               || EVP_CipherUpdate(ctx, out1, &outlen, msg, sizeof(msg)) != 1
+               || EVP_CipherInit_ex(ctx, NULL, NULL, NULL, NULL, enc) != 1
+               || EVP_CipherUpdate(ctx, out2, &outlen, msg, sizeof(msg)) != 1;
+        }
+        if (err == 0 && memcmp(out1, oout, sizeof(msg)) != 0) {
+            PRINT_MSG("CFB output differs from OpenSSL");
+            err = 1;
+        }
+        if (err == 0 && memcmp(out2, oout, sizeof(msg)) != 0) {
+            PRINT_MSG("CFB reinit with NULL IV did not restore the IV");
+            err = 1;
+        }
+
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
 #endif /* WP_HAVE_AESCFB */
 
 #ifdef WP_HAVE_AESCTS
@@ -1458,6 +1524,344 @@ int test_aes256_cts(void *data)
 {
     return test_cipher_cts(data, "AES-256-CBC-CTS", 32);
 }
+
+/* CTS of an input of exactly one block must match OpenSSL and must not write
+ * past the input length. */
+int test_aes128_cts_one_block(void *data)
+{
+    int err;
+    unsigned char key[16];
+    unsigned char iv[16];
+    unsigned char msg[16];
+    unsigned char oenc[16];
+    unsigned char wenc[16];
+    unsigned char dec[32];
+    size_t i;
+    EVP_CIPHER *ocipher = NULL;
+    EVP_CIPHER *wcipher = NULL;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(iv, 0x0c, sizeof(iv));
+    memset(msg, 0x0d, sizeof(msg));
+    memset(dec, 0xa5, sizeof(dec));
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-CBC-CTS", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-CBC-CTS", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+
+    if (err == 0) {
+        err = test_cipher_cts_krb_enc(ocipher, key, iv, msg, sizeof(msg), oenc);
+    }
+    if (err == 0) {
+        err = test_cipher_cts_krb_dec(wcipher, key, iv, msg, sizeof(msg), oenc,
+            sizeof(oenc), dec);
+    }
+    for (i = sizeof(msg); i < sizeof(dec); i++) {
+        if (dec[i] != 0xa5) {
+            PRINT_MSG("One block CTS decrypt wrote past the input length");
+            err = 1;
+            break;
+        }
+    }
+    if (err == 0) {
+        err = test_cipher_cts_krb_enc(wcipher, key, iv, msg, sizeof(msg), wenc);
+    }
+    if (err == 0 && memcmp(oenc, wenc, sizeof(oenc)) != 0) {
+        PRINT_MSG("One block CTS ciphertext differs from OpenSSL");
+        err = 1;
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+/* CTS must use the cached IV when the key and IV are set by separate init
+ * calls, in either order. */
+int test_aes128_cts_split_init(void *data)
+{
+    int err;
+    int keyFirst;
+    unsigned char key[16];
+    unsigned char iv[16];
+    unsigned char msg[17];
+    unsigned char ref[sizeof(msg) + 16];
+    unsigned char enc[sizeof(msg) + 16];
+    unsigned char dec[sizeof(msg) + 16];
+    int outlen;
+    int finallen;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER *ocipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+
+    (void)data;
+
+    memset(key, 0x0b, sizeof(key));
+    memset(iv, 0x0c, sizeof(iv));
+    memset(msg, 0x0d, sizeof(msg));
+
+    cipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-CBC-CTS", "");
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-CBC-CTS", "");
+    err = (cipher == NULL) || (ocipher == NULL);
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        /* No variant requested, so both providers use their default. */
+        err = EVP_CipherInit_ex2(ctx, ocipher, key, iv, 1, NULL) != 1
+           || EVP_CipherUpdate(ctx, ref, &outlen, msg, sizeof(msg)) != 1
+           || EVP_CipherFinal_ex(ctx, ref + outlen, &finallen) != 1;
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+
+    for (keyFirst = 0; err == 0 && keyFirst < 2; keyFirst++) {
+        unsigned char *k1 = keyFirst ? key : NULL;
+        unsigned char *v1 = keyFirst ? NULL : iv;
+        unsigned char *k2 = keyFirst ? NULL : key;
+        unsigned char *v2 = keyFirst ? iv : NULL;
+
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        if (err == 0) {
+            err = EVP_EncryptInit_ex(ctx, cipher, NULL, k1, v1) != 1
+               || EVP_EncryptInit_ex(ctx, NULL, NULL, k2, v2) != 1
+               || EVP_EncryptUpdate(ctx, enc, &outlen, msg, sizeof(msg)) != 1
+               || EVP_EncryptFinal_ex(ctx, enc + outlen, &finallen) != 1;
+        }
+        if (err == 0 && (outlen + finallen != (int)sizeof(msg))) {
+            PRINT_MSG("Split init CTS encrypt length mismatch");
+            err = 1;
+        }
+        if (err == 0 && memcmp(enc, ref, sizeof(msg)) != 0) {
+            PRINT_MSG("Split init CTS ciphertext differs from OpenSSL");
+            err = 1;
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+
+        if (err == 0) {
+            err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+        }
+        if (err == 0) {
+            err = EVP_DecryptInit_ex(ctx, cipher, NULL, k1, v1) != 1
+               || EVP_DecryptInit_ex(ctx, NULL, NULL, k2, v2) != 1
+               || EVP_DecryptUpdate(ctx, dec, &outlen, enc, sizeof(msg)) != 1
+               || EVP_DecryptFinal_ex(ctx, dec + outlen, &finallen) != 1;
+        }
+        if (err == 0 && (outlen + finallen != (int)sizeof(msg))) {
+            PRINT_MSG("Split init CTS decrypt length mismatch");
+            err = 1;
+        }
+        if (err == 0 && memcmp(dec, msg, sizeof(msg)) != 0) {
+            PRINT_MSG("Split init CTS round trip failed");
+            err = 1;
+        }
+
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+
+    EVP_CIPHER_free(ocipher);
+    EVP_CIPHER_free(cipher);
+
+    return err;
+}
+
+/**
+ * Encrypt with the given provider and ciphertext stealing variant.
+ *
+ * @param [in]  cipher   Cipher fetched from the provider under test.
+ * @param [in]  ctsMode  Variant name, CS1, CS2 or CS3.
+ * @param [in]  key      Key data.
+ * @param [in]  iv       IV data.
+ * @param [in]  msg      Plaintext.
+ * @param [in]  len      Length of plaintext in bytes.
+ * @param [out] enc      Buffer for the ciphertext.
+ * @param [out] encLen   Length of ciphertext in bytes.
+ * @return  0 on success, non-zero on failure.
+ */
+static int test_cipher_cts_mode_enc(const EVP_CIPHER *cipher,
+    const char *ctsMode, unsigned char *key, unsigned char *iv,
+    unsigned char *msg, int len, unsigned char *enc, int *encLen)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+    int outLen = 0;
+    int total = 0;
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE,
+        (char *)ctsMode, 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+        err = EVP_CipherInit_ex2(ctx, cipher, key, iv, 1, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, enc, &outLen, msg, len) != 1;
+        total = outLen;
+    }
+    if (err == 0) {
+        err = EVP_CipherFinal_ex(ctx, enc + total, &outLen) != 1;
+        total += outLen;
+    }
+    if (err == 0) {
+        *encLen = total;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return err;
+}
+
+/**
+ * Decrypt with the given provider and ciphertext stealing variant.
+ */
+static int test_cipher_cts_mode_dec(const EVP_CIPHER *cipher,
+    const char *ctsMode, unsigned char *key, unsigned char *iv,
+    unsigned char *enc, int encLen, unsigned char *dec, int *decLen)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+    int outLen = 0;
+    int total = 0;
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE,
+        (char *)ctsMode, 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+        err = EVP_CipherInit_ex2(ctx, cipher, key, iv, 0, params) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, dec, &outLen, enc, encLen) != 1;
+        total = outLen;
+    }
+    if (err == 0) {
+        err = EVP_CipherFinal_ex(ctx, dec + total, &outLen) != 1;
+        total += outLen;
+    }
+    if (err == 0) {
+        *decLen = total;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return err;
+}
+
+/**
+ * Compare AES-CTS against the OpenSSL default provider for one variant.
+ *
+ * The variants differ only in the order of the final two ciphertext blocks,
+ * so a mismatch means data written by one provider cannot be read by the
+ * other. Lengths cover a short final block and an exact block multiple.
+ */
+static int test_cipher_cts_mode_helper(const char *cipherName,
+    const char *ctsMode, int keyLen)
+{
+    static const int lengths[] = { 17, 31, 33, 64 };
+    int err = 0;
+    size_t i;
+    EVP_CIPHER *wcipher = NULL;
+    EVP_CIPHER *ocipher = NULL;
+    unsigned char key[32];
+    unsigned char iv[16];
+    unsigned char msg[64];
+    unsigned char wEnc[128];
+    unsigned char oEnc[128];
+    unsigned char dec[128];
+    int wLen = 0;
+    int oLen = 0;
+    int decLen = 0;
+
+    memset(key, 0xA5, (size_t)keyLen);
+    memset(iv, 0x5A, sizeof(iv));
+    for (i = 0; i < sizeof(msg); i++) {
+        msg[i] = (unsigned char)i;
+    }
+
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, cipherName, "");
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, cipherName, "");
+    err = (wcipher == NULL) || (ocipher == NULL);
+
+    for (i = 0; (err == 0) && (i < sizeof(lengths) / sizeof(lengths[0]));
+         i++) {
+        int len = lengths[i];
+
+        PRINT_MSG("%s %s length %d", cipherName, ctsMode, len);
+
+        err = test_cipher_cts_mode_enc(wcipher, ctsMode, key, iv, msg, len,
+            wEnc, &wLen);
+        if (err == 0) {
+            err = test_cipher_cts_mode_enc(ocipher, ctsMode, key, iv, msg,
+                len, oEnc, &oLen);
+        }
+        if (err == 0) {
+            err = (wLen != oLen) || (memcmp(wEnc, oEnc, (size_t)wLen) != 0);
+            if (err) {
+                PRINT_ERR_MSG("%s %s length %d: ciphertext differs",
+                    cipherName, ctsMode, len);
+            }
+        }
+        /* Each provider must read what the other wrote. */
+        if (err == 0) {
+            err = test_cipher_cts_mode_dec(ocipher, ctsMode, key, iv, wEnc,
+                wLen, dec, &decLen);
+        }
+        if (err == 0) {
+            err = (decLen != len) || (memcmp(dec, msg, (size_t)len) != 0);
+            if (err) {
+                PRINT_ERR_MSG("%s %s length %d: OpenSSL decrypt mismatch",
+                    cipherName, ctsMode, len);
+            }
+        }
+        if (err == 0) {
+            err = test_cipher_cts_mode_dec(wcipher, ctsMode, key, iv, oEnc,
+                oLen, dec, &decLen);
+        }
+        if (err == 0) {
+            err = (decLen != len) || (memcmp(dec, msg, (size_t)len) != 0);
+            if (err) {
+                PRINT_ERR_MSG("%s %s length %d: wolfProvider decrypt mismatch",
+                    cipherName, ctsMode, len);
+            }
+        }
+    }
+
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+    return err;
+}
+
+/**
+ * Test every ciphertext stealing variant against the OpenSSL default
+ * provider, including the CS1 default used when no variant is requested.
+ */
+int test_aes_cts_modes(void *data)
+{
+    static const char *modes[] = { "CS1", "CS2", "CS3" };
+    int err = 0;
+    size_t i;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < sizeof(modes) / sizeof(modes[0])); i++) {
+        err = test_cipher_cts_mode_helper("AES-128-CBC-CTS", modes[i], 16);
+        if (err == 0) {
+            err = test_cipher_cts_mode_helper("AES-256-CBC-CTS", modes[i],
+                32);
+        }
+    }
+
+    return err;
+}
+
 
 #endif /* WP_HAVE_AESCTS */
 

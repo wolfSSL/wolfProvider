@@ -48,6 +48,8 @@ typedef struct wp_AesStreamCtx {
 
     /** Operation being performed is encryption. */
     unsigned int enc:1;
+    /** An IV has been set. */
+    unsigned int ivSet:1;
 
     /** Current IV. */
     unsigned char iv[AES_BLOCK_SIZE];
@@ -57,9 +59,19 @@ typedef struct wp_AesStreamCtx {
 #if defined(WP_HAVE_AESCTS)
     /* Only single shot allowed */
     unsigned int updated:1;
+    /** Ciphertext stealing variant in use. */
+    int ctsMode;
 #endif
 } wp_AesStreamCtx;
 
+
+#if defined(WP_HAVE_AESCTS)
+/** Ciphertext stealing variants. The last two blocks are swapped in CS3, and
+ * in CS2 only when the final block is short. */
+#define WP_CTS_MODE_CS1  1
+#define WP_CTS_MODE_CS2  2
+#define WP_CTS_MODE_CS3  3
+#endif
 
 /* Prototype for initialization to call. */
 static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
@@ -268,6 +280,7 @@ static int wp_aes_init_iv(wp_AesStreamCtx *ctx, const unsigned char *iv,
     if (ok) {
         XMEMCPY(ctx->iv, iv, ivLen);
         XMEMCPY(ctx->oiv, iv, ivLen);
+        ctx->ivSet = 1;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -308,6 +321,13 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
     if (ok && (iv != NULL) && (!wp_aes_init_iv(ctx, iv, ivLen))) {
         ok = 0;
     }
+    if (ok && (iv == NULL) && ctx->ivSet &&
+            ((ctx->mode == EVP_CIPH_CBC_MODE) ||
+             (ctx->mode == EVP_CIPH_CFB_MODE))) {
+        if (!wp_aes_init_iv(ctx, ctx->oiv, ctx->ivLen)) {
+            ok = 0;
+        }
+    }
 
     if (ok && (key != NULL)) {
         if (keyLen != ctx->keyLen) {
@@ -321,7 +341,7 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
             }
 #endif
             WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
-            rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, iv,
+            rc = wc_AesSetKey(&ctx->aes, key, (word32)ctx->keyLen, ctx->iv,
                 dir);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesSetKey", rc);
@@ -392,6 +412,15 @@ static int wp_aes_stream_dinit(wp_AesStreamCtx *ctx, const unsigned char *key,
 
 #ifdef WP_HAVE_AESCTS
 
+/* CS3 always swaps the final two blocks, CS2 only when the last block is
+ * short, and CS1 never does. */
+static int wp_aes_cts_swapped(const wp_AesStreamCtx *ctx, size_t partialSz)
+{
+    return (ctx->ctsMode == WP_CTS_MODE_CS3) ||
+           ((ctx->ctsMode == WP_CTS_MODE_CS2) &&
+            (partialSz != AES_BLOCK_SIZE));
+}
+
 static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     const unsigned char *in, size_t inLen)
 {
@@ -404,11 +433,24 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
      * the existing wolfSSL AES_CTS APIs with FIPS, so the implementation is
      * effectively copied here from wolfSSL internals. */
 
+    if (inLen == AES_BLOCK_SIZE) {
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        rc = wc_AesCbcEncrypt(&ctx->aes, out, in, AES_BLOCK_SIZE);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcEncrypt", rc);
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        }
+        return ok;
+    }
+
     blocks = (int)((inLen + (AES_BLOCK_SIZE - 1)) / AES_BLOCK_SIZE);
     blocks -= 2;
     XMEMSET(ctsBlock, 0, AES_BLOCK_SIZE * 2);
+    XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
     if (ok && blocks > 0) {
-        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
         rc = wc_AesCbcEncrypt(&ctx->aes, out, in, blocks * AES_BLOCK_SIZE);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcEncrypt", rc);
@@ -434,8 +476,17 @@ static int wp_aes_cts_encrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         }
     }
     if (ok) {
-        XMEMCPY(out, ctsBlock + AES_BLOCK_SIZE, AES_BLOCK_SIZE);
-        XMEMCPY(out + AES_BLOCK_SIZE, ctsBlock, inLen - AES_BLOCK_SIZE);
+        size_t partialSz = inLen - AES_BLOCK_SIZE;
+
+        if (wp_aes_cts_swapped(ctx, partialSz)) {
+            XMEMCPY(out, ctsBlock + AES_BLOCK_SIZE, AES_BLOCK_SIZE);
+            XMEMCPY(out + AES_BLOCK_SIZE, ctsBlock, partialSz);
+        }
+        else {
+            XMEMCPY(out, ctsBlock, partialSz);
+            XMEMCPY(out + partialSz, ctsBlock + AES_BLOCK_SIZE,
+                AES_BLOCK_SIZE);
+        }
     }
 
     OPENSSL_cleanse(ctsBlock, sizeof(ctsBlock));
@@ -457,6 +508,19 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
     /* Since AES-CTS is not a FIPS approved algo, we will never be able to call
      * the existing wolfSSL AES_CTS APIs with FIPS, so the implementation is
      * effectively copied here from wolfSSL internals. */
+
+    if (inLen == AES_BLOCK_SIZE) {
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        rc = wc_AesCbcDecrypt(&ctx->aes, out, in, AES_BLOCK_SIZE);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCbcDecrypt", rc);
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        }
+        return ok;
+    }
 
     partialSz = inLen % AES_BLOCK_SIZE;
     if (partialSz == 0) {
@@ -482,7 +546,13 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
         }
     }
     if (ok) {
-        XMEMCPY(ctsBlock, in, inLen);
+        if (wp_aes_cts_swapped(ctx, partialSz)) {
+            XMEMCPY(ctsBlock, in, inLen);
+        }
+        else {
+            XMEMCPY(ctsBlock, in + partialSz, AES_BLOCK_SIZE);
+            XMEMCPY(ctsBlock + AES_BLOCK_SIZE, in, partialSz);
+        }
         XMEMCPY(&ctx->aes.reg, ctsBlock + AES_BLOCK_SIZE, AES_BLOCK_SIZE);
         rc = wc_AesCbcDecrypt(&ctx->aes, tmp, ctsBlock, AES_BLOCK_SIZE);
         if (rc != 0) {
@@ -768,7 +838,9 @@ static int wp_aes_stream_get_ctx_params(wp_AesStreamCtx* ctx,
 #ifdef WP_HAVE_AESCTS
     if (ok && ctx->mode == EVP_CIPH_CBC_MODE) {
         p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_CTS_MODE);
-        if ((p != NULL) && (!OSSL_PARAM_set_utf8_string(p, "CS3"))) {
+        if ((p != NULL) && (!OSSL_PARAM_set_utf8_string(p,
+                (ctx->ctsMode == WP_CTS_MODE_CS1) ? "CS1" :
+                (ctx->ctsMode == WP_CTS_MODE_CS2) ? "CS2" : "CS3"))) {
             ok = 0;
         }
     }
@@ -822,8 +894,19 @@ static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
                         sizeof(cts_mode))) {
                     ok = 0;
                 }
-                if (ok && (XSTRCMP(cts_mode, "CS3") != 0)) {
-                    ok = 0; /* Only CS3 supported */
+                if (ok) {
+                    if (XSTRCMP(cts_mode, "CS1") == 0) {
+                        ctx->ctsMode = WP_CTS_MODE_CS1;
+                    }
+                    else if (XSTRCMP(cts_mode, "CS2") == 0) {
+                        ctx->ctsMode = WP_CTS_MODE_CS2;
+                    }
+                    else if (XSTRCMP(cts_mode, "CS3") == 0) {
+                        ctx->ctsMode = WP_CTS_MODE_CS3;
+                    }
+                    else {
+                        ok = 0;
+                    }
                 }
             }
         }
@@ -850,6 +933,9 @@ static void wp_aes_stream_init_ctx(wp_AesStreamCtx* ctx, size_t kBits,
     ctx->keyLen = ((kBits) / 8);
     ctx->ivLen = ((ivBits) / 8);
     ctx->mode = mode;
+#if defined(WP_HAVE_AESCTS)
+    ctx->ctsMode = WP_CTS_MODE_CS1;
+#endif
 }
 
 
