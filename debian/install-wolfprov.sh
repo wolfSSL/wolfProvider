@@ -24,8 +24,9 @@ REPO_ROOT=${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}
 wolfprov_build() {
     local WOLFSSL_ISFIPS=${1:-0}
     local WOLFPROV_DEBUG=${2:-0}
+    local BINARY_ONLY=${3:-0}
 
-    printf "Running wolfprov_build with WOLFSSL_ISFIPS=$WOLFSSL_ISFIPS and WOLFPROV_DEBUG=$WOLFPROV_DEBUG\n"
+    printf "Running wolfprov_build with WOLFSSL_ISFIPS=$WOLFSSL_ISFIPS and WOLFPROV_DEBUG=$WOLFPROV_DEBUG and BINARY_ONLY=$BINARY_ONLY\n"
 
     export WOLFSSL_ISFIPS
     export WOLFPROV_DEBUG
@@ -56,27 +57,43 @@ wolfprov_build() {
     fi
 
     # Step 6: Check for uncommitted changes
-    if ! git diff --quiet || ! git diff --cached --quiet; then
+    # Only meaningful for source builds: it exists so the step 9 tarball
+    # provably matches the binaries built from it.
+    if [ $BINARY_ONLY -eq 0 ] && { ! git diff --quiet || ! git diff --cached --quiet; }; then
     echo "⚠️  Error: Uncommitted changes in working tree:"
     git status --short
     exit 1
     fi
 
     # Step 7: Clean untracked files
-    echo "🧹 Cleaning untracked files..."
+    echo "🧹 Removing OpenSSL/wolfSSL/wolfProvider source and install dirs..."
     $REPO_ROOT/scripts/build-wolfprovider.sh --distclean
-    git clean -fdx
+    if [ $BINARY_ONLY -eq 0 ]; then
+        echo "🧹 Cleaning untracked files..."
+        git clean -fdx
+    else
+        # git clean would delete untracked files, silently dropping anything the
+        # caller added before building. --distclean above already removed build
+        # output. Nothing now ties this package to a commit, so say so.
+        echo "🧹 Keeping untracked files (binary-only build)"
+        echo "⚠️  Binary-only build: package will NOT correspond to $current_commit"
+        git status --short
+    fi
 
     # Step 8: Changelog updates handled by scripts/debian-changelog-update.sh
 
-    # Step 9: Create tarball
-    if [[ -f "../$TARBALL" ]]; then
-    echo "🗑️ Removing existing tarball: $TARBALL"
-    rm -f "../$TARBALL"
+    # Step 9: Create tarball (source builds only)
+    if [ $BINARY_ONLY -eq 0 ]; then
+        if [[ -f "../$TARBALL" ]]; then
+            echo "🗑️ Removing existing tarball: $TARBALL"
+            rm -f "../$TARBALL"
+        fi
+        echo "📦 Creating tarball $TARBALL from commit $current_commit..."
+        git archive --format=tar.gz --prefix="${TARBALL_PREFIX}/" \
+            -o "../$TARBALL" "$current_commit"
+    else
+        echo "📦 Skipping tarball creation (binary-only build)"
     fi
-    echo "📦 Creating tarball $TARBALL from commit $current_commit..."
-    git archive --format=tar.gz --prefix="${TARBALL_PREFIX}/" \
-        -o "../$TARBALL" "$current_commit"
 
     # Step 9.1: Set up ccache if installed
     # Optional ccache
@@ -98,7 +115,13 @@ wolfprov_build() {
     # Step 10: Build package with optional ccache (if installed)
     echo "⚙️  Building package..."
     WOLFSSL_ISFIPS=${WOLFSSL_ISFIPS:-0}
-    dpkg-buildpackage -us -uc \
+    # -b (--build=any,all): no .dsc or .debian.tar.xz. The .orig.tar.gz is an
+    # input to source packaging, not an output here; step 9 skips creating it.
+    local BUILD_TYPE_FLAG=
+    if [ $BINARY_ONLY -eq 1 ]; then
+        BUILD_TYPE_FLAG=-b
+    fi
+    dpkg-buildpackage -us -uc $BUILD_TYPE_FLAG \
     -eWOLFSSL_ISFIPS \
     -eWOLFPROV_DEBUG \
     -eCC -eCXX \
@@ -130,6 +153,7 @@ main() {
     local debug_mode=0
     local fips_mode=0
     local no_install=0
+    local binary_only=0
     local output_dir=
 
     # Parse command line arguments
@@ -144,6 +168,9 @@ main() {
                 echo "  -d, --debug          Enable debug build mode (adds --enable-debug)"
                 echo "  -f, --fips           Enable FIPS build mode (adds --enable-fips)"
                 echo "  -n, --no-install     Build only, do not install packages"
+                echo "  -b, --binary-only    Build binary packages only, no source package."
+                echo "                       Keeps caller edits to tracked and untracked files;"
+                echo "                       --distclean still removes source/install dirs."
                 echo "  -h, --help           Show this help message"
                 echo ""
                 echo "Arguments:"
@@ -160,6 +187,14 @@ main() {
                 ;;
             -n|--no-install)
                 no_install=1
+                shift
+                ;;
+            # Any caller that copies *.dsc / *.orig.tar.gz afterwards must be
+            # updated before it can pass this flag. None have been:
+            # .github/workflows/build-wolfprovider.yml still copies both
+            # unguarded and would fail on the unmatched glob.
+            -b|--binary-only)
+                binary_only=1
                 shift
                 ;;
             *)
@@ -199,7 +234,7 @@ main() {
     cp -r $REPO_ROOT .
     cd $(basename $REPO_ROOT)
 
-    wolfprov_build $fips_mode $debug_mode
+    wolfprov_build $fips_mode $debug_mode $binary_only
     if [ $no_install -eq 0 ]; then
         wolfprov_install
     fi
