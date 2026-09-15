@@ -3534,8 +3534,8 @@ static int test_rsa_dupctx_verify(EVP_PKEY *pkey, const char *md,
 
 static int test_rsa_dupctx_one_digest(const char *md, void *data)
 {
-    static const unsigned char part1[16] = "rsa-dupctx-part1";
-    static const unsigned char part2[16] = "rsa-dupctx-part2";
+    static const unsigned char part1[] = "rsa-dupctx-part1";
+    static const unsigned char part2[] = "rsa-dupctx-part2";
     int err = 0;
     EVP_PKEY *pkey = NULL;
     const unsigned char *p = rsa_key_der_2048;
@@ -3545,7 +3545,7 @@ static int test_rsa_dupctx_one_digest(const char *md, void *data)
     unsigned char sigB[256];
     size_t sigALen = sizeof(sigA);
     size_t sigBLen = sizeof(sigB);
-    unsigned char msg[32];
+    unsigned char msg[sizeof(part1) + sizeof(part2)];
 
     (void)data;
 

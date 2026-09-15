@@ -1,12 +1,13 @@
 name: Nightly Multi-Compiler Tests
 
-# Runs the FULL multi-compiler matrix (gcc-9..14, clang-12..15) on
+# Runs the FULL multi-compiler matrix (gcc-9..15, clang-12..15) on
 # Ubuntu runners. PR-time multi-compiler.yml is restricted to the
 # compilers that ship in the test-deps container (Debian Bookworm:
 # gcc-11, gcc-12, clang-13..15) to avoid the apt-get hangs that were
 # cancelling PR jobs after 20 minutes. This nightly job restores
 # coverage of the dropped compilers (gcc-9, gcc-10, gcc-13, gcc-14,
-# clang-12) plus everything in between.
+# clang-12) plus everything in between. gcc-15 is newer than the runner
+# image ships, so it comes from the toolchain PPA.
 
 on:
   workflow_call: {}
@@ -61,6 +62,11 @@ jobs:
             OS: ubuntu-latest
             wolfssl_ref: master
             openssl_ref: master
+          - CC: gcc-15
+            CXX: g++-15
+            OS: ubuntu-latest
+            wolfssl_ref: master
+            openssl_ref: master
           - CC: clang-12
             CXX: clang++-12
             OS: ubuntu-22.04
@@ -102,7 +108,13 @@ jobs:
           # on PATH - skips the slow `apt-get update` whenever possible.
           if ! command -v ${{ matrix.CC }} >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }}
+            if ! sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }}; then
+              # Compilers newer than the runner image ships come from the
+              # toolchain PPA.
+              sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+              sudo apt-get update
+              sudo apt-get install -y ${{ matrix.CC }} ${{ matrix.CXX }}
+            fi
           fi
           ${{ matrix.CC }} --version
 
