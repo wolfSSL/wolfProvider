@@ -450,7 +450,7 @@ static int wp_pem2der_decode(wp_Pem2Der* ctx, OSSL_CORE_BIO* coreBio,
     else if (data == NULL) {
         done = 1;
     }
-    if (!done) {
+    if (ok && !done) {
         idx += wp_pem2der_find_header(data + idx, len - idx);
         /* No header means nothing to do. */
         if (idx == len) {
