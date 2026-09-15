@@ -62,6 +62,14 @@ typedef struct wp_DrbgCtx {
     OSSL_FUNC_rand_get_seed_fn* parentGetSeed;
     /** Parent's clear_seed function. */
     OSSL_FUNC_rand_clear_seed_fn* parentClearSeed;
+    /** Parent's enable_locking function. */
+    OSSL_FUNC_rand_enable_locking_fn* parentEnableLocking;
+    /** Parent's lock function. */
+    OSSL_FUNC_rand_lock_fn* parentLock;
+    /** Parent's unlock function. */
+    OSSL_FUNC_rand_unlock_fn* parentUnlock;
+    /** Set when locking has been propagated to the parent. */
+    int parentLockingEnabled;
 #ifndef WP_HAVE_DRBG_RESEED
     /** Set when a failed reseed re-instantiation left ctx->rng de-instantiated. */
     int rngError;
@@ -83,8 +91,9 @@ typedef struct wp_DrbgCtx {
  * @param [in] provCtx         Provider context.
  * @param [in] parent          Parent DRBG context for getting entropy.
  *                             NULL for root DRBGs.
- * @param [in] parentDispatch  Parent's dispatch table containing get_seed
- *                             and clear_seed functions. NULL for root DRBGs.
+ * @param [in] parentDispatch  Parent's dispatch table containing get_seed,
+ *                             clear_seed and locking functions. NULL for
+ *                             root DRBGs.
  * @return  DRBG object on success.
  * @return  NULL on failure.
  */
@@ -113,6 +122,18 @@ static wp_DrbgCtx* wp_drbg_new(void* provCtx, void* parent,
                     case OSSL_FUNC_RAND_CLEAR_SEED:
                         ctx->parentClearSeed =
                             OSSL_FUNC_rand_clear_seed(parentDispatch);
+                        break;
+                    case OSSL_FUNC_RAND_ENABLE_LOCKING:
+                        ctx->parentEnableLocking =
+                            OSSL_FUNC_rand_enable_locking(parentDispatch);
+                        break;
+                    case OSSL_FUNC_RAND_LOCK:
+                        ctx->parentLock =
+                            OSSL_FUNC_rand_lock(parentDispatch);
+                        break;
+                    case OSSL_FUNC_RAND_UNLOCK:
+                        ctx->parentUnlock =
+                            OSSL_FUNC_rand_unlock(parentDispatch);
                         break;
                 }
             }
@@ -148,6 +169,41 @@ static int wp_drbg_uninstantiate(wp_DrbgCtx* ctx);
 static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
     const unsigned char* entropy, size_t entropyLen,
     const unsigned char* addIn, size_t addInLen);
+
+/**
+ * Lock the parent DRBG context object.
+ *
+ * Calls to the parent's dispatch functions go through raw pointers, so the
+ * parent's LOCK dispatch must be taken by this child (core only wraps calls
+ * it makes itself). No parent, or no LOCK captured, is treated as success.
+ * OpenSSL 3.5+ parents treat LOCK as a no-op hint and self-serialize.
+ *
+ * @param [in, out] ctx  DRBG context object.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_drbg_lock_parent(wp_DrbgCtx* ctx)
+{
+    int ok = 1;
+
+    if ((ctx->parent != NULL) && (ctx->parentLock != NULL) &&
+            (!ctx->parentLock(ctx->parent))) {
+        ok = 0;
+    }
+    return ok;
+}
+
+/**
+ * Unlock the parent DRBG context object.
+ *
+ * @param [in, out] ctx  DRBG context object.
+ */
+static void wp_drbg_unlock_parent(wp_DrbgCtx* ctx)
+{
+    if ((ctx->parent != NULL) && (ctx->parentUnlock != NULL)) {
+        ctx->parentUnlock(ctx->parent);
+    }
+}
 
 /**
  * Instantiate a new DRBG.
@@ -187,16 +243,25 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
         WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
             "Getting entropy from parent DRBG");
 
-        seedLen = ctx->parentGetSeed(ctx->parent, &seed,
-            256,  /* entropy bits */
-            32,   /* min_len */
-            256,  /* max_len */
-            predResist, pStr, pStrLen);
-
-        if (seedLen == 0 || seed == NULL) {
-            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
-                "Failed to get seed from parent");
+        /* Parent may be shared; lock around the raw dispatch call. */
+        if (!wp_drbg_lock_parent(ctx)) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG, "Failed to lock parent");
             ok = 0;
+        }
+
+        if (ok) {
+            seedLen = ctx->parentGetSeed(ctx->parent, &seed,
+                256,  /* entropy bits */
+                32,   /* min_len */
+                256,  /* max_len */
+                predResist, pStr, pStrLen);
+            wp_drbg_unlock_parent(ctx);
+
+            if (seedLen == 0 || seed == NULL) {
+                WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                    "Failed to get seed from parent");
+                ok = 0;
+            }
         }
 
         if (ok) {
@@ -220,9 +285,18 @@ static int wp_drbg_instantiate(wp_DrbgCtx* ctx, unsigned int strength,
             }
         }
 
-        /* Clear the seed from parent */
+        /* Clear the seed from parent. */
         if (seed != NULL && ctx->parentClearSeed != NULL) {
-            ctx->parentClearSeed(ctx->parent, seed, seedLen);
+            if (wp_drbg_lock_parent(ctx)) {
+                ctx->parentClearSeed(ctx->parent, seed, seedLen);
+                wp_drbg_unlock_parent(ctx);
+            }
+            else {
+                /* Parent owns the allocation; scrub in place, don't free. */
+                OPENSSL_cleanse(seed, seedLen);
+                WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                    "Parent lock failed; seed scrubbed but not freed");
+            }
         }
     }
     else if (ok) {
@@ -516,6 +590,9 @@ static int wp_drbg_reseed(wp_DrbgCtx* ctx, int predResist,
 /**
  * Create a lock object for this DRBG context object.
  *
+ * Propagates to the parent first ("and all of its parents",
+ * EVP_RAND_enable_locking).
+ *
  * @param [in, out] ctx  DRBG context object.
  * @return  1 on success.
  * @return  0 on failure.
@@ -526,19 +603,37 @@ static int wp_drbg_enable_locking(wp_DrbgCtx* ctx)
 
     WOLFPROV_ENTER(WP_LOG_COMP_RNG, "wp_drbg_enable_locking");
 
+    /* One-shot: a transient parent refusal on a repeat call must not fail a
+     * healthy context (core treats failure as fatal). */
+    if ((!ctx->parentLockingEnabled) && (ctx->parent != NULL) &&
+            (ctx->parentEnableLocking != NULL)) {
+        if (!ctx->parentEnableLocking(ctx->parent)) {
+            WOLFPROV_MSG_DEBUG(WP_LOG_COMP_RNG,
+                "Parent locking could not be enabled");
+            ok = 0;
+        }
+        else {
+            ctx->parentLockingEnabled = 1;
+        }
+    }
+
 #ifndef WP_SINGLE_THREADED
-    if (ctx->mutex == NULL) {
-        ctx->mutex = OPENSSL_malloc(sizeof(*ctx->mutex));
-        if (ctx->mutex == NULL) {
+    if (ok && ctx->mutex == NULL) {
+        /* Init fully before publishing; wp_drbg_lock() tests ctx->mutex
+         * unlocked. */
+        wolfSSL_Mutex* mutex = OPENSSL_malloc(sizeof(*mutex));
+        if (mutex == NULL) {
             ok = 0;
         }
         if (ok) {
-            int rc = wc_InitMutex(ctx->mutex);
+            int rc = wc_InitMutex(mutex);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_COMP_RNG, "wc_InitMutex", rc);
-                OPENSSL_free(ctx->mutex);
-                ctx->mutex = NULL;
+                OPENSSL_free(mutex);
                 ok = 0;
+            }
+            else {
+                ctx->mutex = mutex;
             }
         }
     }
@@ -571,6 +666,8 @@ static int wp_drbg_lock(wp_DrbgCtx* ctx)
             ok = 0;
         }
     }
+#else
+    (void)ctx;
 #endif
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -591,6 +688,8 @@ static int wp_drbg_unlock(wp_DrbgCtx* ctx)
     if (ctx->mutex != NULL) {
        wc_UnLockMutex(ctx->mutex);
     }
+#else
+    (void)ctx;
 #endif
     WOLFPROV_LEAVE(WP_LOG_COMP_RNG, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), 1);
     return 1;
