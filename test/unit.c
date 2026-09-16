@@ -1,6 +1,6 @@
 /* unit.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -617,6 +617,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mlkem_decap_wrong_key, NULL),
     TEST_DECL(test_mlkem_dup, NULL),
     TEST_DECL(test_mlkem_match, NULL),
+    TEST_DECL(test_mlkem_cross_provider_raw, NULL),
     TEST_DECL(test_mlkem_decap_size_query, NULL),
     TEST_DECL(test_mlkem_get_params, NULL),
     TEST_DECL(test_mlkem_import_mismatched_pubpriv, NULL),
@@ -646,6 +647,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_mldsa_reinit_null_key, NULL),
     TEST_DECL(test_mldsa_encode_decode, NULL),
     TEST_DECL(test_mldsa_x509_sign_verify, NULL),
+    TEST_DECL(test_mldsa_cross_provider_raw, NULL),
 #endif
 
 #if defined(WP_HAVE_SLHDSA) && defined(WP_SLHDSA_TEST_SETS)
