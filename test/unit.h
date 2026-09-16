@@ -1,6 +1,6 @@
 /* unit.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfProvider.
  *
@@ -679,6 +679,7 @@ int test_mlkem_decap_tampered_ct(void *data);
 int test_mlkem_decap_wrong_key(void *data);
 int test_mlkem_dup(void *data);
 int test_mlkem_match(void *data);
+int test_mlkem_cross_provider_raw(void *data);
 int test_mlkem_decap_size_query(void *data);
 int test_mlkem_get_params(void *data);
 int test_mlkem_import_mismatched_pubpriv(void *data);
@@ -709,6 +710,7 @@ int test_mldsa_reinit_null_key(void *data);
 int test_mldsa_encode_decode(void *data);
 int test_mldsa_x509_sign_verify(void *data);
 int test_mldsa_encoder_import_object(void *data);
+int test_mldsa_cross_provider_raw(void *data);
 #endif
 
 #if defined(WP_HAVE_SLHDSA) && defined(WP_SLHDSA_TEST_SETS)

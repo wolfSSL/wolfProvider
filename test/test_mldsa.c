@@ -57,12 +57,13 @@ static const unsigned char mldsa_test_msg[] =
  * @param [out] pkey  Generated EVP_PKEY (caller frees).
  * @return  0 on success, non-zero on failure.
  */
-static int mldsa_keygen(const char* name, EVP_PKEY** pkey)
+static int mldsa_keygen_ex(OSSL_LIB_CTX* libCtx, const char* prop,
+    const char* name, EVP_PKEY** pkey)
 {
     int err = 0;
     EVP_PKEY_CTX* ctx = NULL;
 
-    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, name, NULL);
+    ctx = EVP_PKEY_CTX_new_from_name(libCtx, name, prop);
     err = (ctx == NULL);
     if (err == 0) {
         err = EVP_PKEY_keygen_init(ctx) != 1;
@@ -72,6 +73,11 @@ static int mldsa_keygen(const char* name, EVP_PKEY** pkey)
     }
     EVP_PKEY_CTX_free(ctx);
     return err;
+}
+
+static int mldsa_keygen(const char* name, EVP_PKEY** pkey)
+{
+    return mldsa_keygen_ex(wpLibCtx, NULL, name, pkey);
 }
 
 /**
@@ -103,8 +109,9 @@ static int mldsa_get_pub(EVP_PKEY* pkey, unsigned char** out, size_t* len)
  * Sign a message with the given ML-DSA EVP_PKEY using the digest-sign API
  * (which for ML-DSA passes the whole message to the one-shot signer).
  */
-static int mldsa_sign_msg(EVP_PKEY* pkey, const unsigned char* msg,
-    size_t msgLen, unsigned char** sigOut, size_t* sigLenOut)
+static int mldsa_sign_msg_ex(OSSL_LIB_CTX* libCtx, const char* prop,
+    EVP_PKEY* pkey, const unsigned char* msg, size_t msgLen,
+    unsigned char** sigOut, size_t* sigLenOut)
 {
     int err = 0;
     EVP_MD_CTX* mdctx = NULL;
@@ -114,7 +121,7 @@ static int mldsa_sign_msg(EVP_PKEY* pkey, const unsigned char* msg,
     mdctx = EVP_MD_CTX_new();
     err = (mdctx == NULL);
     if (err == 0) {
-        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, pkey,
+        err = EVP_DigestSignInit_ex(mdctx, NULL, NULL, libCtx, prop, pkey,
             NULL) != 1;
     }
     if (err == 0) {
@@ -138,13 +145,21 @@ static int mldsa_sign_msg(EVP_PKEY* pkey, const unsigned char* msg,
     return err;
 }
 
+static int mldsa_sign_msg(EVP_PKEY* pkey, const unsigned char* msg,
+    size_t msgLen, unsigned char** sigOut, size_t* sigLenOut)
+{
+    return mldsa_sign_msg_ex(wpLibCtx, NULL, pkey, msg, msgLen, sigOut,
+        sigLenOut);
+}
+
 /**
  * Verify a signature on a message with the given ML-DSA EVP_PKEY.
  *
  * @return  1 if verified, 0 if not (does not set err on bad sig).
  */
-static int mldsa_verify_msg(EVP_PKEY* pkey, const unsigned char* msg,
-    size_t msgLen, const unsigned char* sig, size_t sigLen)
+static int mldsa_verify_msg_ex(OSSL_LIB_CTX* libCtx, const char* prop,
+    EVP_PKEY* pkey, const unsigned char* msg, size_t msgLen,
+    const unsigned char* sig, size_t sigLen)
 {
     int ok = 0;
     int rc;
@@ -154,7 +169,8 @@ static int mldsa_verify_msg(EVP_PKEY* pkey, const unsigned char* msg,
     if (mdctx == NULL) {
         return 0;
     }
-    rc = EVP_DigestVerifyInit_ex(mdctx, NULL, NULL, wpLibCtx, NULL, pkey, NULL);
+    rc = EVP_DigestVerifyInit_ex(mdctx, NULL, NULL, libCtx, prop, pkey,
+        NULL);
     if (rc == 1) {
         rc = EVP_DigestVerify(mdctx, sig, sigLen, msg, msgLen);
         if (rc == 1) {
@@ -163,6 +179,13 @@ static int mldsa_verify_msg(EVP_PKEY* pkey, const unsigned char* msg,
     }
     EVP_MD_CTX_free(mdctx);
     return ok;
+}
+
+static int mldsa_verify_msg(EVP_PKEY* pkey, const unsigned char* msg,
+    size_t msgLen, const unsigned char* sig, size_t sigLen)
+{
+    return mldsa_verify_msg_ex(wpLibCtx, NULL, pkey, msg, msgLen, sig,
+        sigLen);
 }
 
 /**
@@ -1277,6 +1300,194 @@ int test_mldsa_encoder_import_object(void *data)
     }
     EVP_PKEY_free(pkey);
 
+    return err;
+}
+
+/**
+ * Export the raw public and private key through the key management export.
+ *
+ * EVP_PKEY_todata reaches the provider's export function, which the
+ * parameter getters do not.
+ *
+ * @param [in]  pkey     ML-DSA key.
+ * @param [out] pub      Public key bytes (caller frees).
+ * @param [out] pubLen   Length of public key.
+ * @param [out] priv     Private key bytes (caller frees).
+ * @param [out] privLen  Length of private key.
+ * @return  0 on success, non-zero on failure.
+ */
+static int mldsa_get_raw_pair(EVP_PKEY* pkey, unsigned char** pub,
+    size_t* pubLen, unsigned char** priv, size_t* privLen)
+{
+    int err;
+    OSSL_PARAM* params = NULL;
+    const OSSL_PARAM* p;
+
+    *pub = NULL;
+    *priv = NULL;
+
+    err = EVP_PKEY_todata(pkey, EVP_PKEY_KEYPAIR, &params) != 1;
+    if (err) {
+        PRINT_ERR_MSG("Export of raw key from provider failed");
+    }
+    if (err == 0) {
+        p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_PUB_KEY);
+        err = (p == NULL)
+            || (OSSL_PARAM_get_octet_string(p, (void**)pub, 0, pubLen) != 1);
+    }
+    if (err == 0) {
+        p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_PRIV_KEY);
+        err = (p == NULL)
+            || (OSSL_PARAM_get_octet_string(p, (void**)priv, 0, privLen) != 1);
+    }
+    if (err) {
+        OPENSSL_free(*pub);
+        *pub = NULL;
+    }
+
+    OSSL_PARAM_free(params);
+    return err;
+}
+
+/**
+ * Move a raw ML-DSA key from one provider to the other and use it.
+ *
+ * The imported key signs and the original verifies, and the other way
+ * round, so the transfer is shown to be usable rather than byte equal.
+ *
+ * @param [in] lvl      Parameter set being tested.
+ * @param [in] srcCtx   Library context to generate the key in.
+ * @param [in] srcProp  Property query for the source provider.
+ * @param [in] dstCtx   Library context to import the key into.
+ * @param [in] dstProp  Property query for the destination provider.
+ * @return  0 on success, non-zero on failure.
+ */
+static int mldsa_cross_transfer(const mldsa_test_level* lvl,
+    OSSL_LIB_CTX* srcCtx, const char* srcProp, OSSL_LIB_CTX* dstCtx,
+    const char* dstProp)
+{
+    int err = 0;
+    EVP_PKEY* src = NULL;
+    EVP_PKEY* dst = NULL;
+    EVP_PKEY_CTX* ctx = NULL;
+    OSSL_PARAM* params = NULL;
+    unsigned char* pub = NULL;
+    unsigned char* pub2 = NULL;
+    unsigned char* priv = NULL;
+    unsigned char* sig = NULL;
+    size_t pubLen = 0;
+    size_t pub2Len = 0;
+    size_t privLen = 0;
+    size_t sigLen = 0;
+
+    err = mldsa_keygen_ex(srcCtx, srcProp, lvl->name, &src);
+    if (err == 0) {
+        err = mldsa_get_raw_pair(src, &pub, &pubLen, &priv, &privLen);
+    }
+    if (err == 0) {
+        err = (pubLen != lvl->pubKeySize);
+        if (err) {
+            PRINT_ERR_MSG("Raw public key size does not match the level");
+        }
+    }
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(dstCtx, lvl->name, dstProp);
+        err = (ctx == NULL) || (EVP_PKEY_fromdata_init(ctx) != 1);
+    }
+    if (err == 0) {
+        OSSL_PARAM_BLD* bld = OSSL_PARAM_BLD_new();
+
+        err = (bld == NULL)
+            || OSSL_PARAM_BLD_push_octet_string(bld,
+                OSSL_PKEY_PARAM_PUB_KEY, pub, pubLen) != 1
+            || OSSL_PARAM_BLD_push_octet_string(bld,
+                OSSL_PKEY_PARAM_PRIV_KEY, priv, privLen) != 1;
+        if (err == 0) {
+            params = OSSL_PARAM_BLD_to_param(bld);
+            err = (params == NULL);
+        }
+        OSSL_PARAM_BLD_free(bld);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, &dst, EVP_PKEY_KEYPAIR, params) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Import of raw key into other provider failed");
+        }
+    }
+    if (err == 0) {
+        err = mldsa_get_pub(dst, &pub2, &pub2Len);
+    }
+    if (err == 0) {
+        err = (pubLen != pub2Len) || (memcmp(pub, pub2, pubLen) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Public key changed crossing providers");
+        }
+    }
+    /* The imported key signs, the original verifies. */
+    if (err == 0) {
+        err = mldsa_sign_msg_ex(dstCtx, dstProp, dst, mldsa_test_msg,
+            MLDSA_TEST_MSG_LEN, &sig, &sigLen);
+    }
+    if (err == 0) {
+        err = mldsa_verify_msg_ex(srcCtx, srcProp, src, mldsa_test_msg,
+            MLDSA_TEST_MSG_LEN, sig, sigLen) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Signature from imported key did not verify");
+        }
+    }
+
+    /* And the other way round, so the imported public key is used too. */
+    if (err == 0) {
+        OPENSSL_free(sig);
+        sig = NULL;
+        sigLen = 0;
+        err = mldsa_sign_msg_ex(srcCtx, srcProp, src, mldsa_test_msg,
+            MLDSA_TEST_MSG_LEN, &sig, &sigLen);
+    }
+    if (err == 0) {
+        err = mldsa_verify_msg_ex(dstCtx, dstProp, dst, mldsa_test_msg,
+            MLDSA_TEST_MSG_LEN, sig, sigLen) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Imported key did not verify the original's "
+                "signature");
+        }
+    }
+
+    OPENSSL_free(pub);
+    OPENSSL_free(pub2);
+    OPENSSL_free(sig);
+    OPENSSL_clear_free(priv, privLen);
+    OSSL_PARAM_free(params);
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(src);
+    EVP_PKEY_free(dst);
+    return err;
+}
+
+/**
+ * Test raw ML-DSA keys moving between wolfProvider and OpenSSL.
+ */
+int test_mldsa_cross_provider_raw(void* data)
+{
+    int err = 0;
+    size_t i;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
+        const mldsa_test_level* lvl = &mldsa_levels[i];
+
+        PRINT_MSG("Cross-provider raw key OpenSSL to wolfProvider %s",
+            lvl->name);
+        err = mldsa_cross_transfer(lvl, osslLibCtx, "provider=default",
+            wpLibCtx, NULL);
+        if (err == 0) {
+            PRINT_MSG("Cross-provider raw key wolfProvider to OpenSSL %s",
+                lvl->name);
+            err = mldsa_cross_transfer(lvl, wpLibCtx, NULL, osslLibCtx,
+                "provider=default");
+        }
+    }
     return err;
 }
 
