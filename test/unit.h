@@ -595,6 +595,7 @@ int test_pbkdf2(void *data);
 int test_ecx_encode_epki(void *data);
 #endif
 int test_ecx_sign_verify(void *data);
+int test_ecx_sign_buffer_sizes(void *data);
 int test_ecx_sign_verify_raw_priv(void *data);
 int test_ecx_sign_verify_raw_pub(void *data);
 int test_ecx_misc(void *data);

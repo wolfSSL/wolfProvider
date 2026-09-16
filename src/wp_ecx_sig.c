@@ -370,7 +370,7 @@ static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
     else if (sig == NULL) {
         *sigLen = ED25519_SIG_SIZE;
     }
-    else if (*sigLen != ED25519_SIG_SIZE) {
+    else if (*sigLen < ED25519_SIG_SIZE) {
         ok = 0;
     }
     else {
