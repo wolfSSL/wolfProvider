@@ -111,7 +111,10 @@ IDE/WINVS/.vs/
 IDE/WINVS/**/*.user
 IDE/WINVS/**/*.vcxproj.filters
 
-examples/openssl_example
+examples/openssl_example*
+examples/.deps
+examples/.dirstamp
+examples/.libs
 
 cscope.out
 
