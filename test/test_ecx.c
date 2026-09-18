@@ -197,6 +197,17 @@ int test_ecx_encode_epki(void *data)
 }
 #endif /* WP_HAVE_ED25519 && WP_HAVE_EPKI_TEST */
 
+/* Size the scratch buffers from the largest EdDSA type that is built, so
+ * an Ed25519-only build compiles. */
+#ifdef WP_HAVE_ED448
+#define WP_ECX_SIG_SIZE_MAX     ED448_SIG_SIZE
+#else
+#define WP_ECX_SIG_SIZE_MAX     ED25519_SIG_SIZE
+#endif
+
+/* Fill byte for the undersized buffer, so a stray write is visible. */
+#define WP_ECX_SIG_GUARD        0x5a
+
 /**
  * Sign with an output buffer larger than the signature.
  *
@@ -217,10 +228,13 @@ static int test_ecx_sign_buffer_size(OSSL_LIB_CTX *libCtx, int type,
     const unsigned char *p = keyDer;
     EVP_PKEY *pkey = NULL;
     EVP_MD_CTX *mdCtx = NULL;
-    unsigned char sigExact[ED448_SIG_SIZE];
-    unsigned char sigLarge[ED448_SIG_SIZE * 2];
+    unsigned char sigExact[WP_ECX_SIG_SIZE_MAX];
+    unsigned char sigLarge[WP_ECX_SIG_SIZE_MAX * 2];
+    unsigned char sigSmall[WP_ECX_SIG_SIZE_MAX];
     size_t exactLen = sigSize;
     size_t largeLen = sizeof(sigLarge);
+    size_t smallLen = 0;
+    size_t i;
     static const unsigned char msg[] = "ECX signature buffer size message";
 
     pkey = d2i_PrivateKey_ex(type, NULL, &p, (long)keyDerSz, libCtx, NULL);
@@ -271,6 +285,33 @@ static int test_ecx_sign_buffer_size(OSSL_LIB_CTX *libCtx, int type,
             (memcmp(sigExact, sigLarge, exactLen) != 0);
         if (err) {
             PRINT_ERR_MSG("Buffer size changed the signature");
+        }
+    }
+    EVP_MD_CTX_free(mdCtx);
+    mdCtx = NULL;
+
+    /* A buffer smaller than the signature must be refused and left alone. */
+    if (err == 0) {
+        mdCtx = EVP_MD_CTX_new();
+        err = (mdCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, NULL, NULL, libCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        memset(sigSmall, WP_ECX_SIG_GUARD, sizeof(sigSmall));
+        smallLen = sigSize - 1;
+        err = EVP_DigestSign(mdCtx, sigSmall, &smallLen, msg,
+            sizeof(msg) - 1) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Sign with an undersized buffer succeeded");
+        }
+    }
+    for (i = 0; (err == 0) && (i < sizeof(sigSmall)); i++) {
+        if (sigSmall[i] != WP_ECX_SIG_GUARD) {
+            PRINT_ERR_MSG("Undersized buffer was written to");
+            err = 1;
         }
     }
 
