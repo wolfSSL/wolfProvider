@@ -1643,6 +1643,218 @@ int test_ecx_shared_key_first_use(void *data)
 #endif /* WP_HAVE_ECX_SHARED_KEY_TEST */
 }
 
+/* Size the shared buffers from the EdDSA types that are built so an
+ * Ed25519-only build compiles. */
+#if defined(WP_HAVE_ED25519) && defined(WP_HAVE_ED448)
+#define WP_ECX_STREAM_SIG_SIZE  MAX(ED25519_SIG_SIZE, ED448_SIG_SIZE)
+#elif defined(WP_HAVE_ED448)
+#define WP_ECX_STREAM_SIG_SIZE  ED448_SIG_SIZE
+#else
+#define WP_ECX_STREAM_SIG_SIZE  ED25519_SIG_SIZE
+#endif
+
+#define WP_ECX_STREAM_SPLIT     7
+
+/*
+ * Sign the message in two update calls and return the signature.
+ */
+static int wp_ecx_stream_sign(EVP_PKEY* pkey, const unsigned char* msg,
+    size_t msgLen, unsigned char* sig, size_t* sigLen)
+{
+    int err;
+    size_t queryLen = 0;
+    EVP_MD_CTX* mdCtx = EVP_MD_CTX_new();
+
+    err = mdCtx == NULL;
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, NULL, NULL, wpLibCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignUpdate(mdCtx, msg, WP_ECX_STREAM_SPLIT) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSignUpdate(mdCtx, msg + WP_ECX_STREAM_SPLIT,
+            msgLen - WP_ECX_STREAM_SPLIT) != 1;
+    }
+    /* Query the length first, the way an application sizes its buffer. */
+    if (err == 0) {
+        err = EVP_DigestSignFinal(mdCtx, NULL, &queryLen) != 1;
+    }
+    if (err == 0) {
+        err = queryLen > *sigLen;
+    }
+    if (err == 0) {
+        *sigLen = queryLen;
+        err = EVP_DigestSignFinal(mdCtx, sig, sigLen) != 1;
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    return err;
+}
+
+/*
+ * Verify the signature over the message in two update calls.
+ */
+static int wp_ecx_stream_verify(EVP_PKEY* pkey, const unsigned char* msg,
+    size_t msgLen, const unsigned char* sig, size_t sigLen)
+{
+    int err;
+    EVP_MD_CTX* mdCtx = EVP_MD_CTX_new();
+
+    err = mdCtx == NULL;
+    if (err == 0) {
+        err = EVP_DigestVerifyInit_ex(mdCtx, NULL, NULL, wpLibCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestVerifyUpdate(mdCtx, msg, WP_ECX_STREAM_SPLIT) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestVerifyUpdate(mdCtx, msg + WP_ECX_STREAM_SPLIT,
+            msgLen - WP_ECX_STREAM_SPLIT) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestVerifyFinal(mdCtx, sig, sigLen) != 1;
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    return err;
+}
+
+/*
+ * Sign in one call, for comparison with the streamed signature.
+ */
+static int wp_ecx_oneshot_sign(EVP_PKEY* pkey, const unsigned char* msg,
+    size_t msgLen, unsigned char* sig, size_t* sigLen)
+{
+    int err;
+    EVP_MD_CTX* mdCtx = EVP_MD_CTX_new();
+
+    err = mdCtx == NULL;
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, NULL, NULL, wpLibCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdCtx, NULL, sigLen, msg, msgLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdCtx, sig, sigLen, msg, msgLen) != 1;
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    return err;
+}
+
+static int wp_ecx_stream_sign_verify(int type, const unsigned char* keyDer,
+    size_t keyDerLen, size_t sigSize, const char* name)
+{
+    int err = 0;
+    const unsigned char* p = keyDer;
+    EVP_PKEY* pkey = NULL;
+    EVP_PKEY* pkeyOssl = NULL;
+    EVP_MD_CTX* mdCtx = NULL;
+    unsigned char oneShot[WP_ECX_STREAM_SIG_SIZE];
+    unsigned char streamed[WP_ECX_STREAM_SIG_SIZE];
+    size_t oneShotLen = sizeof(oneShot);
+    size_t streamedLen = sizeof(streamed);
+    static const unsigned char msg[] =
+        "ECX message split over more than one update call";
+    const size_t msgLen = sizeof(msg) - 1;
+
+    PRINT_MSG("Testing ECX streaming sign/verify (%s)", name);
+
+    pkey = d2i_PrivateKey_ex(type, NULL, &p, (long)keyDerLen, wpLibCtx, NULL);
+    err = pkey == NULL;
+    if (err) {
+        PRINT_ERR_MSG("could not create key");
+    }
+
+    if (err == 0) {
+        err = wp_ecx_oneshot_sign(pkey, msg, msgLen, oneShot, &oneShotLen);
+        if (err) {
+            PRINT_ERR_MSG("one-shot sign failed");
+        }
+    }
+    if (err == 0) {
+        err = wp_ecx_stream_sign(pkey, msg, msgLen, streamed, &streamedLen);
+        if (err) {
+            PRINT_ERR_MSG("streaming sign failed");
+        }
+    }
+    if (err == 0) {
+        err = (oneShotLen != sigSize) || (streamedLen != sigSize);
+        if (err) {
+            PRINT_ERR_MSG("unexpected signature length");
+        }
+    }
+    /* EdDSA is deterministic, so both paths must produce the same bytes. */
+    if (err == 0) {
+        err = memcmp(oneShot, streamed, sigSize) != 0;
+        if (err) {
+            PRINT_ERR_MSG("streamed signature differs from one-shot");
+        }
+    }
+    if (err == 0) {
+        err = wp_ecx_stream_verify(pkey, msg, msgLen, streamed, streamedLen);
+        if (err) {
+            PRINT_ERR_MSG("streaming verify rejected a good signature");
+        }
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Verify streamed signature with OpenSSL (%s)", name);
+        p = keyDer;
+        pkeyOssl = d2i_PrivateKey_ex(type, NULL, &p, (long)keyDerLen,
+            osslLibCtx, NULL);
+        err = pkeyOssl == NULL;
+    }
+    if (err == 0) {
+        mdCtx = EVP_MD_CTX_new();
+        err = mdCtx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_DigestVerifyInit_ex(mdCtx, NULL, NULL, osslLibCtx, NULL,
+            pkeyOssl, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestVerify(mdCtx, streamed, streamedLen, msg, msgLen) != 1;
+        if (err) {
+            PRINT_ERR_MSG("OpenSSL rejected the streamed signature");
+        }
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    EVP_PKEY_free(pkeyOssl);
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
+/*
+ * EdDSA has no digest of its own, so the message is gathered by the update
+ * calls and signed in final. Check that path against the one-shot one.
+ */
+int test_ecx_stream_sign_verify(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+#ifdef WP_HAVE_ED25519
+    err = wp_ecx_stream_sign_verify(EVP_PKEY_ED25519, ed25519_key_der,
+        sizeof(ed25519_key_der), ED25519_SIG_SIZE, "ed25519");
+#endif
+#ifdef WP_HAVE_ED448
+    if (err == 0) {
+        err = wp_ecx_stream_sign_verify(EVP_PKEY_ED448, ed448_key_der,
+            sizeof(ed448_key_der), ED448_SIG_SIZE, "ed448");
+    }
+#endif
+
+    return err;
+}
+
 #endif /* defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448) */
 
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
