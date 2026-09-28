@@ -805,7 +805,13 @@ int test_rsa_sign_verify_pss(void *data)
     return err;
 }
 
-#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+/* wolfSSL caps the PSS salt at the hash length only for FIPS v7+ modules. */
+#if defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION_MAJOR) && \
+    (HAVE_FIPS_VERSION_MAJOR >= 7)
+    #define WP_TEST_PSS_SALT_MAY_CAP
+#endif
+
+#ifdef WP_TEST_PSS_SALT_MAY_CAP
 /* FIPS 186-5 5.4(g) modules cap the PSS salt at the hash length while older
  * ones allow longer salts, so accept either but require every path to agree. */
 static int test_rsa_pss_long_salt(int saltlen)
@@ -893,7 +899,7 @@ int test_rsa_pss_salt(void *data)
     }
     if (err == 0) {
         PRINT_MSG("Salt length = maximum");
-#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+#ifdef WP_TEST_PSS_SALT_MAY_CAP
         err = test_rsa_pss_long_salt(RSA_PSS_SALTLEN_MAX);
 #else
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
@@ -907,7 +913,7 @@ int test_rsa_pss_salt(void *data)
     }
     if (err == 0) {
         PRINT_MSG("Salt length = auto");
-#if defined(HAVE_FIPS) || defined(HAVE_FIPS_VERSION)
+#ifdef WP_TEST_PSS_SALT_MAY_CAP
         err = test_rsa_pss_long_salt(RSA_PSS_SALTLEN_AUTO);
 #else
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
