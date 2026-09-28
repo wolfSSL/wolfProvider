@@ -2123,14 +2123,19 @@ int test_dh_small_subgroup_peer(void *data)
     if (err == 0) {
         err = EVP_PKEY_derive_init(ctx) != 1;
     }
+    /* Skip peer validation so derive's own subgroup check must reject it. */
     if (err == 0) {
-        rc = EVP_PKEY_derive_set_peer(ctx, small);
-        if (rc == 1) {
-            secretLen = sizeof(secret);
-            if (EVP_PKEY_derive(ctx, secret, &secretLen) == 1) {
-                PRINT_ERR_MSG("derive accepted a small subgroup peer key");
-                err = 1;
-            }
+        rc = EVP_PKEY_derive_set_peer_ex(ctx, small, 0);
+        err = rc != 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("set_peer failed with validation disabled");
+        }
+    }
+    if (err == 0) {
+        secretLen = sizeof(secret);
+        if (EVP_PKEY_derive(ctx, secret, &secretLen) == 1) {
+            PRINT_ERR_MSG("derive accepted a small subgroup peer key");
+            err = 1;
         }
     }
 
