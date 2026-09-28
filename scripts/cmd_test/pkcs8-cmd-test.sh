@@ -61,9 +61,36 @@ else
 fi
 test_pkey_cipher "rsa" "$OPENSSL_BIN genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048"
 
+# wolfSSL 5.9.4+ leaves DH out of FIPS v7+ builds by default (outside boundary).
+dh_default_off() {
+    local inc="${CMD_TEST_DIR}/../../wolfssl-install/include/wolfssl"
+    local hex fips_major
+
+    [ "${WOLFSSL_ISFIPS:-0}" = "1" ] || return 1
+    hex=$(sed -n 's/^#define LIBWOLFSSL_VERSION_HEX \(0x[0-9a-fA-F]*\).*/\1/p' \
+        "$inc/version.h" 2>/dev/null)
+    fips_major=$(sed -n 's/^#define HAVE_FIPS_VERSION_MAJOR \([0-9]*\).*/\1/p' \
+        "$inc/options.h" 2>/dev/null)
+    [ -n "$hex" ] && [ -n "$fips_major" ] || return 1
+    [ $((hex)) -ge $((0x05009004)) ] && [ "$fips_major" -ge 7 ]
+}
+
+# Skip only on a successful listing from a loaded provider that lacks DH.
+dh_unavailable() {
+    local managers
+
+    dh_default_off || return 1
+    managers=$($OPENSSL_BIN list -key-managers -provider libwolfprov \
+        2>/dev/null) || return 1
+    printf '%s\n' "$managers" | grep -q "rsaEncryption" || return 1
+    ! printf '%s\n' "$managers" | grep -q "dhKeyAgreement"
+}
+
 # DH requires a generated parameter file before the private key can be made.
 use_wolf_provider
-if $OPENSSL_BIN genpkey -genparam -algorithm DH \
+if dh_unavailable; then
+    echo "[SKIP] DH is not built into FIPS v7+ with wolfSSL 5.9.4 or later"
+elif $OPENSSL_BIN genpkey -genparam -algorithm DH \
         -pkeyopt dh_paramgen_prime_len:2048 \
         -out pkcs8_outputs/dh-params.pem 2>/dev/null &&
     test_pkey_cipher "dh" "$OPENSSL_BIN genpkey -paramfile pkcs8_outputs/dh-params.pem"; then
