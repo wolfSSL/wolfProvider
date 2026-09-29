@@ -805,6 +805,87 @@ int test_rsa_sign_verify_pss(void *data)
     return err;
 }
 
+/* wolfSSL caps the PSS salt at the hash length only for FIPS v7+ modules. */
+#if defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION_MAJOR) && \
+    (HAVE_FIPS_VERSION_MAJOR >= 7)
+    #define WP_TEST_PSS_SALT_MAY_CAP
+#endif
+
+#ifdef WP_TEST_PSS_SALT_MAY_CAP
+/* FIPS 186-5 5.4(g) modules cap the PSS salt at the hash length while older
+ * ones allow longer salts, so accept either but require every path to agree. */
+static int test_rsa_pss_long_salt(int saltlen)
+{
+    int err;
+    int capped = 0;
+    EVP_PKEY *pkey = NULL;
+    unsigned char *sig = NULL;
+    size_t sigLen = 0;
+    unsigned char buf[20];
+    const unsigned char *p = rsa_key_der_2048;
+    const char *mdName = EVP_MD_name(EVP_sha256());
+    int hLen = EVP_MD_size(EVP_sha256());
+
+    PRINT_MSG("Load RSA key");
+    pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
+    err = pkey == NULL;
+    if (err == 0) {
+        sigLen = (size_t)EVP_PKEY_size(pkey);
+        sig = (unsigned char*)OPENSSL_malloc(sigLen);
+        err = sig == NULL;
+    }
+    if (err == 0) {
+        err = RAND_bytes(buf, sizeof(buf)) == 0;
+    }
+    /* Explicit salts one byte apart differ only in length, so a failure at
+     * hLen + 1 can only be the module's cap. */
+    if (err == 0) {
+        PRINT_MSG("Sign with wolfprovider, salt length = digest length");
+        err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), mdName,
+            EVP_sha256(), sig, &sigLen, RSA_PKCS1_PSS_PADDING, hLen);
+    }
+    if (err == 0) {
+        PRINT_MSG("Sign with wolfprovider, salt length = digest length + 1");
+        sigLen = (size_t)EVP_PKEY_size(pkey);
+        capped = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), mdName,
+            EVP_sha256(), sig, &sigLen, RSA_PKCS1_PSS_PADDING, hLen + 1) != 0;
+        ERR_clear_error();
+    }
+    if ((err == 0) && !capped) {
+        PRINT_MSG("Module allows salt longer than digest");
+        err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
+                EVP_sha256(), saltlen) == 1;
+    }
+    if ((err == 0) && capped) {
+        PRINT_MSG("Module caps salt at digest length, sign with wolfprovider "
+                  "fails");
+        sigLen = (size_t)EVP_PKEY_size(pkey);
+        err = test_digest_sign(pkey, wpLibCtx, buf, sizeof(buf), mdName,
+            EVP_sha256(), sig, &sigLen, RSA_PKCS1_PSS_PADDING, saltlen) != 1;
+        ERR_clear_error();
+    }
+    if ((err == 0) && capped) {
+        PRINT_MSG("Sign with OpenSSL");
+        sigLen = (size_t)EVP_PKEY_size(pkey);
+        err = test_digest_sign(pkey, osslLibCtx, buf, sizeof(buf), mdName,
+            EVP_sha256(), sig, &sigLen, RSA_PKCS1_PSS_PADDING, saltlen);
+    }
+    if ((err == 0) && capped) {
+        PRINT_MSG("Verify with wolfprovider fails");
+        err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), mdName,
+            EVP_sha256(), sig, sigLen, RSA_PKCS1_PSS_PADDING, saltlen) != 1;
+        ERR_clear_error();
+    }
+
+    EVP_PKEY_free(pkey);
+    if (sig != NULL) {
+        OPENSSL_free(sig);
+    }
+
+    return err;
+}
+#endif
+
 int test_rsa_pss_salt(void *data)
 {
     int err = 0;
@@ -818,8 +899,12 @@ int test_rsa_pss_salt(void *data)
     }
     if (err == 0) {
         PRINT_MSG("Salt length = maximum");
+#ifdef WP_TEST_PSS_SALT_MAY_CAP
+        err = test_rsa_pss_long_salt(RSA_PSS_SALTLEN_MAX);
+#else
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
                 EVP_sha256(), RSA_PSS_SALTLEN_MAX) == 1;
+#endif
     }
     if (err == 0) {
         PRINT_MSG("Salt length = digest length");
@@ -828,8 +913,12 @@ int test_rsa_pss_salt(void *data)
     }
     if (err == 0) {
         PRINT_MSG("Salt length = auto");
+#ifdef WP_TEST_PSS_SALT_MAY_CAP
+        err = test_rsa_pss_long_salt(RSA_PSS_SALTLEN_AUTO);
+#else
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha256(),
                 EVP_sha256(), RSA_PSS_SALTLEN_AUTO) == 1;
+#endif
     }
 #ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
     if (err == 0) {
