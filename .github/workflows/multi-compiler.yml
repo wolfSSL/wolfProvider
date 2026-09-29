@@ -41,7 +41,7 @@ jobs:
       fail-fast: false
       # PR-time matrix is intentionally narrow: only compilers that ship
       # in Debian Bookworm (the test-deps image base). Dropped vs the
-      # prior matrix: gcc-9, gcc-10, gcc-13, gcc-14, clang-12. Full
+      # prior matrix: gcc-9, gcc-10, gcc-13, gcc-14, gcc-15, clang-12. Full
       # cross-compiler coverage (including those) runs in the nightly
       # multi-compiler job called from nightly-osp.yml.
       matrix:

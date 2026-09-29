@@ -592,8 +592,8 @@ int test_mldsa_match(void* data)
  * produce signatures that verify under the original key. */
 int test_mldsa_dupctx(void* data)
 {
-    static const unsigned char part1[16] = "mldsa-dupctx-pt1";
-    static const unsigned char part2[16] = "mldsa-dupctx-pt2";
+    static const unsigned char part1[] = "mldsa-dupctx-pt1";
+    static const unsigned char part2[] = "mldsa-dupctx-pt2";
     int err = 0;
     size_t i;
     EVP_PKEY* k = NULL;
@@ -603,11 +603,11 @@ int test_mldsa_dupctx(void* data)
     unsigned char* sigB = NULL;
     size_t sigALen = 0;
     size_t sigBLen = 0;
-    unsigned char msg[32];
+    unsigned char msg[sizeof(part1) + sizeof(part2)];
 
     (void)data;
-    XMEMCPY(msg, part1, 16);
-    XMEMCPY(msg + 16, part2, 16);
+    XMEMCPY(msg, part1, sizeof(part1));
+    XMEMCPY(msg + sizeof(part1), part2, sizeof(part2));
 
     for (i = 0; (err == 0) && (i < MLDSA_LEVEL_COUNT); i++) {
         PRINT_MSG("Dupctx %s", mldsa_levels[i].name);
@@ -666,7 +666,7 @@ int test_mldsa_dupctx(void* data)
 /* One-shot EVP_PKEY_sign / EVP_PKEY_verify path (not digest_sign). */
 int test_mldsa_oneshot_sign_verify(void* data)
 {
-    static const unsigned char msg[16] = "mldsa-one-shot!!";
+    static const unsigned char msg[] = "mldsa-one-shot!!";
     int err = 0;
     size_t i;
     EVP_PKEY* k = NULL;
@@ -927,7 +927,7 @@ int test_mldsa_empty_message(void* data)
  * context must be reused (OpenSSL reinit contract). */
 int test_mldsa_reinit_null_key(void* data)
 {
-    static const unsigned char msg[16] = "mldsa-reinit-msg";
+    static const unsigned char msg[] = "mldsa-reinit-msg";
     int err = 0;
     EVP_PKEY* k = NULL;
     EVP_MD_CTX* mdctx = NULL;
@@ -978,7 +978,7 @@ int test_mldsa_reinit_null_key(void* data)
  * message that the original public key must verify. */
 int test_mldsa_encode_decode(void* data)
 {
-    static const unsigned char msg[24] = "mldsa-encode-decode-msg!";
+    static const unsigned char msg[] = "mldsa-encode-decode-msg!";
     int err = 0;
     size_t i;
     EVP_PKEY* k = NULL;
