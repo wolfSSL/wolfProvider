@@ -2979,6 +2979,132 @@ int test_aes_ccm_oneshot_encrypt(void *data)
     return err;
 }
 
+static int test_aes_ccm_iv_reuse_helper(OSSL_LIB_CTX *libCtx,
+    const char *cipherName, int keyLen)
+{
+    int err = 0;
+    EVP_CIPHER *cipher = NULL;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[32];
+    unsigned char iv[13];
+    unsigned char iv2[13];
+    unsigned char aad[] = "additional data";
+    unsigned char pt[] = "CCM plaintext for IV reuse test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    int aadLen = (int)(sizeof(aad) - 1);
+    unsigned char ct[64];
+    unsigned char ct2[64];
+    unsigned char tag[16];
+    int outLen = 0, fLen = 0;
+
+    memset(key, 0xAA, keyLen);
+    memset(iv, 0xBB, sizeof(iv));
+    memset(iv2, 0xCC, sizeof(iv2));
+    memset(ct, 0, sizeof(ct));
+    memset(ct2, 0, sizeof(ct2));
+
+    cipher = EVP_CIPHER_fetch(libCtx, cipherName, "");
+    err = cipher == NULL;
+
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, cipher, NULL, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+                                  (int)sizeof(iv), NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, NULL, key, iv) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, NULL, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad, aadLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct, &outLen, pt, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct + outLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag) != 1;
+    }
+
+    /* Reusing the IV that already produced output would repeat the nonce
+     * under the same key, so the second encryption must not complete. */
+    if (err == 0) {
+        int ret = EVP_EncryptInit(ctx, NULL, key, iv);
+        if (ret == 1) {
+            ret = EVP_EncryptUpdate(ctx, NULL, &outLen, NULL, ptLen);
+        }
+        if (ret == 1) {
+            ret = EVP_EncryptUpdate(ctx, NULL, &outLen, aad, aadLen);
+        }
+        if (ret == 1) {
+            ret = EVP_EncryptUpdate(ctx, ct2, &outLen, pt, ptLen);
+        }
+        if (ret == 1) {
+            PRINT_ERR_MSG("%s: second encrypt reused the IV", cipherName);
+            err = 1;
+        }
+    }
+
+    /* A different IV starts a new operation and must still work. */
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, NULL, key, iv2) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, NULL, ptLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad, aadLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, ct2, &outLen, pt, ptLen) != 1;
+        if (err) {
+            PRINT_ERR_MSG("%s: encrypt with a fresh IV failed", cipherName);
+        }
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, ct2 + outLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        err = (outLen != ptLen) || (memcmp(ct, ct2, ptLen) == 0);
+        if (err) {
+            PRINT_ERR_MSG("%s: fresh IV did not change the ciphertext",
+                          cipherName);
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_ccm_iv_reuse(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    PRINT_MSG("AES-128-CCM encrypt with a reused IV");
+    err = test_aes_ccm_iv_reuse_helper(wpLibCtx, "AES-128-CCM", 16);
+    if (err == 0) {
+        PRINT_MSG("AES-256-CCM encrypt with a reused IV");
+        err = test_aes_ccm_iv_reuse_helper(wpLibCtx, "AES-256-CCM", 32);
+    }
+
+    return err;
+}
+
 int test_aes_ccm_bad_tag(void *data)
 {
     int err = 0;

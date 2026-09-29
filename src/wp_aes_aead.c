@@ -1960,6 +1960,7 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
 {
     int ok = 1;
     int rc;
+    int freshIv = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesccm_init");
 
@@ -1980,10 +1981,14 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
         if (ivLen != ctx->ivLen) {
             ok = 0;
         }
-        if (ok) {
+        /* Avoid reusing the IV if it is finished. Only encryption is held
+         * back; decryption may repeat an IV. */
+        if (ok && ((!enc) || (ctx->ivState != IV_STATE_FINISHED) ||
+                (XMEMCMP(ctx->iv, iv, ivLen) != 0))) {
             XMEMCPY(ctx->iv, iv, ivLen);
             ctx->ivState = IV_STATE_BUFFERED;
             ctx->ivSet = 0;
+            freshIv = 1;
         }
     }
     if (ok) {
@@ -1992,7 +1997,7 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
         /* A fresh IV starts a new operation and clears per-operation state.
          * Without one, a context that already produced output is made terminal
          * so its IV/nonce cannot be reused. */
-        if (iv != NULL) {
+        if (freshIv) {
             ctx->authErr = 0;
             ctx->tagAvail = 0;
             wp_aead_reset_op_state(ctx);
