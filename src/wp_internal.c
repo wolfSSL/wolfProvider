@@ -1353,18 +1353,21 @@ int wp_read_der_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio, unsigned char
     while (ok && (readLen > 0)) {
         readLen = BIO_read(bio, buf, sizeof(buf));
         if (readLen < -1) {
-            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_read error (%d) in %s:%d", readLen, __FILE__, __LINE__);
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_read error (%ld) in %s:%d", readLen, __FILE__, __LINE__);
             ok = 0;
         }
         if (ok && (readLen > 0) &&
-                ((uint64_t)*len + (uint64_t)readLen > (uint64_t)UINT32_MAX)) {
+                (!WP_FITS_WORD32((uint64_t)*len + (uint64_t)readLen))) {
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
+                "Length overflow (%u + %ld) in %s:%d", *len, readLen, __FILE__,
+                __LINE__);
             ok = 0;
         }
         if (ok && (readLen > 0)) {
             /* Reallocate for new data. */
             p = OPENSSL_realloc(*data, *len + readLen);
             if (p == NULL) {
-                WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "OPENSSL_realloc error (%d) in %s:%d", readLen, __FILE__, __LINE__);
+                WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "OPENSSL_realloc error (%ld) in %s:%d", readLen, __FILE__, __LINE__);
                 ok = 0;
             }
         }
@@ -1412,8 +1415,15 @@ int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
         /* Read a line at a time. */
         readLen = BIO_gets(bio, buf, sizeof(buf));
         if (readLen < -1) {
-            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_read error (%d) in %s:%d",
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER, "BIO_gets error (%ld) in %s:%d",
                 readLen, __FILE__, __LINE__);
+            ok = 0;
+        }
+        if (ok && (readLen > 0) &&
+                (!WP_FITS_WORD32((uint64_t)*len + (uint64_t)readLen))) {
+            WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
+                "Length overflow (%u + %ld) in %s:%d", *len, readLen, __FILE__,
+                __LINE__);
             ok = 0;
         }
         if (ok && (readLen > 0)) {
@@ -1421,7 +1431,7 @@ int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,
             p = OPENSSL_realloc(*data, *len + readLen);
             if (p == NULL) {
                 WOLFPROV_MSG(WP_LOG_COMP_PROVIDER,
-                    "OPENSSL_realloc error (%d) in %s:%d", readLen, __FILE__,
+                    "OPENSSL_realloc error (%ld) in %s:%d", readLen, __FILE__,
                     __LINE__);
                 ok = 0;
             }
