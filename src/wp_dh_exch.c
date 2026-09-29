@@ -254,6 +254,65 @@ static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
     return ok;
 }
 
+#if (LIBWOLFSSL_VERSION_HEX < 0x05009002) || defined(WOLFSSL_KCAPI_DH)
+/**
+ * Validate the peer's public key against our domain parameters.
+ *
+ * @param [in] key    DH key object holding the domain parameters.
+ * @param [in] pub    Peer's public key data.
+ * @param [in] pubSz  Length of peer's public key data in bytes.
+ * @return 1 on success.
+ * @return 0 on failure.
+ */
+static int wp_dh_check_peer_pub(DhKey* key, const unsigned char* pub,
+    word32 pubSz)
+{
+    int ok = 1;
+    int rc;
+    unsigned char* q = NULL;
+    word32 qSz;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_check_peer_pub");
+
+    if (mp_iszero(&key->q)) {
+        rc = wc_DhCheckPubKey(key, pub, pubSz);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                "wc_DhCheckPubKey", rc);
+            ok = 0;
+        }
+    }
+    else {
+        /* q must be passed explicitly for the y^q test to be performed. */
+        qSz = mp_unsigned_bin_size(&key->q);
+        q = OPENSSL_malloc(qSz);
+        if (q == NULL) {
+            ok = 0;
+        }
+        if (ok) {
+            rc = mp_to_unsigned_bin(&key->q, q);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "mp_to_unsigned_bin", rc);
+                ok = 0;
+            }
+        }
+        if (ok) {
+            rc = wc_DhCheckPubKey_ex(key, pub, pubSz, q, qSz);
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_DhCheckPubKey_ex", rc);
+                ok = 0;
+            }
+        }
+        OPENSSL_free(q);
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+#endif
+
 /**
  * Derive secret from DH keys.
  *
@@ -288,6 +347,12 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
     if (ok && (!wp_dh_get_pub(ctx->peer, &pub, &pubSz))) {
         ok = 0;
     }
+#if (LIBWOLFSSL_VERSION_HEX < 0x05009002) || defined(WOLFSSL_KCAPI_DH)
+    /* Older wolfSSL and KCAPI paths do not validate the subgroup in agree. */
+    if (ok && (!wp_dh_check_peer_pub(wp_dh_get_key(ctx->key), pub, pubSz))) {
+        ok = 0;
+    }
+#endif
     if (ok) {
         int rc;
 
