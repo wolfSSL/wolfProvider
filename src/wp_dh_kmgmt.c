@@ -1061,17 +1061,26 @@ static int wp_dh_validate(const wp_Dh* dh, int selection, int checkType)
     if (((selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) != 0) &&
         (dh->id == 0)) {
         int isPrime = 0;
-        int pm1Init = 0;
+        int mpInit = 0;
         mp_int* p = (mp_int*)&dh->key.p;
         mp_int* g = (mp_int*)&dh->key.g;
+        mp_int* q = (mp_int*)&dh->key.q;
         mp_int pm1;
+        mp_int t;
 
-        /* Explicit domain parameters: p must be prime and g in [2, p-1). */
-        if (mp_init(&pm1) != 0) {
+        /* Explicit domain parameters: p must be large enough and prime, and
+         * g in [2, p-1). */
+        if (mp_count_bits(p) < WP_DH_MIN_BITS) {
+            ERR_raise(ERR_LIB_PROV, PROV_R_KEY_SIZE_TOO_SMALL);
             ok = 0;
         }
-        else {
-            pm1Init = 1;
+        if (ok) {
+            if (mp_init_multi(&pm1, &t, NULL, NULL, NULL, NULL) != 0) {
+                ok = 0;
+            }
+            else {
+                mpInit = 1;
+            }
         }
         if (ok) {
             rc = mp_prime_is_prime(p, 8, &isPrime);
@@ -1085,8 +1094,29 @@ static int wp_dh_validate(const wp_Dh* dh, int selection, int checkType)
         if (ok && ((mp_cmp_d(g, 2) == MP_LT) || (mp_cmp(g, &pm1) != MP_LT))) {
             ok = 0;
         }
-        if (pm1Init) {
+        /* With q present, q must be prime, divide p-1 and be the order of g. */
+        if (ok && (!mp_iszero(q))) {
+            isPrime = 0;
+            rc = mp_prime_is_prime(q, 8, &isPrime);
+            if ((rc != 0) || (!isPrime)) {
+                ok = 0;
+            }
+            if (ok && (mp_mod(&pm1, q, &t) != 0)) {
+                ok = 0;
+            }
+            if (ok && (!mp_iszero(&t))) {
+                ok = 0;
+            }
+            if (ok && (mp_exptmod(g, q, p, &t) != 0)) {
+                ok = 0;
+            }
+            if (ok && (!mp_isone(&t))) {
+                ok = 0;
+            }
+        }
+        if (mpInit) {
             mp_clear(&pm1);
+            mp_clear(&t);
         }
     }
     if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {

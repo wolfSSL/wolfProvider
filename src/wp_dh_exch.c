@@ -280,6 +280,11 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
     if (!WP_FITS_WORD32(*secLen)) {
         ok = 0;
     }
+    /* Imported groups are not size checked on import. */
+    if (ok && (mp_count_bits(&wp_dh_get_key(ctx->key)->p) < WP_DH_MIN_BITS)) {
+        ERR_raise(ERR_LIB_PROV, PROV_R_KEY_SIZE_TOO_SMALL);
+        ok = 0;
+    }
     /* Get our private key data. */
     if (ok && (!wp_dh_get_priv(ctx->key, &priv, &privSz))) {
         ok = 0;

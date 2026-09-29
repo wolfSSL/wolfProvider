@@ -22,6 +22,7 @@
 #include <openssl/params.h>
 #include <openssl/core_names.h>
 #include <openssl/decoder.h>
+#include <openssl/param_build.h>
 #include <wolfprovider/internal.h>
 
 #ifdef WP_HAVE_DH
@@ -117,6 +118,38 @@ static const unsigned char dh_p[] = {
 /* dh2048 g */
 static const unsigned char dh_g[] = {
     0x02
+};
+
+/* A 256-bit safe prime, well below WP_DH_MIN_BITS. With g = 2 the group is
+ * well formed and its only defect is its size, so a rejection can only come
+ * from the minimum size check. */
+static const unsigned char dh_weak_p[] = {
+    0xc0, 0xea, 0x51, 0x7d, 0x3c, 0x12, 0xe6, 0x36,
+    0x23, 0x1e, 0xb7, 0xf0, 0x18, 0x1b, 0xd2, 0x41,
+    0xd9, 0x0d, 0xec, 0xdf, 0x83, 0x4e, 0xde, 0x05,
+    0x46, 0x5a, 0x83, 0xe0, 0xea, 0x66, 0xa4, 0xef
+};
+
+/* pub = 2^priv mod dh_weak_p. */
+static const unsigned char dh_weak_priv[] = {
+    0x97, 0x92, 0x03, 0x78, 0xb5, 0xca, 0xbf, 0x30,
+    0x9b, 0x4e, 0x0c, 0xb5, 0xf3, 0xf6, 0x61, 0xa8,
+    0x57, 0x1e, 0x82, 0x83, 0xb5, 0x27, 0xdc, 0xef,
+    0x51
+};
+
+static const unsigned char dh_weak_pub[] = {
+    0x77, 0x4b, 0x89, 0x5b, 0x07, 0xc8, 0x93, 0xd0,
+    0xc0, 0xa4, 0x1f, 0xa6, 0xaa, 0xb2, 0x5a, 0xbe,
+    0xa9, 0xa4, 0xec, 0x45, 0x7e, 0x36, 0xcf, 0x1c,
+    0x42, 0x14, 0xb1, 0xb6, 0xfc, 0x62, 0x88, 0x61
+};
+
+static const unsigned char dh_weak_peer_pub[] = {
+    0x7d, 0x86, 0xbc, 0xc8, 0x25, 0x95, 0x6c, 0x78,
+    0x87, 0xbe, 0x96, 0xdf, 0x55, 0xf4, 0xfb, 0x09,
+    0x4a, 0x1e, 0x45, 0x62, 0xf8, 0x15, 0x21, 0x70,
+    0x42, 0x58, 0x2b, 0xf1, 0xa1, 0xca, 0x4f, 0x52
 };
 
 /* Fixed param from krb5 DH generation, named "o2048" */
@@ -897,10 +930,11 @@ static const unsigned char dh_pad_pubB[] = {
     0x84, 0x04, 0x50, 0xa3, 0xfe, 0x78, 0xc7, 0x43
 };
 
-/* Build a DH EVP_PKEY from the fixed dh_p/dh_g group with the given public and
- * optional private key material. Used by the padding regression. */
-static int test_dh_key_from_fixed(EVP_PKEY **pkey, const unsigned char *pub,
-    size_t pubLen, const unsigned char *priv, size_t privLen)
+/* Build a DH EVP_PKEY from the given prime (generator 2) with the given public
+ * and optional private key material. */
+static int test_dh_key_from_group(EVP_PKEY **pkey, const unsigned char *prime,
+    size_t primeLen, const unsigned char *pub, size_t pubLen,
+    const unsigned char *priv, size_t privLen)
 {
     int err = 0;
     DH *dh = NULL;
@@ -912,7 +946,7 @@ static int test_dh_key_from_fixed(EVP_PKEY **pkey, const unsigned char *pub,
     dh = DH_new();
     err = dh == NULL;
     if (err == 0) {
-        p = BN_bin2bn(dh_p, sizeof(dh_p), NULL);
+        p = BN_bin2bn(prime, (int)primeLen, NULL);
         g = BN_bin2bn(dh_g, sizeof(dh_g), NULL);
         err = (p == NULL) || (g == NULL);
     }
@@ -954,6 +988,15 @@ static int test_dh_key_from_fixed(EVP_PKEY **pkey, const unsigned char *pub,
     BN_free(g);
     DH_free(dh);
     return err;
+}
+
+/* Build a DH EVP_PKEY from the fixed dh_p/dh_g group. Used by the padding
+ * regression. */
+static int test_dh_key_from_fixed(EVP_PKEY **pkey, const unsigned char *pub,
+    size_t pubLen, const unsigned char *priv, size_t privLen)
+{
+    return test_dh_key_from_group(pkey, dh_p, sizeof(dh_p), pub, pubLen, priv,
+        privLen);
 }
 
 /* Derive a shared secret between keyA (priv) and keyB (peer) using libCtx,
@@ -1732,6 +1775,225 @@ int test_dh_pgen_min_bits(void *data)
     EVP_PKEY_free(weakParams);
     EVP_PKEY_free(keyParams);
     EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/* Imported explicit parameters below the minimum prime size must be rejected
+ * by both the validation call and the derive operation. A group at the
+ * supported size must keep working on the same path. */
+int test_dh_weak_group_rejected(void *data)
+{
+    int err = 0;
+    EVP_PKEY *weakKey = NULL;
+    EVP_PKEY *weakPeer = NULL;
+    EVP_PKEY *goodKey = NULL;
+    EVP_PKEY *goodPeer = NULL;
+    EVP_PKEY_CTX *checkCtx = NULL;
+    unsigned char *secret = NULL;
+    size_t secretLen = 0;
+
+    (void)data;
+
+    PRINT_MSG("Testing DH rejection of an undersized explicit group");
+
+    err = test_dh_key_from_group(&weakKey, dh_weak_p, sizeof(dh_weak_p),
+        dh_weak_pub, sizeof(dh_weak_pub), dh_weak_priv, sizeof(dh_weak_priv));
+    if (err == 0) {
+        checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, weakKey, NULL);
+        err = checkCtx == NULL;
+    }
+    if ((err == 0) && (EVP_PKEY_param_check(checkCtx) == 1)) {
+        PRINT_ERR_MSG("param_check accepted a %d-bit DH modulus",
+            (int)sizeof(dh_weak_p) * 8);
+        err = 1;
+    }
+    EVP_PKEY_CTX_free(checkCtx);
+    checkCtx = NULL;
+
+    /* Derivation must fail even when the caller never validated. */
+    if (err == 0) {
+        err = test_dh_key_from_group(&weakPeer, dh_weak_p, sizeof(dh_weak_p),
+            dh_weak_peer_pub, sizeof(dh_weak_peer_pub), NULL, 0);
+    }
+    if ((err == 0) && (test_dh_derive_with_pad(wpLibCtx, weakKey, weakPeer, 0,
+            &secret, &secretLen) == 0)) {
+        PRINT_ERR_MSG("derive succeeded with a %d-bit DH modulus",
+            (int)sizeof(dh_weak_p) * 8);
+        err = 1;
+    }
+    OPENSSL_free(secret);
+    secret = NULL;
+
+    /* The 2048-bit explicit group must still validate and derive. */
+    if (err == 0) {
+        err = test_dh_key_from_fixed(&goodKey, dh_pad_pubA,
+            sizeof(dh_pad_pubA), dh_pad_privA, sizeof(dh_pad_privA));
+    }
+    if (err == 0) {
+        checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, goodKey, NULL);
+        err = checkCtx == NULL;
+    }
+    if ((err == 0) && (EVP_PKEY_param_check(checkCtx) != 1)) {
+        PRINT_ERR_MSG("param_check rejected a supported DH group");
+        err = 1;
+    }
+    if (err == 0) {
+        err = test_dh_key_from_fixed(&goodPeer, dh_pad_pubB,
+            sizeof(dh_pad_pubB), NULL, 0);
+    }
+    if (err == 0) {
+        err = test_dh_derive_with_pad(wpLibCtx, goodKey, goodPeer, 0, &secret,
+            &secretLen);
+        if (err != 0) {
+            PRINT_ERR_MSG("derive failed with a supported DH group");
+        }
+    }
+
+    OPENSSL_free(secret);
+    EVP_PKEY_CTX_free(checkCtx);
+    EVP_PKEY_free(goodPeer);
+    EVP_PKEY_free(goodKey);
+    EVP_PKEY_free(weakPeer);
+    EVP_PKEY_free(weakKey);
+    return err;
+}
+
+/* Import explicit p/q/g domain parameters and return the param_check result.
+ * Uses fromdata so that q reaches the provider, which DH_set0_pqg does not
+ * guarantee. */
+static int test_dh_param_check_pqg(const BIGNUM *p, const BIGNUM *q,
+    const BIGNUM *g, int *result)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY_CTX *checkCtx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params = NULL;
+
+    err = (bld = OSSL_PARAM_BLD_new()) == NULL;
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_Q, q) != 1;
+    }
+    if (err == 0) {
+        err = OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, g) != 1;
+    }
+    if (err == 0) {
+        err = (params = OSSL_PARAM_BLD_to_param(bld)) == NULL;
+    }
+    if (err == 0) {
+        err = (ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL)) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS, params)
+              != 1;
+    }
+    if (err == 0) {
+        err = (checkCtx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, pkey, NULL))
+              == NULL;
+    }
+    if (err == 0) {
+        *result = EVP_PKEY_param_check(checkCtx);
+    }
+
+    EVP_PKEY_CTX_free(checkCtx);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    return err;
+}
+
+/* Domain parameters carrying q must be checked for consistency: q prime, q
+ * dividing p-1 and g of order q. dh_p is a safe prime, so the matching q is
+ * (p-1)/2 and g = 2 has order q while g = 5 does not. */
+int test_dh_param_check_q(void *data)
+{
+    int err = 0;
+    int i;
+    int cnt;
+    int result;
+    BIGNUM *p = NULL;
+    BIGNUM *q = NULL;
+    BIGNUM *g = NULL;
+    BIGNUM *gBadOrder = NULL;
+    BIGNUM *qComposite = NULL;
+    BIGNUM *qNoDivide = NULL;
+    struct {
+        const char *name;
+        const BIGNUM *q;
+        const BIGNUM *g;
+        int expect;
+    } tc[4];
+
+    (void)data;
+
+    PRINT_MSG("Testing DH explicit q consistency checks");
+
+    p = BN_bin2bn(dh_p, sizeof(dh_p), NULL);
+    q = BN_new();
+    g = BN_new();
+    gBadOrder = BN_new();
+    qComposite = BN_new();
+    qNoDivide = BN_new();
+    err = (p == NULL) || (q == NULL) || (g == NULL) || (gBadOrder == NULL) ||
+          (qComposite == NULL) || (qNoDivide == NULL);
+    if (err == 0) {
+        /* p is a safe prime, so (p-1)/2 is the order of the subgroup. */
+        err = BN_rshift1(q, p) != 1;
+    }
+    if (err == 0) {
+        err = (BN_set_word(g, 2) != 1) || (BN_set_word(gBadOrder, 5) != 1) ||
+              (BN_set_word(qComposite, 9) != 1) ||
+              (BN_set_word(qNoDivide, 3) != 1);
+    }
+    /* A q that is not a factor of p-1 is rejected by the divisibility check,
+     * which runs first; the order check would also catch it. */
+    if (err == 0) {
+        tc[0].name = "matching q";
+        tc[0].q = q;
+        tc[0].g = g;
+        tc[0].expect = 1;
+        tc[1].name = "composite q";
+        tc[1].q = qComposite;
+        tc[1].g = g;
+        tc[1].expect = 0;
+        tc[2].name = "q not dividing p-1";
+        tc[2].q = qNoDivide;
+        tc[2].g = g;
+        tc[2].expect = 0;
+        tc[3].name = "g not of order q";
+        tc[3].q = q;
+        tc[3].g = gBadOrder;
+        tc[3].expect = 0;
+    }
+
+    cnt = (int)(sizeof(tc) / sizeof(tc[0]));
+    for (i = 0; (err == 0) && (i < cnt); i++) {
+        result = 0;
+        err = test_dh_param_check_pqg(p, tc[i].q, tc[i].g, &result);
+        if ((err == 0) && (tc[i].expect != 0) && (result != 1)) {
+            PRINT_ERR_MSG("param_check rejected %s", tc[i].name);
+            err = 1;
+        }
+        if ((err == 0) && (tc[i].expect == 0) && (result == 1)) {
+            PRINT_ERR_MSG("param_check accepted %s", tc[i].name);
+            err = 1;
+        }
+    }
+
+    BN_free(qNoDivide);
+    BN_free(qComposite);
+    BN_free(gBadOrder);
+    BN_free(g);
+    BN_free(q);
+    BN_free(p);
     return err;
 }
 
