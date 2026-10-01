@@ -2287,7 +2287,9 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
 {
     int ok = 1;
     int rc;
+    int baseSz = 0;
     word32 idx = 0;
+    word32 pubLen = 0;
     unsigned char* base = NULL;
 
     WOLFPROV_ENTER_SILENT(WP_LOG_COMP_DH, WOLFPROV_FUNC_NAME);
@@ -2311,7 +2313,13 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
     }
     /* Calculate the public key. base ^ priv using key agree. */
     if (ok) {
-        base = OPENSSL_malloc(mp_unsigned_bin_size(&dh->key.g));
+        baseSz = mp_unsigned_bin_size(&dh->key.g);
+        if (baseSz <= 0) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        base = OPENSSL_malloc(baseSz);
         if (base == NULL) {
             ok = 0;
         }
@@ -2323,7 +2331,8 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
         }
     }
     if (ok) {
-        dh->pub = OPENSSL_malloc(mp_unsigned_bin_size(&dh->key.p));
+        pubLen = (word32)mp_unsigned_bin_size(&dh->key.p);
+        dh->pub = OPENSSL_malloc(pubLen);
         if (dh->pub == NULL) {
             ok = 0;
         }
@@ -2335,14 +2344,14 @@ static int wp_dh_decode_pki(wp_Dh* dh, unsigned char* data, word32 len)
     }
 #endif
     if (ok) {
-        rc = wc_DhAgree(&dh->key, dh->pub, &idx, dh->priv, (word32)dh->privSz,
-            base, 1);
+        rc = wc_DhAgree(&dh->key, dh->pub, &pubLen, dh->priv,
+            (word32)dh->privSz, base, (word32)baseSz);
         if (rc != 0) {
             ok = 0;
         }
     }
     if (ok) {
-        dh->pubSz = idx;
+        dh->pubSz = pubLen;
         dh->bits = mp_count_bits(&dh->key.p);
     }
 
