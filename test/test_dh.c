@@ -1997,4 +1997,262 @@ int test_dh_param_check_q(void *data)
     return err;
 }
 
+/* The generation interface must not report success for controls wolfSSL
+ * cannot apply: it picks the generator during parameter generation and
+ * derives the private key length from the group. */
+#define TEST_DH_GEN_PRIV_LEN 256
+
+/* Parameter generation refuses a generator wolfSSL cannot produce. It takes
+ * 2 because that is what applications send when the caller named none. */
+static int test_dh_pgen_generator(int gen, int expectOk)
+{
+    int err = 0;
+    int rc;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *keyParams = NULL;
+    BIGNUM *prime = NULL;
+    BIGNUM *generator = NULL;
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctx, TEST_DH_MIN_BITS)
+              != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_dh_paramgen_generator(ctx, gen) != 1;
+        if (err != 0) {
+            PRINT_MSG("set_dh_paramgen_generator refused a usable generator");
+        }
+    }
+    if (err == 0) {
+        rc = EVP_PKEY_paramgen(ctx, &keyParams);
+        if (expectOk && (rc != 1)) {
+            PRINT_MSG("paramgen refused the generator applications default to");
+            err = 1;
+        }
+        if ((!expectOk) && (rc == 1)) {
+            PRINT_MSG("paramgen accepted a generator it cannot produce");
+            err = 1;
+        }
+    }
+    /* wolfSSL derives the generator from the prime it made, so the value
+     * produced is not the requested one and is not compared with it. */
+    if ((err == 0) && expectOk) {
+        err = EVP_PKEY_get_bn_param(keyParams, OSSL_PKEY_PARAM_FFC_P, &prime)
+              != 1;
+    }
+    if ((err == 0) && expectOk) {
+        err = EVP_PKEY_get_bn_param(keyParams, OSSL_PKEY_PARAM_FFC_G,
+                                    &generator) != 1;
+    }
+    if ((err == 0) && expectOk) {
+        if (BN_num_bits(prime) < TEST_DH_MIN_BITS) {
+            PRINT_MSG("paramgen produced a prime below the minimum size");
+            err = 1;
+        }
+        /* A generator must be at least 2 and less than the prime. */
+        if ((err == 0) && ((BN_num_bits(generator) < 2) ||
+                (BN_cmp(generator, prime) >= 0))) {
+            PRINT_MSG("paramgen produced a generator outside 2 to p - 1");
+            err = 1;
+        }
+    }
+
+    BN_free(generator);
+    BN_free(prime);
+    EVP_PKEY_free(keyParams);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/* Build a DH parameters key for the group the generator tests use. */
+static int test_dh_params_from_group(EVP_PKEY **keyParams)
+{
+    int err;
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+        (char*)"ffdhe2048", 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+    err = ctx == NULL;
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, keyParams, EVP_PKEY_KEY_PARAMETERS,
+                                params) != 1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+/* Key generation takes a generator only when the domain parameters already
+ * have it, whether they come from a group name or a parameters key. */
+static int test_dh_keygen_generator(int gen, int expectOk, int useTemplate)
+{
+    int err = 0;
+    int rc;
+    int idx = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *keyParams = NULL;
+    EVP_PKEY *key = NULL;
+    BIGNUM *g = NULL;
+    OSSL_PARAM params[3];
+
+    if (useTemplate) {
+        err = test_dh_params_from_group(&keyParams);
+    }
+    else {
+        params[idx++] = OSSL_PARAM_construct_utf8_string(
+            OSSL_PKEY_PARAM_GROUP_NAME, (char*)"ffdhe2048", 0);
+    }
+    params[idx++] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_DH_GENERATOR,
+        &gen);
+    params[idx] = OSSL_PARAM_construct_end();
+
+    if (err == 0) {
+        if (useTemplate) {
+            ctx = EVP_PKEY_CTX_new_from_pkey(wpLibCtx, keyParams, NULL);
+        }
+        else {
+            ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        }
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_CTX_set_params(ctx, params) != 1;
+    }
+    if (err == 0) {
+        rc = EVP_PKEY_generate(ctx, &key);
+        if (expectOk && (rc != 1)) {
+            PRINT_MSG("keygen refused the generator the parameters have");
+            err = 1;
+        }
+        if ((!expectOk) && (rc == 1)) {
+            PRINT_MSG("keygen accepted a generator the parameters lack");
+            err = 1;
+        }
+    }
+    if ((err == 0) && expectOk) {
+        err = EVP_PKEY_get_bn_param(key, OSSL_PKEY_PARAM_FFC_G, &g) != 1;
+        if ((err == 0) && (!BN_is_word(g, (BN_ULONG)gen))) {
+            PRINT_MSG("keygen produced a generator other than the requested");
+            err = 1;
+        }
+    }
+
+    BN_free(g);
+    EVP_PKEY_free(key);
+    EVP_PKEY_free(keyParams);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
+
+int test_dh_pgen_controls(void *data)
+{
+    int err = 0;
+    int privLen = TEST_DH_GEN_PRIV_LEN;
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    PRINT_MSG("Testing DH generator and private length generation controls");
+
+    PRINT_MSG("Parameter generation refuses a generator it cannot produce");
+    err = test_dh_pgen_generator(5, 0);
+    if (err == 0) {
+        PRINT_MSG("Parameter generation takes the generator 2 applications "
+                  "send by default");
+        err = test_dh_pgen_generator(2, 1);
+    }
+
+    PRINT_MSG("A generator below 2 is refused when set");
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_paramgen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        if (EVP_PKEY_CTX_set_dh_paramgen_generator(ctx, 1) == 1) {
+            PRINT_MSG("set_dh_paramgen_generator accepted a generator of 1");
+            err = 1;
+        }
+    }
+    EVP_PKEY_CTX_free(ctx);
+    ctx = NULL;
+
+    if (err == 0) {
+        PRINT_MSG("Key generation takes the generator the named group has");
+        err = test_dh_keygen_generator(2, 1, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("Key generation refuses a generator the named group lacks");
+        err = test_dh_keygen_generator(5, 0, 0);
+    }
+    if (err == 0) {
+        PRINT_MSG("Key generation takes the generator a parameters key has");
+        err = test_dh_keygen_generator(2, 1, 1);
+    }
+    if (err == 0) {
+        PRINT_MSG("Key generation refuses a generator a parameters key lacks");
+        err = test_dh_keygen_generator(5, 0, 1);
+    }
+
+    PRINT_MSG("A private key length is refused when set");
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_DH_PRIV_LEN,
+            &privLen);
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_CTX_set_params(ctx, params) == 1) {
+            PRINT_MSG("set_params accepted a private key length");
+            err = 1;
+        }
+    }
+    EVP_PKEY_CTX_free(ctx);
+    ctx = NULL;
+
+    PRINT_MSG("A private key length of 0 is taken");
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "DH", NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_keygen_init(ctx) != 1;
+    }
+    if (err == 0) {
+        privLen = 0;
+        params[0] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_DH_PRIV_LEN,
+            &privLen);
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_CTX_set_params(ctx, params) != 1) {
+            PRINT_MSG("set_params refused a private key length of 0");
+            err = 1;
+        }
+    }
+    EVP_PKEY_CTX_free(ctx);
+
+    return err;
+}
+
 #endif /* WP_HAVE_DH */
