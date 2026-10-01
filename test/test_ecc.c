@@ -1102,6 +1102,167 @@ int test_ecdh_invalid_kdf_strings(void *data)
     return err;
 }
 
+#ifdef USE_ECC_B_PARAM
+/* Build a P-256 public key from raw X and Y ordinates. */
+static EVP_PKEY* test_ecdh_peer_from_xy(const BIGNUM* x, const BIGNUM* y)
+{
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *key = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params = NULL;
+
+    bld = OSSL_PARAM_BLD_new();
+    if (bld != NULL) {
+        if ((OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
+                 "prime256v1", 0) == 1) &&
+            (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_EC_PUB_X, x) == 1) &&
+            (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_EC_PUB_Y, y) == 1)) {
+            params = OSSL_PARAM_BLD_to_param(bld);
+        }
+        OSSL_PARAM_BLD_free(bld);
+    }
+    if (params != NULL) {
+        ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "EC", NULL);
+    }
+    if (ctx != NULL) {
+        if ((EVP_PKEY_fromdata_init(ctx) != 1) ||
+            (EVP_PKEY_fromdata(ctx, &key, EVP_PKEY_PUBLIC_KEY, params) != 1)) {
+            EVP_PKEY_free(key);
+            key = NULL;
+        }
+        EVP_PKEY_CTX_free(ctx);
+    }
+    OSSL_PARAM_free(params);
+
+    return key;
+}
+
+/* Set raw X and Y ordinates on an existing key. */
+static int test_ecdh_set_xy(EVP_PKEY* key, const BIGNUM* x, const BIGNUM* y)
+{
+    int rc = 0;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params = NULL;
+
+    bld = OSSL_PARAM_BLD_new();
+    if (bld != NULL) {
+        if ((OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_EC_PUB_X, x) == 1) &&
+            (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_EC_PUB_Y, y) == 1)) {
+            params = OSSL_PARAM_BLD_to_param(bld);
+        }
+        OSSL_PARAM_BLD_free(bld);
+    }
+    if (params != NULL) {
+        rc = EVP_PKEY_set_params(key, params);
+    }
+    OSSL_PARAM_free(params);
+
+    return rc;
+}
+
+/* A public key that is not on the named curve must be rejected wherever it can
+ * be supplied - a key exchange against one leaks our private key. Rejecting it
+ * must also leave a key that already held a good point alone. */
+int test_ecdh_invalid_curve_peer(void *data)
+{
+    int err;
+    EVP_PKEY *key = NULL;
+    EVP_PKEY *peer = NULL;
+    EVP_PKEY *onCurve = NULL;
+    EVP_PKEY *offCurve = NULL;
+    BIGNUM *x = NULL;
+    BIGNUM *y = NULL;
+    BIGNUM *badY = NULL;
+    unsigned char *secret = NULL;
+    const unsigned char *p;
+
+    (void)data;
+
+    PRINT_MSG("Reject ECDH peer key that is not on the curve");
+
+    p = ecc_key_der_256;
+    key = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p, sizeof(ecc_key_der_256),
+        wpLibCtx, NULL);
+    err = key == NULL;
+    if (err == 0) {
+        p = ecc_peerkey_der_256;
+        peer = d2i_PrivateKey_ex(EVP_PKEY_EC, NULL, &p,
+            sizeof(ecc_peerkey_der_256), wpLibCtx, NULL);
+        err = peer == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(peer, OSSL_PKEY_PARAM_EC_PUB_X, &x) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_get_bn_param(peer, OSSL_PKEY_PARAM_EC_PUB_Y, &y) != 1;
+    }
+    if (err == 0) {
+        /* (X, Y + 1) satisfies X != 0 but is not on P-256. */
+        err = (badY = BN_dup(y)) == NULL;
+    }
+    if (err == 0) {
+        err = BN_add_word(badY, 1) != 1;
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Import of an off-curve point must fail");
+        offCurve = test_ecdh_peer_from_xy(x, badY);
+        err = offCurve != NULL;
+        if (err != 0) {
+            PRINT_ERR_MSG("Imported public key not on the curve");
+        }
+    }
+    if (err == 0) {
+        PRINT_MSG("Setting an off-curve point on a live key must fail");
+        err = test_ecdh_set_xy(peer, x, badY) == 1;
+        if (err != 0) {
+            PRINT_ERR_MSG("Set public key not on the curve");
+        }
+    }
+    if (err == 0) {
+        PRINT_MSG("Rejected point must leave the peer key as it was");
+        err = test_ecdh_derive(key, peer, &secret, sizeof(ecc_derived_256));
+        if (err != 0) {
+            PRINT_ERR_MSG("Rejected point destroyed the peer's public key");
+        }
+    }
+    if (err == 0) {
+        err = memcmp(secret, ecc_derived_256, sizeof(ecc_derived_256)) != 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("Secret does not match, expected!");
+        }
+        OPENSSL_free(secret);
+        secret = NULL;
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Ordinates of a real point are still accepted");
+        onCurve = test_ecdh_peer_from_xy(x, y);
+        err = onCurve == NULL;
+    }
+    if (err == 0) {
+        err = test_ecdh_derive(key, onCurve, &secret, sizeof(ecc_derived_256));
+    }
+    if (err == 0) {
+        err = memcmp(secret, ecc_derived_256, sizeof(ecc_derived_256)) != 0;
+        if (err != 0) {
+            PRINT_ERR_MSG("Secret does not match, expected!");
+        }
+    }
+
+    OPENSSL_free(secret);
+    BN_free(badY);
+    BN_free(y);
+    BN_free(x);
+    EVP_PKEY_free(offCurve);
+    EVP_PKEY_free(onCurve);
+    EVP_PKEY_free(peer);
+    EVP_PKEY_free(key);
+
+    return err;
+}
+#endif /* USE_ECC_B_PARAM */
+
 #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
 /* Apply X9.63 KDF using OpenSSL's reference implementation so we can compare
  * against wolfProvider's output. */
