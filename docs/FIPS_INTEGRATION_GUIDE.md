@@ -206,6 +206,7 @@ cd wolfssl-5.8.4-commercial-fips-ready
 
 ./configure --enable-fips=ready \
     --enable-opensslcoexist \
+    --enable-dh \
     --prefix=/usr/local/wolfssl-fips \
     CPPFLAGS="-I/usr/local/openssl/include -DWOLFSSL_OLD_OID_SUM -DWOLFSSL_DH_EXTRA"
 make -j$(nproc)
@@ -216,6 +217,7 @@ Replace `--enable-fips=ready` with your bundle's tag (see FIPS Check Options abo
 
 **Required flags:**
 - `--enable-opensslcoexist` - Prevents symbol conflicts with OpenSSL (mandatory)
+- `--enable-dh` - Enables DH, which is off by default in FIPS v7+ bundles (mandatory)
 - `-DWOLFSSL_OLD_OID_SUM` - Required for certificate compatibility (mandatory)
 - `-DWOLFSSL_DH_EXTRA` - Required for DH key operations (mandatory)
 - `-I/usr/local/openssl/include` - Path to your OpenSSL headers (adjust as needed)
