@@ -1584,3 +1584,66 @@ int test_ecx_x_security_bits(void *data)
 
 #endif /* defined(WP_HAVE_X25519) || defined(WP_HAVE_X448) */
 
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
+    defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
+/*
+ * Encoding a key that another provider manages goes through the encoder's
+ * import-object: OpenSSL hands it the encoder context and uses the key object
+ * it returns. Cover every key type wp_ecx_new_by_type() handles.
+ */
+int test_ecx_encoder_import_object(void *data)
+{
+    static const char* names[] = {
+#ifdef WP_HAVE_X25519
+        "X25519",
+#endif
+#ifdef WP_HAVE_ED25519
+        "ED25519",
+#endif
+#ifdef WP_HAVE_X448
+        "X448",
+#endif
+#ifdef WP_HAVE_ED448
+        "ED448",
+#endif
+    };
+    int err = 0;
+    EVP_PKEY* pkey;
+    size_t i;
+#ifdef WP_HAVE_ED25519
+    unsigned char badPub[ED25519_PUB_KEY_SIZE];
+#endif
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < ARRAY_SIZE(names)); i++) {
+        pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, names[i]);
+        err = (pkey == NULL);
+        if (err == 0) {
+            err = test_encoder_import_object(names[i],
+                "output=der,structure=PrivateKeyInfo", pkey,
+                EVP_PKEY_KEYPAIR);
+        }
+        EVP_PKEY_free(pkey);
+    }
+
+#ifdef WP_HAVE_ED25519
+    /* An ED25519 public key whose y is not below the field prime. */
+    pkey = NULL;
+    XMEMSET(badPub, 0xff, sizeof(badPub));
+    if (err == 0) {
+        pkey = EVP_PKEY_new_raw_public_key_ex(osslLibCtx, "ED25519", NULL,
+            badPub, sizeof(badPub));
+        err = (pkey == NULL);
+    }
+    if (err == 0) {
+        err = test_encoder_import_object_rejected("ED25519",
+            "output=der,structure=SubjectPublicKeyInfo", pkey,
+            EVP_PKEY_PUBLIC_KEY);
+    }
+    EVP_PKEY_free(pkey);
+#endif
+
+    return err;
+}
+#endif

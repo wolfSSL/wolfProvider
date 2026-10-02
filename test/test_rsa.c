@@ -3704,4 +3704,115 @@ int test_rsa_sha512_256_dupctx(void *data)
 }
 #endif /* WP_HAVE_SHA512_256 */
 
+/*
+ * Encoding a key that another provider manages goes through the encoder's
+ * import-object: OpenSSL hands it the encoder context and uses the key object
+ * it returns.
+ */
+int test_rsa_encoder_import_object(void *data)
+{
+    static const char* names[] = {
+        "RSA",
+#ifdef WP_RSA_PSS_ENCODING
+        "RSA-PSS",
+#endif
+    };
+    int err = 0;
+    EVP_PKEY_CTX* ctx;
+    EVP_PKEY* pkey;
+    size_t bits = 2048;
+    OSSL_PARAM params[2];
+    OSSL_PARAM_BLD* bld = NULL;
+    OSSL_PARAM* pubParams = NULL;
+    BIGNUM* n = NULL;
+    BIGNUM* e = NULL;
+    size_t i;
+
+    (void)data;
+
+    params[0] = OSSL_PARAM_construct_size_t(OSSL_PKEY_PARAM_RSA_BITS, &bits);
+    params[1] = OSSL_PARAM_construct_end();
+
+    /* Both key types the encoder context can carry reach wp_rsa_base_new.
+     * EVP_PKEY_Q_keygen() rejects RSA-PSS before OpenSSL 3.5. */
+    for (i = 0; (err == 0) && (i < ARRAY_SIZE(names)); i++) {
+        ctx = NULL;
+        pkey = NULL;
+
+        err = (ctx = EVP_PKEY_CTX_new_from_name(osslLibCtx, names[i], NULL))
+            == NULL;
+        if (err == 0) {
+            err = EVP_PKEY_keygen_init(ctx) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_CTX_set_params(ctx, params) != 1;
+        }
+        if (err == 0) {
+            err = EVP_PKEY_generate(ctx, &pkey) != 1;
+        }
+        if (err) {
+            PRINT_ERR_MSG("Failed to generate %s key", names[i]);
+        }
+        if (err == 0) {
+            err = test_encoder_import_object(names[i],
+                "output=pem,structure=SubjectPublicKeyInfo", pkey,
+                EVP_PKEY_PUBLIC_KEY);
+        }
+        if (err == 0) {
+            err = test_encoder_import_object(names[i],
+                "output=der,structure=PrivateKeyInfo", pkey,
+                EVP_PKEY_KEYPAIR);
+        }
+
+        EVP_PKEY_free(pkey);
+        EVP_PKEY_CTX_free(ctx);
+    }
+
+    /* wolfProvider imports a modulus of at most 8192 bits. */
+    ctx = NULL;
+    pkey = NULL;
+    if (err == 0) {
+        n = BN_new();
+        e = BN_new();
+        bld = OSSL_PARAM_BLD_new();
+        err = (n == NULL) || (e == NULL) || (bld == NULL);
+    }
+    if (err == 0) {
+        err = (BN_set_bit(n, 16383) != 1) || (BN_set_bit(n, 0) != 1) ||
+              (BN_set_word(e, 65537) != 1);
+    }
+    if (err == 0) {
+        err = (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_N, n) != 1) ||
+              (OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_E, e) != 1);
+    }
+    if (err == 0) {
+        err = (pubParams = OSSL_PARAM_BLD_to_param(bld)) == NULL;
+    }
+    if (err == 0) {
+        err = (ctx = EVP_PKEY_CTX_new_from_name(osslLibCtx, "RSA", NULL))
+            == NULL;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata_init(ctx) != 1;
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_PUBLIC_KEY, pubParams)
+            != 1;
+    }
+    if (err == 0) {
+        err = test_encoder_import_object_rejected("RSA",
+            "output=pem,structure=SubjectPublicKeyInfo", pkey,
+            EVP_PKEY_PUBLIC_KEY);
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    OSSL_PARAM_free(pubParams);
+    OSSL_PARAM_BLD_free(bld);
+    BN_free(e);
+    BN_free(n);
+
+    return err;
+}
+
 #endif /* WP_HAVE_RSA */

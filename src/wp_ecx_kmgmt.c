@@ -2218,6 +2218,59 @@ static int wp_ecx_decode_enc_pki(wp_EcxEncDecCtx* ctx, wp_Ecx* ecx,
 #endif
 
 /**
+ * Create an ECX key object of the type the context was created for.
+ *
+ * @param [in]  provCtx   Provider context.
+ * @param [in]  keyType   Type of ECX key to create.
+ * @param [out] dataType  Data type name of the key. May be NULL.
+ * @return  New ECX key object on success.
+ * @return  NULL on failure.
+ */
+static wp_Ecx* wp_ecx_new_by_type(WOLFPROV_CTX* provCtx, int keyType,
+    const char** dataType)
+{
+    wp_Ecx* ecx;
+    const char* name = NULL;
+
+#ifdef WP_HAVE_X25519
+    if (keyType == WP_KEY_TYPE_X25519) {
+        ecx = wp_x25519_new(provCtx);
+        name = "X25519";
+    }
+    else
+#endif /* WP_HAVE_X25519 */
+#ifdef WP_HAVE_ED25519
+    if (keyType == WP_KEY_TYPE_ED25519) {
+        ecx = wp_ed25519_new(provCtx);
+        name = "ED25519";
+    }
+    else
+#endif /* WP_HAVE_ED25519 */
+#ifdef WP_HAVE_X448
+    if (keyType == WP_KEY_TYPE_X448) {
+        ecx = wp_x448_new(provCtx);
+        name = "X448";
+    }
+    else
+#endif /* WP_HAVE_X448 */
+#ifdef WP_HAVE_ED448
+    if (keyType == WP_KEY_TYPE_ED448) {
+        ecx = wp_ed448_new(provCtx);
+        name = "ED448";
+    }
+    else
+#endif /* WP_HAVE_ED448 */
+    {
+        ecx = NULL;
+    }
+
+    if (dataType != NULL) {
+        *dataType = name;
+    }
+    return ecx;
+}
+
+/**
  * Decode the data in the core BIO.
  *
  * The format of the key must be the same as the decoder's format.
@@ -2256,37 +2309,7 @@ static int wp_ecx_decode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO* cBio,
 
     if (ok) {
         ctx->selection = selection;
-#ifdef WP_HAVE_X25519
-        if (ctx->keyType == WP_KEY_TYPE_X25519) {
-            ecx = wp_x25519_new(ctx->provCtx);
-            dataType = "X25519";
-        }
-        else
-#endif /* WP_HAVE_X25519 */
-#ifdef WP_HAVE_ED25519
-        if (ctx->keyType == WP_KEY_TYPE_ED25519) {
-            ecx = wp_ed25519_new(ctx->provCtx);
-            dataType = "ED25519";
-        }
-        else
-#endif /* WP_HAVE_ED25519 */
-#ifdef WP_HAVE_X448
-        if (ctx->keyType == WP_KEY_TYPE_X448) {
-            ecx = wp_x448_new(ctx->provCtx);
-            dataType = "X448";
-        }
-        else
-#endif /* WP_HAVE_X448 */
-#ifdef WP_HAVE_ED448
-        if (ctx->keyType == WP_KEY_TYPE_ED448) {
-            ecx = wp_ed448_new(ctx->provCtx);
-            dataType = "ED448";
-        }
-        else
-#endif /* WP_HAVE_ED448 */
-        {
-            ecx = NULL;
-        }
+        ecx = wp_ecx_new_by_type(ctx->provCtx, ctx->keyType, &dataType);
         if (ecx == NULL) {
             ok = 0;
         }
@@ -2496,6 +2519,27 @@ static int wp_ecx_export_object(wp_EcxEncDecCtx* ctx, wp_Ecx* ecx, size_t size,
     return wp_ecx_export(ecx, ctx->selection, exportCb, exportCbArg);
 }
 
+/**
+ * Create an ECX key object and import the key data into it.
+ *
+ * @param [in] ctx        ECX encoder/decoder context object.
+ * @param [in] selection  Parts of key to import.
+ * @param [in] params     Array of parameters with key data.
+ * @return  New ECX key object on success.
+ * @return  NULL on failure.
+ */
+static wp_Ecx* wp_ecx_import_object(wp_EcxEncDecCtx* ctx, int selection,
+    const OSSL_PARAM params[])
+{
+    wp_Ecx* ecx = wp_ecx_new_by_type(ctx->provCtx, ctx->keyType, NULL);
+
+    if ((ecx != NULL) && (!wp_ecx_import(ecx, selection, params))) {
+        wp_ecx_free(ecx);
+        ecx = NULL;
+    }
+    return ecx;
+}
+
 /*
  * ECX SubkectPublicKeyInfo
  */
@@ -2680,7 +2724,7 @@ const OSSL_DISPATCH wp_x25519_spki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -2709,7 +2753,7 @@ const OSSL_DISPATCH wp_x25519_spki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -2832,7 +2876,7 @@ const OSSL_DISPATCH wp_x25519_pki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -2861,7 +2905,7 @@ const OSSL_DISPATCH wp_x25519_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -2894,7 +2938,7 @@ const OSSL_DISPATCH wp_x25519_epki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -2923,7 +2967,7 @@ const OSSL_DISPATCH wp_x25519_epki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3013,7 +3057,7 @@ const OSSL_DISPATCH wp_ed25519_spki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3042,7 +3086,7 @@ const OSSL_DISPATCH wp_ed25519_spki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3102,7 +3146,7 @@ const OSSL_DISPATCH wp_ed25519_pki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3131,7 +3175,7 @@ const OSSL_DISPATCH wp_ed25519_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3164,7 +3208,7 @@ const OSSL_DISPATCH wp_ed25519_epki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3193,7 +3237,7 @@ const OSSL_DISPATCH wp_ed25519_epki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3319,7 +3363,7 @@ const OSSL_DISPATCH wp_x448_spki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3348,7 +3392,7 @@ const OSSL_DISPATCH wp_x448_spki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3471,7 +3515,7 @@ const OSSL_DISPATCH wp_x448_pki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3500,7 +3544,7 @@ const OSSL_DISPATCH wp_x448_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3533,7 +3577,7 @@ const OSSL_DISPATCH wp_x448_epki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3562,7 +3606,7 @@ const OSSL_DISPATCH wp_x448_epki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3651,7 +3695,7 @@ const OSSL_DISPATCH wp_ed448_spki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3680,7 +3724,7 @@ const OSSL_DISPATCH wp_ed448_spki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_spki_does_selection     },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3740,7 +3784,7 @@ const OSSL_DISPATCH wp_ed448_pki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3769,7 +3813,7 @@ const OSSL_DISPATCH wp_ed448_pki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3802,7 +3846,7 @@ const OSSL_DISPATCH wp_ed448_epki_der_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
@@ -3831,7 +3875,7 @@ const OSSL_DISPATCH wp_ed448_epki_pem_encoder_functions[] = {
     { OSSL_FUNC_ENCODER_SET_CTX_PARAMS, (DFUNC)wp_ecx_enc_dec_set_ctx_params  },
     { OSSL_FUNC_ENCODER_DOES_SELECTION, (DFUNC)wp_ecx_pki_does_selection      },
     { OSSL_FUNC_ENCODER_ENCODE,         (DFUNC)wp_ecx_encode                  },
-    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import                  },
+    { OSSL_FUNC_ENCODER_IMPORT_OBJECT,  (DFUNC)wp_ecx_import_object           },
     { OSSL_FUNC_ENCODER_FREE_OBJECT,    (DFUNC)wp_ecx_free                    },
     { 0, NULL }
 };
