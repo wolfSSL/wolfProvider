@@ -84,7 +84,7 @@ echo -e "\n\nTesting -sslEncKey\n" >> "$LOG_FILE"
 $SCRIPTS_DIR/x11vnc_sslenckey.exp >> "$LOG_FILE" 2>> "$LOG_FILE"
 
 if [ $? -eq 0 ] && grep -q "BEGIN ENCRYPTED PRIVATE KEY" ca-dir/server-wolf.pem \
-    && openssl pkey -in ca-dir/server-wolf.pem -passin pass:wolfprov -noout \
+    && openssl pkey -in ca-dir/server-wolf.pem -passin pass:wolfprov-test-pass -noout \
     >> "$LOG_FILE" 2>> "$LOG_FILE"
 then
     echo "[ PASSED ] -sslEncKey"
