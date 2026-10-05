@@ -626,6 +626,8 @@ int test_x509_cert(void *data);
     defined(WP_HAVE_ECDH) && defined(WP_HAVE_SHA384)
 int test_tls12_cbc(void *data);
 int test_tls12_cbc_ossl(void *data);
+int test_tls10_cbc(void *data);
+int test_dtls12_cbc(void *data);
 int test_aes_tls_cbc_bad_pad(void *data);
 int test_aes_tls_cbc_split(void *data);
 #endif

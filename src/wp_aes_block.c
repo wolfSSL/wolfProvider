@@ -509,11 +509,12 @@ static int wp_aes_block_doit(wp_AesBlockCtx *ctx, unsigned char *out,
 }
 
 /**
- * TLS 1.2 CBC decryption record post-processing.
+ * TLS CBC decryption record post-processing.
  *
  * Performs constant-time padding validation and MAC extraction after
  * CBC decryption. For ETM (Encrypt-then-MAC) or no-MAC modes, strips the
- * explicit IV and validates/removes padding. For MtE (MAC-then-Encrypt),
+ * explicit IV of TLS 1.1+ and DTLS records and validates/removes padding.
+ * TLS 1.0 records have no explicit IV. For MtE (MAC-then-Encrypt),
  * also extracts the MAC using a constant-time rotation pattern.
  *
  * @param [in]      ctx     AES block context object.
@@ -531,8 +532,8 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aes_block_tls_dec_record");
 
     /*
-     * TLS 1.2 CBC padding removal and MAC extraction.
-     * Buffer: [explicit_IV(BS)][payload][MAC(macsize)][padding(pad+1)]
+     * TLS CBC padding removal and MAC extraction.
+     * Buffer: [explicit_IV(ivLen)][payload][MAC(macsize)][padding(pad+1)]
      *
      * Constant-time padding validation based on OpenSSL's
      * tls1_cbc_remove_padding_and_mac() (ssl/record/methods/tls_pad.c)
@@ -550,6 +551,7 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
     size_t good;
     size_t i, j;
     size_t macSize = ctx->tlsmacsize;
+    size_t ivLen = 0;
 
     /* Free any previously allocated MAC */
     if (ctx->tlsmacAlloced) {
@@ -558,18 +560,34 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
         ctx->tlsmac = NULL;
     }
 
-    if (macSize > EVP_MAX_MD_SIZE ||
-        oLen < AES_BLOCK_SIZE + macSize + 1) {
+    switch (ctx->tls_version) {
+        case TLS1_2_VERSION:
+        case DTLS1_2_VERSION:
+        case TLS1_1_VERSION:
+        case DTLS1_VERSION:
+        case DTLS1_BAD_VER:
+            ivLen = AES_BLOCK_SIZE;
+            break;
+        case TLS1_VERSION:
+            ivLen = 0;
+            break;
+        default:
+            ok = 0;
+            break;
+    }
+
+    if (ok && (macSize > EVP_MAX_MD_SIZE ||
+        oLen < ivLen + macSize + 1)) {
         ok = 0;
     }
 
     if (ok && macSize == 0) {
         /* ETM (Encrypt-then-MAC) or no MAC: the record layer already
-         * handled the MAC. We only need to strip the explicit IV and
+         * handled the MAC. We only need to strip any explicit IV and
          * validate+remove padding (same as OpenSSL ssl3_cbc_copy_mac
          * returning early when mac_size == 0). */
-        unsigned char *ivRec = out + AES_BLOCK_SIZE;
-        size_t ivRecLen = oLen - AES_BLOCK_SIZE;
+        unsigned char *ivRec = out + ivLen;
+        size_t ivRecLen = oLen - ivLen;
         unsigned char padV = ivRec[ivRecLen - 1];
         size_t gd = (size_t)0 - ((size_t)(
             wp_ct_int_mask_gte((int)ivRecLen, (int)padV + 1) & 1));
@@ -621,9 +639,9 @@ static int wp_aes_block_tls_dec_record(wp_AesBlockCtx *ctx,
         rotatedMac = rotatedMacBuf +
             ((0 - (size_t)rotatedMacBuf) & 63);
 
-        /* For TLS 1.1+/DTLS: skip explicit IV */
-        rec = out + AES_BLOCK_SIZE;
-        recLen = oLen - AES_BLOCK_SIZE;
+        /* Skip the explicit IV, if any */
+        rec = out + ivLen;
+        recLen = oLen - ivLen;
         origRecLen = recLen;
 
         padVal = rec[recLen - 1];
