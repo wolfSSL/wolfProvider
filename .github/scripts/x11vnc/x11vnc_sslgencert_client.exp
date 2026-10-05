@@ -25,7 +25,6 @@ expect "company"        { send "wolfssl\r" }
 
 # create the cert
 expect "passphrase"     { send "n\r" }
-expect "pass phrase"    { send "wolfprov\r" }
 expect "Sign"           { send "y\r" }
 expect "commit"         { send "y\r" }
 

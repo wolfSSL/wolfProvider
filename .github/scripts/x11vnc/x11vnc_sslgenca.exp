@@ -2,20 +2,18 @@
 
 set timeout 5
 
-# generate a certificate authority
+# generate a certificate authority with an unencrypted key; OpenSSL 3.0 req
+# can only encrypt it with DES-EDE3-CBC, which wolfProvider does not support
+set env(REQ_ARGS) "-noenc"
 spawn x11vnc -sslGenCA ca-dir
 
 sleep 1
 
-# provide password and verify
-expect {
-    "PEM"   { send "wolfprov\r" }
-    eof     { exit 1 }
-}
-expect "PEM"            { send "wolfprov\r" }
-
 # provide CA information
-expect "Country Name"   { send "US\r" }
+expect {
+    "Country Name"  { send "US\r" }
+    eof             { exit 1 }
+}
 expect "State"          { send "montana\r" }
 expect "Locality"       { send "bozeman\r" }
 expect "Organization"   { send "wolfssl\r" }
