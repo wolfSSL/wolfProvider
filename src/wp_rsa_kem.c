@@ -344,15 +344,23 @@ static int wp_rsasve_generate(wp_RsaKemCtx* ctx, unsigned char* out,
     }
     if (ok && (out != NULL)) {
         /* Step 3: out = RSAEP((n,e), z) */
-        int rc;
+        int rc = 0;
 
         oLen = nLen;
-        rc = wc_RsaDirect(secret, nLen, out, &oLen, rsa, RSA_PUBLIC_ENCRYPT,
-            &ctx->rng);
-        if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaDirect", rc);
+        if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
             OPENSSL_cleanse(secret, nLen);
             ok = 0;
+        }
+        if (ok) {
+            rc = wc_RsaDirect(secret, nLen, out, &oLen, rsa,
+                RSA_PUBLIC_ENCRYPT, &ctx->rng);
+            wp_unlock(wp_rsa_get_mutex(ctx->rsa));
+            if (rc < 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaDirect",
+                    rc);
+                OPENSSL_cleanse(secret, nLen);
+                ok = 0;
+            }
         }
         /* Front pad output with zeros if required. */
         if (ok && (oLen < nLen)) {
@@ -450,15 +458,22 @@ static int wp_rsasve_recover(wp_RsaKemCtx* ctx, unsigned char* out,
     /* Step 3: out = RSADP((n,d), in) */
     if (ok && (out != NULL)) {
         word32 oLen = nLen;
-        int rc;
+        int rc = 0;
 
-        PRIVATE_KEY_UNLOCK();
-        rc = wc_RsaDirect((byte*)in, (word32)inLen, out, &oLen, rsa,
-            RSA_PRIVATE_DECRYPT, &ctx->rng);
-        PRIVATE_KEY_LOCK();
-        if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaDirect decrypt", rc);
+        if (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1) {
             ok = 0;
+        }
+        if (ok) {
+            PRIVATE_KEY_UNLOCK();
+            rc = wc_RsaDirect((byte*)in, (word32)inLen, out, &oLen, rsa,
+                RSA_PRIVATE_DECRYPT, &ctx->rng);
+            PRIVATE_KEY_LOCK();
+            wp_unlock(wp_rsa_get_mutex(ctx->rsa));
+            if (rc < 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_RsaDirect decrypt", rc);
+                ok = 0;
+            }
         }
         /* Front pad output with zeros if required. */
         if (ok && (oLen < nLen)) {
