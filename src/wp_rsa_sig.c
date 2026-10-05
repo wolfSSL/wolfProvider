@@ -280,6 +280,8 @@ static wp_RsaSigCtx* wp_rsa_ctx_new(WOLFPROV_CTX* provCtx,
             ctx->propQuery = p;
             ctx->provCtx = provCtx;
             ctx->libCtx = provCtx->libCtx;
+            /* No PSS restrictions from a key yet. */
+            ctx->minSaltLen = -1;
         }
 
         if (!ok) {
@@ -349,6 +351,7 @@ static wp_RsaSigCtx* wp_rsa_ctx_dup(wp_RsaSigCtx* srcCtx)
             dstCtx->padMode  = srcCtx->padMode;
             dstCtx->op       = srcCtx->op;
             dstCtx->saltLen  = srcCtx->saltLen;
+            dstCtx->minSaltLen = srcCtx->minSaltLen;
             XMEMCPY(dstCtx->mdName, srcCtx->mdName, sizeof(srcCtx->mdName));
             XMEMCPY(dstCtx->mgf1MdName, srcCtx->mgf1MdName,
                 sizeof(srcCtx->mgf1MdName));
@@ -512,9 +515,9 @@ static int wp_rsa_signverify_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
         #ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
             ctx->saltLen = RSA_PSS_SALTLEN_AUTO_DIGEST_MAX;
         #else
-            ctx->saltLen = WP_RSA_DEFAULT_SALT_LEN;
+            ctx->saltLen = RSA_PSS_SALTLEN_AUTO;
         #endif
-            ctx->minSaltLen = 0;
+            ctx->minSaltLen = -1;
 
             /* If we have already set PSS salt len, use that */
             saltLen = wp_rsa_get_pss_salt_len(ctx->rsa);
