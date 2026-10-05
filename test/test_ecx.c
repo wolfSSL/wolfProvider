@@ -197,6 +197,151 @@ int test_ecx_encode_epki(void *data)
 }
 #endif /* WP_HAVE_ED25519 && WP_HAVE_EPKI_TEST */
 
+/* Size the scratch buffers from the largest EdDSA type that is built, so
+ * an Ed25519-only build compiles. */
+#ifdef WP_HAVE_ED448
+#define WP_ECX_SIG_SIZE_MAX     ED448_SIG_SIZE
+#else
+#define WP_ECX_SIG_SIZE_MAX     ED25519_SIG_SIZE
+#endif
+
+/* Fill byte for the undersized buffer, so a stray write is visible. */
+#define WP_ECX_SIG_GUARD        0x5a
+
+/**
+ * Sign with an output buffer larger than the signature.
+ *
+ * The length passed in is the size of the buffer, an upper bound, so a
+ * caller with a fixed maximum signature buffer must be accepted.
+ *
+ * @param [in] libCtx    Library context to sign with.
+ * @param [in] type      Key type, ED25519 or ED448.
+ * @param [in] keyDer    DER encoded private key.
+ * @param [in] keyDerSz  Length of the DER key in bytes.
+ * @param [in] sigSize   Size of the signature for the key type.
+ * @return  0 on success, non-zero on failure.
+ */
+static int test_ecx_sign_buffer_size(OSSL_LIB_CTX *libCtx, int type,
+    const unsigned char *keyDer, size_t keyDerSz, size_t sigSize)
+{
+    int err = 0;
+    const unsigned char *p = keyDer;
+    EVP_PKEY *pkey = NULL;
+    EVP_MD_CTX *mdCtx = NULL;
+    unsigned char sigExact[WP_ECX_SIG_SIZE_MAX];
+    unsigned char sigLarge[WP_ECX_SIG_SIZE_MAX * 2];
+    unsigned char sigSmall[WP_ECX_SIG_SIZE_MAX];
+    size_t exactLen = sigSize;
+    size_t largeLen = sizeof(sigLarge);
+    size_t smallLen = 0;
+    size_t i;
+    static const unsigned char msg[] = "ECX signature buffer size message";
+
+    pkey = d2i_PrivateKey_ex(type, NULL, &p, (long)keyDerSz, libCtx, NULL);
+    err = (pkey == NULL);
+
+    /* An exactly sized buffer has always worked; keep it covered. */
+    if (err == 0) {
+        mdCtx = EVP_MD_CTX_new();
+        err = (mdCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, NULL, NULL, libCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdCtx, sigExact, &exactLen, msg,
+            sizeof(msg) - 1) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Sign with an exactly sized buffer failed");
+        }
+    }
+    EVP_MD_CTX_free(mdCtx);
+    mdCtx = NULL;
+
+    if (err == 0) {
+        mdCtx = EVP_MD_CTX_new();
+        err = (mdCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, NULL, NULL, libCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_DigestSign(mdCtx, sigLarge, &largeLen, msg,
+            sizeof(msg) - 1) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Sign with an oversized buffer failed");
+        }
+    }
+    if (err == 0) {
+        err = (largeLen != sigSize);
+        if (err) {
+            PRINT_ERR_MSG("Oversized buffer returned the wrong length");
+        }
+    }
+    if (err == 0) {
+        err = (exactLen != largeLen) ||
+            (memcmp(sigExact, sigLarge, exactLen) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Buffer size changed the signature");
+        }
+    }
+    EVP_MD_CTX_free(mdCtx);
+    mdCtx = NULL;
+
+    /* A buffer smaller than the signature must be refused and left alone. */
+    if (err == 0) {
+        mdCtx = EVP_MD_CTX_new();
+        err = (mdCtx == NULL);
+    }
+    if (err == 0) {
+        err = EVP_DigestSignInit_ex(mdCtx, NULL, NULL, libCtx, NULL, pkey,
+            NULL) != 1;
+    }
+    if (err == 0) {
+        memset(sigSmall, WP_ECX_SIG_GUARD, sizeof(sigSmall));
+        smallLen = sigSize - 1;
+        err = EVP_DigestSign(mdCtx, sigSmall, &smallLen, msg,
+            sizeof(msg) - 1) == 1;
+        if (err) {
+            PRINT_ERR_MSG("Sign with an undersized buffer succeeded");
+        }
+    }
+    for (i = 0; (err == 0) && (i < sizeof(sigSmall)); i++) {
+        if (sigSmall[i] != WP_ECX_SIG_GUARD) {
+            PRINT_ERR_MSG("Undersized buffer was written to");
+            err = 1;
+        }
+    }
+
+    EVP_MD_CTX_free(mdCtx);
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
+int test_ecx_sign_buffer_sizes(void *data)
+{
+    int err = 0;
+
+    (void)data;
+
+    #ifdef WP_HAVE_ED25519
+    PRINT_MSG("Ed25519 signature output buffer sizes");
+    err = test_ecx_sign_buffer_size(wpLibCtx, EVP_PKEY_ED25519,
+        ed25519_key_der, sizeof(ed25519_key_der), ED25519_SIG_SIZE);
+    #endif
+    #ifdef WP_HAVE_ED448
+    if (err == 0) {
+        PRINT_MSG("Ed448 signature output buffer sizes");
+        err = test_ecx_sign_buffer_size(wpLibCtx, EVP_PKEY_ED448,
+            ed448_key_der, sizeof(ed448_key_der), ED448_SIG_SIZE);
+    }
+    #endif
+
+    return err;
+}
+
 int test_ecx_sign_verify(void *data)
 {
     int err = 0;

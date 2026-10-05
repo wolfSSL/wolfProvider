@@ -370,21 +370,25 @@ static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
     else if (sig == NULL) {
         *sigLen = ED25519_SIG_SIZE;
     }
-    else if (*sigLen != ED25519_SIG_SIZE) {
+    else if (*sigLen < ED25519_SIG_SIZE) {
         ok = 0;
     }
     else {
         int rc;
-        word32 len;
+        word32 len = ED25519_SIG_SIZE;
         ed25519_key* ed25519 = (ed25519_key*)wp_ecx_get_key(ctx->ecx);
 
         if (sigSize == (size_t)-1) {
             sigSize = *sigLen;
         }
-        len = (word32)sigSize;
 
         /* EdDSA signs with the public half; make sure it is derived first. */
         ok = wp_ecx_ensure_pub(ctx->ecx);
+        /* wolfCrypt is given the signature size rather than the buffer size,
+         * which may be too large to hold in a word32. */
+        if (ok && (sigSize < ED25519_SIG_SIZE)) {
+            ok = 0;
+        }
         if (ok && (!WP_FITS_WORD32(tbsLen))) {
             ok = 0;
         }
@@ -583,16 +587,20 @@ static int wp_ed448_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
     }
     else {
         int rc;
-        word32 len;
+        word32 len = ED448_SIG_SIZE;
         ed448_key* ed448 = (ed448_key*)wp_ecx_get_key(ctx->ecx);
 
         if (sigSize == (size_t)-1) {
             sigSize = *sigLen;
         }
-        len = (word32)sigSize;
 
         /* EdDSA signs with the public half; make sure it is derived first. */
         ok = wp_ecx_ensure_pub(ctx->ecx);
+        /* wolfCrypt is given the signature size rather than the buffer size,
+         * which may be too large to hold in a word32. */
+        if (ok && (sigSize < ED448_SIG_SIZE)) {
+            ok = 0;
+        }
         if (ok && (!WP_FITS_WORD32(tbsLen))) {
             ok = 0;
         }
