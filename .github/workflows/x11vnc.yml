@@ -119,28 +119,16 @@ jobs:
         shell: bash
         run: |
           export ${{ matrix.force_fail }}
-          export WOLFPROV_FORCE_FAIL_STR="${{ matrix.force_fail }}"
-          export X11VNC_TEST_LOG=/tmp/x11vnc-test.log
-          export X11VNC_TEST_STATUS=0
-          if ! $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh $X11VNC_TEST_LOG; then
-            X11VNC_TEST_STATUS=1
-          fi
-
-          if $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $X11VNC_TEST_STATUS "$WOLFPROV_FORCE_FAIL_STR" x11vnc; then
-            X11VNC_TEST_STATUS=0
-          else
-            X11VNC_TEST_STATUS=1
-          fi
-
-          # Surface the most recent log via the existing follow-up step
-          export X11VNC_TEST_LOG=/tmp/x11vnc-test.log
+          TEST_RESULT=0
+          $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh \
+            /tmp/x11vnc-test.log || TEST_RESULT=$?
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh \
+            $TEST_RESULT "${{ matrix.force_fail }}" x11vnc
 
       - name: Show x11vnc test log on failure
+        if: failure()
         run: |
-          if [ $X11VNC_TEST_STATUS -ne 0 ]; then
-            cat $X11VNC_TEST_LOG
+          if [ -f /tmp/x11vnc-test.log ]; then
+            cat /tmp/x11vnc-test.log
           fi
-          exit $X11VNC_TEST_STATUS
-
-          $GITHUB_WORKSPACE/.github/scripts/x11vnc/test_x11vnc.sh
 

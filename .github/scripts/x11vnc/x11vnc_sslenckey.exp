@@ -13,12 +13,12 @@ expect {
     eof                                 { exit 1 }
 }
 
-# supply password
+# supply password; FIPS rejects a PBKDF2 pass phrase shorter than 14 bytes
 expect {
-    "Enter pass phrase:"    { send "wolfprov\r" }
+    "Enter pass phrase:"    { send "wolfprov-test-pass\r" }
     eof                     { exit 1 }
 }
-expect "Verifying"  { send "wolfprov\r" }
+expect "Verifying"  { send "wolfprov-test-pass\r" }
 
 expect eof
 exit 0

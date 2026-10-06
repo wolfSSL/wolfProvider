@@ -83,7 +83,9 @@ echo -e "\n\nTesting -sslEncKey\n" >> "$LOG_FILE"
 
 $SCRIPTS_DIR/x11vnc_sslenckey.exp >> "$LOG_FILE" 2>> "$LOG_FILE"
 
-if [ $? -eq 0 ] && grep -q "BEGIN ENCRYPTED PRIVATE KEY" ca-dir/server-wolf.pem
+if [ $? -eq 0 ] && grep -q "BEGIN ENCRYPTED PRIVATE KEY" ca-dir/server-wolf.pem \
+    && openssl pkey -in ca-dir/server-wolf.pem -passin pass:wolfprov-test-pass -noout \
+    >> "$LOG_FILE" 2>> "$LOG_FILE"
 then
     echo "[ PASSED ] -sslEncKey"
 else
@@ -100,11 +102,15 @@ fi
 Xvfb :0 -screen 0 100x100x8 2>> "$LOG_FILE" &
 sleep 2
 
+# The anonymous DH used by -ssl defaults to a fixed 1024-bit group, which
+# FIPS rejects, so supply the RFC 7919 ffdhe2048 group instead
+DH_PARAMS="$SCRIPTS_DIR/ffdhe2048.pem"
+
 
 # Testing with SSL will use the TLSNone security type
 echo -e "\n\nTesting -ssl handshake, authentication, initialization...\n" >> "$LOG_FILE"
 
-PORT=`x11vnc -ssl TMP -display :0 -localhost -bg -o server.log`
+PORT=`x11vnc -ssl TMP -dhparams "$DH_PARAMS" -display :0 -localhost -bg -o server.log`
 PORT=`echo "$PORT" | grep -m 1 "PORT=" | sed -e 's/PORT=//'`
 
 timeout 15 vncviewer -GnuTLSPriority=LEGACY -DesktopSize=0 -display :0 -log *:stderr:100 localhost::$PORT 2> client.log
@@ -127,7 +133,7 @@ echo -e "\n\nTesting -ssl with a password...\n" >> "$LOG_FILE"
 
 x11vnc -storepasswd wolfprov passwd 2>> "$LOG_FILE"
 
-PORT=`x11vnc -ssl TMP -display :0 -localhost -bg -o server.log -rfbauth passwd`
+PORT=`x11vnc -ssl TMP -dhparams "$DH_PARAMS" -display :0 -localhost -bg -o server.log -rfbauth passwd`
 PORT=`echo "$PORT" | grep -m 1 "PORT=" | sed -e 's/PORT=//'`
 
 timeout 15 vncviewer -GnuTLSPriority=LEGACY -DesktopSize=0 -display :0 -passwd passwd -log *:stderr:100 localhost::$PORT 2> client.log
