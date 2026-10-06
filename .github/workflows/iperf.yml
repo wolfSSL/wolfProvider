@@ -122,7 +122,9 @@ jobs:
 
       - name: Run tests
         working-directory: iperf
+        shell: bash
         run: |
+          set +o pipefail
           export ${{ matrix.force_fail }}
 
           # Test variables for iperf
@@ -135,12 +137,30 @@ jobs:
           export IPERF3_PASSWORD=rossi
           export KEY_DIR=$GITHUB_WORKSPACE/test-keys
 
-          # Launch the iperf server in the background
-          $IPERF3_EXECUTABLE -s \
+          # Launch the iperf server in the background for one test
+          $IPERF3_EXECUTABLE -s -1 \
             --rsa-private-key-path $KEY_DIR/rsa_private_unprotected.pem \
-            --authorized-users-path $KEY_DIR/credentials.csv &
+            --authorized-users-path $KEY_DIR/credentials.csv \
+            > iperf-server.log 2>&1 &
+          SERVER_PID=$!
+
+          # Wait for port 5201 (0x1451) to be in LISTEN state (0A)
+          for i in $(seq 1 50); do
+            if grep -qs ':1451 [0-9A-F]*:0000 0A' /proc/net/tcp /proc/net/tcp6; then
+              break
+            fi
+            sleep 0.1
+          done
 
           # Run the client
           $IPERF3_EXECUTABLE -c localhost -i $IPERF3_TEST_INTERVAL -t $IPERF3_TEST_DURATION \
             --rsa-public-key-path $KEY_DIR/rsa_public.pem \
-            --user $IPERF3_USER | tee $IPERF3_TEST_LOG \
+            --user $IPERF3_USER 2>&1 | tee $IPERF3_TEST_LOG
+          TEST_RESULT=${PIPESTATUS[0]}
+
+          kill $SERVER_PID 2>/dev/null || true
+          wait $SERVER_PID || true
+          echo "--- iperf server output ---"
+          cat iperf-server.log
+
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} iperf

@@ -281,20 +281,19 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
         fi
     # ----- IPERF -----
     elif [ "$TEST_SUITE" = "iperf" ]; then
-        IPERF_TEST_LOG="iperf-test.log"
-        if [ -f $IPERF_TEST_LOG ]; then
-              read sender_gb receiver_gb < <(awk '/sender/ {s=$4} /receiver/ {r=$4} END{print s, r}' )
-
-            if [[ -z "$sender_gb" && -z "$receiver_gb" ]]; then
-                echo "PASS: No data sent or received, as expected with force fail enabled"
-                exit 0
-            else
-                echo "FAIL: Iperf tests unexpectedly succeeded with data sent or received"
-                echo "  Sent: $sender_gb GB, Received: $receiver_gb GB"
-                exit 1
-            fi
+        # The client must fail on an OpenSSL error before sending any data
+        if [ "$TEST_RESULT" -ne 0 ] \
+            && [ -f "iperf-test.log" ] \
+            && grep -q 'error:[0-9A-F]\{8\}:' iperf-test.log \
+            && grep -q 'unable to send parameters to server' iperf-test.log \
+            && ! grep -q 'sender$' iperf-test.log; then
+            echo "PASS: iperf client failed to send its encrypted credentials as expected with force fail enabled"
+            exit 0
+        elif [ "$TEST_RESULT" -eq 0 ]; then
+            echo "FAIL: iperf tests unexpectedly succeeded with force fail enabled"
+            exit 1
         else
-            echo "Error: $IPERF_TEST_LOG not found"
+            echo "FAIL: iperf exited $TEST_RESULT but iperf-test.log is missing or does not show the credential encryption failure"
             exit 1
         fi
     else
