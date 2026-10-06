@@ -608,10 +608,18 @@ int test_cmac_reinit(void *data)
         PRINT_ERR_MSG("CMAC after reset doesn't match OpenSSL");
         err = 1;
     }
+/* OpenSSL before 3.0.13, 3.1.5 and 3.2.1 crashes in EVP_MAC_final() on a
+ * CMAC context that has a cipher but no key. */
+#if (OPENSSL_VERSION_NUMBER >= 0x30200010L) || \
+    ((OPENSSL_VERSION_NUMBER >= 0x30100050L) && \
+     (OPENSSL_VERSION_NUMBER < 0x30200000L)) || \
+    ((OPENSSL_VERSION_NUMBER >= 0x300000d0L) && \
+     (OPENSSL_VERSION_NUMBER < 0x30100000L))
     if (err == 0) {
         PRINT_MSG("CMAC keyless restart with a rejected key, OpenSSL");
         err = test_cmac_reinit_stale_key(osslLibCtx);
     }
+#endif
     if (err == 0) {
         PRINT_MSG("CMAC keyless restart with a rejected key, wolfProvider");
         err = test_cmac_reinit_stale_key(wpLibCtx);
