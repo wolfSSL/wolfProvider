@@ -121,7 +121,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `openssh.yml` | OpenSSH client + server | SSH2 KEX, host key sign/verify, hostbased auth, sftp |
 | `openvpn.yml` | OpenVPN | control-channel TLS, tls-auth/tls-crypt HMAC, data-channel ciphers |
 | `stunnel.yml` | stunnel TLS proxy | server + client TLS 1.2 termination (TLS 1.3 + X25519/X448 paths skipped in FIPS) |
-| `nginx.yml` | nginx web server | server-side TLS, certificate selection, OCSP stapling |
+| `nginx.yml` | nginx web server | server-side TLS, certificate selection, OCSP stapling (nginx release-1.31.6 + nginx-tests master; FIPS passphrase failures are fixed in `nginx.yml`, not `wolfssl/osp`) |
 | `nginx-pqc.yml` | oqs-demos nginx (PQC) | ML-DSA (FIPS 204) cert auth + ML-KEM/hybrid (FIPS 203) KEX over TLS 1.3 (master + latest -stable, v5.9.2 PQC floor) |
 | `socat.yml` | socat (multipurpose relay) | OpenSSL bridge mode (TLS in/out) |
 | `tcpdump.yml` | tcpdump packet capture | build + link against wolfprov-backed libssl (no live decrypt) |

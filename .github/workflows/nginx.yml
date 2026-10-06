@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        nginx_ref: [ 'release-1.27.4' ]
+        nginx_ref: [ 'release-1.31.6' ]
         wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
@@ -110,12 +110,42 @@ jobs:
           path: nginx-tests
           ref: master
 
+      - name: Lengthen test key passphrases
+        if: ${{ matrix.fips_ref == 'FIPS' }}
+        working-directory: nginx-tests
+        shell: bash
+        run: |
+          # FIPS v5 PBKDF2 rejects passphrases shorter than 14 bytes, so
+          # append one suffix to every passphrase and password file value
+          FILES=$(grep -l -e '-passout pass:' *.t) || {
+            echo "No nginx-tests file creates an encrypted key; review this step"
+            exit 1
+          }
+          echo "Lengthening passphrases in:" $FILES
+          perl -i -pe '
+              s/(-pass(?:in|out) pass:)(\$name|[\w.]+)/$1$2-wolfprov-fips/g;
+              s/(write_file\(.password\w*., .)([\w.]+)(.\))/$1$2-wolfprov-fips$3/;
+              s/"(\w+)\$CRLF"/"$1-wolfprov-fips\$CRLF"/g if /write_file\(.password/;
+              s/(echo )([\w.]+)( > \$d\/password)/$1$2-wolfprov-fips$3/;
+          ' $FILES
+
+          # Fail here, not inside prove, if a passphrase was not rewritten
+          if grep -nE -- '-pass(in|out) pass:' $FILES | grep -v -- '-wolfprov-fips'; then
+            echo "Passphrases above were not lengthened; update this step"
+            exit 1
+          fi
+
       - name: Run nginx-tests with wolfProvider
         working-directory: nginx-tests
+        shell: bash
         run: |
-          export ${{ matrix.force_fail }}
+          set +o pipefail # keep -e from aborting before PIPESTATUS is read
 
-          # Run tests and save result
-          TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y TEST_NGINX_BINARY=../nginx/objs/nginx prove -v . 2>&1 | tee nginx-test.log
-          TEST_RESULT=$?
+          # Run as non-root so nginx workers can read the 0700 test dir
+          useradd --create-home nginxtest
+          runuser -u nginxtest -- env ${{ matrix.force_fail }} \
+            TEST_NGINX_VERBOSE=y TEST_NGINX_CATLOG=y \
+            TEST_NGINX_BINARY=../nginx/objs/nginx \
+            prove -v . 2>&1 | tee nginx-test.log
+          TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} nginx
