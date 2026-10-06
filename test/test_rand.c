@@ -174,8 +174,8 @@ int test_drbg_parent_locking(void *data)
         err = ctx == NULL;
     }
     if (err == 0) {
-        PRINT_MSG("Enable locking propagates to parent");
-        err = (enableLocking(ctx) != 1) ||
+        PRINT_MSG("Enable locking propagates to parent once");
+        err = (enableLocking(ctx) != 1) || (enableLocking(ctx) != 1) ||
               (fakeParent.enableLockingCalls != 1);
     }
     if (err == 0) {
