@@ -296,6 +296,23 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "FAIL: iperf exited $TEST_RESULT but iperf-test.log is missing or does not show the credential encryption failure"
             exit 1
         fi
+    # ----- PAM_PKCS11 -----
+    elif [ "$TEST_SUITE" = "pam_pkcs11" ]; then
+        # Only the authentication without force fail may succeed, and the one
+        # under force fail must stop at SoftHSM's PIN check
+        if [ "$TEST_RESULT" -ne 0 ] \
+            && [ -f "pam-pkcs11-test.log" ] \
+            && [ "$(grep -c '^pamtester: successfully authenticated' pam-pkcs11-test.log)" -eq 1 ] \
+            && grep -q 'Error 2320: Wrong smartcard PIN' pam-pkcs11-test.log; then
+            echo "PASS: pam_pkcs11 authentication failed at the token PIN check as expected with force fail enabled"
+            exit 0
+        elif [ "$TEST_RESULT" -eq 0 ]; then
+            echo "FAIL: pam_pkcs11 tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "FAIL: pam_pkcs11 exited $TEST_RESULT but pam-pkcs11-test.log does not show one successful authentication and then the token PIN check failure"
+            exit 1
+        fi
     else
         if [ $TEST_RESULT -eq 0 ]; then
             echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"
