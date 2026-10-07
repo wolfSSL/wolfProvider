@@ -47,8 +47,8 @@ jobs:
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
         fips_ref: [ 'FIPS', 'non-FIPS' ]
         replace_default: [ true ]
-        key_type: [ 'rsa', 'ecdsa', 'ed25519', 'chacha20-poly1305' ]
-        iterations: [ 10 ] # Total of 80 runs
+        suite: [ 'aes-ctr', 'aes-gcm' ]
+        iterations: [ 10 ]
         force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
     env:
       WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
@@ -94,16 +94,11 @@ jobs:
     - name: Run git + replace default + ssh test
       shell: bash
       run: |
-        echo "=== Running Git + replace default + ssh Test ==="
-        echo "Using the local test script for consistent testing"
-        # Run the test with the matrix parameters
-        echo "Testing with key type: ${{ matrix.key_type }}"
-        echo "Running ${{ matrix.iterations }} iterations"
-
-        # Run the scripts test
+        set +o pipefail
         ${{ matrix.force_fail }} ./scripts/test-git-ssh-dr.sh \
-          --key-types "${{ matrix.key_type }}" \
+          --suite "${{ matrix.suite }}" \
           --iterations "${{ matrix.iterations }}" \
-          --verbose
+          --verbose 2>&1 | tee git-ssh-dr-test.log
+        TEST_RESULT=${PIPESTATUS[0]}
 
-        echo "=== Test completed for ${{ matrix.key_type }} ==="
+        $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} git-ssh-dr
