@@ -4120,4 +4120,38 @@ int test_ec_tls_group_p192(void *data)
     return err;
 }
 
+
+#ifdef WP_HAVE_EC_P256
+int test_ecc_encoder_import_object(void *data)
+{
+    int err;
+    EVP_PKEY* pkey;
+
+    (void)data;
+
+    pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, "EC", "P-256");
+    err = (pkey == NULL);
+    if (err == 0) {
+        err = test_encoder_import_object("EC", pkey);
+    }
+    EVP_PKEY_free(pkey);
+
+#ifndef OPENSSL_NO_EC2M
+    /* wolfSSL has no binary curves. */
+    pkey = NULL;
+    if (err == 0) {
+        pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, "EC", "sect233k1");
+        err = (pkey == NULL);
+    }
+    if (err == 0) {
+        err = test_encoder_import_object_rejected("EC", pkey);
+    }
+    EVP_PKEY_free(pkey);
+#endif
+
+    return err;
+}
+
+#endif /* WP_HAVE_EC_P256 */
+
 #endif /* WP_HAVE_ECC */

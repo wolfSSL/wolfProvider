@@ -2861,4 +2861,36 @@ int test_dh_small_subgroup_peer(void *data)
     return err;
 }
 
+int test_dh_encoder_import_object(void *data)
+{
+    int err;
+    EVP_PKEY* pkey = NULL;
+    OSSL_PARAM params[2];
+
+    (void)data;
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+        (char*)"ffdhe2048", 0);
+    params[1] = OSSL_PARAM_construct_end();
+    err = test_pkey_keygen_params(osslLibCtx, "DH", params, &pkey);
+    if (err == 0) {
+        err = test_encoder_import_object("DH", pkey);
+    }
+    EVP_PKEY_free(pkey);
+
+    /* wolfProvider names only the FFDHE groups. */
+    pkey = NULL;
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+        (char*)"modp_1536", 0);
+    if (err == 0) {
+        err = test_pkey_keygen_params(osslLibCtx, "DH", params, &pkey);
+    }
+    if (err == 0) {
+        err = test_encoder_import_object_rejected("DH", pkey);
+    }
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
 #endif /* WP_HAVE_DH */

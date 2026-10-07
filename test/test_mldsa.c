@@ -1262,4 +1262,22 @@ int test_mldsa_encode_epki(void* data)
 }
 #endif /* WP_HAVE_EPKI_TEST */
 
+
+int test_mldsa_encoder_import_object(void *data)
+{
+    int err;
+    EVP_PKEY* pkey;
+
+    (void)data;
+
+    pkey = EVP_PKEY_Q_keygen(osslLibCtx, NULL, "ML-DSA-44");
+    err = (pkey == NULL);
+    if (err == 0) {
+        err = test_encoder_import_object("ML-DSA-44", pkey);
+    }
+    EVP_PKEY_free(pkey);
+
+    return err;
+}
+
 #endif /* WP_HAVE_MLDSA */
