@@ -393,6 +393,10 @@ static wp_Dh* wp_dh_new(WOLFPROV_CTX *provCtx)
 {
     wp_Dh* dh = NULL;
 
+    /* Every wolfCrypt DH call is made on a key created here, and wolfCrypt
+     * FIPS gates them on the DH primitive-Z CAST: serialize it here. */
+    WP_CHECK_FIPS_ALGO_PTR(WP_CAST_ALGO_DH);
+
     if (wolfssl_prov_is_running()) {
         dh = (wp_Dh*)OPENSSL_zalloc(sizeof(*dh));
     }

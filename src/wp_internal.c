@@ -121,6 +121,83 @@ int wp_init_cast_mutexes(void)
     return CRYPTO_THREAD_run_once(&castAlgosOnce, wolfprov_init_cast_mutex);
 }
 
+static CRYPTO_ONCE castPendingOnce = CRYPTO_ONCE_STATIC_INIT;
+/** Number of CASTs that failed when the pending CASTs were run. */
+static int castPendingFailed = 0;
+
+/**
+ * Run a CAST self-test unless it has already passed.
+ *
+ * wc_RunCast_fips() re-runs a passed CAST, putting it back in progress; a
+ * thread using the algorithm meanwhile fails, and on FIPS v5 that puts the
+ * whole module in degraded mode.
+ *
+ * @param [in] type  CAST identifier (FIPS_CAST_*).
+ * @return  0 on success.
+ * @return  Other value on failure.
+ */
+static int wp_run_cast(int type)
+{
+    if (wc_GetCastStatus_fips(type) == FIPS_CAST_STATE_SUCCESS) {
+        return 0;
+    }
+    return wc_RunCast_fips(type);
+}
+
+/**
+ * Run every CAST self-test that has not run yet, except the DH and ECC
+ * primitive-Z ones.
+ *
+ * Run once, through wp_run_pending_casts().
+ */
+static void wolfprov_run_pending_casts(void)
+{
+    int i;
+    int state;
+
+    for (i = 0; i < FIPS_CAST_COUNT; i++) {
+        /* Left to run lazily (the slowest CASTs, #351), serialized by
+         * wp_init_cast() on every path that reaches them. */
+        if ((i == FIPS_CAST_DH_PRIMITIVE_Z) ||
+                (i == FIPS_CAST_ECC_PRIMITIVE_Z)) {
+            continue;
+        }
+        state = wc_GetCastStatus_fips(i);
+        if (state == FIPS_CAST_STATE_INIT) {
+            if (wc_RunCast_fips(i) != 0) {
+                castPendingFailed++;
+            }
+        }
+        else if (state == FIPS_CAST_STATE_FAILURE) {
+            castPendingFailed++;
+        }
+    }
+}
+
+/**
+ * Run, once per process, the CAST self-tests that have not run yet.
+ *
+ * wolfCrypt runs a CAST on first use of its algorithm. Two threads making
+ * that first use at once race on the CAST state, and on FIPS v5 the loser
+ * puts the module in degraded mode, so all crypto of the process fails.
+ * wp_init_cast() serializes the CASTs it runs, but not the ones wolfCrypt
+ * runs inside other algorithms (TLS 1.2, TLS 1.3 and SSH KDF, and
+ * dependencies across algorithm groups). Call before the provider is usable
+ * so that only the DH and ECC primitive-Z CASTs are left to run lazily, each
+ * through wp_init_cast() before any wolfCrypt call gated on it. CASTs that
+ * passed are not re-run.
+ *
+ * @return  1 when no CAST failed.
+ * @return  0 on failure.
+ */
+int wp_run_pending_casts(void)
+{
+    if (!CRYPTO_THREAD_run_once(&castPendingOnce, wolfprov_run_pending_casts)) {
+        return 0;
+    }
+    return castPendingFailed == 0;
+}
+
 /**
  * Initialize a CAST self-test for a specific algorithm.
  *
@@ -153,54 +230,54 @@ int wp_init_cast(int algo)
             switch (algo) {
 #ifdef WP_HAVE_AES
                 case WP_CAST_ALGO_AES:
-                    if (wc_RunCast_fips(FIPS_CAST_AES_CBC) != 0 ||
-                        wc_RunCast_fips(FIPS_CAST_AES_GCM) != 0) {
+                    if (wp_run_cast(FIPS_CAST_AES_CBC) != 0 ||
+                        wp_run_cast(FIPS_CAST_AES_GCM) != 0) {
                         ok = 0;
                     }
                     break;
 #endif
 #ifdef WP_HAVE_HMAC
                 case WP_CAST_ALGO_HMAC:
-                    if (wc_RunCast_fips(FIPS_CAST_HMAC_SHA1) != 0 ||
-                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_256) != 0 ||
-                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA2_512) != 0 ||
-                        wc_RunCast_fips(FIPS_CAST_HMAC_SHA3_256) != 0) {
+                    if (wp_run_cast(FIPS_CAST_HMAC_SHA1) != 0 ||
+                        wp_run_cast(FIPS_CAST_HMAC_SHA2_256) != 0 ||
+                        wp_run_cast(FIPS_CAST_HMAC_SHA2_512) != 0 ||
+                        wp_run_cast(FIPS_CAST_HMAC_SHA3_256) != 0) {
                         ok = 0;
                     }
                     break;
 #endif
 #ifdef WP_HAVE_RSA
                 case WP_CAST_ALGO_RSA:
-                    if (wc_RunCast_fips(FIPS_CAST_RSA_SIGN_PKCS1v15) != 0) {
+                    if (wp_run_cast(FIPS_CAST_RSA_SIGN_PKCS1v15) != 0) {
                         ok = 0;
                     }
                     break;
 #endif
 #ifdef WP_HAVE_ECDSA
                 case WP_CAST_ALGO_ECDSA:
-                    if (wc_RunCast_fips(FIPS_CAST_ECDSA) != 0) {
+                    if (wp_run_cast(FIPS_CAST_ECDSA) != 0) {
                         ok = 0;
                     }
                     break;
 #endif
 #ifdef WP_HAVE_ECDH
                 case WP_CAST_ALGO_ECDH:
-                    if (wc_RunCast_fips(FIPS_CAST_ECC_CDH) != 0 ||
-                        wc_RunCast_fips(FIPS_CAST_ECC_PRIMITIVE_Z) != 0) {
+                    if (wp_run_cast(FIPS_CAST_ECC_CDH) != 0 ||
+                        wp_run_cast(FIPS_CAST_ECC_PRIMITIVE_Z) != 0) {
                         ok = 0;
                     }
                     break;
 #endif
 #ifdef WP_HAVE_DH
                 case WP_CAST_ALGO_DH:
-                    if (wc_RunCast_fips(FIPS_CAST_DH_PRIMITIVE_Z) != 0) {
+                    if (wp_run_cast(FIPS_CAST_DH_PRIMITIVE_Z) != 0) {
                         ok = 0;
                     }
                     break;
 #endif
 #ifdef WP_HAVE_RANDOM
                 case WP_CAST_ALGO_DRBG:
-                    if (wc_RunCast_fips(FIPS_CAST_DRBG) != 0) {
+                    if (wp_run_cast(FIPS_CAST_DRBG) != 0) {
                         ok = 0;
                     }
                     break;

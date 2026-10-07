@@ -56,6 +56,16 @@ test_decode_oid_precheck_test_SOURCES = \
     test/standalone/tests/decode_oid_precheck/test_decode_oid_precheck.c
 test_decode_oid_precheck_test_LDADD = $(STANDALONE_COMMON_LDADD)
 
+# FIPS CAST at provider init regression test - part of 'make check'. Runs in
+# fresh processes so the CASTs are cold (the shared unit.test warms them).
+check_PROGRAMS += test/fips_cast_init.test
+noinst_PROGRAMS += test/fips_cast_init.test
+DISTCLEANFILES += test/.libs/fips_cast_init.test
+test_fips_cast_init_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
+test_fips_cast_init_test_SOURCES = \
+    test/standalone/tests/fips_cast_init/test_fips_cast_init.c
+test_fips_cast_init_test_LDADD = $(STANDALONE_COMMON_LDADD)
+
 test_pqc_interop_test_CPPFLAGS = $(STANDALONE_COMMON_CPPFLAGS)
 test_pqc_interop_test_SOURCES = test/standalone/tests/pqc_interop/test_pqc_interop.c
 test_pqc_interop_test_LDADD = $(STANDALONE_COMMON_LDADD)

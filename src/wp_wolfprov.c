@@ -1906,6 +1906,14 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
                 "Failed to initialize FIPS CAST mutexes");
             ok = 0;
         }
+        /* Threads making the first use of an algorithm at once race on its
+         * CAST, so run the CASTs not run yet now, before the provider is
+         * usable (DH and ECC primitive-Z stay lazy, behind wp_init_cast()).
+         * A failed CAST still fails its algorithms when used. */
+        else if (!wp_run_pending_casts()) {
+            WOLFPROV_ERROR_MSG(WP_LOG_COMP_PROVIDER,
+                "FIPS CAST failed at provider init");
+        }
 #endif
     }
 

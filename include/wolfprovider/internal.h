@@ -202,6 +202,7 @@ void wp_provctx_unlock_rng(WOLFPROV_CTX* provCtx);
 #define WP_CAST_ALGO_COUNT  7
 
 int wp_init_cast_mutexes(void);
+int wp_run_pending_casts(void);
 
 int wp_init_cast(int algo);
 

@@ -233,6 +233,13 @@ static int wp_mlx_kem_classical_encap(wp_MlxCtx* ctx, unsigned char* cbuf,
                 ok = 0;
             }
         }
+#if defined(HAVE_FIPS) && !defined(WP_SINGLE_THREADED)
+        /* wc_ecc_shared_secret fires the ECC primitive-Z CAST; serialize it
+         * here. */
+        if (ok && wp_init_cast(WP_CAST_ALGO_ECDH) != 1) {
+            ok = 0;
+        }
+#endif
         if (ok) {
             PRIVATE_KEY_UNLOCK();
             rc = wc_ecc_shared_secret(&eph,
@@ -382,6 +389,13 @@ static int wp_mlx_kem_classical_decap(wp_MlxCtx* ctx, const unsigned char* cbuf,
                 ok = 0;
             }
         }
+#if defined(HAVE_FIPS) && !defined(WP_SINGLE_THREADED)
+        /* wc_ecc_shared_secret fires the ECC primitive-Z CAST; serialize it
+         * here. */
+        if (ok && wp_init_cast(WP_CAST_ALGO_ECDH) != 1) {
+            ok = 0;
+        }
+#endif
         if (ok) {
             PRIVATE_KEY_UNLOCK();
             rc = wc_ecc_shared_secret(priv, &peer, sbuf, &ssLen);
