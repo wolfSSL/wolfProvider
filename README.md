@@ -32,6 +32,7 @@ Information on how to configure, build, and test wolfProvider can be found here:
 ### Symmetric Ciphers
 * AES (128, 192, 256-bit keys)
     * ECB, CBC, CTR, CFB, CTS
+    * XTS (AES-128-XTS, AES-256-XTS)
     * GCM, CCM (AEAD)
     * Key Wrap
 * 3DES-CBC
