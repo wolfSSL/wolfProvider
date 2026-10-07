@@ -2111,6 +2111,256 @@ int test_rsa_load_cert(void* data)
 }
 
 /**
+ * Load a DER certificate through the file store. The expected DER comes from
+ * OpenSSL's own PEM and ASN.1 code; the store must return the same bytes.
+ */
+int test_rsa_load_cert_der(void* data)
+{
+    int err;
+    BIO* pemBio = NULL;
+    BIO* derBio = NULL;
+    X509* oracle = NULL;
+    X509* cert = NULL;
+    unsigned char* oracleDer = NULL;
+    unsigned char* certDer = NULL;
+    int oracleLen = 0;
+    int certLen = 0;
+    OSSL_STORE_CTX* ctx = NULL;
+    OSSL_STORE_INFO* info = NULL;
+
+    (void)data;
+
+    PRINT_MSG("Convert certificate to DER with OpenSSL");
+    pemBio = BIO_new_file(CERTS_DIR "/server-cert.pem", "r");
+    err = pemBio == NULL;
+    if (err == 0) {
+        oracle = PEM_read_bio_X509(pemBio, NULL, NULL, NULL);
+        err = oracle == NULL;
+    }
+    if (err == 0) {
+        oracleLen = i2d_X509(oracle, &oracleDer);
+        err = oracleLen <= 0;
+    }
+    if (err == 0) {
+        derBio = BIO_new_mem_buf(oracleDer, oracleLen);
+        err = derBio == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Load DER certificate from the file store");
+        ctx = OSSL_STORE_attach(derBio, "file", wpLibCtx, NULL, NULL, NULL,
+            NULL, NULL, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = OSSL_STORE_expect(ctx, OSSL_STORE_INFO_CERT) != 1;
+    }
+    if (err == 0) {
+        info = OSSL_STORE_load(ctx);
+        err = info == NULL;
+    }
+    if (err == 0) {
+        cert = OSSL_STORE_INFO_get1_CERT(info);
+        err = cert == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Compare with OpenSSL's DER");
+        certLen = i2d_X509(cert, &certDer);
+        err = (certLen != oracleLen) ||
+              (memcmp(certDer, oracleDer, oracleLen) != 0);
+    }
+
+    OPENSSL_free(certDer);
+    OPENSSL_free(oracleDer);
+    X509_free(cert);
+    X509_free(oracle);
+    OSSL_STORE_INFO_free(info);
+    OSSL_STORE_close(ctx);
+    BIO_free(derBio);
+    BIO_free(pemBio);
+    return err;
+}
+
+/**
+ * Convert a PEM certificate file to DER with OpenSSL's PEM and ASN.1 code.
+ */
+static int test_rsa_cert_file_der(const char* file, unsigned char** der,
+    int* derLen)
+{
+    int err;
+    BIO* bio = NULL;
+    X509* x509 = NULL;
+
+    bio = BIO_new_file(file, "r");
+    err = bio == NULL;
+    if (err == 0) {
+        x509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+        err = x509 == NULL;
+    }
+    if (err == 0) {
+        *derLen = i2d_X509(x509, der);
+        err = *derLen <= 0;
+    }
+
+    X509_free(x509);
+    BIO_free(bio);
+    return err;
+}
+
+/**
+ * Load two concatenated DER certificates through the file store. Each load
+ * must return the next certificate in order, as OpenSSL's file store does.
+ */
+int test_rsa_load_cert_der_multi(void* data)
+{
+    int err = 0;
+    static const char* files[2] = {
+        CERTS_DIR "/server-cert.pem",
+        CERTS_DIR "/ca-cert.pem"
+    };
+    unsigned char* oracleDer[2] = { NULL, NULL };
+    int oracleLen[2] = { 0, 0 };
+    unsigned char* allDer = NULL;
+    BIO* derBio = NULL;
+    X509* cert = NULL;
+    unsigned char* certDer = NULL;
+    int certLen = 0;
+    OSSL_STORE_CTX* ctx = NULL;
+    OSSL_STORE_INFO* info = NULL;
+    int i;
+
+    (void)data;
+
+    PRINT_MSG("Convert certificates to DER with OpenSSL");
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        err = test_rsa_cert_file_der(files[i], &oracleDer[i], &oracleLen[i]);
+    }
+    if (err == 0) {
+        allDer = (unsigned char*)OPENSSL_malloc(oracleLen[0] + oracleLen[1]);
+        err = allDer == NULL;
+    }
+    if (err == 0) {
+        memcpy(allDer, oracleDer[0], oracleLen[0]);
+        memcpy(allDer + oracleLen[0], oracleDer[1], oracleLen[1]);
+        derBio = BIO_new_mem_buf(allDer, oracleLen[0] + oracleLen[1]);
+        err = derBio == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Load concatenated DER certificates from the file store");
+        ctx = OSSL_STORE_attach(derBio, "file", wpLibCtx, NULL, NULL, NULL,
+            NULL, NULL, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = OSSL_STORE_expect(ctx, OSSL_STORE_INFO_CERT) != 1;
+    }
+    if (err == 0) {
+        PRINT_MSG("Compare each certificate with OpenSSL's DER, in order");
+    }
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        info = OSSL_STORE_load(ctx);
+        err = (info == NULL) ||
+              (OSSL_STORE_INFO_get_type(info) != OSSL_STORE_INFO_CERT);
+        if (err == 0) {
+            cert = OSSL_STORE_INFO_get1_CERT(info);
+            err = cert == NULL;
+        }
+        if (err == 0) {
+            certLen = i2d_X509(cert, &certDer);
+            err = (certLen != oracleLen[i]) ||
+                  (memcmp(certDer, oracleDer[i], oracleLen[i]) != 0);
+        }
+        OPENSSL_free(certDer);
+        certDer = NULL;
+        X509_free(cert);
+        cert = NULL;
+        OSSL_STORE_INFO_free(info);
+        info = NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Check that nothing follows the two certificates");
+        err = OSSL_STORE_eof(ctx) != 1;
+    }
+
+    OSSL_STORE_close(ctx);
+    BIO_free(derBio);
+    OPENSSL_free(allDer);
+    OPENSSL_free(oracleDer[1]);
+    OPENSSL_free(oracleDer[0]);
+    return err;
+}
+
+/**
+ * Load a DER CRL through the file store. The expected DER comes from
+ * OpenSSL's own PEM and ASN.1 code; the store must return the same bytes.
+ */
+int test_rsa_load_crl_der(void* data)
+{
+    int err;
+    BIO* pemBio = NULL;
+    BIO* derBio = NULL;
+    X509_CRL* oracle = NULL;
+    X509_CRL* crl = NULL;
+    unsigned char* oracleDer = NULL;
+    unsigned char* crlDer = NULL;
+    int oracleLen = 0;
+    int crlLen = 0;
+    OSSL_STORE_CTX* ctx = NULL;
+    OSSL_STORE_INFO* info = NULL;
+
+    (void)data;
+
+    PRINT_MSG("Convert CRL to DER with OpenSSL");
+    pemBio = BIO_new_file(CERTS_DIR "/crl.pem", "r");
+    err = pemBio == NULL;
+    if (err == 0) {
+        oracle = PEM_read_bio_X509_CRL(pemBio, NULL, NULL, NULL);
+        err = oracle == NULL;
+    }
+    if (err == 0) {
+        oracleLen = i2d_X509_CRL(oracle, &oracleDer);
+        err = oracleLen <= 0;
+    }
+    if (err == 0) {
+        derBio = BIO_new_mem_buf(oracleDer, oracleLen);
+        err = derBio == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Load DER CRL from the file store");
+        ctx = OSSL_STORE_attach(derBio, "file", wpLibCtx, NULL, NULL, NULL,
+            NULL, NULL, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = OSSL_STORE_expect(ctx, OSSL_STORE_INFO_CRL) != 1;
+    }
+    if (err == 0) {
+        info = OSSL_STORE_load(ctx);
+        err = (info == NULL) ||
+              (OSSL_STORE_INFO_get_type(info) != OSSL_STORE_INFO_CRL);
+    }
+    if (err == 0) {
+        crl = OSSL_STORE_INFO_get1_CRL(info);
+        err = crl == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Compare with OpenSSL's DER");
+        crlLen = i2d_X509_CRL(crl, &crlDer);
+        err = (crlLen != oracleLen) ||
+              (memcmp(crlDer, oracleDer, oracleLen) != 0);
+    }
+
+    OPENSSL_free(crlDer);
+    OPENSSL_free(oracleDer);
+    X509_CRL_free(crl);
+    X509_CRL_free(oracle);
+    OSSL_STORE_INFO_free(info);
+    OSSL_STORE_close(ctx);
+    BIO_free(derBio);
+    BIO_free(pemBio);
+    return err;
+}
+
+/**
  * Load the RSA private key from the file store with a caller property query.
  *
  * @param [in] props  Property query passed as OSSL_STORE_PARAM_PROPERTIES.

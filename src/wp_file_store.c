@@ -308,6 +308,210 @@ static int wp_file_decoder_set_input_structure(OSSL_DECODER_CTX* decCtx,
 }
 
 /**
+ * DER certificate/CRL to object decoder context.
+ */
+typedef struct wp_Der2Obj {
+    /** Provider context - used to read the core BIO. */
+    WOLFPROV_CTX* provCtx;
+} wp_Der2Obj;
+
+/**
+ * Create a new DER to object decoder context.
+ *
+ * @param [in] provCtx  Provider context.
+ * @return  Pointer to context.
+ */
+static wp_Der2Obj* wp_der2obj_newctx(WOLFPROV_CTX* provCtx)
+{
+    wp_Der2Obj* ctx = NULL;
+
+    if (wolfssl_prov_is_running()) {
+        ctx = (wp_Der2Obj*)OPENSSL_zalloc(sizeof(*ctx));
+    }
+    if (ctx != NULL) {
+        ctx->provCtx = provCtx;
+    }
+
+    return ctx;
+}
+
+/**
+ * Dispose of DER to object decoder context.
+ *
+ * @param [in] ctx  DER to object decoder context.
+ */
+static void wp_der2obj_freectx(wp_Der2Obj* ctx)
+{
+    OPENSSL_free(ctx);
+}
+
+/**
+ * Read exactly len bytes from the BIO.
+ *
+ * @param [in]  bio  BIO to read from.
+ * @param [out] buf  Buffer to read into.
+ * @param [in]  len  Number of bytes to read. At most INT_MAX.
+ * @return  1 when all bytes were read.
+ * @return  0 otherwise.
+ */
+static int wp_der2obj_read(BIO* bio, unsigned char* buf, word32 len)
+{
+    int readLen = 1;
+
+    while ((len > 0) && (readLen > 0)) {
+        readLen = BIO_read(bio, buf, (int)len);
+        if (readLen > 0) {
+            buf += readLen;
+            len -= (word32)readLen;
+        }
+    }
+
+    return len == 0;
+}
+
+/**
+ * Read the header of the DER SEQUENCE at the BIO's position.
+ *
+ * @param [in]  bio     BIO to read from.
+ * @param [out] hdr     Buffer of at least 6 bytes to hold the header.
+ * @param [out] hdrLen  Length of the header in bytes.
+ * @param [out] objLen  Length of the SEQUENCE including its header.
+ * @return  1 when a DER SEQUENCE header was read.
+ * @return  0 otherwise.
+ */
+static int wp_der2obj_read_hdr(BIO* bio, unsigned char* hdr, word32* hdrLen,
+    word32* objLen)
+{
+    int ok;
+    word32 n = 0;
+    word32 contentLen = 0;
+    word32 i;
+
+    ok = wp_der2obj_read(bio, hdr, 2) && (hdr[0] == 0x30);
+    if (ok && (hdr[1] < 0x80)) {
+        contentLen = hdr[1];
+    }
+    else if (ok) {
+        n = hdr[1] & 0x7f;
+        ok = (n >= 1) && (n <= 4) && wp_der2obj_read(bio, hdr + 2, n);
+        for (i = 0; ok && (i < n); i++) {
+            contentLen = (contentLen << 8) | hdr[2 + i];
+        }
+    }
+    /* Keep the whole object within BIO_read's int length. */
+    if (ok && (contentLen > (word32)INT_MAX - 2 - n)) {
+        ok = 0;
+    }
+    if (ok) {
+        *hdrLen = 2 + n;
+        *objLen = 2 + n + contentLen;
+    }
+
+    return ok;
+}
+
+/**
+ * Pass DER data up as a certificate or CRL object, unparsed.
+ *
+ * The file store needs this for DER input, as OpenSSL's file store does
+ * (file_store_any2obj.c): the PEM to DER decoder does the same for PEM input.
+ * No cryptographic operation is performed.
+ *
+ * @param [in]      ctx        DER to object decoder context.
+ * @param [in, out] coreBio    BIO wrapped for the core.
+ * @param [in]      obj        Object type: OSSL_OBJECT_CERT or OSSL_OBJECT_CRL.
+ * @param [in]      dataCb     Callback to pass the object to.
+ * @param [in]      dataCbArg  Argument to pass to callback.
+ * @return  1 on success or when the data is not a DER SEQUENCE.
+ * @return  0 on failure.
+ */
+static int wp_der2obj_decode(wp_Der2Obj* ctx, OSSL_CORE_BIO* coreBio, int obj,
+    OSSL_CALLBACK* dataCb, void* dataCbArg)
+{
+    int ok = 1;
+    BIO* bio;
+    unsigned char hdr[6];
+    word32 hdrLen = 0;
+    word32 objLen = 0;
+    unsigned char* data = NULL;
+    OSSL_PARAM params[3];
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_der2obj_decode");
+
+    bio = wp_corebio_get_bio(ctx->provCtx, coreBio);
+    if (bio == NULL) {
+        ok = 0;
+    }
+    /* Read one object only so the next load starts at the next object.
+     * Not a complete DER SEQUENCE: not for this decoder, let others try. */
+    else if (wp_der2obj_read_hdr(bio, hdr, &hdrLen, &objLen)) {
+        data = (unsigned char*)OPENSSL_malloc(objLen);
+        if (data == NULL) {
+            ok = 0;
+        }
+        else {
+            XMEMCPY(data, hdr, hdrLen);
+        }
+        if (ok && wp_der2obj_read(bio, data + hdrLen, objLen - hdrLen)) {
+            params[0] = OSSL_PARAM_construct_octet_string(
+                OSSL_OBJECT_PARAM_DATA, data, objLen);
+            params[1] = OSSL_PARAM_construct_int(OSSL_OBJECT_PARAM_TYPE, &obj);
+            params[2] = OSSL_PARAM_construct_end();
+            ok = dataCb(params, dataCbArg);
+        }
+    }
+    OPENSSL_free(data);
+    BIO_free(bio);
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+/**
+ * Decode DER certificate: pass it up as a certificate object.
+ */
+static int wp_der2cert_decode(wp_Der2Obj* ctx, OSSL_CORE_BIO* coreBio,
+    int selection, OSSL_CALLBACK* dataCb, void* dataCbArg,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    (void)selection;
+    (void)pwCb;
+    (void)pwCbArg;
+    return wp_der2obj_decode(ctx, coreBio, OSSL_OBJECT_CERT, dataCb,
+        dataCbArg);
+}
+
+/**
+ * Decode DER CRL: pass it up as a CRL object.
+ */
+static int wp_der2crl_decode(wp_Der2Obj* ctx, OSSL_CORE_BIO* coreBio,
+    int selection, OSSL_CALLBACK* dataCb, void* dataCbArg,
+    OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg)
+{
+    (void)selection;
+    (void)pwCb;
+    (void)pwCbArg;
+    return wp_der2obj_decode(ctx, coreBio, OSSL_OBJECT_CRL, dataCb,
+        dataCbArg);
+}
+
+/** Dispatch table for DER certificate to object decoder. */
+const OSSL_DISPATCH wp_der_to_cert_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,  (DFUNC)wp_der2obj_newctx },
+    { OSSL_FUNC_DECODER_FREECTX, (DFUNC)wp_der2obj_freectx },
+    { OSSL_FUNC_DECODER_DECODE,  (DFUNC)wp_der2cert_decode },
+    { 0, NULL }
+};
+
+/** Dispatch table for DER CRL to object decoder. */
+const OSSL_DISPATCH wp_der_to_crl_decoder_functions[] = {
+    { OSSL_FUNC_DECODER_NEWCTX,  (DFUNC)wp_der2obj_newctx },
+    { OSSL_FUNC_DECODER_FREECTX, (DFUNC)wp_der2obj_freectx },
+    { OSSL_FUNC_DECODER_DECODE,  (DFUNC)wp_der2crl_decode },
+    { 0, NULL }
+};
+
+/**
  * Information about supported decoders from file data.
  */
 typedef struct wp_DecoderInfo {
@@ -405,6 +609,41 @@ static int wp_file_decoder_prop_query(const char* base, const char* caller,
 }
 
 /**
+ * Fetch a decoder and add it to the decoder context.
+ *
+ * @param [in]      ctx        File system context object.
+ * @param [in, out] decCtx     OpenSSL decoder context.
+ * @param [in]      name       Decoder name.
+ * @param [in]      propQuery  Structure property query. May be NULL.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_file_add_decoder(wp_FileCtx* ctx, OSSL_DECODER_CTX* decCtx,
+    const char* name, const char* propQuery)
+{
+    int ok = 1;
+    OSSL_DECODER* decoder = NULL;
+    char* query = NULL;
+
+    if (!wp_file_decoder_prop_query(propQuery, ctx->propQuery, &query)) {
+        ok = 0;
+    }
+    if (ok) {
+        decoder = OSSL_DECODER_fetch(ctx->provCtx->libCtx, name, query);
+        if (decoder == NULL) {
+            ok = 0;
+        }
+    }
+    if (ok && !OSSL_DECODER_CTX_add_decoder(decCtx, decoder)) {
+        ok = 0;
+    }
+    OSSL_DECODER_free(decoder);
+    OPENSSL_free(query);
+
+    return ok;
+}
+
+/**
  * Set the decoders into the decoder context.
  *
  * @param [in]      ctx     File system context object.
@@ -416,29 +655,22 @@ static int wp_file_set_decoder(wp_FileCtx* ctx, OSSL_DECODER_CTX* decCtx)
 {
     int ok = 1;
     size_t i;
-    OSSL_DECODER* decoder;
-    char* query = NULL;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_file_set_decoder");
 
     for (i = 0; ok && (i < WP_DECODERS_SIZE); i++) {
-        if (!wp_file_decoder_prop_query(wp_decoders[i].propQuery,
-                ctx->propQuery, &query)) {
-            ok = 0;
-        }
-        if (ok) {
-            decoder = OSSL_DECODER_fetch(ctx->provCtx->libCtx,
-                wp_decoders[i].name, query);
-            if (decoder == NULL) {
-                ok = 0;
-            }
-            if (ok && !OSSL_DECODER_CTX_add_decoder(decCtx, decoder)) {
-                ok = 0;
-            }
-            OSSL_DECODER_free(decoder);
-        }
-        OPENSSL_free(query);
-        query = NULL;
+        ok = wp_file_add_decoder(ctx, decCtx, wp_decoders[i].name,
+            wp_decoders[i].propQuery);
+    }
+    /* DER certificates and CRLs are passed up unparsed, as OpenSSL's file
+     * store does. Only added when one is expected: key loading is unchanged. */
+    if (ok && (ctx->type == OSSL_STORE_INFO_CERT)) {
+        ok = wp_file_add_decoder(ctx, decCtx, WP_NAMES_DER2OBJ,
+            "structure=Certificate");
+    }
+    else if (ok && (ctx->type == OSSL_STORE_INFO_CRL)) {
+        ok = wp_file_add_decoder(ctx, decCtx, WP_NAMES_DER2OBJ,
+            "structure=CertificateList");
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
