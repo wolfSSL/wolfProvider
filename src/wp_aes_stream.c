@@ -29,7 +29,8 @@
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
 
-#if defined(WP_HAVE_AESCTR) || defined(WP_HAVE_AESCFB) || defined(WP_HAVE_AESCTS)
+#if defined(WP_HAVE_AESCTR) || defined(WP_HAVE_AESCFB) || \
+    defined(WP_HAVE_AESOFB) || defined(WP_HAVE_AESCTS)
 
 /**
  * Data structure for AES ciphers that are streaming.
@@ -38,7 +39,7 @@ typedef struct wp_AesStreamCtx {
     /** wolfSSL AES object.  */
     Aes aes;
 
-    /** Cipher mode - CTR, CFB or CTS. */
+    /** Cipher mode - CTR, CFB, OFB or CTS. */
     int mode;
 
     /** Length of key in bytes. */
@@ -323,7 +324,8 @@ static int wp_aes_stream_init(wp_AesStreamCtx *ctx, const unsigned char *key,
     }
     if (ok && (iv == NULL) && ctx->ivSet &&
             ((ctx->mode == EVP_CIPH_CBC_MODE) ||
-             (ctx->mode == EVP_CIPH_CFB_MODE))) {
+             (ctx->mode == EVP_CIPH_CFB_MODE) ||
+             (ctx->mode == EVP_CIPH_OFB_MODE))) {
         if (!wp_aes_init_iv(ctx, ctx->oiv, ctx->ivLen)) {
             ok = 0;
         }
@@ -586,7 +588,7 @@ static int wp_aes_cts_decrypt(wp_AesStreamCtx *ctx, unsigned char *out,
 #endif /* ifdef WP_HAVE_AESCTS */
 
 /**
- * Encrypt/decrypt using AES-CTR, AES-CFB or AES-CTS with wolfSSL.
+ * Encrypt/decrypt using AES-CTR, AES-CFB, AES-OFB or AES-CTS with wolfSSL.
  *
  * Assumes out has inLen bytes available.
  * Assumes whole blocks only.
@@ -645,6 +647,35 @@ static int wp_aes_stream_doit(wp_AesStreamCtx *ctx, unsigned char *out,
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
                     "wc_AesCfbEncrypt/wc_AesCfbDecrypt", rc);
+                ok = 0;
+            }
+            in += chunk;
+            out += chunk;
+            inLen -= chunk;
+        }
+        if (ok) {
+            XMEMCPY(ctx->iv, ctx->aes.reg, ctx->ivLen);
+        }
+    }
+    else
+#endif
+#ifdef WP_HAVE_AESOFB
+    if (ctx->mode == EVP_CIPH_OFB_MODE) {
+        XMEMCPY(&ctx->aes.reg, ctx->iv, ctx->ivLen);
+        while (ok && (inLen > 0)) {
+            /* Cap chunk to largest word32 multiple of AES_BLOCK_SIZE so the
+             * IV state is consistent across chunk boundaries. */
+            word32 chunk = (inLen > 0xFFFFFFF0U) ? 0xFFFFFFF0U : (word32)inLen;
+            int rc;
+            if (ctx->enc) {
+                rc = wc_AesOfbEncrypt(&ctx->aes, out, in, chunk);
+            }
+            else {
+                rc = wc_AesOfbDecrypt(&ctx->aes, out, in, chunk);
+            }
+            if (rc != 0) {
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG,
+                    "wc_AesOfbEncrypt/wc_AesOfbDecrypt", rc);
                 ok = 0;
             }
             in += chunk;
@@ -923,7 +954,7 @@ static int wp_aes_stream_set_ctx_params(wp_AesStreamCtx *ctx,
  * @param [in, out] ctx      AES stream context object.
  * @param [in]      kBits    Number of bits in a valid key.
  * @param [in]      ivBits   Number of bits in a valid IV. 0 indicates no IV.
- * @param [in]      mode     AES stream mode: CTR, CFB or CTS.
+ * @param [in]      mode     AES stream mode: CTR, CFB, OFB or CTS.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -1032,6 +1063,18 @@ IMPLEMENT_AES_STREAM(cfb, CFB, 0, 128, 128)
 #endif /* WP_HAVE_AESCFB */
 
 /*
+ * AES OFB
+ */
+#ifdef WP_HAVE_AESOFB
+/** wp_aes256ofb_functions */
+IMPLEMENT_AES_STREAM(ofb, OFB, 0, 256, 128)
+/** wp_aes192ofb_functions */
+IMPLEMENT_AES_STREAM(ofb, OFB, 0, 192, 128)
+/** wp_aes128ofb_functions */
+IMPLEMENT_AES_STREAM(ofb, OFB, 0, 128, 128)
+#endif /* WP_HAVE_AESOFB */
+
+/*
  * AES CTS
  *
  * Even though AES-CTS is a block cipher, since we will only be supporting a
@@ -1046,5 +1089,6 @@ IMPLEMENT_AES_STREAM(cts, CBC, EVP_CIPH_FLAG_CTS, 192, 128)
 IMPLEMENT_AES_STREAM(cts, CBC, EVP_CIPH_FLAG_CTS, 128, 128)
 #endif /* WP_HAVE_AESCTS */
 
-#endif /* WP_HAVE_AESCTR || WP_HAVE_AESCFB || WP_HAVE_AESCTS */
+#endif /* WP_HAVE_AESCTR || WP_HAVE_AESCFB || WP_HAVE_AESOFB ||
+        * WP_HAVE_AESCTS */
 
