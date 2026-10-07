@@ -73,30 +73,53 @@ jobs:
           OPENSSL_INC="$PWD/openssl-install/include"
           WOLFSSL_INC="$PWD/wolfssl-install/include"
           WOLFPROV_INC="$PWD/include"
-          
+
+          # Under -j, cppcheck runs its whole-program checks only with a build dir
+          rm -rf cppcheck-build
+          mkdir cppcheck-build
+
           # Run cppcheck on source files only (tests can be analyzed separately if needed)
-          # Use --force and suppress noValidConfiguration to proceed even with incomplete config
-          cppcheck \
+          # The *_MAX values stand in for <limits.h>, which wolfSSL's sp_int.h needs.
+          # cppcheck 2.10 cannot evaluate __has_include(); library #ifdefs add no configurations.
+          # cppcheck's own exit status goes to cppcheck-rc.txt; the pipeline status is tee's.
+          rm -f cppcheck-rc.txt
+          { cppcheck \
             --enable=all \
             --suppress=missingIncludeSystem \
             --suppress=unusedFunction \
             --suppress=unmatchedSuppression \
-            --suppress=noValidConfiguration \
             --inline-suppr \
             --force \
             --error-exitcode=0 \
             -I "$OPENSSL_INC" \
             -I "$WOLFSSL_INC" \
             -I "$WOLFPROV_INC" \
+            --config-exclude="$OPENSSL_INC" \
+            --config-exclude="$WOLFSSL_INC" \
+            -DUCHAR_MAX=255 \
+            -DUSHRT_MAX=65535 \
+            -DUINT_MAX=4294967295U \
+            -DULONG_MAX=18446744073709551615UL \
+            -DULLONG_MAX=18446744073709551615ULL \
+            -U__has_include \
+            -j "$(nproc)" \
+            --cppcheck-build-dir=cppcheck-build \
             --platform=unix64 \
-            src/ 2>&1 | tee cppcheck-output.txt || true
-          
-          # Display output (filter out noValidConfiguration messages and progress)
-          grep -v "noValidConfiguration" cppcheck-output.txt | \
-            grep -v "^Checking " | \
+            src/ 2>&1 || echo $? > cppcheck-rc.txt; } | tee cppcheck-output.txt || true
+
+          # Display output (filter out progress)
+          grep -v "^Checking " cppcheck-output.txt | \
             grep -v "^[0-9]*/[0-9]* files checked" | \
             grep -v "^nofile:0:0: information:" || true
-          
+
+          # Findings do not change the exit status (--error-exitcode=0), so non-zero
+          # means cppcheck itself failed, e.g. crashed before checking every file
+          CPPCHECK_RC=$(cat cppcheck-rc.txt 2>/dev/null || echo 0)
+          if [ "$CPPCHECK_RC" -ne 0 ]; then
+            echo "cppcheck exited with status $CPPCHECK_RC"
+            exit 1
+          fi
+
           # Count errors and warnings (count lines with error:/warning: that are actual issues)
           # Use wc -l for more reliable counting, and strip whitespace
           ERROR_COUNT=$(grep -E "^src/.*:[0-9]+:[0-9]+:.*error:" cppcheck-output.txt 2>/dev/null | wc -l | tr -d '[:space:]' || echo "0")
@@ -108,6 +131,14 @@ jobs:
           
           echo "cppcheck found $ERROR_COUNT errors and $WARNING_COUNT warnings"
           
+          # Fail if any file had no valid configuration, i.e. was not analysed
+          NOT_ANALYZED=$(grep "\[noValidConfiguration\]" cppcheck-output.txt | cut -d: -f1 | sort -u)
+          if [ -n "$NOT_ANALYZED" ]; then
+            echo "cppcheck could not analyse:"
+            echo "$NOT_ANALYZED"
+            exit 1
+          fi
+
           # Fail only if critical errors found (adjust threshold as needed)
           if [ "${ERROR_COUNT}" -gt 0 ] 2>/dev/null; then
             echo "cppcheck found errors"

@@ -267,7 +267,7 @@ binary.
 
 | Job | Tool | Notes |
 |-----|------|-------|
-| `cppcheck` | `cppcheck --enable=all` on `src/` | Fails on any `error:` line. Warnings are reported but don't fail. |
+| `cppcheck` | `cppcheck --enable=all` on `src/` | Fails on any `error:` line, or on a file cppcheck could not analyse (`noValidConfiguration`). Warnings are reported but don't fail. |
 | `scan-build` | `clang --analyze` via `scan-build` | Currently fails only if bug count > 50 (rolling baseline). HTML report uploaded as artifact. |
 | `infer` | Facebook Infer | Currently fails only if issue count > 100. CSV + text report uploaded. |
 
@@ -409,6 +409,7 @@ for review).
 | Nightly Slack alert: `<app> FIPS` failed | The corresponding `<app>.yml` job log → "Test <app> with wolfProvider" step. The OSP patch in `wolfssl/osp` is the usual fix site. |
 | Sanitizer report (ASan/UBSan/TSan) | `sanitizers.yml` → "Run wolfprov unit tests (make test) under sanitizers" step. The first stack frame inside wolfProvider source is the bug. |
 | Static analysis report | Download the `scan-build-results` / `cppcheck-results` / `infer-results` artifact from the workflow run. |
+| `cppcheck could not analyse: <files>` | Rerun the "Run cppcheck" command from `static-analysis.yml` locally with `-v` on a listed file to see which `#error` or `#if` stopped every configuration. The usual fix is another `-D`/`-U` there; those flags work around the bookworm image's cppcheck 2.10, so revisit them when it is upgraded. |
 | Container image change isn't picked up | `publish-test-deps-image.yml` only fires on push to master under `docker/wolfprovider-test-deps/**`. Manually dispatch it if you need to force a rebuild. |
 
 ## Layout reference
