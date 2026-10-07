@@ -114,6 +114,10 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_AES_192_CFB "AES-192-CFB:2.16.840.1.101.3.4.1.24"
 #define WP_NAMES_AES_128_CFB "AES-128-CFB:2.16.840.1.101.3.4.1.4"
 
+#define WP_NAMES_AES_256_OFB "AES-256-OFB:2.16.840.1.101.3.4.1.43"
+#define WP_NAMES_AES_192_OFB "AES-192-OFB:2.16.840.1.101.3.4.1.23"
+#define WP_NAMES_AES_128_OFB "AES-128-OFB:2.16.840.1.101.3.4.1.3"
+
 #define WP_NAMES_AES_256_WRAP   \
     "AES-256-WRAP:id-aes256-wrap:AES256-WRAP:2.16.840.1.101.3.4.1.45"
 #define WP_NAMES_AES_192_WRAP \
@@ -422,6 +426,10 @@ extern const OSSL_DISPATCH wp_aes128ctr_functions[];
 extern const OSSL_DISPATCH wp_aes256cfb_functions[];
 extern const OSSL_DISPATCH wp_aes192cfb_functions[];
 extern const OSSL_DISPATCH wp_aes128cfb_functions[];
+
+extern const OSSL_DISPATCH wp_aes256ofb_functions[];
+extern const OSSL_DISPATCH wp_aes192ofb_functions[];
+extern const OSSL_DISPATCH wp_aes128ofb_functions[];
 
 extern const OSSL_DISPATCH wp_aes256wrap_functions[];
 extern const OSSL_DISPATCH wp_aes192wrap_functions[];
