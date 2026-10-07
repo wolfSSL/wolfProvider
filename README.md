@@ -34,6 +34,10 @@ Information on how to configure, build, and test wolfProvider can be found here:
     * ECB, CBC, CTR, CFB, CTS
     * GCM, CCM (AEAD)
     * Key Wrap
+    * XTS (128, 256-bit keys). Needs wolfSSL 5.6.6+ configured with
+      `--enable-aesxts`; not available with FIPS v5. Duplicate key halves are
+      rejected on encrypt, as in OpenSSL. On decrypt, wolfCrypt rejects them in
+      FIPS builds, and in 5.9.2+ unless `WC_AES_XTS_ALLOW_DUPLICATE_KEYS` is set.
 * 3DES-CBC
 
 ### MACs
