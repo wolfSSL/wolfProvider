@@ -2111,6 +2111,76 @@ int test_rsa_load_cert(void* data)
 }
 
 /**
+ * Load a DER certificate through the file store. The expected DER comes from
+ * OpenSSL's own PEM and ASN.1 code; the store must return the same bytes.
+ */
+int test_rsa_load_cert_der(void* data)
+{
+    int err;
+    BIO* pemBio = NULL;
+    BIO* derBio = NULL;
+    X509* oracle = NULL;
+    X509* cert = NULL;
+    unsigned char* oracleDer = NULL;
+    unsigned char* certDer = NULL;
+    int oracleLen = 0;
+    int certLen = 0;
+    OSSL_STORE_CTX* ctx = NULL;
+    OSSL_STORE_INFO* info = NULL;
+
+    (void)data;
+
+    PRINT_MSG("Convert certificate to DER with OpenSSL");
+    pemBio = BIO_new_file(CERTS_DIR "/server-cert.pem", "r");
+    err = pemBio == NULL;
+    if (err == 0) {
+        oracle = PEM_read_bio_X509(pemBio, NULL, NULL, NULL);
+        err = oracle == NULL;
+    }
+    if (err == 0) {
+        oracleLen = i2d_X509(oracle, &oracleDer);
+        err = oracleLen <= 0;
+    }
+    if (err == 0) {
+        derBio = BIO_new_mem_buf(oracleDer, oracleLen);
+        err = derBio == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Load DER certificate from the file store");
+        ctx = OSSL_STORE_attach(derBio, "file", wpLibCtx, NULL, NULL, NULL,
+            NULL, NULL, NULL);
+        err = ctx == NULL;
+    }
+    if (err == 0) {
+        err = OSSL_STORE_expect(ctx, OSSL_STORE_INFO_CERT) != 1;
+    }
+    if (err == 0) {
+        info = OSSL_STORE_load(ctx);
+        err = info == NULL;
+    }
+    if (err == 0) {
+        cert = OSSL_STORE_INFO_get1_CERT(info);
+        err = cert == NULL;
+    }
+    if (err == 0) {
+        PRINT_MSG("Compare with OpenSSL's DER");
+        certLen = i2d_X509(cert, &certDer);
+        err = (certLen != oracleLen) ||
+              (memcmp(certDer, oracleDer, oracleLen) != 0);
+    }
+
+    OPENSSL_free(certDer);
+    OPENSSL_free(oracleDer);
+    X509_free(cert);
+    X509_free(oracle);
+    OSSL_STORE_INFO_free(info);
+    OSSL_STORE_close(ctx);
+    BIO_free(derBio);
+    BIO_free(pemBio);
+    return err;
+}
+
+/**
  * Load the RSA private key from the file store with a caller property query.
  *
  * @param [in] props  Property query passed as OSSL_STORE_PARAM_PROPERTIES.

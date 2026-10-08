@@ -404,6 +404,7 @@ int test_rsa_pss_no_params(void *data);
 
 int test_rsa_load_key(void* data);
 int test_rsa_load_cert(void* data);
+int test_rsa_load_cert_der(void* data);
 int test_rsa_load_key_prop_query(void* data);
 int test_rsa_fromdata(void* data);
 int test_rsa_fromdata_oversize(void* data);

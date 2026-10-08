@@ -417,6 +417,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_pss_no_params, NULL),
     TEST_DECL(test_rsa_load_key, NULL),
     TEST_DECL(test_rsa_load_cert, NULL),
+    TEST_DECL(test_rsa_load_cert_der, NULL),
     TEST_DECL(test_rsa_load_key_prop_query, NULL),
     TEST_DECL(test_rsa_fromdata, NULL),
     TEST_DECL(test_rsa_fromdata_oversize, NULL),
