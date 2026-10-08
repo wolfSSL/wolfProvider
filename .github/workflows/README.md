@@ -143,7 +143,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `pam-pkcs11.yml` | PAM PKCS#11 module | smartcard login via PKCS#11 token + wolfprov-backed verify |
 | `opensc.yml` | OpenSC smartcard middleware | PKCS#15 / pkcs11-tool cert + key ops |
 | `sscep.yml` | SCEP enrollment client | CSR signing + SCEP message envelope decrypt/encrypt |
-| `git-ssh-dr.yml` | git over SSH (wolfSSL custom) | ed25519/RSA host key + signing path through OpenSSH stack |
+| `git-ssh-dr.yml` | git over SSH to a local sshd (wolfSSL custom) | RNG, SHA-2 and AES in Debian's OpenSSH: `aes-ctr` (RSA, DH group14, aes128-ctr, hmac-sha2-256) and `aes-gcm` (ECDSA P-521, ECDH P-256, aes256-gcm) suites |
 | `libfido2.yml` | FIDO2 / WebAuthn | CTAP2 ECDSA signatures, HMAC-secret extension |
 
 #### TPM, disk crypto, hashing
