@@ -137,10 +137,12 @@ jobs:
           # Run the QSSLSocket test, the make check takes too long
           QTEST_ENVIRONMENT=ci ./tests/auto/network/ssl/qsslsocket/tst_qsslsocket 2>&1 | tee qsslsocket-test.log
 
-          # Check test results based on qt_ref
-          if grep -q "521 passed" qsslsocket-test.log; then
+          # Expected passes: non-FIPS also passes pskServer(WithoutProxy)
+          # (TLS 1.0 PSK-AES256-CBC-SHA); FIPS does not.
+          EXPECTED_PASS=${{ matrix.fips_ref == 'FIPS' && '521' || '522' }}
+          if grep -q "Totals: ${EXPECTED_PASS} passed" qsslsocket-test.log; then
             TEST_RESULT=0
-            echo "SUCCESS: Found 521 passed tests as expected"
+            echo "SUCCESS: Found ${EXPECTED_PASS} passed tests as expected"
           else
             TEST_RESULT=1
             echo "Tests failed unexpectedly for 'v5.15.8-lts-lgpl' branch."

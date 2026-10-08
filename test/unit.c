@@ -612,6 +612,8 @@ TEST_CASE test_case[] = {
     defined(WP_HAVE_ECDH) && defined(WP_HAVE_SHA384)
     TEST_DECL(test_tls12_cbc_ossl, NULL),
     TEST_DECL(test_tls12_cbc, NULL),
+    TEST_DECL(test_tls10_cbc, NULL),
+    TEST_DECL(test_dtls12_cbc, NULL),
     TEST_DECL(test_aes_tls_cbc_bad_pad, NULL),
     TEST_DECL(test_aes_tls_cbc_split, NULL),
 #endif

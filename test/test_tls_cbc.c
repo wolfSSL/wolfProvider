@@ -24,7 +24,7 @@
     defined(WP_HAVE_ECDH) && defined(WP_HAVE_SHA384)
 
 /*
- * Direct EVP-level test for TLS 1.2 CBC OSSL_CIPHER_PARAM_TLS_MAC handling.
+ * Direct EVP-level test for TLS CBC OSSL_CIPHER_PARAM_TLS_MAC handling.
  * Exercises the same EVP calls the TLS record layer makes for provided CBC
  * ciphers: set TLS_VERSION + TLS_MAC_SIZE, encrypt/decrypt in-place, then
  * retrieve the MAC via TLS_MAC get_params.
@@ -35,22 +35,29 @@ static const unsigned char testPlain[] = "Hello TLS 1.2 CBC test from wolfProv!"
 
 #define BS  AES_BLOCK_SIZE
 
-/* Encrypt a TLS 1.2 CBC record in-place. Returns 0 on success. */
-static int test_tls_cbc_enc(EVP_CIPHER *cipher, const unsigned char *key,
-    const unsigned char *iv, const unsigned char *pt, int ptLen,
-    const unsigned char *mac, int macSize, unsigned char *buf, int *outLen)
+/* Explicit IV length of a CBC record for the TLS version. */
+static int test_tls_cbc_iv_len(unsigned int tlsVer)
+{
+    return (tlsVer == TLS1_VERSION) ? 0 : BS;
+}
+
+/* Encrypt a TLS CBC record in-place. Returns 0 on success. */
+static int test_tls_cbc_enc(EVP_CIPHER *cipher, unsigned int tlsVer,
+    const unsigned char *key, const unsigned char *iv,
+    const unsigned char *pt, int ptLen, const unsigned char *mac, int macSize,
+    unsigned char *buf, int *outLen)
 {
     int err = 0;
     EVP_CIPHER_CTX *ctx = NULL;
     OSSL_PARAM params[3];
-    unsigned int tlsVer = TLS1_2_VERSION;
     size_t macSz = (size_t)macSize;
-    int inLen = BS + ptLen + macSize;
+    int ivLen = test_tls_cbc_iv_len(tlsVer);
+    int inLen = ivLen + ptLen + macSize;
 
     /* Build in-place buffer: [explicit_IV][plaintext][MAC] */
-    memcpy(buf, iv, BS);
-    memcpy(buf + BS, pt, ptLen);
-    memcpy(buf + BS + ptLen, mac, macSize);
+    memcpy(buf, iv, ivLen);
+    memcpy(buf + ivLen, pt, ptLen);
+    memcpy(buf + ivLen + ptLen, mac, macSize);
 
     ctx = EVP_CIPHER_CTX_new();
     if (ctx == NULL) {
@@ -76,21 +83,22 @@ static int test_tls_cbc_enc(EVP_CIPHER *cipher, const unsigned char *key,
 }
 
 /*
- * Decrypt a TLS 1.2 CBC record in-place and verify:
+ * Decrypt a TLS CBC record in-place and verify:
  *   - outLen == ptLen
- *   - plaintext at buf+BS matches original
- *   - TLS_MAC get_params returns non-NULL pointer matching original MAC
+ *   - plaintext after the explicit IV matches original
+ *   - with a MAC (MtE), TLS_MAC get_params returns the original MAC
  */
-static int test_tls_cbc_dec(EVP_CIPHER *cipher, const unsigned char *key,
-    const unsigned char *iv, const unsigned char *origPt, int ptLen,
-    const unsigned char *origMac, int macSize, unsigned char *buf, int encLen)
+static int test_tls_cbc_dec(EVP_CIPHER *cipher, unsigned int tlsVer,
+    const unsigned char *key, const unsigned char *iv,
+    const unsigned char *origPt, int ptLen, const unsigned char *origMac,
+    int macSize, unsigned char *buf, int encLen)
 {
     int err = 0;
     EVP_CIPHER_CTX *ctx = NULL;
     OSSL_PARAM params[3];
     OSSL_PARAM getParams[2];
-    unsigned int tlsVer = TLS1_2_VERSION;
     size_t macSz = (size_t)macSize;
+    int ivLen = test_tls_cbc_iv_len(tlsVer);
     int outLen = 0;
     unsigned char *tlsMac = NULL;
 
@@ -120,20 +128,21 @@ static int test_tls_cbc_dec(EVP_CIPHER *cipher, const unsigned char *key,
         err = 1;
     }
 
-    /* Verify plaintext at buf+BS (past explicit IV) */
-    if (err == 0 && memcmp(buf + BS, origPt, ptLen) != 0) {
+    /* Verify plaintext past the explicit IV */
+    if (err == 0 && memcmp(buf + ivLen, origPt, ptLen) != 0) {
         PRINT_ERR_MSG("dec plaintext mismatch");
         err = 1;
     }
 
-    /* Retrieve and verify TLS_MAC */
-    if (err == 0) {
+    /* Retrieve and verify TLS_MAC; with no MAC (ETM) there is none */
+    if (err == 0 && macSize > 0) {
         getParams[0] = OSSL_PARAM_construct_octet_ptr(
             OSSL_CIPHER_PARAM_TLS_MAC, (void **)&tlsMac, macSize);
         getParams[1] = OSSL_PARAM_construct_end();
         err = EVP_CIPHER_CTX_get_params(ctx, getParams) != 1;
     }
-    if (err == 0 && (tlsMac == NULL || memcmp(tlsMac, origMac, macSize) != 0)) {
+    if (err == 0 && macSize > 0 &&
+            (tlsMac == NULL || memcmp(tlsMac, origMac, macSize) != 0)) {
         PRINT_ERR_MSG("dec MAC mismatch or NULL");
         err = 1;
     }
@@ -144,7 +153,7 @@ static int test_tls_cbc_dec(EVP_CIPHER *cipher, const unsigned char *key,
 
 /* Encrypt with encCtx provider, decrypt with decCtx provider. */
 static int test_tls_cbc_interop(OSSL_LIB_CTX *encCtx, OSSL_LIB_CTX *decCtx,
-    const char *cipherName, int keyLen, int macSize)
+    unsigned int tlsVer, const char *cipherName, int keyLen, int macSize)
 {
     int err = 0;
     EVP_CIPHER *encCipher = NULL;
@@ -167,11 +176,11 @@ static int test_tls_cbc_interop(OSSL_LIB_CTX *encCtx, OSSL_LIB_CTX *decCtx,
         memset(mac, 0xCC, macSize);
     }
     if (err == 0) {
-        err = test_tls_cbc_enc(encCipher, key, iv, testPlain,
+        err = test_tls_cbc_enc(encCipher, tlsVer, key, iv, testPlain,
                                sizeof(testPlain), mac, macSize, buf, &encLen);
     }
     if (err == 0) {
-        err = test_tls_cbc_dec(decCipher, key, iv, testPlain,
+        err = test_tls_cbc_dec(decCipher, tlsVer, key, iv, testPlain,
                                sizeof(testPlain), mac, macSize, buf, encLen);
     }
 
@@ -180,61 +189,90 @@ static int test_tls_cbc_interop(OSSL_LIB_CTX *encCtx, OSSL_LIB_CTX *decCtx,
     return err;
 }
 
-static const struct {
+typedef struct TlsCbcTest {
     const char *cipher;
     int keyLen;
     int macSize;
-} tlsCbcTests[] = {
+} TlsCbcTest;
+
+static const TlsCbcTest tls12CbcTests[] = {
     { "AES-256-CBC", 32, 48 },  /* ECDHE-RSA-AES256-SHA384 */
     { "AES-128-CBC", 16, 32 },  /* ECDHE-RSA-AES128-SHA256 */
 };
-#define TLS_CBC_TEST_CNT \
-    (int)(sizeof(tlsCbcTests) / sizeof(tlsCbcTests[0]))
+#define TLS12_CBC_TEST_CNT \
+    (int)(sizeof(tls12CbcTests) / sizeof(tls12CbcTests[0]))
 
-int test_tls12_cbc(void *data)
+static const TlsCbcTest tlsSha1CbcTests[] = {
+    { "AES-128-CBC", 16, 20 },  /* AES128-SHA */
+    { "AES-128-CBC", 16, 0 },   /* AES128-SHA with Encrypt-then-MAC */
+};
+#define TLS_SHA1_CBC_TEST_CNT \
+    (int)(sizeof(tlsSha1CbcTests) / sizeof(tlsSha1CbcTests[0]))
+
+/* Run the TLS CBC records through OpenSSL only, or across both providers. */
+static int test_tls_cbc_ver(unsigned int tlsVer, const char *verName,
+    const TlsCbcTest *tests, int cnt, int baseline)
 {
     int err = 0;
     int i;
 
-    (void)data;
-
-    for (i = 0; i < TLS_CBC_TEST_CNT && err == 0; i++) {
-        PRINT_MSG("TLS 1.2 CBC (OpenSSL -> wolfProvider): %s mac=%d",
-                  tlsCbcTests[i].cipher, tlsCbcTests[i].macSize);
-        err = test_tls_cbc_interop(osslLibCtx, wpLibCtx,
-                                   tlsCbcTests[i].cipher,
-                                   tlsCbcTests[i].keyLen,
-                                   tlsCbcTests[i].macSize);
-        if (err == 0) {
-            PRINT_MSG("TLS 1.2 CBC (wolfProvider -> OpenSSL): %s mac=%d",
-                      tlsCbcTests[i].cipher, tlsCbcTests[i].macSize);
-            err = test_tls_cbc_interop(wpLibCtx, osslLibCtx,
-                                       tlsCbcTests[i].cipher,
-                                       tlsCbcTests[i].keyLen,
-                                       tlsCbcTests[i].macSize);
+    for (i = 0; i < cnt && err == 0; i++) {
+        if (baseline) {
+            PRINT_MSG("%s CBC (OpenSSL baseline): %s mac=%d", verName,
+                      tests[i].cipher, tests[i].macSize);
+            err = test_tls_cbc_interop(osslLibCtx, osslLibCtx, tlsVer,
+                                       tests[i].cipher, tests[i].keyLen,
+                                       tests[i].macSize);
+        }
+        else {
+            PRINT_MSG("%s CBC (OpenSSL -> wolfProvider): %s mac=%d", verName,
+                      tests[i].cipher, tests[i].macSize);
+            err = test_tls_cbc_interop(osslLibCtx, wpLibCtx, tlsVer,
+                                       tests[i].cipher, tests[i].keyLen,
+                                       tests[i].macSize);
+            if (err == 0) {
+                PRINT_MSG("%s CBC (wolfProvider -> OpenSSL): %s mac=%d",
+                          verName, tests[i].cipher, tests[i].macSize);
+                err = test_tls_cbc_interop(wpLibCtx, osslLibCtx, tlsVer,
+                                           tests[i].cipher, tests[i].keyLen,
+                                           tests[i].macSize);
+            }
         }
     }
 
     return err;
 }
 
-int test_tls12_cbc_ossl(void *data)
+int test_tls12_cbc(void *data)
 {
-    int err = 0;
-    int i;
-
     (void)data;
 
-    for (i = 0; i < TLS_CBC_TEST_CNT && err == 0; i++) {
-        PRINT_MSG("TLS 1.2 CBC (OpenSSL baseline): %s mac=%d",
-                  tlsCbcTests[i].cipher, tlsCbcTests[i].macSize);
-        err = test_tls_cbc_interop(osslLibCtx, osslLibCtx,
-                                   tlsCbcTests[i].cipher,
-                                   tlsCbcTests[i].keyLen,
-                                   tlsCbcTests[i].macSize);
-    }
+    return test_tls_cbc_ver(TLS1_2_VERSION, "TLS 1.2", tls12CbcTests,
+                            TLS12_CBC_TEST_CNT, 0);
+}
 
-    return err;
+int test_tls12_cbc_ossl(void *data)
+{
+    (void)data;
+
+    return test_tls_cbc_ver(TLS1_2_VERSION, "TLS 1.2", tls12CbcTests,
+                            TLS12_CBC_TEST_CNT, 1);
+}
+
+int test_tls10_cbc(void *data)
+{
+    (void)data;
+
+    return test_tls_cbc_ver(TLS1_VERSION, "TLS 1.0", tlsSha1CbcTests,
+                            TLS_SHA1_CBC_TEST_CNT, 0);
+}
+
+int test_dtls12_cbc(void *data)
+{
+    (void)data;
+
+    return test_tls_cbc_ver(DTLS1_2_VERSION, "DTLS 1.2", tlsSha1CbcTests,
+                            TLS_SHA1_CBC_TEST_CNT, 0);
 }
 
 /*
@@ -274,7 +312,7 @@ static int test_aes_tls_cbc_bad_pad_helper(OSSL_LIB_CTX *libCtx,
 
     /* Encrypt a valid TLS record. */
     if (err == 0) {
-        err = test_tls_cbc_enc(cipher, key, iv, testPlain, ptLen,
+        err = test_tls_cbc_enc(cipher, tlsVer, key, iv, testPlain, ptLen,
                                mac, macSize, buf, &encLen);
     }
 
@@ -360,8 +398,8 @@ static int test_aes_tls_cbc_split_helper(OSSL_LIB_CTX *libCtx,
         err = 1;
     }
     if (err == 0) {
-        err = test_tls_cbc_enc(cipher, key, iv, testPlain, sizeof(testPlain),
-                               mac, macSize, buf, &encLen);
+        err = test_tls_cbc_enc(cipher, tlsVer, key, iv, testPlain,
+                               sizeof(testPlain), mac, macSize, buf, &encLen);
     }
     /* Output buffer sized to the produced plaintext so an overread past the
      * written region is caught. */
