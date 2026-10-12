@@ -315,6 +315,12 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_cts_split_init, NULL),
     TEST_DECL(test_aes128_cts_one_block_split_init, NULL),
 #endif
+#ifdef WP_HAVE_AESXTS
+    TEST_DECL(test_aes_xts, NULL),
+    TEST_DECL(test_aes_xts_limits, NULL),
+    TEST_DECL(test_aes_xts_ctx, NULL),
+    TEST_DECL(test_aes_xts_params, NULL),
+#endif
     TEST_DECL(test_cipher_null_zero, NULL),
 #ifdef WP_HAVE_AESGCM
     TEST_DECL(test_aes128_gcm, NULL),

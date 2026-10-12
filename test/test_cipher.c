@@ -1972,6 +1972,491 @@ int test_aes_cts_modes(void *data)
 
 #endif /* WP_HAVE_AESCTS */
 
+#ifdef WP_HAVE_AESXTS
+
+typedef struct aes_xts_vec {
+    const char *name;
+    const char *oid;
+    int keyLen;
+    int len;
+    const unsigned char *key;
+    const unsigned char *iv;
+    const unsigned char *pt;
+    const unsigned char *ct;
+} aes_xts_vec;
+
+/* CAVS XTSGenAES128,101 and XTSGenAES256,101. */
+static const aes_xts_vec aes_xts_vecs[] = {
+    {
+        "AES-128-XTS", "1.3.111.2.1619.0.1.1", 32, 32,
+        (const unsigned char *)
+        "\xb7\xb9\x3f\x51\x6a\xef\x29\x5e\xff\x3a\x29\xd8\x37\xcf\x1f\x13"
+        "\x53\x47\xe8\xa2\x1d\xae\x61\x6f\xf5\x06\x2b\x2e\x8d\x78\xce\x5e",
+        (const unsigned char *)
+        "\x87\x3e\xde\xa6\x53\xb6\x43\xbd\x8b\xcf\x51\x40\x31\x97\xed\x14",
+        (const unsigned char *)
+        "\x23\x6f\x8a\x5b\x58\xdd\x55\xf6\x19\x4e\xd7\x0c\x4a\xc1\xa1\x7f"
+        "\x1f\xe6\x0e\xc9\xa6\xc4\x54\xd0\x87\xcc\xb7\x7d\x6b\x63\x8c\x47",
+        (const unsigned char *)
+        "\x22\xe6\xa3\xc6\x37\x9d\xcf\x75\x99\xb0\x52\xb5\xa7\x49\xc7\xf7"
+        "\x8a\xd8\xa1\x1b\x9f\x1a\xa9\x43\x0c\xf3\xae\xf4\x45\x68\x2e\x19"
+    },
+    {
+        "AES-256-XTS", "1.3.111.2.1619.0.1.2", 64, 48,
+        (const unsigned char *)
+        "\x26\x6c\x33\x6b\x3b\x01\x48\x9f\x32\x67\xf5\x28\x35\xfd\x92\xf6"
+        "\x74\x37\x4b\x88\xb4\xe1\xeb\xd2\xd3\x6a\x5f\x45\x75\x81\xd9\xd0"
+        "\x42\xc3\xee\xf7\xb0\xb7\xe5\x13\x7b\x08\x64\x96\xb4\xd9\xe6\xac"
+        "\x65\x8d\x71\x96\xa2\x3f\x23\xf0\x36\x17\x2f\xdb\x8f\xae\xe5\x27",
+        (const unsigned char *)
+        "\x06\xb2\x09\xa7\xa2\x2f\x48\x6e\xcb\xfa\xdb\x0f\x31\x37\xba\x42",
+        (const unsigned char *)
+        "\xca\x7d\x65\xef\x8d\x3d\xfa\xd3\x45\xb6\x1c\xcd\xdc\xa1\xad\x81"
+        "\xde\x83\x0b\x9e\x86\xc7\xb4\x26\xd7\x6c\xb7\xdb\x76\x68\x52\xd9"
+        "\x81\xc6\xb2\x14\x09\x39\x9d\x78\xf4\x2c\xc0\xb3\x3a\x7b\xbb\x06",
+        (const unsigned char *)
+        "\xc7\x32\x56\x87\x0c\xc2\xf4\xdd\x57\xac\xc7\x4b\x54\x56\xdb\xd7"
+        "\x76\x91\x2a\x12\x8b\xc1\xf7\x7d\x72\xcd\xeb\xbf\x27\x00\x44\xb7"
+        "\xa4\x3c\xee\xd2\x90\x25\xe1\xe8\xbe\x21\x1f\xa3\xc3\xed\x00\x2d"
+    },
+};
+#define AES_XTS_VEC_CNT ((int)(sizeof(aes_xts_vecs) / sizeof(*aes_xts_vecs)))
+
+#define AES_XTS_LIB_NAME(libCtx) \
+    (((libCtx) == wpLibCtx) ? "wolfProvider" : "OpenSSL")
+
+/* One data unit with a fresh key+IV init, via Update/Final or EVP_Cipher(). */
+static int test_aes_xts_crypt(const EVP_CIPHER *cipher, int enc, int oneShot,
+    const unsigned char *key, const unsigned char *iv,
+    const unsigned char *in, int len, unsigned char *out)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int outLen = 0;
+    int fLen = 0;
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, enc) != 1;
+    }
+    if ((err == 0) && oneShot) {
+        err = EVP_Cipher(ctx, out, in, len) != len;
+    }
+    else if (err == 0) {
+        err = (EVP_CipherUpdate(ctx, out, &outLen, in, len) != 1) ||
+              (EVP_CipherFinal_ex(ctx, out + outLen, &fLen) != 1) ||
+              (outLen != len) || (fLen != 0);
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return err;
+}
+
+int test_aes_xts(void *data)
+{
+    int err = 0;
+    /* Block-aligned, ciphertext-stealing and sector lengths. */
+    static const int lens[] = { 16, 17, 31, 32, 33, 512, 513, 4096 };
+    const aes_xts_vec *v;
+    EVP_CIPHER *ocipher;
+    EVP_CIPHER *wcipher;
+    EVP_CIPHER *oidCipher;
+    unsigned char key[64];
+    unsigned char iv[16];
+    unsigned char pt[4096];
+    unsigned char oEnc[4096];
+    unsigned char wEnc[4096];
+    unsigned char dec[4096];
+    int i;
+    int j;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < AES_XTS_VEC_CNT); i++) {
+        v = &aes_xts_vecs[i];
+        ocipher = EVP_CIPHER_fetch(osslLibCtx, v->name, "");
+        wcipher = EVP_CIPHER_fetch(wpLibCtx, v->name, "");
+        oidCipher = EVP_CIPHER_fetch(wpLibCtx, v->oid, "");
+        err = (ocipher == NULL) || (wcipher == NULL) || (oidCipher == NULL) ||
+              !EVP_CIPHER_is_a(oidCipher, v->name);
+
+        PRINT_MSG("%s known answer, fetched by name and by OID", v->name);
+        /* Bit 0: decrypt, bit 1: EVP_Cipher(), bit 2: fetched by OID. */
+        for (j = 0; (err == 0) && (j < 8); j++) {
+            int enc = (j & 1) == 0;
+
+            err = test_aes_xts_crypt((j & 4) ? oidCipher : wcipher, enc,
+                      (j & 2) != 0, v->key, v->iv, enc ? v->pt : v->ct,
+                      v->len, dec) ||
+                  (memcmp(dec, enc ? v->ct : v->pt, v->len) != 0);
+        }
+
+        /* wolfProvider alternates Update and EVP_Cipher() by length. */
+        for (j = 0; (err == 0) && (j < (int)(sizeof(lens) / sizeof(*lens)));
+                j++) {
+            PRINT_MSG("%s vs OpenSSL, %d bytes", v->name, lens[j]);
+            err = (RAND_bytes(key, v->keyLen) != 1) ||
+                  (RAND_bytes(iv, sizeof(iv)) != 1) ||
+                  (RAND_bytes(pt, lens[j]) != 1) ||
+                  test_aes_xts_crypt(ocipher, 1, 0, key, iv, pt, lens[j],
+                      oEnc) ||
+                  test_aes_xts_crypt(wcipher, 1, j & 1, key, iv, pt, lens[j],
+                      wEnc) ||
+                  (memcmp(oEnc, wEnc, lens[j]) != 0) ||
+                  test_aes_xts_crypt(wcipher, 0, j & 1, key, iv, oEnc, lens[j],
+                      dec) ||
+                  (memcmp(dec, pt, lens[j]) != 0) ||
+                  test_aes_xts_crypt(ocipher, 0, 0, key, iv, wEnc, lens[j],
+                      dec) ||
+                  (memcmp(dec, pt, lens[j]) != 0);
+        }
+
+        EVP_CIPHER_free(oidCipher);
+        EVP_CIPHER_free(wcipher);
+        EVP_CIPHER_free(ocipher);
+    }
+
+    return err;
+}
+
+#define AES_XTS_REINIT_SZ   (2 + 16)
+
+/* wolfCrypt rejects equal key halves on decrypt; OpenSSL accepts them. */
+#if (defined(HAVE_FIPS) && LIBWOLFSSL_VERSION_HEX >= 0x05007000) || \
+    (LIBWOLFSSL_VERSION_HEX >= 0x05009002 && \
+     !defined(WC_AES_XTS_ALLOW_DUPLICATE_KEYS))
+    #define AES_XTS_DEC_DUP_REJECTED
+#endif
+
+/* Key ctx for enc, then re-init without a cipher (EVP keeps the ctx). res gets
+ * the re-init's and a 16-byte Update's returns and the output. */
+static int test_aes_xts_reinit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
+    const aes_xts_vec *v, int enc, const unsigned char *key, int reEnc,
+    unsigned char *res)
+{
+    int err;
+    int outLen;
+
+    memset(res, 0, AES_XTS_REINIT_SZ);
+    err = EVP_CipherInit_ex(ctx, cipher, NULL, v->key, v->iv, enc) != 1;
+    if (err == 0) {
+        res[0] = (unsigned char)EVP_CipherInit_ex(ctx, NULL, NULL, key, v->iv,
+            reEnc);
+        res[1] = (unsigned char)EVP_CipherUpdate(ctx, res + 2, &outLen, v->pt,
+            16);
+    }
+
+    return err;
+}
+
+/* res: re-init and IVLEN results, checked against OpenSSL's by the caller. */
+static int test_aes_xts_limits_ex(OSSL_LIB_CTX *libCtx, const aes_xts_vec *v,
+    const unsigned char *in, unsigned char *out,
+    unsigned char res[][AES_XTS_REINIT_SZ])
+{
+    static const struct {
+        int len;
+        int ok;
+    } lens[] = {
+        { 0, 0 }, { 15, 0 }, { 16, 1 }, { 1 << 24, 1 }, { (1 << 24) + 16, 0 }
+    };
+    int err;
+    EVP_CIPHER *cipher;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char dupKey[64];
+    unsigned char key2[64];
+    OSSL_PARAM params[2];
+    size_t ivLen = 8;
+    int outLen;
+    int enc;
+    int i;
+    int j;
+
+    PRINT_MSG("%s limits, %s", v->name, AES_XTS_LIB_NAME(libCtx));
+    err = (cipher = EVP_CIPHER_fetch(libCtx, v->name, "")) == NULL;
+    /* Bit 0: encrypt, bit 1: EVP_Cipher(). */
+    for (i = 0; (err == 0) && (i < (int)(sizeof(lens) / sizeof(*lens))); i++) {
+        for (j = 0; (err == 0) && (j < 4); j++) {
+            err = test_aes_xts_crypt(cipher, j & 1, j >> 1, v->key, v->iv, in,
+                      lens[i].len, out) != !lens[i].ok;
+        }
+    }
+
+    /* Equal key halves: encrypt init fails, leaving a fresh ctx keyless. */
+    if (err == 0) {
+        memcpy(dupKey, v->key, v->keyLen / 2);
+        memcpy(dupKey + v->keyLen / 2, v->key, v->keyLen / 2);
+        err = ((ctx = EVP_CIPHER_CTX_new()) == NULL) ||
+              (EVP_EncryptInit_ex(ctx, cipher, NULL, dupKey, v->iv) != 0) ||
+              (EVP_EncryptUpdate(ctx, out, &outLen, in, 16) != 0);
+    }
+    /* Refused re-key of a keyed ctx. */
+    if (err == 0) {
+        err = test_aes_xts_reinit(ctx, cipher, v, 1, dupKey, 1, res[0]) ||
+              (res[0][0] != 0);
+    }
+    /* Equal halves on decrypt re-key (row 6). */
+    if (err == 0) {
+        err = test_aes_xts_reinit(ctx, cipher, v, 0, dupKey, 0, res[6]);
+    }
+#ifdef AES_XTS_DEC_DUP_REJECTED
+    if ((err == 0) && (libCtx == wpLibCtx)) {
+        err = EVP_DecryptInit_ex(ctx, cipher, NULL, dupKey, v->iv) != 0;
+    }
+#endif
+    /* Re-key a live ctx with a valid key, same and other direction. */
+    if (err == 0) {
+        memcpy(key2, v->key, v->keyLen);
+        key2[0] ^= 1;
+        err = test_aes_xts_reinit(ctx, cipher, v, 1, key2, 1, res[4]) ||
+              test_aes_xts_reinit(ctx, cipher, v, 1, key2, 0, res[5]);
+    }
+    /* Key-less init in the other direction. */
+    for (enc = 0; (err == 0) && (enc <= 1); enc++) {
+        err = test_aes_xts_reinit(ctx, cipher, v, enc, NULL, !enc,
+                  res[1 + enc]);
+    }
+    if (err == 0) {
+        dupKey[v->keyLen - 1] ^= 1;
+        err = (EVP_EncryptInit_ex(ctx, cipher, NULL, dupKey, v->iv) != 1) ||
+              (EVP_EncryptUpdate(ctx, out, &outLen, in, 16) != 1);
+    }
+
+    /* Wrong key length. A wrong IVLEN param only reaches init on newer
+     * OpenSSL (3.0 drops it), so its result is compared with OpenSSL's. */
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_IVLEN,
+            &ivLen);
+        params[1] = OSSL_PARAM_construct_end();
+        memset(res[3], 0, AES_XTS_REINIT_SZ);
+        err = EVP_CIPHER_CTX_set_key_length(ctx, v->keyLen / 2) != 0;
+        res[3][0] = (unsigned char)EVP_EncryptInit_ex2(ctx, cipher, v->key,
+            v->iv, params);
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_xts_limits(void *data)
+{
+    int err;
+    unsigned char *in;
+    unsigned char *out;
+    unsigned char oRes[7][AES_XTS_REINIT_SZ];
+    unsigned char wRes[7][AES_XTS_REINIT_SZ];
+    int i;
+
+    (void)data;
+
+    in = (unsigned char *)OPENSSL_zalloc((1 << 24) + 16);
+    out = (unsigned char *)OPENSSL_malloc((1 << 24) + 16);
+    err = (in == NULL) || (out == NULL);
+    for (i = 0; (err == 0) && (i < AES_XTS_VEC_CNT); i++) {
+        err = test_aes_xts_limits_ex(osslLibCtx, &aes_xts_vecs[i], in, out,
+                  oRes) ||
+              test_aes_xts_limits_ex(wpLibCtx, &aes_xts_vecs[i], in, out,
+                  wRes);
+        if ((err == 0) &&
+                (memcmp(oRes, wRes, 6 * AES_XTS_REINIT_SZ) != 0)) {
+            PRINT_ERR_MSG("%s differs from OpenSSL",
+                aes_xts_vecs[i].name);
+            err = 1;
+        }
+        /* Row 6: rejected leaving no key, or accepted exactly as OpenSSL. */
+        if (err == 0) {
+            int rejected = (wRes[6][0] == 0) && (wRes[6][1] == 0);
+#ifdef AES_XTS_DEC_DUP_REJECTED
+            err = !rejected;
+#else
+            err = !rejected &&
+                  (memcmp(oRes[6], wRes[6], AES_XTS_REINIT_SZ) != 0);
+#endif
+            if (err) {
+                PRINT_ERR_MSG("%s equal-halves decrypt unexpected",
+                    aes_xts_vecs[i].name);
+            }
+        }
+    }
+
+    OPENSSL_free(out);
+    OPENSSL_free(in);
+    return err;
+}
+
+static int test_aes_xts_ctx_ex(OSSL_LIB_CTX *libCtx, const aes_xts_vec *v)
+{
+#ifdef WC_AESFREE_IS_MANDATORY
+    /* wolfProvider won't copy an Aes that owns fds/handles/heap. */
+    int canCopy = (libCtx != wpLibCtx);
+#else
+    int canCopy = 1;
+#endif
+    int err;
+    EVP_CIPHER *cipher;
+    EVP_CIPHER_CTX *ctx = NULL;
+    EVP_CIPHER_CTX *copy = NULL;
+    unsigned char iv[16];
+    unsigned char buf[512];
+    unsigned char ref[512];
+    int outLen;
+    int fLen;
+    int enc;
+    int i;
+
+    PRINT_MSG("%s ctx, %s", v->name, AES_XTS_LIB_NAME(libCtx));
+    err = ((cipher = EVP_CIPHER_fetch(libCtx, v->name, "")) == NULL) ||
+          ((ctx = EVP_CIPHER_CTX_new()) == NULL) ||
+          ((copy = EVP_CIPHER_CTX_new()) == NULL);
+
+    /* Update needs both key and IV; passing the cipher resets the ctx. */
+    if (err == 0) {
+        err = (EVP_EncryptInit_ex(ctx, cipher, NULL, v->key, NULL) != 1) ||
+              (EVP_EncryptUpdate(ctx, buf, &outLen, v->pt, 16) != 0) ||
+              (EVP_EncryptInit_ex(ctx, cipher, NULL, NULL, v->iv) != 1) ||
+              (EVP_EncryptUpdate(ctx, buf, &outLen, v->pt, 16) != 0);
+    }
+
+    /* cryptsetup: key once, then per data unit an IV-only init, an in-place
+     * update and an empty final, each matching a fresh key+IV init. */
+    for (enc = 0; (err == 0) && (enc <= 1); enc++) {
+        err = (EVP_CipherInit_ex(ctx, cipher, NULL, v->key, NULL, enc) != 1) ||
+              (EVP_CIPHER_CTX_set_padding(ctx, 0) != 1);
+        memcpy(iv, v->iv, sizeof(iv));
+        for (i = 0; (err == 0) && (i < 4); i++) {
+            iv[0] = (unsigned char)i;
+            memset(buf, 0x40 + i, sizeof(buf));
+            err = test_aes_xts_crypt(cipher, enc, 0, v->key, iv, buf,
+                      sizeof(buf), ref) ||
+                  (EVP_CipherInit_ex(ctx, NULL, NULL, NULL, iv, enc) != 1) ||
+                  (EVP_CipherUpdate(ctx, buf, &outLen, buf,
+                      sizeof(buf)) != 1) ||
+                  (EVP_CipherFinal_ex(ctx, buf + outLen, &fLen) != 1) ||
+                  (outLen != (int)sizeof(buf)) || (fLen != 0) ||
+                  (memcmp(buf, ref, sizeof(buf)) != 0);
+        }
+    }
+
+    /* A copy outlives its source. */
+    if (err == 0) {
+        err = (EVP_EncryptInit_ex(ctx, cipher, NULL, v->key, v->iv) != 1) ||
+              (EVP_CIPHER_CTX_copy(copy, ctx) != canCopy);
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+    if ((err == 0) && canCopy) {
+        err = (EVP_EncryptUpdate(copy, buf, &outLen, v->pt, v->len) != 1) ||
+              (memcmp(buf, v->ct, v->len) != 0);
+    }
+
+    EVP_CIPHER_CTX_free(copy);
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_xts_ctx(void *data)
+{
+    int err = 0;
+    int i;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < AES_XTS_VEC_CNT); i++) {
+        err = test_aes_xts_ctx_ex(osslLibCtx, &aes_xts_vecs[i]) ||
+              test_aes_xts_ctx_ex(wpLibCtx, &aes_xts_vecs[i]);
+    }
+
+    return err;
+}
+
+/* PADDING, NUM, key and IV length of a ctx; IV and UPDATED_IV must be iv. */
+static int test_aes_xts_ctx_vals(EVP_CIPHER_CTX *ctx, const unsigned char *iv,
+    unsigned long *vals)
+{
+    int err;
+    unsigned int pad = 0;
+    unsigned char got[2][16];
+    OSSL_PARAM params[2];
+
+    params[0] = OSSL_PARAM_construct_uint(OSSL_CIPHER_PARAM_PADDING, &pad);
+    params[1] = OSSL_PARAM_construct_end();
+    err = (EVP_CIPHER_CTX_get_params(ctx, params) != 1) ||
+          (EVP_CIPHER_CTX_get_original_iv(ctx, got[0], sizeof(got[0])) != 1) ||
+          (EVP_CIPHER_CTX_get_updated_iv(ctx, got[1], sizeof(got[1])) != 1) ||
+          (memcmp(got[0], iv, sizeof(got[0])) != 0) ||
+          (memcmp(got[1], iv, sizeof(got[1])) != 0);
+    vals[0] = pad;
+    vals[1] = EVP_CIPHER_CTX_get_num(ctx);
+    vals[2] = EVP_CIPHER_CTX_get_key_length(ctx);
+    vals[3] = EVP_CIPHER_CTX_get_iv_length(ctx);
+
+    return err;
+}
+
+static int test_aes_xts_params_ex(OSSL_LIB_CTX *libCtx, const aes_xts_vec *v,
+    unsigned long *vals)
+{
+    int err;
+    EVP_CIPHER *cipher;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char buf[64];
+    int outLen;
+
+    err = ((cipher = EVP_CIPHER_fetch(libCtx, v->name, "")) == NULL) ||
+          ((ctx = EVP_CIPHER_CTX_new()) == NULL) ||
+          (EVP_EncryptInit_ex(ctx, cipher, NULL, v->key, v->iv) != 1);
+    if (err == 0) {
+        vals[0] = EVP_CIPHER_get_mode(cipher);
+        vals[1] = EVP_CIPHER_get_key_length(cipher);
+        vals[2] = EVP_CIPHER_get_iv_length(cipher);
+        vals[3] = EVP_CIPHER_get_block_size(cipher);
+        vals[4] = EVP_CIPHER_get_flags(cipher);
+        err = test_aes_xts_ctx_vals(ctx, v->iv, vals + 5);
+    }
+    /* NUM and PADDING are reported, not stored; the tweak never advances. */
+    if (err == 0) {
+        err = (EVP_CIPHER_CTX_set_padding(ctx, 0) != 1) ||
+              (EVP_CIPHER_CTX_set_num(ctx, 5) != 1) ||
+              (EVP_EncryptUpdate(ctx, buf, &outLen, v->pt, v->len) != 1) ||
+              test_aes_xts_ctx_vals(ctx, v->iv, vals + 9);
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(cipher);
+    return err;
+}
+
+int test_aes_xts_params(void *data)
+{
+    int err = 0;
+    unsigned long oVals[13];
+    unsigned long wVals[13];
+    int i;
+    int j;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < AES_XTS_VEC_CNT); i++) {
+        PRINT_MSG("%s params, wolfProvider vs OpenSSL", aes_xts_vecs[i].name);
+        err = test_aes_xts_params_ex(osslLibCtx, &aes_xts_vecs[i], oVals) ||
+              test_aes_xts_params_ex(wpLibCtx, &aes_xts_vecs[i], wVals);
+        for (j = 0; (err == 0) && (j < (int)(sizeof(oVals) / sizeof(*oVals)));
+                j++) {
+            if (oVals[j] != wVals[j]) {
+                PRINT_ERR_MSG("%s value %d: OpenSSL %lu, wolfProvider %lu",
+                    aes_xts_vecs[i].name, j, oVals[j], wVals[j]);
+                err = 1;
+            }
+        }
+    }
+
+    return err;
+}
+
+#endif /* WP_HAVE_AESXTS */
+
 #ifdef WP_HAVE_AESCBC
 
 int test_aes256_cbc_multiple(void *data)

@@ -78,6 +78,7 @@ sudo make install
 | Flag | Purpose |
 |------|---------|
 | `--enable-aesgcm-stream` | Better AES-GCM support |
+| `--enable-aesxts` | AES-128-XTS and AES-256-XTS (wolfSSL 5.6.6+; not available with FIPS v5) |
 | `--enable-curve25519` | X25519 Key Exchange |
 | `--enable-curve448` | X448 Key Exchange |
 | `--enable-ed25519` | Ed25519 signatures and certificates |
