@@ -134,6 +134,10 @@
 #ifdef WOLFSSL_AES_CFB
     #define WP_HAVE_AESCFB
 #endif
+/* wc_AesXtsSetKeyNoInit() is available from wolfSSL 5.6.6. */
+#if defined(WOLFSSL_AES_XTS) && (LIBWOLFSSL_VERSION_HEX >= 0x05006006)
+    #define WP_HAVE_AESXTS
+#endif
 
 #ifndef WC_NO_RNG
     #define WP_HAVE_RANDOM

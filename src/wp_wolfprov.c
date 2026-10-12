@@ -397,9 +397,12 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
 #ifdef HAVE_FIPS
 /* Properties of wolfSSL provider: name and FIPS wolfSSL. */
 #define WOLFPROV_PROPERTIES     "provider=wolfprov,fips=yes"
+/* Algorithms outside the FIPS claim: a fips=yes query does not get them. */
+#define WOLFPROV_PROPERTIES_NON_FIPS    "provider=wolfprov,fips=no"
 #else
 /* Properties of wolfSSL provider: name only. */
 #define WOLFPROV_PROPERTIES     "provider=wolfprov"
+#define WOLFPROV_PROPERTIES_NON_FIPS    WOLFPROV_PROPERTIES
 #endif
 
 /* List of digest algorithm implementations available in wolfSSL provider. */
@@ -538,6 +541,16 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
     { WP_NAMES_AES_192_CTS, WOLFPROV_PROPERTIES, wp_aes192cts_functions,
       "" },
     { WP_NAMES_AES_128_CTS, WOLFPROV_PROPERTIES, wp_aes128cts_functions,
+      "" },
+#endif
+
+#ifdef WP_HAVE_AESXTS
+    /* AES-XTS */
+    { WP_NAMES_AES_256_XTS, WOLFPROV_PROPERTIES_NON_FIPS,
+      wp_aes256xts_functions,
+      "" },
+    { WP_NAMES_AES_128_XTS, WOLFPROV_PROPERTIES_NON_FIPS,
+      wp_aes128xts_functions,
       "" },
 #endif
 

@@ -2372,3 +2372,300 @@ int test_des3_cbc_large_update(void *data)
     return err;
 }
 #endif /* WP_HAVE_DES3CBC */
+
+#ifdef WP_HAVE_AESXTS
+
+/* Encrypt or decrypt one data unit: a single update, and a final that outputs
+ * nothing. */
+static int test_cipher_xts_crypt(const EVP_CIPHER *cipher, int enc,
+    const unsigned char *key, const unsigned char *iv, const unsigned char *in,
+    int len, unsigned char *out)
+{
+    int err;
+    EVP_CIPHER_CTX *ctx;
+    int outLen = 0;
+    int fLen = 0;
+
+    err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    if (err == 0) {
+        err = EVP_CipherInit_ex2(ctx, cipher, key, iv, enc, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, out, &outLen, in, len) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherFinal_ex(ctx, out + outLen, &fLen) != 1;
+    }
+    if (err == 0) {
+        err = (outLen != len) || (fLen != 0);
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return err;
+}
+
+static int test_cipher_xts_kat(const EVP_CIPHER *cipher, int keyLen)
+{
+    int err = 0;
+    const struct {
+        const char *key;
+        const char *iv;
+        const char *pt;
+        const char *ct;
+        int keyLen;
+        int len;
+    } vects[] = {
+        /* IEEE Std 1619-2007 vector 2 */
+        {
+            "\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11"
+            "\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22\x22",
+            "\x33\x33\x33\x33\x33\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+            "\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44"
+            "\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44",
+            "\xc4\x54\x18\x5e\x6a\x16\x93\x6e\x39\x33\x40\x38\xac\xef\x83\x8b"
+            "\xfb\x18\x6f\xff\x74\x80\xad\xc4\x28\x93\x82\xec\xd6\xd3\x94\xf0",
+            32, 32
+        },
+        /* IEEE Std 1619-2007 vector 15: partial last block */
+        {
+            "\xff\xfe\xfd\xfc\xfb\xfa\xf9\xf8\xf7\xf6\xf5\xf4\xf3\xf2\xf1\xf0"
+            "\xbf\xbe\xbd\xbc\xbb\xba\xb9\xb8\xb7\xb6\xb5\xb4\xb3\xb2\xb1\xb0",
+            "\x9a\x78\x56\x34\x12\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+            "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f"
+            "\x10",
+            "\x6c\x16\x25\xdb\x46\x71\x52\x2d\x3d\x75\x99\x60\x1d\xe7\xca\x09"
+            "\xed",
+            32, 17
+        },
+        /* NIST CAVP XTSGenAES256 (hex tweak) ENCRYPT COUNT 1 */
+        {
+            "\x1e\xa6\x61\xc5\x8d\x94\x3a\x0e\x48\x01\xe4\x2f\x4b\x09\x47\x14"
+            "\x9e\x7f\x9f\x8e\x3e\x68\xd0\xc7\x50\x52\x10\xbd\x31\x1a\x0e\x7c"
+            "\xd6\xe1\x3f\xfd\xf2\x41\x8d\x8d\x19\x11\xc0\x04\xcd\xa5\x8d\xa3"
+            "\xd6\x19\xb7\xe2\xb9\x14\x1e\x58\x31\x8e\xea\x39\x2c\xf4\x1b\x08",
+            "\xad\xf8\xd9\x26\x27\x46\x4a\xd2\xf0\x42\x8e\x84\xa9\xf8\x75\x64",
+            "\x2e\xed\xea\x52\xcd\x82\x15\xe1\xac\xc6\x47\xe8\x10\xbb\xc3\x64"
+            "\x2e\x87\x28\x7f\x8d\x2e\x57\xe3\x6c\x0a\x24\xfb\xc1\x2a\x20\x2e",
+            "\xcb\xaa\xd0\xe2\xf6\xce\xa3\xf5\x0b\x37\xf9\x34\xd4\x6a\x9b\x13"
+            "\x0b\x9d\x54\xf0\x7e\x34\xf3\x6a\xf7\x93\xe8\x6f\x73\xc6\xd7\xdb",
+            64, 32
+        },
+        /* NIST CAVP XTSGenAES128 (hex tweak) ENCRYPT COUNT 1 */
+        {
+            "\xa1\xb9\x0c\xba\x3f\x06\xac\x35\x3b\x2c\x34\x38\x76\x08\x17\x62"
+            "\x09\x09\x23\x02\x6e\x91\x77\x18\x15\xf2\x9d\xab\x01\x93\x2f\x2f",
+            "\x4f\xae\xf7\x11\x7c\xda\x59\xc6\x6e\x4b\x92\x01\x3e\x76\x8a\xd5",
+            "\xeb\xab\xce\x95\xb1\x4d\x3c\x8d\x6f\xb3\x50\x39\x07\x90\x31\x1c",
+            "\x77\x8a\xe8\xb4\x3c\xb9\x8d\x5a\x82\x50\x81\xd5\xbe\x47\x1c\x63",
+            32, 16
+        },
+        /* NIST CAVP XTSGenAES128 (hex tweak) ENCRYPT, DataUnitLen 200: partial
+         * last block */
+        {
+            "\x39\x4c\x97\x88\x1a\xbd\x98\x9d\x29\xc7\x03\xe4\x8a\x72\xb3\x97"
+            "\xa7\xac\xf5\x1b\x59\x64\x9e\xee\xa9\xb3\x32\x74\xd8\x54\x1d\xf4",
+            "\x4b\x15\xc6\x84\xa1\x52\xd4\x85\xfe\x99\x37\xd3\x9b\x16\x8c\x29",
+            "\x2f\x3b\x9d\xcf\xba\xe7\x29\x58\x3b\x1d\x1f\xfd\xd1\x6b\xb6\xfe"
+            "\x27\x57\x32\x94\x35\x66\x2a\x78\xf0",
+            "\xf3\x47\x38\x02\xe3\x8a\x3f\xfe\xf4\xd4\xfb\x8e\x6a\xa2\x66\xeb"
+            "\xde\x55\x3a\x64\x52\x8a\x06\x46\x3e",
+            32, 25
+        },
+        /* NIST CAVP XTSGenAES128 (hex tweak) DECRYPT COUNT 1 */
+        {
+            "\xc4\x3c\xd0\xb2\x37\x98\xee\x3d\xb0\x05\x3d\x1e\x4d\x18\x5e\x96"
+            "\x5d\x67\xfd\xda\x8c\x53\x25\xcc\x70\x9f\xc3\x97\x3f\x05\xcd\x17",
+            "\x79\x00\x43\x2e\x60\x21\xbc\x0e\x62\x7c\x7b\x96\xca\x08\xb4\xd0",
+            "\x07\xf2\xc2\xd4\xe6\xdb\x6e\x12\x00\xbc\x16\x5d\x15\x4e\x06\x98",
+            "\x34\x54\xf7\xd3\x4c\x0c\xaf\xfa\x12\xe9\xd2\x85\x0b\x03\x7f\xff",
+            32, 16
+        },
+        /* NIST CAVP XTSGenAES256 (hex tweak) DECRYPT COUNT 1 */
+        {
+            "\xd6\xc4\xcf\x73\xc6\x39\xe0\x25\x65\x4d\xd3\x23\x2f\xe3\xaa\x71"
+            "\x38\xf2\x1b\xc8\x92\x22\x71\xb4\xa6\xc0\xaf\x99\x91\x00\xb6\xb5"
+            "\xe3\x80\xec\x7e\xc8\xda\x88\xe6\x81\x6c\xd7\xf4\xf2\x6e\x7a\xc0"
+            "\xf8\x6e\x4c\xaa\xc3\xbe\x55\x23\x4e\xbc\xd4\x34\x7c\xda\x2f\xa5",
+            "\x04\x1f\x41\xfa\x30\xb7\x88\x98\x04\x0b\x5e\x0e\xcb\xa2\x7d\x2b",
+            "\xb8\xf3\x3d\xd3\x8c\x13\x8d\xac\xa2\x27\x72\x8e\x19\xb6\x2c\x4a"
+            "\xd5\xad\x51\x6e\xe2\xc3\xaf\x34\x31\x09\x7f\xf2\x81\x95\x6d\x7d",
+            "\xd0\x83\xf3\x7a\x61\x60\xac\x25\xc3\x22\x98\x00\xae\x07\x21\xd9"
+            "\x4b\xf6\xa9\xff\x2f\x73\xa4\x18\x54\x4e\x6c\x78\x7c\xbc\xd3\x4a",
+            64, 32
+        },
+    };
+    unsigned char out[32];
+    size_t i;
+
+    PRINT_MSG("Running XTS Known Answer Tests");
+
+    for (i = 0; (err == 0) && (i < sizeof(vects) / sizeof(vects[0])); i++) {
+        if (vects[i].keyLen != keyLen) {
+            continue;
+        }
+        err = test_cipher_xts_crypt(cipher, 1, (const unsigned char *)vects[i].key,
+            (const unsigned char *)vects[i].iv, (const unsigned char *)vects[i].pt,
+            vects[i].len, out);
+        if ((err == 0) && (memcmp(out, vects[i].ct, vects[i].len) != 0)) {
+            PRINT_MSG("KAT Encryption output mismatch for vector %zu", i + 1);
+            err = 1;
+        }
+        if (err == 0) {
+            err = test_cipher_xts_crypt(cipher, 0,
+                (const unsigned char *)vects[i].key,
+                (const unsigned char *)vects[i].iv,
+                (const unsigned char *)vects[i].ct, vects[i].len, out);
+        }
+        if ((err == 0) && (memcmp(out, vects[i].pt, vects[i].len) != 0)) {
+            PRINT_MSG("KAT Decryption output mismatch for vector %zu", i + 1);
+            err = 1;
+        }
+    }
+
+    return err;
+}
+
+static int test_cipher_xts(void *data, const char *cipher, int keyLen)
+{
+    int err = 0;
+    /* One block, partial last blocks and several blocks. */
+    static const int lens[] = { 16, 17, 31, 32, 33, 47, 100, 512, 1023 };
+    unsigned char key[64];
+    unsigned char iv[16];
+    unsigned char msg[1023];
+    unsigned char oEnc[sizeof(msg)];
+    unsigned char wEnc[sizeof(msg)];
+    unsigned char dec[sizeof(msg)];
+    EVP_CIPHER_CTX *ctx = NULL;
+    EVP_CIPHER* ocipher;
+    EVP_CIPHER* wcipher;
+    int outLen;
+    size_t i;
+
+    (void)data;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, cipher, "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, cipher, "");
+    if ((ocipher == NULL) || (wcipher == NULL)) {
+        err = 1;
+    }
+
+    if (err == 0) {
+        err = test_cipher_xts_kat(wcipher, keyLen);
+    }
+
+    if (err == 0) {
+        err = RAND_bytes(key, keyLen) != 1;
+    }
+    if (err == 0) {
+        /* Halves must differ. */
+        key[0] = key[keyLen / 2] ^ 0x01;
+        err = RAND_bytes(iv, sizeof(iv)) != 1;
+    }
+    if (err == 0) {
+        err = RAND_bytes(msg, sizeof(msg)) != 1;
+    }
+
+    /* Interop with OpenSSL: same ciphertext, and each decrypts the other's. */
+    for (i = 0; (err == 0) && (i < sizeof(lens) / sizeof(lens[0])); i++) {
+        PRINT_MSG("XTS interop, %d bytes", lens[i]);
+        err = test_cipher_xts_crypt(ocipher, 1, key, iv, msg, lens[i], oEnc);
+        if (err == 0) {
+            err = test_cipher_xts_crypt(wcipher, 1, key, iv, msg, lens[i], wEnc);
+        }
+        if ((err == 0) && (memcmp(oEnc, wEnc, lens[i]) != 0)) {
+            PRINT_MSG("Ciphertext differs from OpenSSL");
+            err = 1;
+        }
+        if (err == 0) {
+            err = test_cipher_xts_crypt(wcipher, 0, key, iv, oEnc, lens[i], dec);
+        }
+        if ((err == 0) && (memcmp(dec, msg, lens[i]) != 0)) {
+            PRINT_MSG("wolfProvider decryption of OpenSSL ciphertext failed");
+            err = 1;
+        }
+        if (err == 0) {
+            err = test_cipher_xts_crypt(ocipher, 0, key, iv, wEnc, lens[i], dec);
+        }
+        if ((err == 0) && (memcmp(dec, msg, lens[i]) != 0)) {
+            PRINT_MSG("OpenSSL decryption of wolfProvider ciphertext failed");
+            err = 1;
+        }
+    }
+
+    /* Each update is a data unit of its own with the same tweak. */
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex2(ctx, wcipher, key, iv, 1, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, wEnc, &outLen, msg, 33) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherUpdate(ctx, wEnc + 33, &outLen, msg + 33, 47) != 1;
+    }
+    if (err == 0) {
+        err = test_cipher_xts_crypt(ocipher, 1, key, iv, msg, 33, oEnc);
+    }
+    if (err == 0) {
+        err = test_cipher_xts_crypt(ocipher, 1, key, iv, msg + 33, 47, oEnc + 33);
+    }
+    if ((err == 0) && (memcmp(oEnc, wEnc, 33 + 47) != 0)) {
+        PRINT_MSG("Second update did not reuse the tweak");
+        err = 1;
+    }
+
+    /* Changing direction without a new key is rejected, and the context
+     * then refuses to process data. */
+    if ((err == 0) && (EVP_CipherInit_ex2(ctx, NULL, NULL, iv, 0, NULL) == 1)) {
+        PRINT_MSG("Direction change without a key accepted");
+        err = 1;
+    }
+    if ((err == 0) && (EVP_CipherUpdate(ctx, dec, &outLen, wEnc, 33) == 1)) {
+        PRINT_MSG("Update accepted after a rejected direction change");
+        err = 1;
+    }
+
+    /* Less than one block is rejected. */
+    if (err == 0) {
+        err = EVP_CipherInit_ex2(ctx, wcipher, key, iv, 1, NULL) != 1;
+    }
+    if ((err == 0) && (EVP_CipherUpdate(ctx, wEnc, &outLen, msg, 15) == 1)) {
+        PRINT_MSG("15-byte data unit accepted");
+        err = 1;
+    }
+
+    /* Equal key halves are rejected for encryption and decryption. */
+    if (err == 0) {
+        memcpy(key + keyLen / 2, key, keyLen / 2);
+        if (EVP_CipherInit_ex2(ctx, wcipher, key, iv, 1, NULL) == 1) {
+            PRINT_MSG("Equal key halves accepted for encryption");
+            err = 1;
+        }
+    }
+    if ((err == 0) && (EVP_CipherInit_ex2(ctx, wcipher, key, iv, 0, NULL) == 1)) {
+        PRINT_MSG("Equal key halves accepted for decryption");
+        err = 1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+int test_aes128_xts(void *data)
+{
+    return test_cipher_xts(data, "AES-128-XTS", 32);
+}
+
+int test_aes256_xts(void *data)
+{
+    return test_cipher_xts(data, "AES-256-XTS", 64);
+}
+
+#endif /* WP_HAVE_AESXTS */
