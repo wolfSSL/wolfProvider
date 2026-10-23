@@ -162,7 +162,7 @@ int test_mlkem_keygen(void* data)
 /**
  * Test ML-KEM raw key import/export round-trip.
  *
- * For each level: keygen, export both pub and priv via EVP_PKEY_todata,
+ * For each level: keygen, read both pub and priv as key parameters,
  * import into a fresh EVP_PKEY via EVP_PKEY_fromdata, re-export, and verify
  * the bytes match exactly. Proves the OSSL_PARAM marshaling for raw keys is
  * lossless in both directions.
@@ -1118,6 +1118,254 @@ int test_mlx_dup(void* data)
         ctLen = 0; ss1Len = 0; ss2Len = 0; ss3Len = 0;
     }
 
+    return err;
+}
+
+/**
+ * Encapsulate with one key and decapsulate with the other.
+ *
+ * @param [in] lvl      Parameter set being tested.
+ * @param [in] encKey   Key to encapsulate with.
+ * @param [in] encCtx   Library context owning the encapsulating key.
+ * @param [in] encProp  Property query for the encapsulating provider.
+ * @param [in] decKey   Key to decapsulate with.
+ * @param [in] decCtx   Library context owning the decapsulating key.
+ * @param [in] decProp  Property query for the decapsulating provider.
+ * @return  0 on success, non-zero on failure.
+ */
+static int mlkem_cross_use(const mlkem_test_level* lvl, EVP_PKEY* encKey,
+    OSSL_LIB_CTX* encCtx, const char* encProp, EVP_PKEY* decKey,
+    OSSL_LIB_CTX* decCtx, const char* decProp)
+{
+    int err = 0;
+    EVP_PKEY_CTX* ectx = NULL;
+    EVP_PKEY_CTX* dctx = NULL;
+    unsigned char* ct = NULL;
+    unsigned char* ss1 = NULL;
+    unsigned char* ss2 = NULL;
+    size_t ctLen = 0;
+    size_t ss1Len = 0;
+    size_t ss2Len = 0;
+
+    ectx = EVP_PKEY_CTX_new_from_pkey(encCtx, encKey, encProp);
+    err = (ectx == NULL) || (EVP_PKEY_encapsulate_init(ectx, NULL) != 1);
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate(ectx, NULL, &ctLen, NULL, &ss1Len) != 1;
+    }
+    if (err == 0) {
+        ct = (unsigned char*)OPENSSL_malloc(ctLen);
+        ss1 = (unsigned char*)OPENSSL_malloc(ss1Len);
+        err = (ct == NULL) || (ss1 == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_encapsulate(ectx, ct, &ctLen, ss1, &ss1Len) != 1;
+    }
+    if (err == 0) {
+        err = (ctLen != lvl->ctSize);
+        if (err) {
+            PRINT_ERR_MSG("Unexpected ciphertext size crossing providers");
+        }
+    }
+    if (err == 0) {
+        dctx = EVP_PKEY_CTX_new_from_pkey(decCtx, decKey, decProp);
+        err = (dctx == NULL) || (EVP_PKEY_decapsulate_init(dctx, NULL) != 1);
+    }
+    if (err == 0) {
+        ss2Len = ss1Len;
+        ss2 = (unsigned char*)OPENSSL_malloc(ss2Len);
+        err = (ss2 == NULL);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_decapsulate(dctx, ss2, &ss2Len, ct, ctLen) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Decapsulate of other provider's ciphertext failed");
+        }
+    }
+    if (err == 0) {
+        err = (ss1Len != ss2Len) || (memcmp(ss1, ss2, ss1Len) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Shared secret differs across providers");
+        }
+    }
+
+    OPENSSL_free(ct);
+    OPENSSL_clear_free(ss1, ss1Len);
+    OPENSSL_clear_free(ss2, ss2Len);
+    EVP_PKEY_CTX_free(ectx);
+    EVP_PKEY_CTX_free(dctx);
+    return err;
+}
+
+/**
+ * Export the raw public and private key through the key management export.
+ *
+ * EVP_PKEY_todata reaches the provider's export function, which the
+ * parameter getters do not.
+ *
+ * @param [in]  pkey     ML-KEM key.
+ * @param [out] pub      Public key bytes (caller frees).
+ * @param [out] pubLen   Length of public key.
+ * @param [out] priv     Private key bytes (caller frees).
+ * @param [out] privLen  Length of private key.
+ * @return  0 on success, non-zero on failure.
+ */
+static int mlkem_export_raw_pair(EVP_PKEY* pkey, unsigned char** pub,
+    size_t* pubLen, unsigned char** priv, size_t* privLen)
+{
+    int err;
+    OSSL_PARAM* params = NULL;
+    const OSSL_PARAM* p;
+
+    *pub = NULL;
+    *priv = NULL;
+
+    err = EVP_PKEY_todata(pkey, EVP_PKEY_KEYPAIR, &params) != 1;
+    if (err) {
+        PRINT_ERR_MSG("Export of raw key from provider failed");
+    }
+    if (err == 0) {
+        p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_PUB_KEY);
+        err = (p == NULL)
+            || (OSSL_PARAM_get_octet_string(p, (void**)pub, 0, pubLen) != 1);
+    }
+    if (err == 0) {
+        p = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_PRIV_KEY);
+        err = (p == NULL)
+            || (OSSL_PARAM_get_octet_string(p, (void**)priv, 0, privLen) != 1);
+    }
+    if (err) {
+        OPENSSL_free(*pub);
+        *pub = NULL;
+    }
+
+    OSSL_PARAM_free(params);
+    return err;
+}
+
+/**
+ * Move a raw ML-KEM key from one provider to the other and use it.
+ *
+ * Exports the raw public and private keys from a key generated in the
+ * source provider through the key management export, imports them into the
+ * destination provider and checks the public key read back is unchanged.
+ * Each key then decapsulates a ciphertext made for the other, so both
+ * imported halves are shown to be usable rather than merely byte equal.
+ *
+ * @param [in] lvl      Parameter set being tested.
+ * @param [in] srcCtx   Library context to generate the key in.
+ * @param [in] srcProp  Property query for the source provider.
+ * @param [in] dstCtx   Library context to import the key into.
+ * @param [in] dstProp  Property query for the destination provider.
+ * @return  0 on success, non-zero on failure.
+ */
+static int mlkem_cross_transfer(const mlkem_test_level* lvl,
+    OSSL_LIB_CTX* srcCtx, const char* srcProp, OSSL_LIB_CTX* dstCtx,
+    const char* dstProp)
+{
+    int err = 0;
+    EVP_PKEY* src = NULL;
+    EVP_PKEY* dst = NULL;
+    EVP_PKEY_CTX* ctx = NULL;
+    OSSL_PARAM* params = NULL;
+    unsigned char* pub = NULL;
+    unsigned char* pub2 = NULL;
+    unsigned char* priv = NULL;
+    size_t pubLen = 0;
+    size_t pub2Len = 0;
+    size_t privLen = 0;
+
+    err = wp_test_mlkem_keygen_ex(srcCtx, srcProp, lvl->name, &src);
+    if (err == 0) {
+        err = mlkem_export_raw_pair(src, &pub, &pubLen, &priv, &privLen);
+    }
+    if (err == 0) {
+        err = (pubLen != lvl->pubKeySize) || (privLen != lvl->privKeySize);
+        if (err) {
+            PRINT_ERR_MSG("Raw key sizes do not match the parameter set");
+        }
+    }
+
+    if (err == 0) {
+        ctx = EVP_PKEY_CTX_new_from_name(dstCtx, lvl->name, dstProp);
+        err = (ctx == NULL) || (EVP_PKEY_fromdata_init(ctx) != 1);
+    }
+    if (err == 0) {
+        OSSL_PARAM_BLD* bld = OSSL_PARAM_BLD_new();
+
+        err = (bld == NULL)
+            || OSSL_PARAM_BLD_push_octet_string(bld,
+                OSSL_PKEY_PARAM_PUB_KEY, pub, pubLen) != 1
+            || OSSL_PARAM_BLD_push_octet_string(bld,
+                OSSL_PKEY_PARAM_PRIV_KEY, priv, privLen) != 1;
+        if (err == 0) {
+            params = OSSL_PARAM_BLD_to_param(bld);
+            err = (params == NULL);
+        }
+        OSSL_PARAM_BLD_free(bld);
+    }
+    if (err == 0) {
+        err = EVP_PKEY_fromdata(ctx, &dst, EVP_PKEY_KEYPAIR, params) != 1;
+        if (err) {
+            PRINT_ERR_MSG("Import of raw key into other provider failed");
+        }
+    }
+    if (err == 0) {
+        err = mlkem_get_pub(dst, &pub2, &pub2Len);
+    }
+    if (err == 0) {
+        err = (pubLen != pub2Len) || (memcmp(pub, pub2, pubLen) != 0);
+        if (err) {
+            PRINT_ERR_MSG("Public key changed crossing providers");
+        }
+    }
+    if (err == 0) {
+        err = mlkem_cross_use(lvl, dst, dstCtx, dstProp, src, srcCtx,
+            srcProp);
+    }
+    /* And the other way round, so the imported private key decapsulates. */
+    if (err == 0) {
+        err = mlkem_cross_use(lvl, src, srcCtx, srcProp, dst, dstCtx,
+            dstProp);
+    }
+
+    OPENSSL_free(pub);
+    OPENSSL_free(pub2);
+    OPENSSL_clear_free(priv, privLen);
+    OSSL_PARAM_free(params);
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(src);
+    EVP_PKEY_free(dst);
+    return err;
+}
+
+/**
+ * Test raw ML-KEM keys moving between wolfProvider and OpenSSL.
+ *
+ * Covers both directions for every parameter set. wolfProvider has no
+ * ASN.1 encoder for ML-KEM, so the raw parameter interface is the only
+ * way a key can cross between providers.
+ */
+int test_mlkem_cross_provider_raw(void* data)
+{
+    int err = 0;
+    size_t i;
+
+    (void)data;
+
+    for (i = 0; (err == 0) && (i < MLKEM_LEVEL_COUNT); i++) {
+        const mlkem_test_level* lvl = &mlkem_levels[i];
+
+        PRINT_MSG("Cross-provider raw key OpenSSL to wolfProvider %s",
+            lvl->name);
+        err = mlkem_cross_transfer(lvl, osslLibCtx, "provider=default",
+            wpLibCtx, NULL);
+        if (err == 0) {
+            PRINT_MSG("Cross-provider raw key wolfProvider to OpenSSL %s",
+                lvl->name);
+            err = mlkem_cross_transfer(lvl, wpLibCtx, NULL, osslLibCtx,
+                "provider=default");
+        }
+    }
     return err;
 }
 
