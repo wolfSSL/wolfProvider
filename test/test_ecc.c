@@ -27,12 +27,7 @@
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
 
-#include <wolfssl/wolfcrypt/hash.h>
-
-/* Mirror the fallback used in src/wp_ecdsa_sig.c for wolfSSL < v5.9.1. */
-#ifndef WC_MIN_DIGEST_SIZE
-#define WC_MIN_DIGEST_SIZE 20
-#endif
+#include <wolfprovider/internal.h>
 
 #ifdef WP_HAVE_ECC
 
@@ -2029,17 +2024,19 @@ int test_ecdsa_p256_pkey(void *data)
     return err;
 }
 
-/* Raw EVP_PKEY_verify must reject inputs below WC_MIN_DIGEST_SIZE. */
+/* Raw ECDSA sign and verify must reject inputs below wolfSSL's minimums. */
 int test_ecdsa_verify_undersized_hash(void *data)
 {
-    /* Boundaries track WC_MIN_DIGEST_SIZE so the assertions stay valid for
-     * whatever hash set the wolfSSL build enabled (typically 20 for SHA-1,
-     * but 16 when MD5 is on or 28+ in FIPS 186-5 builds). */
-    static const size_t sizes[]      = { 0,
-                                         WC_MIN_DIGEST_SIZE - 1,
-                                         WC_MIN_DIGEST_SIZE,
-                                         WC_MAX_DIGEST_SIZE };
-    static const int    expectFail[] = { 1, 1, 0, 0 };
+    /* Minimums vary with the hash set and FIPS level, e.g. 16 with MD5. */
+    static const size_t verifySizes[] = { 0,
+                                          WC_MIN_DIGEST_SIZE_FOR_VERIFY - 1,
+                                          WC_MIN_DIGEST_SIZE_FOR_VERIFY,
+                                          WC_MAX_DIGEST_SIZE };
+    static const size_t signSizes[]   = { 0,
+                                          WC_MIN_DIGEST_SIZE_FOR_SIGN - 1,
+                                          WC_MIN_DIGEST_SIZE_FOR_SIGN,
+                                          WC_MAX_DIGEST_SIZE };
+    static const int    expectFail[]  = { 1, 1, 0, 0 };
     int err;
     size_t i;
     EVP_PKEY *pkey = NULL;
@@ -2056,26 +2053,28 @@ int test_ecdsa_verify_undersized_hash(void *data)
         err = pkey == NULL;
     }
 
-    for (i = 0; (err == 0) && (i < sizeof(sizes)/sizeof(sizes[0])); i++) {
-        PRINT_MSG("verify tbsLen=%zu", sizes[i]);
+    for (i = 0; (err == 0) && (i < sizeof(verifySizes)/sizeof(verifySizes[0]));
+            i++) {
+        PRINT_MSG("verify tbsLen=%zu", verifySizes[i]);
         ecdsaSigLen = sizeof(ecdsaSig);
-        err = test_pkey_sign_ecc(pkey, osslLibCtx, buf, sizes[i], ecdsaSig,
-                                 &ecdsaSigLen);
+        err = test_pkey_sign_ecc(pkey, osslLibCtx, buf, verifySizes[i],
+                                 ecdsaSig, &ecdsaSigLen);
         if (err == 0) {
-            int verifyErr = test_pkey_verify_ecc(pkey, wpLibCtx, buf, sizes[i],
-                                                 ecdsaSig, ecdsaSigLen);
+            int verifyErr = test_pkey_verify_ecc(pkey, wpLibCtx, buf,
+                                                 verifySizes[i], ecdsaSig,
+                                                 ecdsaSigLen);
             err = (verifyErr != 0) != expectFail[i];
         }
     }
 
-    /* Same minimum applies on the sign side: wolfProvider must refuse to
-     * produce a raw signature it would later refuse to verify. */
-    for (i = 0; (err == 0) && (i < sizeof(sizes)/sizeof(sizes[0])); i++) {
+    /* The sign minimum is never below the verify minimum. */
+    for (i = 0; (err == 0) && (i < sizeof(signSizes)/sizeof(signSizes[0]));
+            i++) {
         int signErr;
-        PRINT_MSG("sign tbsLen=%zu", sizes[i]);
+        PRINT_MSG("sign tbsLen=%zu", signSizes[i]);
         ecdsaSigLen = sizeof(ecdsaSig);
-        signErr = test_pkey_sign_ecc(pkey, wpLibCtx, buf, sizes[i], ecdsaSig,
-                                     &ecdsaSigLen);
+        signErr = test_pkey_sign_ecc(pkey, wpLibCtx, buf, signSizes[i],
+                                     ecdsaSig, &ecdsaSigLen);
         err = (signErr != 0) != expectFail[i];
     }
 
