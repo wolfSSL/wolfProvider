@@ -169,6 +169,7 @@ exercised, with and without `WOLFPROV_FORCE_FAIL=1`.
 | `xmlsec.yml` | xmlsec | XML-DSig + XML-Enc (RSA-SHA256, AES-128/256-GCM) |
 | `libeac3.yml` | OpenEAC (eID auth) | ePassport BAC/PACE + EAC3 chip auth |
 | `librelp.yml` | rsyslog RELP transport | TLS session resumption (the recent FIPS 5.9.1 regression site) |
+| `mosquitto.yml` | Eclipse Mosquitto MQTT broker + client lib | broker TLS + TLS-PSK tests (certificate auth, CRL, PSK publish and bridge) |
 | `net-snmp.yml` | Net-SNMP | SNMPv3 USM (HMAC-SHA + AES priv) |
 | `qt5network5.yml` | Qt5 Network (QSslSocket) | Qt's TLS path through the wolfprov-backed libssl |
 | `systemd.yml` | systemd | journald-remote TLS, systemd-timesyncd NTS |
