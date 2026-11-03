@@ -333,6 +333,7 @@ void* wp_mldsa_get_key(wp_MlDsa* mldsa);
 int wp_mldsa_get_sig_size(const wp_MlDsa* mldsa);
 int wp_mldsa_has_private(const wp_MlDsa* mldsa);
 int wp_mldsa_get_level(wp_MlDsa* mldsa);
+int wp_mldsa_get_security_bits(const wp_MlDsa* mldsa);
 
 /* Internal SLH-DSA types and functions. */
 typedef struct wp_SlhDsa wp_SlhDsa;

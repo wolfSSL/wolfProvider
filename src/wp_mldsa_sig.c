@@ -767,7 +767,7 @@ static int wp_mldsa_stream_verify_final(wp_MlDsaSigCtx* ctx,
 /* Digests permitted for FIPS 204 HashML-DSA. Restricting to the SHA2/SHA3
  * families keeps the generic name mapper from admitting legacy/undersized
  * digests (MD5, SHA-1, SHA-512/224) as a HashML-DSA pre-hash. */
-static int wp_mldsa_hash_allowed(enum wc_HashType hashType)
+static int wp_mldsa_hash_allowed(enum wc_HashType hashType, int secBits)
 {
     int allowed = 0;
 
@@ -783,6 +783,14 @@ static int wp_mldsa_hash_allowed(enum wc_HashType hashType)
             (hashType == WC_HASH_TYPE_SHA3_512)) {
         allowed = 1;
     }
+#ifndef WOLFSSL_MLDSA_ALLOW_WEAK_PREHASH
+    /* FIPS 204 sec 5.4: collision strength must cover the parameter set. */
+    if (allowed && (wc_HashGetDigestSize(hashType) * 8 / 2 < secBits)) {
+        allowed = 0;
+    }
+#else
+    (void)secBits;
+#endif /* !WOLFSSL_MLDSA_ALLOW_WEAK_PREHASH */
     return allowed;
 }
 
@@ -796,7 +804,8 @@ static int wp_mldsa_setup_prehash(wp_MlDsaSigCtx* ctx, const char* mdName)
     OSSL_LIB_CTX* libCtx = (ctx->provCtx != NULL) ? ctx->provCtx->libCtx : NULL;
 
     ctx->hashType = wp_name_to_wc_hash_type(libCtx, mdName, NULL);
-    if (!wp_mldsa_hash_allowed(ctx->hashType)) {
+    if (!wp_mldsa_hash_allowed(ctx->hashType,
+            wp_mldsa_get_security_bits(ctx->mldsa))) {
         ctx->hashType = WC_HASH_TYPE_NONE;
         ok = 0;
     }

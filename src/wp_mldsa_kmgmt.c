@@ -193,6 +193,22 @@ int wp_mldsa_get_level(wp_MlDsa* mldsa)
 }
 
 /**
+ * Get the security strength in bits of the key's parameter set.
+ *
+ * @param [in] mldsa  ML-DSA key object.
+ * @return  Security bits, or 0 when not available.
+ */
+int wp_mldsa_get_security_bits(const wp_MlDsa* mldsa)
+{
+    int bits = 0;
+
+    if ((mldsa != NULL) && (mldsa->data != NULL)) {
+        bits = mldsa->data->securityBits;
+    }
+    return bits;
+}
+
+/**
  * Get the maximum signature size for the key.
  *
  * @param [in] mldsa  ML-DSA key object.

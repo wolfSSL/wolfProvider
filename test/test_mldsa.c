@@ -743,66 +743,87 @@ int test_mldsa_get_params(void* data)
     return err;
 }
 
-/* DigestSignInit with non-empty mdName must fail (ML-DSA is pure). */
+/* HashML-DSA digest choices and whether init must accept them. */
+typedef struct mldsa_prehash_case {
+    const char* keyName;
+    const char* mdName;
+    int ok;
+} mldsa_prehash_case;
+
+static const mldsa_prehash_case mldsa_prehash_cases[] = {
+    { "ML-DSA-44", "SHA-256", 1 },
+#ifdef WP_HAVE_SHA384
+    { "ML-DSA-65", "SHA-384", 1 },
+#endif /* WP_HAVE_SHA384 */
+#ifdef WP_HAVE_SHA512
+    { "ML-DSA-87", "SHA-512", 1 },
+#endif /* WP_HAVE_SHA512 */
+    { "ML-DSA-65", "SHA-1",   0 },
+#ifndef WOLFSSL_MLDSA_ALLOW_WEAK_PREHASH
+    /* Digest weaker than the parameter set (FIPS 204 sec 5.4). */
+    { "ML-DSA-65", "SHA-256", 0 },
+    { "ML-DSA-87", "SHA-384", 0 },
+#endif /* !WOLFSSL_MLDSA_ALLOW_WEAK_PREHASH */
+};
+#define MLDSA_PREHASH_CASE_COUNT \
+    (sizeof(mldsa_prehash_cases) / sizeof(mldsa_prehash_cases[0]))
+
+/* A digest name selects HashML-DSA: allowed digests round-trip, others fail
+ * at init. */
 int test_mldsa_digest_sign_prehash(void* data)
 {
     int err = 0;
+    size_t i;
     EVP_PKEY* k = NULL;
     EVP_MD_CTX* mdctx = NULL;
-    unsigned char sig[5000];
-    size_t sigLen = sizeof(sig);
-    const unsigned char msg[] = "wolfProvider ML-DSA pre-hash message";
+    unsigned char sig[ML_DSA_LEVEL5_SIG_SIZE];
+    size_t sigLen = 0;
     int rc;
 
     (void)data;
-    PRINT_MSG("DigestSign/Verify pre-hash (HashML-DSA) round-trip");
+    for (i = 0; (err == 0) && (i < MLDSA_PREHASH_CASE_COUNT); i++) {
+        const mldsa_prehash_case* c = &mldsa_prehash_cases[i];
+        PRINT_MSG("HashML-DSA %s with %s", c->keyName, c->mdName);
 
-    err = mldsa_keygen("ML-DSA-65", &k);
-    if (err == 0) {
-        mdctx = EVP_MD_CTX_new();
-        err = (mdctx == NULL);
+        err = mldsa_keygen(c->keyName, &k);
+        if (err == 0) {
+            mdctx = EVP_MD_CTX_new();
+            err = (mdctx == NULL);
+        }
+        if (err == 0) {
+            rc = EVP_DigestSignInit_ex(mdctx, NULL, c->mdName, wpLibCtx, NULL,
+                k, NULL);
+            err = ((rc == 1) != c->ok);
+            if (err) PRINT_ERR_MSG("DigestSignInit result unexpected");
+        }
+        if ((err == 0) && c->ok) {
+            sigLen = sizeof(sig);
+            err = EVP_DigestSign(mdctx, sig, &sigLen, mldsa_test_msg,
+                MLDSA_TEST_MSG_LEN) != 1;
+            if (err) PRINT_ERR_MSG("EVP_DigestSign (pre-hash) failed");
+        }
+        EVP_MD_CTX_free(mdctx);
+        mdctx = NULL;
+        if (err == 0) {
+            mdctx = EVP_MD_CTX_new();
+            err = (mdctx == NULL);
+        }
+        if (err == 0) {
+            rc = EVP_DigestVerifyInit_ex(mdctx, NULL, c->mdName, wpLibCtx,
+                NULL, k, NULL);
+            err = ((rc == 1) != c->ok);
+            if (err) PRINT_ERR_MSG("DigestVerifyInit result unexpected");
+        }
+        if ((err == 0) && c->ok) {
+            err = EVP_DigestVerify(mdctx, sig, sigLen, mldsa_test_msg,
+                MLDSA_TEST_MSG_LEN) != 1;
+            if (err) PRINT_ERR_MSG("EVP_DigestVerify (pre-hash) failed");
+        }
+        EVP_MD_CTX_free(mdctx);
+        mdctx = NULL;
+        EVP_PKEY_free(k);
+        k = NULL;
     }
-    /* A digest name selects FIPS 204 HashML-DSA; signing must succeed. */
-    if (err == 0) {
-        rc = EVP_DigestSignInit_ex(mdctx, NULL, "SHA-256", wpLibCtx, NULL, k,
-            NULL);
-        err = (rc != 1);
-        if (err) PRINT_ERR_MSG("DigestSignInit with mdName failed");
-    }
-    if (err == 0) {
-        err = EVP_DigestSign(mdctx, sig, &sigLen, msg, sizeof(msg)) != 1;
-        if (err) PRINT_ERR_MSG("EVP_DigestSign (pre-hash) failed");
-    }
-    EVP_MD_CTX_free(mdctx);
-    mdctx = NULL;
-    if (err == 0) {
-        mdctx = EVP_MD_CTX_new();
-        err = (mdctx == NULL);
-    }
-    if (err == 0) {
-        rc = EVP_DigestVerifyInit_ex(mdctx, NULL, "SHA-256", wpLibCtx, NULL, k,
-            NULL);
-        err = (rc != 1);
-    }
-    if (err == 0) {
-        err = EVP_DigestVerify(mdctx, sig, sigLen, msg, sizeof(msg)) != 1;
-        if (err) PRINT_ERR_MSG("EVP_DigestVerify (pre-hash) failed");
-    }
-    EVP_MD_CTX_free(mdctx);
-    mdctx = NULL;
-    /* A weak/legacy digest is not allowed for HashML-DSA. */
-    if (err == 0) {
-        mdctx = EVP_MD_CTX_new();
-        err = (mdctx == NULL);
-    }
-    if (err == 0) {
-        rc = EVP_DigestSignInit_ex(mdctx, NULL, "SHA-1", wpLibCtx, NULL, k,
-            NULL);
-        err = (rc == 1);
-        if (err) PRINT_ERR_MSG("DigestSignInit accepted SHA-1 for ML-DSA");
-    }
-    EVP_MD_CTX_free(mdctx);
-    EVP_PKEY_free(k);
     return err;
 }
 
