@@ -307,6 +307,12 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes128_cfb_reinit, NULL),
     TEST_DECL(test_aes_cfb_large_update, NULL),
 #endif
+#ifdef WP_HAVE_AESOFB
+    TEST_DECL(test_aes128_ofb_stream, NULL),
+    TEST_DECL(test_aes192_ofb_stream, NULL),
+    TEST_DECL(test_aes256_ofb_stream, NULL),
+    TEST_DECL(test_aes_ofb_kat, NULL),
+#endif
 #ifdef WP_HAVE_AESCTS
     TEST_DECL(test_aes128_cts, NULL),
     TEST_DECL(test_aes256_cts, NULL),
