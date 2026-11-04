@@ -327,6 +327,13 @@ int test_aes128_cts_one_block_split_init(void *data);
 
 #endif
 
+#ifdef WP_HAVE_AESXTS
+
+int test_aes128_xts(void *data);
+int test_aes256_xts(void *data);
+
+#endif
+
 #ifdef WP_HAVE_RANDOM
 
 int test_random(void *data);
