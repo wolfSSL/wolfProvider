@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "internal/dso.h"
+#include "internal/thread_once.h"
 #include "provider_local.h"
 
 /* For the replace default model we actually do not want OpenSSL built with FIPS.
@@ -21,6 +22,13 @@
 #endif
 
 static DSO *d = NULL;
+static CRYPTO_RWLOCK *d_lock = NULL;
+static CRYPTO_ONCE d_lock_once = CRYPTO_ONCE_STATIC_INIT;
+
+DEFINE_RUN_ONCE_STATIC(d_lock_init)
+{
+    return (d_lock = CRYPTO_THREAD_lock_new()) != NULL;
+}
 
 /* Common function to dynamically load libwolfprov and call wolfssl_provider_init */
 static int load_wolfprov_and_init(const OSSL_CORE_HANDLE *handle,
@@ -28,23 +36,42 @@ static int load_wolfprov_and_init(const OSSL_CORE_HANDLE *handle,
                                 void **provctx) {
     int ret = 0;
     OSSL_provider_init_fn *wolfssl_provider_init_fn = NULL;
+    DSO *cur, *nd = NULL;
 
-    if (!d) {
-        d = DSO_new();
-        if (!d) {
+    /* d_lock is not held over dlopen(). */
+    if (!RUN_ONCE(&d_lock_once, d_lock_init) || !CRYPTO_THREAD_read_lock(d_lock))
+        return 0;
+    cur = d;
+    CRYPTO_THREAD_unlock(d_lock);
+
+    if (!cur) {
+        nd = DSO_new();
+        if (!nd) {
             fprintf(stderr, "DSO_new() failed\n");
             return 0;
         }
 
-        if (!DSO_load(d, "wolfprov", NULL, 0)) {
+        if (!DSO_load(nd, "wolfprov", NULL, 0)) {
             fprintf(stderr, "Could not load libwolfprov.so. Is the libwolfprov package installed?\n");
-            DSO_free(d);
-            d = NULL;
+            DSO_free(nd);
             return 0;
         }
+
+        if (!CRYPTO_THREAD_write_lock(d_lock)) {
+            DSO_free(nd);
+            return 0;
+        }
+        if (!d) {
+            d = nd;
+            nd = NULL;
+        }
+        cur = d;
+        CRYPTO_THREAD_unlock(d_lock);
+        /* Lost the race. */
+        DSO_free(nd);
     }
 
-    wolfssl_provider_init_fn = (OSSL_provider_init_fn*)DSO_bind_func(d, "wolfssl_provider_init");
+    wolfssl_provider_init_fn = (OSSL_provider_init_fn*)DSO_bind_func(cur, "wolfssl_provider_init");
     if (!wolfssl_provider_init_fn) {
         fprintf(stderr, "Failed to find wolfssl_provider_init symbol\n");
         return 0;
