@@ -51,7 +51,8 @@ jobs:
       matrix:
         wolfssl_ref: ${{ fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
     env:
-      # detect_leaks=0: OpenSSL keeps provider-registry allocs alive.
+      # detect_leaks=0: the libasan preload would also leak-check shell
+      # tools; the unit-test step enables it for the test binaries only.
       # detect_odr_violation=0: libwolfprov is linked + dlopen'd in
       # test/unit.test -- false-positive ODR.
       ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=0:print_stacktrace=1:detect_odr_violation=0
@@ -111,7 +112,9 @@ jobs:
         run: |
           export LD_PRELOAD="$(gcc -print-file-name=libasan.so)"
           source scripts/env-setup
-          make test
+          # Preload is only for env-setup's openssl; test binaries link libasan.
+          unset LD_PRELOAD
+          ASAN_OPTIONS="${ASAN_OPTIONS}:detect_leaks=1" make test
 
       - name: Run cmd-tests under sanitizers
         shell: bash

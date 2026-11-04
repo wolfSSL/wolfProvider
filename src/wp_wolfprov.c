@@ -285,6 +285,7 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
  */
 static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
 {
+    OSSL_LIB_CTX_free(ctx->libCtx);
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
     /* Release a reference only if this context took one; pairing a failed init
      * with a cleanup would tear down the shared subsystem other contexts use. */
@@ -310,7 +311,7 @@ static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
  * Stores the library context object in the wolfSSL provider object.
  *
  * @param [in] ctx     wolfSSL provider context object.
- * @param [in] libCtx  Library context object.
+ * @param [in] libCtx  Library context object. Owned by ctx.
  */
 static void wolfssl_prov_ctx_set0_lib_ctx(WOLFPROV_CTX* ctx,
         OSSL_LIB_CTX* libCtx)

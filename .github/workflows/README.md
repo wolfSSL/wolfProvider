@@ -251,14 +251,14 @@ wolfProvider and the test is dead weight.
 
 | Job | Flags | What it catches |
 |-----|-------|-----------------|
-| `sanitizers` (ASan + UBSan) | `-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all` | use-after-free, double-free, out-of-bounds read/write, signed overflow, misaligned access, NULL deref, etc. |
+| `sanitizers` (ASan + UBSan) | `-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all` | use-after-free, double-free, out-of-bounds read/write, signed overflow, misaligned access, NULL deref, etc.; leaks in `make test` (LeakSanitizer). |
 | `tsan` (Thread Sanitizer) | `-fsanitize=thread` | data races + lock-ordering violations in the multi-threaded unit tests in `test/unit.c` (`pthread_create` fan-out). |
 
 ASan and TSan can't coexist in one binary, so they're separate jobs
-with separate caches. Both use `LD_PRELOAD=libasan.so` / `libtsan.so`
-for the unit-test run because wolfProvider is loaded via `dlopen()`
-from OpenSSL and the runtime needs the sanitizer interceptors live
-before any provider code runs. `ASAN_OPTIONS=detect_odr_violation=0`
+with separate caches. The unit-test binaries link the sanitizer
+runtime. The ASan job preloads `libasan.so` only for `scripts/env-setup`
+and the cmd-tests, and runs `make test` with `detect_leaks=1`.
+`ASAN_OPTIONS=detect_odr_violation=0`
 is set to suppress a known false positive from the provider's static
 ASN.1 table being linked into both `libwolfprov.so` and the test
 binary.
