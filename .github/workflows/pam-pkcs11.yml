@@ -96,18 +96,11 @@ jobs:
       - name: Run pam_pkcs11 tests
         shell: bash
         run: |
-          set +o pipefail # ignore errors from make check
           export ${{ matrix.force_fail }}
           export PAM_PKCS11_REF=${{ matrix.pam_pkcs11_ref }}
+          export PAM_PKCS11_TEST_LOG=pam-pkcs11-test.log
 
-          # Run tests
-          if timeout 300 $GITHUB_WORKSPACE/.github/scripts/pam-pkcs11-test.sh; then
-            TEST_RESULT=0
-          else
-            TEST_RESULT=1
-          fi
+          TEST_RESULT=0
+          timeout 300 $GITHUB_WORKSPACE/.github/scripts/pam-pkcs11-test.sh || TEST_RESULT=$?
 
-          echo "TEST_RESULT: $TEST_RESULT"
-
-          # Capture result
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} pam_pkcs11
