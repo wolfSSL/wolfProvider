@@ -296,6 +296,22 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             echo "FAIL: iperf exited $TEST_RESULT but iperf-test.log is missing or does not show the credential encryption failure"
             exit 1
         fi
+    # ----- GIT-SSH-DR -----
+    elif [ "$TEST_SUITE" = "git-ssh-dr" ]; then
+        # Every client operation must fail on wolfProvider's RNG
+        if [ "$TEST_RESULT" -ne 0 ] \
+            && [ -f "git-ssh-dr-test.log" ] \
+            && grep -Eq '^Result: 0 succeeded, [1-9][0-9]* failed on the RNG, 0 failed otherwise, 0 skipped$' \
+                git-ssh-dr-test.log; then
+            echo "PASS: every git over SSH operation failed on the RNG as expected with force fail enabled"
+            exit 0
+        elif [ "$TEST_RESULT" -eq 0 ]; then
+            echo "FAIL: git over SSH tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "FAIL: git-ssh-dr exited $TEST_RESULT but git-ssh-dr-test.log is missing or shows operations that did not fail on the RNG"
+            exit 1
+        fi
     else
         if [ $TEST_RESULT -eq 0 ]; then
             echo "$TEST_SUITE tests unexpectedly succeeded with force fail enabled"
