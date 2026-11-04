@@ -269,7 +269,7 @@ binary.
 |-----|------|-------|
 | `cppcheck` | `cppcheck --enable=all` on `src/` | Fails on any `error:` line, or on a file cppcheck could not analyse (`noValidConfiguration`). Warnings are reported but don't fail. |
 | `scan-build` | `clang --analyze` via `scan-build` | Currently fails only if bug count > 50 (rolling baseline). HTML report uploaded as artifact. |
-| `infer` | Facebook Infer | Currently fails only if issue count > 100. CSV + text report uploaded. |
+| `infer` | Facebook Infer | Fails if infer does not analyse every `src/*.c` file, or finds more than 100 issues (`infer-out/report.json`). `infer-out/` and the run log uploaded. |
 
 The scan-build and infer thresholds are baseline-based, not strict —
 they let pre-existing issues slide but flag obvious regressions.

@@ -334,30 +334,39 @@ jobs:
           # Run infer on the build (it wraps the compilation)
           # Build only the library to avoid test compilation issues
           # Explicitly set CC=clang for make
-          infer run -- make -j$(nproc) CC=clang libwolfprov.la 2>&1 | tee infer-log.txt || true
-          
-          # Generate text report
-          if [ -d infer-out ]; then
-            infer report --issues-csv infer-report.csv 2>&1 || true
-            infer report --issues-txt infer-report.txt 2>&1 || true
-            
-            # Display summary
-            if [ -f infer-report.txt ]; then
-              echo "=== Infer Analysis Summary ==="
-              cat infer-report.txt
-              
-              # Count issues
-              ISSUE_COUNT=$(grep -c "Found.*issue" infer-report.txt || echo "0")
-              echo "Infer found issues (check infer-report.txt for details)"
-              
-              # Fail if too many critical issues (adjust threshold as needed)
-              if [ "$ISSUE_COUNT" -gt 100 ]; then
-                echo "Too many issues found by Infer"
-                exit 1
-              fi
-            fi
-          else
-            echo "Infer did not produce output directory"
+          # infer's own exit status goes to infer-rc.txt; the pipeline status is tee's.
+          rm -f infer-rc.txt
+          { infer run -- make -j$(nproc) CC=clang libwolfprov.la 2>&1 || echo $? > infer-rc.txt; } | tee infer-log.txt || true
+
+          INFER_RC=$(cat infer-rc.txt 2>/dev/null || echo 0)
+          if [ "$INFER_RC" -ne 0 ]; then
+            echo "infer exited with status $INFER_RC"
+            exit 1
+          fi
+
+          # Fail if infer did not analyse every source file
+          SRC_COUNT=$(ls src/*.c | wc -l)
+          ANALYSED=$(sed -n 's/^Found \([0-9]*\) source files to analyze.*/\1/p' infer-log.txt)
+          if [ "$ANALYSED" != "$SRC_COUNT" ]; then
+            echo "infer analysed ${ANALYSED:-0} of $SRC_COUNT source files"
+            exit 1
+          fi
+
+          # infer run writes report.txt and report.json (one entry per issue)
+          if [ ! -f infer-out/report.txt ] || [ ! -f infer-out/report.json ]; then
+            echo "infer wrote no report"
+            exit 1
+          fi
+          echo "=== Infer Analysis Summary ==="
+          cat infer-out/report.txt
+
+          ISSUE_COUNT=$(jq length infer-out/report.json)
+          echo "Infer found $ISSUE_COUNT issues"
+
+          # Fail if too many issues (adjust threshold as needed)
+          if [ "$ISSUE_COUNT" -gt 100 ]; then
+            echo "Too many issues found by Infer"
+            exit 1
           fi
 
       - name: Upload Infer results
@@ -367,8 +376,6 @@ jobs:
           name: infer-results
           path: |
             infer-out/
-            infer-report.txt
-            infer-report.csv
             infer-log.txt
           retention-days: 7
           if-no-files-found: ignore
