@@ -1186,6 +1186,53 @@ int test_ecx_import_short_pub(void *data)
     OPENSSL_free(buf);
     return err;
 }
+
+/* OpenSSL's hybrid KEM keymgmt imports X25519 public keys with
+ * DOMAIN_PARAMETERS|PRIVATE_KEY selection. */
+int test_ecx_import_pub_with_priv_selection(void *data)
+{
+    int err = 0;
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    static const unsigned char pubKey[32] = {
+        0x85, 0x20, 0xf0, 0x09, 0x89, 0x30, 0xa7, 0x54,
+        0x74, 0x8b, 0x7d, 0xdc, 0xb4, 0x3e, 0xf7, 0x5a,
+        0x0d, 0xbf, 0x3a, 0x0d, 0x26, 0x38, 0x1a, 0xf4,
+        0xeb, 0xa4, 0xa9, 0x8e, 0xaa, 0x9b, 0x4e, 0x6a
+    };
+    unsigned char out[sizeof(pubKey)];
+    size_t outLen = sizeof(out);
+    OSSL_PARAM params[2];
+
+    (void)data;
+    PRINT_MSG("X25519 public import with private-key selection");
+
+    ctx = EVP_PKEY_CTX_new_from_name(wpLibCtx, "X25519", NULL);
+    err = (ctx == NULL) || (EVP_PKEY_fromdata_init(ctx) != 1);
+    if (err == 0) {
+        params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PUB_KEY,
+            (void*)pubKey, sizeof(pubKey));
+        params[1] = OSSL_PARAM_construct_end();
+        if (EVP_PKEY_fromdata(ctx, &pkey,
+                OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS |
+                OSSL_KEYMGMT_SELECT_PRIVATE_KEY, params) != 1) {
+            PRINT_ERR_MSG("X25519 public import failed");
+            err = 1;
+        }
+    }
+    if (err == 0) {
+        if (EVP_PKEY_get_raw_public_key(pkey, out, &outLen) != 1 ||
+                outLen != sizeof(pubKey) ||
+                memcmp(out, pubKey, sizeof(pubKey)) != 0) {
+            PRINT_ERR_MSG("X25519 imported public key mismatch");
+            err = 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    return err;
+}
 #endif /* WP_HAVE_X25519 */
 
 int test_ecx_dup(void *data)

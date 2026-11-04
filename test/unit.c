@@ -593,6 +593,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_ecx_x25519_get_params_stale_ret, NULL),
     TEST_DECL(test_ecx_import_zero_priv, NULL),
     TEST_DECL(test_ecx_import_short_pub, NULL),
+    TEST_DECL(test_ecx_import_pub_with_priv_selection, NULL),
 #endif
     TEST_DECL(test_ecx_dup, NULL),
     TEST_DECL(test_ecx_shared_key_first_use, NULL),
