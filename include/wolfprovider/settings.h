@@ -125,6 +125,12 @@
 #ifdef WOLFSSL_AES_COUNTER
     #define WP_HAVE_AESCTR
 #endif
+/* XTS init/set-key APIs need wolfSSL 5.6.6; none in the FIPS v5 boundary. */
+#if defined(WOLFSSL_AES_XTS) && (LIBWOLFSSL_VERSION_HEX >= 0x05006006) && \
+    (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION_MAJOR) && HAVE_FIPS_VERSION_MAJOR >= 6))
+    #define WP_HAVE_AESXTS
+#endif
 #ifdef HAVE_AESGCM
     #define WP_HAVE_AESGCM
 #endif

@@ -541,6 +541,14 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
 #endif
 
+#ifdef WP_HAVE_AESXTS
+    /* AES-XTS */
+    { WP_NAMES_AES_256_XTS, WOLFPROV_PROPERTIES, wp_aes256xts_functions,
+      "" },
+    { WP_NAMES_AES_128_XTS, WOLFPROV_PROPERTIES, wp_aes128xts_functions,
+      "" },
+#endif
+
 #ifdef HAVE_AES_KEYWRAP
     /* AES Kwy Wrap - unpadded */
     { WP_NAMES_AES_256_WRAP, WOLFPROV_PROPERTIES, wp_aes256wrap_functions,

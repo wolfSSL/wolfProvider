@@ -30,6 +30,7 @@
     <ClCompile Include="..\..\..\src\wp_aes_stream.c" />
     <ClCompile Include="..\..\..\src\wp_aes_aead.c" />
     <ClCompile Include="..\..\..\src\wp_aes_wrap.c" />
+    <ClCompile Include="..\..\..\src\wp_aes_xts.c" />
     <ClCompile Include="..\..\..\src\wp_des.c" />
     <ClCompile Include="..\..\..\src\wp_hmac.c" />
     <ClCompile Include="..\..\..\src\wp_cmac.c" />
