@@ -374,9 +374,6 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_dh_krb5_keygen, NULL),
     TEST_DECL(test_dh_pad, NULL),
     TEST_DECL(test_dh_derive_small_buffer, NULL),
-#if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
-    TEST_DECL(test_dh_x963_kdf, NULL),
-#endif
     TEST_DECL(test_dh_fromdata_oversize, NULL),
     TEST_DECL(test_dh_param_check_explicit, NULL),
     TEST_DECL(test_dh_import_group_no_nul, NULL),
@@ -484,6 +481,11 @@ TEST_CASE test_case[] = {
         TEST_DECL(test_ecdh_p256, NULL),
         #if defined(HAVE_X963_KDF) && defined(WP_HAVE_SHA256)
         TEST_DECL(test_ecdh_x963_kdf, NULL),
+        #endif
+        #if defined(HAVE_X963_KDF) && defined(HAVE_AES_KEYWRAP) && \
+            defined(WP_HAVE_AESCBC) && defined(WP_HAVE_SHA1) && \
+            !defined(OPENSSL_NO_CMS)
+        TEST_DECL(test_ecdh_cms_kari, NULL),
         #endif
     #endif
     #ifdef WP_HAVE_ECDSA

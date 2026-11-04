@@ -31,12 +31,6 @@
 
 #ifdef WP_HAVE_DH
 
-/** No KDF applied to derived secret. */
-#define WP_KDF_NONE       0
-/** X9.63 KDF applied to derived secret. */
-#define WP_KDF_X963       1
-
-
 /**
  * DH key exchange context.
  */
@@ -52,8 +46,7 @@ typedef struct wp_DhCtx {
     /** Pad secret output with zeros.  */
     int pad;
 
-    /** KDF type to apply to calculated secret. */
-    int kdfType;
+    /* KDF parameters are kept for get/set parity; no DH KDF is applied. */
     /** Digest to use with KDF. */
     enum wc_HashType kdfMd;
     /** Name of digest to use with KDF.  */
@@ -150,7 +143,6 @@ static wp_DhCtx* wp_dh_dupctx(wp_DhCtx* src)
         if (ok) {
             /* Copy remaining fields across. */
             dst->pad     = src->pad;
-            dst->kdfType = src->kdfType;
             dst->kdfMd   = src->kdfMd;
             XMEMCPY(dst->kdfMdName, src->kdfMdName, sizeof(dst->kdfMdName));
             dst->ukmLen  = src->ukmLen;
@@ -200,54 +192,6 @@ static int wp_dh_init(wp_DhCtx* ctx, wp_Dh* dh, const OSSL_PARAM params[])
         ctx->key = dh;
         ctx->pad = 0;
         ok = wp_dh_set_ctx_params(ctx, params);
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
-}
-
-/**
- * Derive key from secret KDF to produce output.
- *
- * @param [in]  ctx      DH key exchange context object.
- * @param [in]  key      Buffer to hold key derived from secret.
- * @param [out] keyLen   Length of derived key in bytes.
- * @param [in]  keySize  Length of buffer in bytes.
- * @param [in]  sec      Secret data.
- * @param [in]  secLen   Length of secret data in bytes.
- * @return 1 on success.
- * @return 0 on failure.
- */
-static int wp_dh_kdf_derive(wp_DhCtx* ctx, unsigned char* key,
-    size_t* keyLen, size_t keySize, unsigned char* sec, size_t secLen)
-{
-    int ok = 1;
-
-    WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_kdf_derive");
-
-    if (keySize < ctx->keyLen) {
-        ok = 0;
-    }
-    if (ok) {
-#ifdef HAVE_X963_KDF
-        int rc;
-        /* TODO: support X9.42 KDF that includes ASN.1 encoding. */
-        rc = wc_X963_KDF(ctx->kdfMd, sec, (word32)secLen, ctx->ukm,
-            (word32)ctx->ukmLen, key, (word32)ctx->keyLen);
-        if (rc != 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_X963_KDF", rc);
-            ok = 0;
-        }
-        else {
-            *keyLen = ctx->keyLen;
-        }
-#else
-        (void)key;
-        (void)keyLen;
-        (void)sec;
-        (void)secLen;
-        ok = 0;
-#endif
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -398,8 +342,6 @@ static int wp_dh_derive_secret(wp_DhCtx* ctx, unsigned char* secret,
 /**
  * Derive a secret/key using DH key exchange.
  *
- * Can put the DH secret through a KDF.
- *
  * @param [in]  ctx      DH key exchange context object.
  * @param [out] secret   Buffer to hold secret/key.
  * @param [out] secLen   Length of secret/key data in bytes.
@@ -411,10 +353,7 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
     size_t* secLen, size_t secSize)
 {
     int ok = 1;
-    int done = 0;
-    unsigned char* out = NULL;
     size_t outLen = 0;
-    unsigned char* tmp = NULL;
     size_t maxLen = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_DH, "wp_dh_derive");
@@ -425,58 +364,25 @@ static int wp_dh_derive(wp_DhCtx* ctx, unsigned char* secret,
 
     /* No output buffer, return maximum size only. */
     if (ok && (secret == NULL)) {
-        if (ctx->kdfType == WP_KDF_NONE) {
-            *secLen = wp_dh_get_size(ctx->key);
-        }
-        else {
-            *secLen = ctx->keyLen;
-        }
-        done = 1;
+        *secLen = wp_dh_get_size(ctx->key);
     }
-
-    if ((!done) && ok) {
+    else if (ok) {
         /* Calculate maximum secret length. */
         maxLen = wp_dh_get_size(ctx->key);
 
-        if (ctx->kdfType == WP_KDF_NONE) {
-            /* Output of DH key exchange directly into caller's buffer. */
-            if (secSize < maxLen) {
-                ok = 0;
-            }
-            else {
-                out = secret;
-                outLen = secSize;
-            }
-        }
-        else if (ctx->kdfType == WP_KDF_X963) {
-            /* Output of DH key exchange goes into temporary buffer. */
-            tmp = OPENSSL_malloc(maxLen);
-            if (tmp == NULL) {
-                ok = 0;
-            }
-            if (ok) {
-                out = tmp;
-                outLen = maxLen;
-            }
-        }
-    }
-
-    if ((!done) && ok && (out != NULL)) {
-        /* DH key exchange derivation using wolfSSL. */
-        ok = wp_dh_derive_secret(ctx, out, &outLen, maxLen);
-    }
-
-    if ((!done) && ok) {
-        if (ctx->kdfType == WP_KDF_X963) {
-            /* Put output through KDF using wolfSSL. */
-            ok = wp_dh_kdf_derive(ctx, secret, secLen, secSize, out, outLen);
+        /* Output of DH key exchange directly into caller's buffer. */
+        if (secSize < maxLen) {
+            ok = 0;
         }
         else {
+            outLen = secSize;
+            /* DH key exchange derivation using wolfSSL. */
+            ok = wp_dh_derive_secret(ctx, secret, &outLen, maxLen);
+        }
+        if (ok) {
             *secLen = outLen;
         }
     }
-
-    OPENSSL_clear_free(tmp, maxLen);
 
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -547,9 +453,9 @@ static int wp_dh_set_peer(wp_DhCtx* ctx, wp_Dh* peer)
 }
 
 /**
- * Set the KDF algorithm from the parameters.
+ * Check the KDF algorithm from the parameters. Only none is supported.
  *
- * @param [in, out] ctx     DH key exchange context object.
+ * @param [in]      ctx     DH key exchange context object. Unused.
  * @param [in]      params  Array of parameters and values.
  * @return  1 on success.
  * @return  0 on failure.
@@ -566,18 +472,14 @@ static int wp_dh_set_param_kdf(wp_DhCtx* ctx, const OSSL_PARAM params[])
         ok = 0;
     }
     if (ok && (kdf != NULL)) {
-        if (kdf[0] == '\0') {
-            ctx->kdfType = WP_KDF_NONE;
-        }
-        else if (XSTRCMP(kdf, OSSL_KDF_NAME_X942KDF_ASN1) == 0) {
-            /* Only support the non ASN1 variant. */
-            ctx->kdfType = WP_KDF_X963;
-        }
-        else {
+        /* wolfCrypt has no X9.42 KDF. */
+        if (kdf[0] != '\0') {
+            ERR_raise(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED);
             ok = 0;
         }
     }
 
+    (void)ctx;
     WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
@@ -692,7 +594,7 @@ static const OSSL_PARAM* wp_dh_gettable_ctx_params(wp_DhCtx* ctx,
 /**
  * Get the KDF algorithm from the context and put into parameters.
  *
- * @param [in]      ctx     DH key exchange context object.
+ * @param [in]      ctx     DH key exchange context object. Unused.
  * @param [in, out] params  Array of parameters and values.
  * @return  1 on success.
  * @return  0 on failure.
@@ -706,15 +608,12 @@ static int wp_dh_get_params_kdf(wp_DhCtx* ctx, OSSL_PARAM params[])
 
      p = OSSL_PARAM_locate(params, OSSL_EXCHANGE_PARAM_KDF_TYPE);
      if (p != NULL) {
-         const char* type = "";
-         if (ctx->kdfType == WP_KDF_X963) {
-             type = OSSL_KDF_NAME_X942KDF_ASN1;
-         }
-         if (ok && (!OSSL_PARAM_set_utf8_string(p, type))) {
+         if (!OSSL_PARAM_set_utf8_string(p, "")) {
              ok = 0;
          }
      }
 
+     (void)ctx;
      WOLFPROV_LEAVE(WP_LOG_COMP_DH, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
      return ok;
 }

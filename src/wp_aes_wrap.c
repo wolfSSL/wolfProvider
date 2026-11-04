@@ -331,6 +331,7 @@ static int wp_aes_wrap_dinit(wp_AesWrapCtx *ctx, const unsigned char *key,
  *
  * @param [in]  ctx      AES wrap context object.
  * @param [out] out      Buffer to hold encrypted/decrypted result.
+ *                       May be NULL to get the output length.
  * @param [out] outLen   Length of encrypted/decrypted data in bytes.
  * @param [in]  outSize  Size of output buffer in bytes.
  * @param [in]  in       Data to encrypt/decrypt.
@@ -354,6 +355,20 @@ static int wp_aes_wrap_update(wp_AesWrapCtx *ctx, unsigned char *out,
 
     if (ok && (inLen == 0)) {
         *outLen = 0;
+    }
+    else if (ok && (out == NULL)) {
+        /* Size query. */
+        if ((inLen < 2 * KEYWRAP_BLOCK_SIZE) ||
+                ((inLen % KEYWRAP_BLOCK_SIZE) != 0)) {
+            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_INPUT_LENGTH);
+            ok = 0;
+        }
+        else if (ctx->wrap) {
+            *outLen = inLen + KEYWRAP_BLOCK_SIZE;
+        }
+        else {
+            *outLen = inLen - KEYWRAP_BLOCK_SIZE;
+        }
     }
     else if (ok) {
         int rc;
