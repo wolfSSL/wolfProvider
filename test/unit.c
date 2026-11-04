@@ -397,6 +397,7 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_rsa_sign_verify_recover_pkcs1, NULL),
     TEST_DECL(test_rsa_sign_verify_pss, NULL),
     TEST_DECL(test_rsa_sign_verify_x931, NULL),
+    TEST_DECL(test_rsa_verify_short_sig, NULL),
     TEST_DECL(test_rsa_enc_dec_pkcs1, NULL),
     TEST_DECL(test_rsa_enc_dec_oaep, NULL),
     TEST_DECL(test_rsa_enc_dec_nopad, NULL),

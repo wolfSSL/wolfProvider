@@ -1475,10 +1475,35 @@ static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
         ok = 0;
     }
     else {
-        unsigned char* decryptedSig = (unsigned char*)OPENSSL_malloc(sigLen);
+        unsigned char* decryptedSig = NULL;
+        unsigned char* padded = NULL;
+        int keyLen = wc_RsaEncryptSize(wp_rsa_get_key(ctx->rsa));
 
-        if (decryptedSig == NULL) {
-            ok = 0;
+        /* Like RSA_public_decrypt, accept short PKCS#1 v1.5 signatures without
+         * a digest (e.g. OpenPGP MPIs); RSA_verify requires full length. */
+        if ((ctx->padMode == RSA_PKCS1_PADDING) &&
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+                (ctx->hash.type == WC_HASH_TYPE_NONE) &&
+#else
+                (ctx->hashType == WC_HASH_TYPE_NONE) &&
+#endif
+                (sig != NULL) && (keyLen > 0) && (sigLen > 0) &&
+                (sigLen < (size_t)keyLen)) {
+            padded = (unsigned char*)OPENSSL_zalloc(keyLen);
+            if (padded == NULL) {
+                ok = 0;
+            }
+            else {
+                XMEMCPY(padded + keyLen - sigLen, sig, sigLen);
+                sig = padded;
+                sigLen = (size_t)keyLen;
+            }
+        }
+        if (ok) {
+            decryptedSig = (unsigned char*)OPENSSL_malloc(sigLen);
+            if (decryptedSig == NULL) {
+                ok = 0;
+            }
         }
         if (ok) {
             if (ctx->padMode == RSA_PKCS1_PADDING) {
@@ -1502,6 +1527,7 @@ static int wp_rsa_verify(wp_RsaSigCtx* ctx, const unsigned char* sig,
             }
         }
         OPENSSL_free(decryptedSig);
+        OPENSSL_free(padded);
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);

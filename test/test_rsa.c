@@ -1597,6 +1597,65 @@ int test_rsa_sign_verify_x931(void *data)
     return err;
 }
 
+int test_rsa_verify_short_sig(void *data)
+{
+    int err;
+    static const unsigned char sha256Prefix[] = {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01,
+        0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20
+    };
+    /* SHA-256 PKCS#1 v1.5 signature of msg by rsa_key_der_2048 starts 0x00. */
+    unsigned char msg[] = { 0x00, 0x65 };
+    unsigned char tbs[sizeof(sha256Prefix) + 32];
+    unsigned char sig[256];
+    size_t sigLen = sizeof(sig);
+    const unsigned char *p = rsa_key_der_2048;
+    OSSL_LIB_CTX *libCtxs[] = { osslLibCtx, wpLibCtx };
+    EVP_PKEY *pkey = NULL;
+    int i;
+
+    (void)data;
+
+    pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
+    err = pkey == NULL;
+    if (err == 0) {
+        memcpy(tbs, sha256Prefix, sizeof(sha256Prefix));
+        err = EVP_Digest(msg, sizeof(msg), tbs + sizeof(sha256Prefix), NULL,
+            EVP_sha256(), NULL) != 1;
+    }
+    if (err == 0) {
+        err = test_digest_sign(pkey, osslLibCtx, msg, sizeof(msg), "SHA256",
+            NULL, sig, &sigLen, RSA_PKCS1_PADDING, 0);
+    }
+    if (err == 0) {
+        err = (sigLen != sizeof(sig)) || (sig[0] != 0x00);
+    }
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        /* No digest, DigestInfo as tbs, leading zero stripped (OpenPGP). */
+        err = test_pkey_verify(pkey, libCtxs[i], tbs, sizeof(tbs), sig + 1,
+            sigLen - 1, RSA_PKCS1_PADDING, NULL, NULL);
+        if (err == 0) {
+            sig[sigLen / 2] ^= 0x80;
+            err = test_pkey_verify(pkey, libCtxs[i], tbs, sizeof(tbs),
+                sig + 1, sigLen - 1, RSA_PKCS1_PADDING, NULL, NULL) != 1;
+            sig[sigLen / 2] ^= 0x80;
+        }
+        /* With a digest the signature must be full length. */
+        if (err == 0) {
+            err = test_digest_verify(pkey, libCtxs[i], msg, sizeof(msg),
+                "SHA256", NULL, sig, sigLen, RSA_PKCS1_PADDING, 0);
+        }
+        if (err == 0) {
+            err = test_digest_verify(pkey, libCtxs[i], msg, sizeof(msg),
+                "SHA256", NULL, sig + 1, sigLen - 1, RSA_PKCS1_PADDING,
+                0) != 1;
+        }
+    }
+
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
 static int test_rsa_enc_dec(const unsigned char *der, size_t derLen,
                             int padMode, const EVP_MD *rsaMd,
                             const EVP_MD *rsaMgf1Md)
