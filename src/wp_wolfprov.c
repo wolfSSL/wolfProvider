@@ -460,8 +460,12 @@ static const OSSL_ALGORITHM wolfprov_digests[] = {
       "" },
 #endif
 
-#ifdef WP_HAVE_SHAKE_256
     /* SHAKE */
+#ifdef WP_HAVE_SHAKE_128
+    { WP_NAMES_SHAKE_128, WOLFPROV_PROPERTIES, wp_shake_128_functions,
+      "" },
+#endif
+#ifdef WP_HAVE_SHAKE_256
     { WP_NAMES_SHAKE_256, WOLFPROV_PROPERTIES, wp_shake_256_functions,
       "" },
 #endif

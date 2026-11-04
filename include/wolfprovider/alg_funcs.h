@@ -86,6 +86,7 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_SHA3_384      "SHA3-384:2.16.840.1.101.3.4.2.9"
 #define WP_NAMES_SHA3_512      "SHA3-512:2.16.840.1.101.3.4.2.10"
 
+#define WP_NAMES_SHAKE_128     "SHAKE-128:SHAKE128:2.16.840.1.101.3.4.2.11"
 #define WP_NAMES_SHAKE_256     "SHAKE-256:SHAKE256:2.16.840.1.101.3.4.2.12"
 
 /* Cipher names. */
@@ -397,6 +398,7 @@ extern const OSSL_DISPATCH wp_sha3_256_functions[];
 extern const OSSL_DISPATCH wp_sha3_384_functions[];
 extern const OSSL_DISPATCH wp_sha3_512_functions[];
 
+extern const OSSL_DISPATCH wp_shake_128_functions[];
 extern const OSSL_DISPATCH wp_shake_256_functions[];
 
 /* Cipher implementations. */

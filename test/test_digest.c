@@ -203,7 +203,7 @@ int test_sha3_512(void *data)
 
 /******************************************************************************/
 
-#ifdef WP_HAVE_SHAKE_256
+#if defined(WP_HAVE_SHAKE_128) || defined(WP_HAVE_SHAKE_256)
 static int test_xof_op(const EVP_MD *md, unsigned char *msg, size_t len,
     unsigned char *prev, unsigned int *prevLen)
 {
@@ -251,6 +251,166 @@ static int test_xof_op(const EVP_MD *md, unsigned char *msg, size_t len,
     return err;
 }
 
+#if (OPENSSL_VERSION_NUMBER >= 0x30300000L) && \
+    (LIBWOLFSSL_VERSION_HEX >= 0x05005001)
+/* Squeeze in chunks across block boundaries, reinitializing and copying the
+ * context on the way. No final after squeeze and no squeeze after final. */
+static int test_xof_squeeze(EVP_MD *md, int wp, const unsigned char *in,
+    size_t inLen, unsigned char *out, size_t *len)
+{
+    static const size_t chunks[] = { 0, 1, 135, 32, 168, 104, 400, 3 };
+    unsigned char tmp[200];
+    EVP_MD_CTX *ctx;
+    EVP_MD_CTX *dup = NULL;
+    size_t i;
+    int r;
+    int err;
+
+    err = (ctx = EVP_MD_CTX_new()) == NULL;
+    for (r = 0; (err == 0) && (r < 2); r++) {
+        *len = 0;
+        err = (EVP_DigestInit_ex(ctx, md, NULL) != 1) ||
+            (EVP_DigestUpdate(ctx, in, inLen / 2) != 1) ||
+            (EVP_DigestUpdate(ctx, in + inLen / 2, inLen - inLen / 2) != 1);
+        for (i = 0; (err == 0) && (i < sizeof(chunks) / sizeof(*chunks));
+                i++) {
+            err = EVP_DigestSqueeze(ctx, out + *len, chunks[i]) != 1;
+            *len += chunks[i];
+        }
+    }
+    /* wolfProvider refuses absorbing once output started. */
+    if ((err == 0) && wp && (EVP_DigestUpdate(ctx, out, 1) == 1)) {
+        err = 1;
+    }
+    if (err == 0) {
+        err = ((dup = EVP_MD_CTX_dup(ctx)) == NULL) ||
+            (EVP_DigestSqueeze(ctx, out + *len, sizeof(tmp)) != 1) ||
+            (EVP_DigestSqueeze(dup, tmp, sizeof(tmp)) != 1) ||
+            (memcmp(out + *len, tmp, sizeof(tmp)) != 0);
+        *len += sizeof(tmp);
+    }
+    if ((err == 0) && (EVP_DigestFinalXOF(ctx, tmp, 1) == 1)) {
+        err = 1;
+    }
+    if ((err == 0) && ((EVP_DigestInit_ex(dup, md, NULL) != 1) ||
+            (EVP_DigestFinalXOF(dup, tmp, 1) != 1) ||
+            (EVP_DigestSqueeze(dup, tmp, 1) == 1))) {
+        err = 1;
+    }
+
+    EVP_MD_CTX_free(dup);
+    EVP_MD_CTX_free(ctx);
+    return err;
+}
+#endif
+
+/* Sizes, default length final and squeeze must match OpenSSL. */
+static int test_xof_parity(EVP_MD *omd, EVP_MD *wmd)
+{
+    static const unsigned char msg[] = "Test pattern";
+    unsigned char out[2][1100];
+    unsigned int len[2];
+    int rc[2];
+    EVP_MD *md[2];
+    EVP_MD_CTX *ctx = NULL;
+    size_t i;
+    int err;
+
+    md[0] = omd;
+    md[1] = wmd;
+    /* Parameters absent (RFC 8702), as OpenSSL 3.0.17+. */
+    err = (EVP_MD_get_block_size(omd) != EVP_MD_get_block_size(wmd)) ||
+        (EVP_MD_get_size(omd) != EVP_MD_get_size(wmd)) ||
+        ((EVP_MD_get_flags(omd) & EVP_MD_FLAG_XOF) == 0) ||
+        ((EVP_MD_get_flags(wmd) & EVP_MD_FLAG_XOF) == 0) ||
+        ((EVP_MD_get_flags(wmd) & EVP_MD_FLAG_DIGALGID_ABSENT) == 0);
+    if (err) {
+        PRINT_ERR_MSG("XOF sizes or flags don't match");
+    }
+    if (err == 0) {
+        err = (ctx = EVP_MD_CTX_new()) == NULL;
+    }
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        len[i] = 0;
+        rc[i] = EVP_DigestInit_ex(ctx, md[i], NULL) &&
+            EVP_DigestUpdate(ctx, msg, sizeof(msg)) &&
+            EVP_DigestFinal_ex(ctx, out[i], &len[i]);
+    }
+    if ((err == 0) && ((rc[0] != rc[1]) || (len[0] != len[1]) ||
+            (memcmp(out[0], out[1], len[0]) != 0))) {
+        PRINT_ERR_MSG("Default length XOF output doesn't match");
+        err = 1;
+    }
+#if OPENSSL_VERSION_NUMBER >= 0x30400000L
+    if (err == 0) {
+        size_t xofLen = 64;
+        size_t getLen;
+        OSSL_PARAM params[2];
+        OSSL_PARAM getParams[2];
+
+        /* Size is an alias of XOF length; read back as XOF length. */
+        params[0] = OSSL_PARAM_construct_size_t(OSSL_DIGEST_PARAM_SIZE,
+            &xofLen);
+        params[1] = OSSL_PARAM_construct_end();
+        getParams[0] = OSSL_PARAM_construct_size_t(OSSL_DIGEST_PARAM_XOFLEN,
+            &getLen);
+        getParams[1] = OSSL_PARAM_construct_end();
+        for (i = 0; (err == 0) && (i < 2); i++) {
+            len[i] = 0;
+            getLen = 0;
+            err = (EVP_DigestInit_ex2(ctx, md[i], params) != 1) ||
+                (EVP_MD_CTX_get_params(ctx, getParams) != 1) ||
+                (getLen != xofLen) ||
+                (EVP_DigestUpdate(ctx, msg, sizeof(msg)) != 1) ||
+                (EVP_DigestFinal_ex(ctx, out[i], &len[i]) != 1) ||
+                (len[i] != xofLen);
+        }
+        if (err || (memcmp(out[0], out[1], xofLen) != 0)) {
+            PRINT_ERR_MSG("XOF length with final doesn't match");
+            err = 1;
+        }
+    }
+#endif
+    /* No absorbing or output after final until init (EVP or provider). */
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        err = (EVP_DigestInit_ex(ctx, wmd, NULL) != 1) ||
+            (EVP_DigestUpdate(ctx, msg, sizeof(msg)) != 1) ||
+            (EVP_DigestFinalXOF(ctx, out[i], 32) != 1) ||
+            (EVP_DigestUpdate(ctx, msg, sizeof(msg)) == 1) ||
+            (EVP_DigestFinalXOF(ctx, out[i], 32) == 1);
+    }
+    if ((err == 0) && (memcmp(out[0], out[1], 32) != 0)) {
+        err = 1;
+    }
+#if (OPENSSL_VERSION_NUMBER >= 0x30300000L) && \
+    (LIBWOLFSSL_VERSION_HEX >= 0x05005001)
+    {
+        static const size_t inLens[] = { 0, 135, 136, 137, 168, 169, 400 };
+        unsigned char in[400];
+        size_t j;
+        size_t sLen[2] = { 0, 0 };
+
+        for (i = 0; i < sizeof(in); i++) {
+            in[i] = (unsigned char)i;
+        }
+        for (j = 0; (err == 0) && (j < sizeof(inLens) / sizeof(*inLens));
+                j++) {
+            for (i = 0; (err == 0) && (i < 2); i++) {
+                err = test_xof_squeeze(md[i], i == 1, in, inLens[j], out[i],
+                    &sLen[i]);
+            }
+            if ((err == 0) && (memcmp(out[0], out[1], sLen[0]) != 0)) {
+                PRINT_ERR_MSG("Squeezed XOF output doesn't match");
+                err = 1;
+            }
+        }
+    }
+#endif
+    EVP_MD_CTX_free(ctx);
+
+    return err;
+}
+
 static int test_create_xof(const char *name, void *data)
 {
     int err = 0;
@@ -284,11 +444,21 @@ static int test_create_xof(const char *name, void *data)
         PRINT_MSG("Digest With wolfprovider");
         err = test_xof_op(wmd, longMsg, sizeof(longMsg), digest, &dLen);
     }
+    if (err == 0) {
+        err = test_xof_parity(omd, wmd);
+    }
 
     EVP_MD_free(wmd);
     EVP_MD_free(omd);
 
     return err;
+}
+#endif
+
+#ifdef WP_HAVE_SHAKE_128
+int test_shake_128(void *data)
+{
+    return test_create_xof("SHAKE128", data);
 }
 #endif
 
@@ -416,6 +586,9 @@ int test_digest_dupctx(void *data)
 #endif
 #ifdef WP_HAVE_SHA3_512
         { "SHA3-512", 0 },
+#endif
+#ifdef WP_HAVE_SHAKE_128
+        { "SHAKE-128", 1 },
 #endif
 #ifdef WP_HAVE_SHAKE_256
         { "SHAKE-256", 1 },

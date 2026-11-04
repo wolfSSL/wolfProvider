@@ -163,6 +163,9 @@ int test_sha3_224(void *data);
 int test_sha3_256(void *data);
 int test_sha3_384(void *data);
 int test_sha3_512(void *data);
+#ifdef WP_HAVE_SHAKE_128
+int test_shake_128(void *data);
+#endif
 #ifdef WP_HAVE_SHAKE_256
 int test_shake_256(void *data);
 #endif

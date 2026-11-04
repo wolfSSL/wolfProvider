@@ -215,6 +215,9 @@ TEST_CASE test_case[] = {
 #ifdef WP_HAVE_SHA3_512
     TEST_DECL(test_sha3_512, NULL),
 #endif
+#ifdef WP_HAVE_SHAKE_128
+    TEST_DECL(test_shake_128, NULL),
+#endif
 #ifdef WP_HAVE_SHAKE_256
     TEST_DECL(test_shake_256, NULL),
 #endif
