@@ -1539,11 +1539,13 @@ static int wp_rsa_verify_recover_init(wp_RsaSigCtx* ctx, wp_Rsa* rsa,
 /**
  * Verify and recover an RSA signature.
  *
- * @param [in] ctx     RSA signature context object.
- * @param [in] sig     Signature data.
- * @param [in] sigLen  Length of signature data in bytes.
- * @param [in] tbs     Data to be signed.
- * @param [in] tbsLen  Length of data to be signed in bytes.
+ * @param [in]  ctx       RSA signature context object.
+ * @param [out] rout      Recovered data, only the digest when one is set.
+ *                        NULL to get the maximum size.
+ * @param [out] routlen   Length of recovered data in bytes.
+ * @param [in]  routsize  Size of rout in bytes.
+ * @param [in]  sig       Signature data.
+ * @param [in]  sigLen    Length of signature data in bytes.
  * @return  1 on success.
  * @return  0 on failure.
  */
@@ -1552,39 +1554,102 @@ static int wp_rsa_verify_recover(wp_RsaSigCtx* ctx, unsigned char* rout,
 {
     int rc = 0;
     int ok = 1;
+    int keyLen = 0;
+    int dLen;
+    word32 outLen = 0;
+    enum wc_HashType hashType = WC_HASH_TYPE_NONE;
+    unsigned char* out = rout;
+    unsigned char* decrypted = NULL;
+    unsigned char encoded[MAX_DER_DIGEST_SZ];
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_verify_recover");
 
-    if ((ctx == NULL) || (rout == NULL) || (routlen == NULL) || (sig == NULL)) {
+    if ((ctx == NULL) || (routlen == NULL)) {
+        ok = 0;
+    }
+    if (ok && (!wp_rsa_check_key_size(ctx->rsa, 1))) {
+        ok = 0;
+    }
+    if (ok) {
+        keyLen = wc_RsaEncryptSize(wp_rsa_get_key(ctx->rsa));
+        if (keyLen <= 0) {
+            ok = 0;
+        }
+    }
+    if (ok && (rout == NULL)) {
+        *routlen = (size_t)keyLen;
+        WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+        return 1;
+    }
+    if (ok && (sig == NULL)) {
         ok = 0;
     }
 
-    /* Only PKCS1 supported for now */
-    if (ok && (ctx->padMode != RSA_PKCS1_PADDING)) {
-        WOLFPROV_ERROR_MSG(WP_LOG_COMP_RSA, "Only PKCS1 padding supported"
-                                      " for verify recover");
+    if (ok && (ctx->padMode != RSA_PKCS1_PADDING) &&
+            (ctx->padMode != RSA_NO_PADDING)) {
+        WOLFPROV_ERROR_MSG(WP_LOG_COMP_RSA, "Only PKCS1 and no padding"
+                                      " supported for verify recover");
         ok = 0;
     }
 
     if (ok && ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(routsize)))) {
         ok = 0;
     }
+    if (ok) {
+#if LIBWOLFSSL_VERSION_HEX >= 0x05007004
+        hashType = ctx->hash.type;
+#else
+        hashType = ctx->hashType;
+#endif
+        outLen = (word32)routsize;
+        if (hashType != WC_HASH_TYPE_NONE) {
+            decrypted = (unsigned char*)OPENSSL_malloc(keyLen);
+            if (decrypted == NULL) {
+                ok = 0;
+            }
+            out = decrypted;
+            outLen = (word32)keyLen;
+        }
+    }
     if (ok && (wp_lock(wp_rsa_get_mutex(ctx->rsa)) != 1)) {
         ok = 0;
     }
     if (ok) {
-        rc = wc_RsaSSL_Verify(sig, (word32)sigLen, rout, (word32)routsize,
-            wp_rsa_get_key(ctx->rsa));
+        if (ctx->padMode == RSA_NO_PADDING) {
+            rc = wc_RsaDirect((byte*)sig, (word32)sigLen, out, &outLen,
+                wp_rsa_get_key(ctx->rsa), RSA_PUBLIC_DECRYPT, &ctx->rng);
+        }
+        else {
+            rc = wc_RsaSSL_Verify(sig, (word32)sigLen, out, outLen,
+                wp_rsa_get_key(ctx->rsa));
+        }
         wp_unlock(wp_rsa_get_mutex(ctx->rsa));
         if (rc < 0) {
-            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_RsaSSL_Verify", rc);
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "RSA verify recover", rc);
             ok = 0;
+        }
+    }
+    if (ok && (decrypted != NULL)) {
+        dLen = wc_HashGetDigestSize(hashType);
+        if ((dLen <= 0) || (rc < dLen) || (routsize < (size_t)dLen)) {
+            ok = 0;
+        }
+        if (ok && ((wc_EncodeSignature(encoded, decrypted + rc - dLen,
+                (word32)dLen, wc_HashGetOID(hashType)) != (word32)rc) ||
+                (XMEMCMP(encoded, decrypted, rc) != 0))) {
+            ok = 0;
+        }
+        if (ok) {
+            XMEMCPY(rout, decrypted + rc - dLen, dLen);
+            rc = dLen;
         }
     }
     if (ok) {
         *routlen = (size_t)rc;
     }
 
+    OPENSSL_free(decrypted);
+    WOLFPROV_LEAVE(WP_LOG_COMP_RSA, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
 }
 
