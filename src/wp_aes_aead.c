@@ -61,6 +61,8 @@ typedef struct wp_AeadCtx {
 
     /** Length of key. */
     size_t keyLen;
+    /** Key data. */
+    unsigned char key[AES_256_KEY_SIZE];
     /** Length of iv/nonce. */
     size_t ivLen;
     /** Authentication tag length.  */
@@ -83,7 +85,7 @@ typedef struct wp_AeadCtx {
     unsigned int ivGen:1;
     /** CCM needs to set IV specially. */
     unsigned int ivSet:1;
-    /** GCM needs to know if key has been set. */
+    /** Key has been set. */
     unsigned int keySet:1;
     /** Cache of authentication status. */
     unsigned int authErr:1;
@@ -132,6 +134,106 @@ typedef struct wp_AeadCtx {
 /** Uninitialized value for a field of type size_t. */
 #define UNINITIALISED_SIZET      ((size_t)-1)
 
+/**
+ * Save the key for dupctx.
+ *
+ * @param [in, out] ctx     AEAD context object.
+ * @param [in]      key     Key data.
+ * @param [in]      keyLen  Length of key in bytes.
+ */
+static void wp_aead_save_key(wp_AeadCtx* ctx, const unsigned char* key,
+    size_t keyLen)
+{
+    XMEMCPY(ctx->key, key, keyLen);
+    ctx->keySet = 1;
+}
+
+/**
+ * Duplicate the AEAD context object.
+ *
+ * @param [in] src  AEAD context object to copy.
+ * @return  NULL on failure.
+ * @return  AEAD context object.
+ */
+static void *wp_aead_dupctx(wp_AeadCtx* src)
+{
+    wp_AeadCtx* dst = NULL;
+    int ok = 1;
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+#if defined(WP_HAVE_AESGCM) && defined(WOLFSSL_AESGCM_STREAM)
+    /* wolfCrypt's GCM stream state can't be copied. */
+    if (ok && (src->mode == EVP_CIPH_GCM_MODE) &&
+            (src->ivState == IV_STATE_COPIED)) {
+        ok = 0;
+    }
+#endif
+    if (ok) {
+        dst = OPENSSL_malloc(sizeof(*dst));
+        if (dst == NULL) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        XMEMCPY(dst, src, sizeof(*dst));
+        dst->aad = NULL;
+        dst->aadLen = 0;
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+        dst->in = NULL;
+        dst->inLen = 0;
+        dst->bufSize = 0;
+#endif
+        XMEMSET(&dst->aes, 0, sizeof(dst->aes));
+        if (wc_AesInit(&dst->aes, NULL, INVALID_DEVID) != 0) {
+            ok = 0;
+        }
+    }
+#ifdef WP_HAVE_AESGCM
+    if (ok && src->keySet && (src->mode == EVP_CIPH_GCM_MODE) &&
+            (wc_AesGcmSetKey(&dst->aes, src->key, (word32)src->keyLen) != 0)) {
+        ok = 0;
+    }
+#endif
+#ifdef WP_HAVE_AESCCM
+    if (ok && src->keySet && (src->mode == EVP_CIPH_CCM_MODE) &&
+            (wc_AesCcmSetKey(&dst->aes, src->key, (word32)src->keyLen) != 0)) {
+        ok = 0;
+    }
+#endif
+    if (ok && (src->aad != NULL) && (src->aadLen > 0)) {
+        dst->aad = OPENSSL_memdup(src->aad, src->aadLen);
+        if (dst->aad == NULL) {
+            ok = 0;
+        }
+        else {
+            dst->aadLen = src->aadLen;
+        }
+    }
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    if (ok && (src->in != NULL)) {
+        dst->in = OPENSSL_malloc(src->bufSize);
+        if (dst->in == NULL) {
+            ok = 0;
+        }
+        else {
+            XMEMCPY(dst->in, src->in, src->inLen);
+            dst->inLen = src->inLen;
+            dst->bufSize = src->bufSize;
+        }
+    }
+#endif
+    if ((!ok) && (dst != NULL)) {
+        OPENSSL_free(dst->aad);
+        wc_AesFree(&dst->aes);
+        OPENSSL_clear_free(dst, sizeof(*dst));
+        dst = NULL;
+    }
+
+    return dst;
+}
+
 
 /** AEAD cipher flags. */
 #define AEAD_FLAGS (WP_CIPHER_FLAG_AEAD | WP_CIPHER_FLAG_CUSTOM_IV)
@@ -171,6 +273,7 @@ const OSSL_DISPATCH wp_aes##kbits##lc##_functions[] = {                        \
     { OSSL_FUNC_CIPHER_NEWCTX,                                                 \
                                   (DFUNC)wp_aes_##lc##_##kbits##lc##_newctx }, \
     { OSSL_FUNC_CIPHER_FREECTX,         (DFUNC)wp_aes_##lc##_freectx        }, \
+    { OSSL_FUNC_CIPHER_DUPCTX,          (DFUNC)wp_aead_dupctx               }, \
     { OSSL_FUNC_CIPHER_ENCRYPT_INIT,    (DFUNC)wp_aes##lc##_einit           }, \
     { OSSL_FUNC_CIPHER_DECRYPT_INIT,    (DFUNC)wp_aes##lc##_dinit           }, \
     { OSSL_FUNC_CIPHER_UPDATE,          (DFUNC)wp_aes##lc##_stream_update   }, \
@@ -1145,6 +1248,9 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
     if (ok) {
         WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
     }
+    if (ok && (key != NULL) && (keyLen != ctx->keyLen)) {
+        ok = 0;
+    }
 #ifdef WOLFSSL_AESGCM_STREAM
     if (ok) {
         int rc;
@@ -1166,12 +1272,18 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetKey", rc);
                 ok = 0;
             }
+            else {
+                wp_aead_save_key(ctx, key, keyLen);
+            }
         }
         else if (key != NULL) {
             rc = wc_AesGcmEncryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen);
             if (rc != 0) {
                 WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmEncryptInit", rc);
                 ok = 0;
+            }
+            else {
+                wp_aead_save_key(ctx, key, keyLen);
             }
         }
     }
@@ -1181,6 +1293,9 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetKey", rc);
             ok = 0;
+        }
+        else {
+            wp_aead_save_key(ctx, key, keyLen);
         }
     }
     if (ok && (iv != NULL)) {
@@ -1249,12 +1364,18 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
     if (ok) {
         WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
     }
+    if (ok && (key != NULL) && (keyLen != ctx->keyLen)) {
+        ok = 0;
+    }
 #ifdef WOLFSSL_AESGCM_STREAM
     if (ok && key != NULL) {
         int rc = wc_AesGcmDecryptInit(aes, key, (word32)keyLen, iv, (word32)ivLen);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmDecryptInit", rc);
             ok = 0;
+        }
+        else {
+            wp_aead_save_key(ctx, key, keyLen);
         }
     }
     if (ok && (iv != NULL)) {
@@ -1268,6 +1389,9 @@ static int wp_aesgcm_dinit(wp_AeadCtx *ctx, const unsigned char *key,
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetKey", rc);
             ok = 0;
+        }
+        else {
+            wp_aead_save_key(ctx, key, keyLen);
         }
     }
     if (ok && (iv != NULL)) {
@@ -1534,6 +1658,13 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
      */
     if ((!done) && ok && (ctx->ivState == IV_STATE_UNINITIALISED)) {
         ok = 0;
+    }
+    if ((!done) && ok && (ctx->ivState == IV_STATE_BUFFERED)) {
+        rc = wc_AesGcmInit(aes, NULL, 0, ctx->iv, (word32)ctx->ivLen);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmInit", rc);
+            ok = 0;
+        }
     }
 
     if ((!done) && ok) {
@@ -1892,10 +2023,10 @@ static void wp_aes_gcm_freectx(wp_AeadCtx* ctx)
 {
     OPENSSL_free(ctx->aad);
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
-    OPENSSL_free(ctx->in);
+    OPENSSL_clear_free(ctx->in, ctx->inLen);
 #endif
     wc_AesFree(&ctx->aes);
-    OPENSSL_free(ctx);
+    OPENSSL_clear_free(ctx, sizeof(*ctx));
 }
 
 
@@ -1970,11 +2101,17 @@ static int wp_aesccm_init(wp_AeadCtx* ctx, const unsigned char *key,
     if (ok) {
         WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
     }
+    if (ok && (key != NULL) && (keyLen != ctx->keyLen)) {
+        ok = 0;
+    }
     if (ok && (key != NULL)) {
         rc = wc_AesCcmSetKey(&ctx->aes, key, (word32)keyLen);
         if (rc != 0) {
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesCcmSetKey", rc);
             ok = 0;
+        }
+        else {
+            wp_aead_save_key(ctx, key, keyLen);
         }
     }
     if (ok && (iv != NULL)) {
@@ -2411,7 +2548,7 @@ static void wp_aes_ccm_freectx(wp_AeadCtx* ctx)
 {
     OPENSSL_free(ctx->aad);
     wc_AesFree(&ctx->aes);
-    OPENSSL_free(ctx);
+    OPENSSL_clear_free(ctx, sizeof(*ctx));
 }
 
 /* Implement AES CCM for key sizes: 128, 192 and 256 bits. */

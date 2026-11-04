@@ -2510,6 +2510,90 @@ int test_aes_gcm_final_no_update_no_iv(void *data)
     return err;
 }
 
+static EVP_CIPHER_CTX *aead_base(EVP_CIPHER *cipher, int enc, int ccm,
+    const unsigned char *key)
+{
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+    if (ctx != NULL && (EVP_CipherInit_ex(ctx, cipher, NULL, NULL, NULL,
+            enc) != 1 ||
+            EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, 12, NULL) != 1 ||
+            (ccm && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16,
+                NULL) != 1) ||
+            EVP_CipherInit_ex(ctx, NULL, NULL, key, NULL, enc) != 1)) {
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+    return ctx;
+}
+
+/* pyca/cryptography copies a keyed base context for every operation. */
+static int aead_copy_op(EVP_CIPHER_CTX *base, int copy, int enc, int ccm,
+    int len, const unsigned char *in, unsigned char *out, unsigned char *tag)
+{
+    static const unsigned char iv[12] = { 1, 2, 3 };
+    static const unsigned char aad[] = "aad";
+    EVP_CIPHER_CTX *ctx = copy ? EVP_CIPHER_CTX_new() : base;
+    int n = 0, fin, err;
+
+    err = ctx == NULL || (copy && EVP_CIPHER_CTX_copy(ctx, base) != 1) ||
+        EVP_CipherInit_ex(ctx, NULL, NULL, NULL, iv, enc) != 1 ||
+        (!enc && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16,
+            tag) != 1) ||
+        (ccm && EVP_CipherUpdate(ctx, NULL, &n, NULL, len) != 1) ||
+        (len > 0 && (EVP_CipherUpdate(ctx, NULL, &n, aad, sizeof(aad)) != 1 ||
+            EVP_CipherUpdate(ctx, out, &n, in, len) != 1 || n != len)) ||
+        EVP_CipherFinal_ex(ctx, out + n, &fin) != 1 ||
+        (enc && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag) != 1);
+    if (copy) {
+        EVP_CIPHER_CTX_free(ctx);
+    }
+    return err;
+}
+
+int test_aes_aead_ctx_copy(void *data)
+{
+    static const char *names[] = { "AES-128-GCM", "AES-192-GCM", "AES-256-GCM",
+#ifdef WP_HAVE_AESCCM
+        "AES-128-CCM", "AES-192-CCM", "AES-256-CCM",
+#endif
+    };
+    unsigned char key[32] = { 4, 5, 6 }, pt[32] = { 7, 8, 9 };
+    unsigned char ct[2][32], tag[2][16], dec[32];
+    EVP_CIPHER *cipher[2];
+    EVP_CIPHER_CTX *base[2], *ref;
+    int i, j, ccm, len, err = 0;
+
+    (void)data;
+
+    for (i = 0; i < (int)(sizeof(names) / sizeof(*names)) && !err; i++) {
+        PRINT_MSG("%s: copy keyed context", names[i]);
+        ccm = strstr(names[i], "CCM") != NULL;
+        cipher[0] = EVP_CIPHER_fetch(osslLibCtx, names[i], "");
+        cipher[1] = EVP_CIPHER_fetch(wpLibCtx, names[i], "");
+        base[0] = aead_base(cipher[1], 1, ccm, key);
+        base[1] = aead_base(cipher[1], 0, ccm, key);
+        /* Round two copies the bases again; GCM goes straight to Final. */
+        for (j = 0; j < 2 && !err; j++) {
+            len = (ccm || j == 0) ? 32 : 0;
+            /* Default can't copy GCM/CCM before 3.0.13/3.1.5. */
+            ref = aead_base(cipher[0], 1, ccm, key);
+            err = aead_copy_op(ref, 0, 1, ccm, len, pt, ct[0], tag[0]) ||
+                aead_copy_op(base[0], 1, 1, ccm, len, pt, ct[1], tag[1]) ||
+                memcmp(ct[0], ct[1], len) != 0 ||
+                memcmp(tag[0], tag[1], 16) != 0 ||
+                aead_copy_op(base[1], 1, 0, ccm, len, ct[1], dec, tag[1]) ||
+                memcmp(dec, pt, len) != 0;
+            EVP_CIPHER_CTX_free(ref);
+        }
+        EVP_CIPHER_CTX_free(base[0]);
+        EVP_CIPHER_CTX_free(base[1]);
+        EVP_CIPHER_free(cipher[0]);
+        EVP_CIPHER_free(cipher[1]);
+    }
+    return err;
+}
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/

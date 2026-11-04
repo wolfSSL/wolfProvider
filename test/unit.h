@@ -298,6 +298,7 @@ int test_aes_gcm_tag_len_undersized(void *data);
 int test_aes_gcm_key_no_iv(void *data);
 int test_aes_gcm_stream_key_no_iv(void *data);
 int test_aes_gcm_final_no_update_no_iv(void *data);
+int test_aes_aead_ctx_copy(void *data);
 
 #endif /* WP_HAVE_AESGCM */
 
