@@ -639,6 +639,7 @@ int test_ecx_x_security_bits(void *data);
 
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
     defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
+int test_ecx_default_digest(void *data);
 int test_ecx_encoder_import_object(void *data);
 #endif
 

@@ -1731,6 +1731,64 @@ int test_ecx_x_security_bits(void *data)
 
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
     defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
+/* Ed keys mandate no digest (one-shot signing); X keys have no default. */
+int test_ecx_default_digest(void *data)
+{
+    static const struct {
+        const char* name;
+        int isEd;
+    } types[] = {
+#ifdef WP_HAVE_X25519
+        { "X25519", 0 },
+#endif
+#ifdef WP_HAVE_ED25519
+        { "ED25519", 1 },
+#endif
+#ifdef WP_HAVE_X448
+        { "X448", 0 },
+#endif
+#ifdef WP_HAVE_ED448
+        { "ED448", 1 },
+#endif
+    };
+    OSSL_LIB_CTX* libCtxs[2];
+    int err = 0;
+    size_t i, j;
+
+    (void)data;
+    libCtxs[0] = osslLibCtx;
+    libCtxs[1] = wpLibCtx;
+
+    for (i = 0; (err == 0) && (i < ARRAY_SIZE(types)); i++) {
+        for (j = 0; (err == 0) && (j < ARRAY_SIZE(libCtxs)); j++) {
+            char md[32] = "";
+            int rv;
+            int gettable;
+            EVP_PKEY* pkey = EVP_PKEY_Q_keygen(libCtxs[j], NULL,
+                types[i].name);
+
+            err = (pkey == NULL);
+            if (err == 0) {
+                rv = EVP_PKEY_get_default_digest_name(pkey, md, sizeof(md));
+                gettable = OSSL_PARAM_locate_const(
+                    EVP_PKEY_gettable_params(pkey),
+                    OSSL_PKEY_PARAM_MANDATORY_DIGEST) != NULL;
+                if ((rv != (types[i].isEd ? 2 : -2)) ||
+                        (types[i].isEd && (strcmp(md, "UNDEF") != 0)) ||
+                        ((j == 1) && (gettable != types[i].isEd))) {
+                    PRINT_MSG("%s default digest (%s): %d '%s' gettable %d",
+                        types[i].name, (j == 0) ? "OpenSSL" : "wolfProvider",
+                        rv, md, gettable);
+                    err = 1;
+                }
+            }
+            EVP_PKEY_free(pkey);
+        }
+    }
+
+    return err;
+}
+
 int test_ecx_encoder_import_object(void *data)
 {
     static const char* names[] = {

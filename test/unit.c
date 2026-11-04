@@ -602,6 +602,7 @@ TEST_CASE test_case[] = {
 #endif
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_ED25519) || \
     defined(WP_HAVE_X448) || defined(WP_HAVE_ED448)
+    TEST_DECL(test_ecx_default_digest, NULL),
     TEST_DECL(test_ecx_encoder_import_object, NULL),
 #endif
 
