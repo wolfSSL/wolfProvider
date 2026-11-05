@@ -404,12 +404,12 @@ static int wolfprov_get_params(void* provCtx, OSSL_PARAM params[])
 
 /* List of digest algorithm implementations available in wolfSSL provider. */
 static const OSSL_ALGORITHM wolfprov_digests[] = {
-#ifdef WP_HAVE_MD5
+#if defined(WP_HAVE_MD5) || defined(WP_FIPS_DENY_LEGACY)
     /* MD5 */
     { WP_NAMES_MD5, WOLFPROV_PROPERTIES, wp_md5_functions,
       "" },
 #endif
-#ifdef WP_HAVE_MD5_SHA1
+#if defined(WP_HAVE_MD5_SHA1) || defined(WP_FIPS_DENY_LEGACY)
     /* MD5-SHA1 */
     { WP_NAMES_MD5_SHA1, WOLFPROV_PROPERTIES, wp_md5_sha1_functions,
       "" },
@@ -551,7 +551,7 @@ static const OSSL_ALGORITHM wolfprov_ciphers[] = {
       "" },
 #endif
 
-#ifdef WP_HAVE_DES3CBC
+#if defined(WP_HAVE_DES3CBC) || defined(WP_FIPS_DENY_LEGACY)
     { WP_NAMES_DES_EDE3_CBC, WOLFPROV_PROPERTIES, wp_des3cbc_functions,
      "" },
 #endif

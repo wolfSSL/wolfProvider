@@ -21,6 +21,7 @@ test_unit_test_SOURCES = \
 	test/test_rand_seed.c \
 	test/test_ecc.c \
 	test/test_ecx.c \
+	test/test_fips_policy.c \
 	test/test_gmac.c \
 	test/test_krb5kdf.c \
 	test/test_sshkdf.c \

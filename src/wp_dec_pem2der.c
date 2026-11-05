@@ -156,6 +156,7 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
     const char* footer;
     const char* base64Data;
     size_t base64Len;
+    size_t i;
 
     WOLFPROV_ENTER(WP_LOG_COMP_PK, "wp_pem2der_convert");
 
@@ -167,7 +168,14 @@ static int wp_pem2der_convert(const char* data, word32 len, DerBuffer** pDer,
     if (ok) {
         base64Data = data + 16 + nameLen + 1;
         base64Len = len - (16 + nameLen + 1);
-        footer = XSTRSTR(base64Data, "-----END ");
+        /* Older wolfSSL builds do not export the XSTRNSTR helper. */
+        footer = NULL;
+        for (i = 0; (base64Len >= 9) && (i <= base64Len - 9); i++) {
+            if (XMEMCMP(base64Data + i, "-----END ", 9) == 0) {
+                footer = base64Data + i;
+                break;
+            }
+        }
         if (footer == NULL) {
             info->consumed = len;
             ok = 0;
@@ -325,7 +333,7 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
         dataType = NULL;
         obj = OSSL_OBJECT_PKEY;
 
-#ifdef WOLFSSL_ENCRYPTED_KEYS
+#if defined(WOLFSSL_ENCRYPTED_KEYS) && !defined(WP_FIPS_DENY_LEGACY)
         /* wc_PemToDer decrypts in place through the password callback. */
         dataFormat = "PrivateKeyInfo";
         info.passwd_cb = wp_pem_password_cb;
@@ -343,6 +351,22 @@ static int wp_pem2der_decode_data(const unsigned char* data, word32 len,
     else {
         ok = 0;
     }
+
+#ifdef WP_FIPS_DENY_LEGACY
+    /* Traditional encrypted PEM derives its key with MD5, even for AES.
+     * Reject its encryption headers before wc_PemToDer can decrypt it. */
+    if (ok && (obj == OSSL_OBJECT_PKEY)) {
+        word32 i;
+        for (i = 0; i <= len - 8; i++) {
+            if (XMEMCMP(data + i, "DEK-Info", 8) == 0) {
+                ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
+                    "Traditional encrypted PEM is disabled in FIPS mode");
+                ok = 0;
+                break;
+            }
+        }
+    }
+#endif
 
     if (ok && !done) {
         /* Decode the PEM to DER using wolfSSL. */
