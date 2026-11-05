@@ -129,6 +129,7 @@ static int test_fips_kdf_digest(const char* name, const char* deniedDigest)
 {
     EVP_KDF* kdf = EVP_KDF_fetch(wpLibCtx, name, "provider=wolfprov");
     const char* digests[] = { "SHA256", NULL };
+    char properties[] = "provider=wolfprov";
     unsigned char key[64] = {0}, salt[16] = {0}, out[32];
     uint64_t iterations = 1000;
     int i, err = 0;
@@ -145,7 +146,7 @@ static int test_fips_kdf_digest(const char* name, const char* deniedDigest)
         params[n++] = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
             (char*)digests[i], 0);
         params[n++] = OSSL_PARAM_construct_utf8_string(
-            OSSL_KDF_PARAM_PROPERTIES, "provider=wolfprov", 0);
+            OSSL_KDF_PARAM_PROPERTIES, properties, 0);
         if (strcmp(name, "PBKDF2") == 0) {
             params[n++] = OSSL_PARAM_construct_octet_string(
                 OSSL_KDF_PARAM_PASSWORD, key, sizeof(key));
