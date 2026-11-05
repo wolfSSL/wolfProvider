@@ -264,6 +264,9 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
     OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg);
 int wp_decrypt_key_pkcs8(unsigned char* data, word32* len,
     OSSL_PASSPHRASE_CALLBACK* pwCb, void* pwCbArg);
+#ifdef WP_FIPS_DENY_LEGACY
+int wp_check_fips_pkcs8(const unsigned char* data, word32 len);
+#endif
 
 int wp_read_der_bio(WOLFPROV_CTX* provCtx, OSSL_CORE_BIO *coreBio, unsigned char** data, word32* len);
 int wp_read_pem_bio(WOLFPROV_CTX *provctx, OSSL_CORE_BIO *coreBio,

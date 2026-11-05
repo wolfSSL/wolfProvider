@@ -19,10 +19,12 @@
  */
 
 
+#include <limits.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
 #include <openssl/objects.h>
 #include <openssl/err.h>
+#include <openssl/proverr.h>
 #include <openssl/crypto.h>
 
 #include <wolfprovider/settings.h>
@@ -577,6 +579,16 @@ enum wc_HashType wp_name_to_wc_hash_type(OSSL_LIB_CTX* libCtx, const char* name,
 enum wc_HashType wp_nid_to_wc_hash_type(int nid)
 {
     enum wc_HashType hashType = WC_HASH_TYPE_NONE;
+
+#ifdef WP_FIPS_DENY_LEGACY
+    /* A fetch can succeed for a denial method. KDFs and MACs calling wolfCrypt
+     * directly must not treat that metadata as permission to use it. */
+    if ((nid == NID_md5) || (nid == NID_md5_sha1)) {
+        ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
+            "MD5-based digests are disabled in FIPS mode");
+        nid = NID_undef;
+    }
+#endif
 
     switch (nid) {
         case NID_md5:
@@ -1217,6 +1229,70 @@ int wp_encrypt_key_pkcs8(WOLFPROV_CTX* provCtx, int cipher,
 #endif
 }
 
+#ifdef WP_FIPS_DENY_LEGACY
+/**
+ * Check encryption metadata before wolfCrypt can decrypt a key directly.
+ * Allow PBES2/PBKDF2 with AES-CBC and a SHA-based PRF.
+ *
+ * @param [in] data  DER-encoded EncryptedPrivateKeyInfo.
+ * @param [in] len   Length of the DER encoding in bytes.
+ * @return 1 when the encryption scheme is allowed, or 0 when rejected.
+ */
+int wp_check_fips_pkcs8(const unsigned char* data, word32 len)
+{
+    const unsigned char* p = data;
+    const X509_ALGOR* alg = NULL;
+    X509_SIG* epki = NULL;
+    PBE2PARAM* pbe = NULL;
+    PBKDF2PARAM* kdf = NULL;
+    int nid, ok = 0;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_PROVIDER, "wp_check_fips_pkcs8");
+
+    if ((data != NULL) && (len <= INT_MAX)) {
+        epki = d2i_X509_SIG(NULL, &p, (long)len);
+    }
+    if ((epki != NULL) && (p == data + len)) {
+        X509_SIG_get0(epki, &alg, NULL);
+        if ((OBJ_obj2nid(alg->algorithm) == NID_pbes2) &&
+                (alg->parameter != NULL)) {
+            pbe = ASN1_TYPE_unpack_sequence(ASN1_ITEM_rptr(PBE2PARAM),
+                alg->parameter);
+        }
+    }
+    if ((pbe != NULL) &&
+            (OBJ_obj2nid(pbe->keyfunc->algorithm) == NID_id_pbkdf2) &&
+            (pbe->keyfunc->parameter != NULL)) {
+        nid = OBJ_obj2nid(pbe->encryption->algorithm);
+        if ((nid == NID_aes_128_cbc) || (nid == NID_aes_192_cbc) ||
+                (nid == NID_aes_256_cbc)) {
+            kdf = ASN1_TYPE_unpack_sequence(ASN1_ITEM_rptr(PBKDF2PARAM),
+                pbe->keyfunc->parameter);
+        }
+    }
+    if (kdf != NULL) {
+        /* Omitted PBKDF2 PRF means HMAC-SHA1. */
+        nid = (kdf->prf == NULL) ? NID_hmacWithSHA1 :
+            OBJ_obj2nid(kdf->prf->algorithm);
+        ok = (nid == NID_hmacWithSHA1) || (nid == NID_hmacWithSHA224) ||
+            (nid == NID_hmacWithSHA256) || (nid == NID_hmacWithSHA384) ||
+            (nid == NID_hmacWithSHA512) || (nid == NID_hmacWithSHA512_224) ||
+            (nid == NID_hmacWithSHA512_256);
+    }
+    PBKDF2PARAM_free(kdf);
+    PBE2PARAM_free(pbe);
+    X509_SIG_free(epki);
+    if (!ok) {
+        ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
+            "Encrypted keys require PBES2/PBKDF2 with AES-CBC and a SHA PRF "
+            "in FIPS mode");
+    }
+    WOLFPROV_LEAVE(WP_LOG_COMP_PROVIDER,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+#endif
+
 #ifdef WP_HAVE_PKCS8_ENC
 /* DER encoding of the PBKDF2 OID (1.2.840.113549.1.5.12). */
 static const unsigned char wp_pbkdf2_oid[] = {
@@ -1275,6 +1351,11 @@ int wp_decrypt_key_pkcs8(unsigned char* data, word32* len,
     if ((data == NULL) || (!wp_is_pbkdf2_encrypted(data, *len))) {
         ok = 0;
     }
+#ifdef WP_FIPS_DENY_LEGACY
+    if (ok && !wp_check_fips_pkcs8(data, *len)) {
+        ok = 0;
+    }
+#endif
 #ifdef WOLFSSL_SMALL_STACK
     if (ok) {
         password = (char*)XMALLOC(WP_EPKI_PASSWORD_MAX, NULL,

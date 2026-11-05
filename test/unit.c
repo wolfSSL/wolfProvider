@@ -180,6 +180,12 @@ static int debug = 1;
 static unsigned long flags = 0;
 
 TEST_CASE test_case[] = {
+#ifdef WP_FIPS_DENY_LEGACY
+    /* Exercise the first fetch before another test constructs the methods. */
+    TEST_DECL(test_fips_legacy_algorithms, NULL),
+    TEST_DECL(test_fips_legacy_kdfs, NULL),
+    TEST_DECL(test_fips_legacy_key_decrypt, NULL),
+#endif
     TEST_DECL(test_logging, &debug),
     TEST_DECL(test_ct_masks, NULL),
 #ifdef WP_HAVE_SHA1

@@ -30,8 +30,77 @@
 #include <wolfprovider/alg_funcs.h>
 
 
-#if defined(WP_HAVE_DES3CBC)
-#if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
+#if defined(WP_HAVE_DES3CBC) || defined(WP_FIPS_DENY_LEGACY)
+/**
+ * Returns the parameters that can be retrieved.
+ *
+ * @param [in] provCtx  wolfProvider context object. Unused.
+ * @return  Array of parameters.
+ */
+static const OSSL_PARAM *wp_cipher_gettable_params(void *provCtx)
+{
+    /**
+     * Parameters able to be retrieved for a cipher.
+     */
+    static const OSSL_PARAM cipher_supported_gettable_params[] = {
+        OSSL_PARAM_uint(OSSL_CIPHER_PARAM_MODE, NULL),
+        OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_KEYLEN, NULL),
+        OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_IVLEN, NULL),
+        OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_BLOCK_SIZE, NULL),
+        OSSL_PARAM_END
+    };
+    (void)provCtx;
+    return cipher_supported_gettable_params;
+}
+
+/**
+ * Get the values from the DES3 block context for the parameters.
+ *
+ * @param [in, out] params  Array of parameters to retrieve.
+ * @param [in]      mode    DES3 cipher mode.
+ * @param [in]      kBits   Number of bits in key.
+ * @param [in]      ivBits  Number of bits in IV.
+ * @return 1 on success.
+ * @return 0 on failure.
+ */
+static int wp_des3_block_get_params(OSSL_PARAM params[], unsigned int mode,
+    size_t kBits, size_t ivBits)
+{
+    int ok = 1;
+    OSSL_PARAM *p;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_DES, "wp_des3_block_get_params");
+
+    p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_MODE);
+    if ((p != NULL) && (!OSSL_PARAM_set_uint(p, mode))) {
+        ok = 0;
+    }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_KEYLEN);
+        if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, kBits / 8))) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_BLOCK_SIZE);
+        /* This metadata is also needed when wolfCrypt has NO_DES3 set. */
+        if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, 8))) {
+            ok = 0;
+        }
+    }
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_IVLEN);
+        if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, ivBits / 8))) {
+            ok = 0;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_DES,
+        __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
+#ifndef WP_FIPS_DENY_LEGACY
 /**
  * Data structure for DES3 ciphers that are block based.
  */
@@ -103,74 +172,6 @@ static void *wp_des3_block_dupctx(wp_Des3BlockCtx *src)
     }
 
     return dst;
-}
-
-/**
- * Returns the parameters that can be retrieved.
- *
- * @param [in] provCtx  wolfProvider context object. Unused.
- * @return  Array of parameters.
- */
-static const OSSL_PARAM *wp_cipher_gettable_params(
-    WOLFPROV_CTX *provCtx)
-{
-    /**
-     * Parameters able to be retrieved for a cipher.
-     */
-    static const OSSL_PARAM cipher_supported_gettable_params[] = {
-        OSSL_PARAM_uint(OSSL_CIPHER_PARAM_MODE, NULL),
-        OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_KEYLEN, NULL),
-        OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_IVLEN, NULL),
-        OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_BLOCK_SIZE, NULL),
-        OSSL_PARAM_END
-    };
-    (void)provCtx;
-    return cipher_supported_gettable_params;
-}
-
-/**
- * Get the values from the DES3 block context for the parameters.
- *
- * @param [in, out] params  Array of parameters to retrieve.
- * @param [in]      mode    DES3 cipher mode.
- * @param [in]      kBits   Number of bits in key.
- * @param [in]      ivBits  Number of bits in IV.
- * @return 1 on success.
- * @return 0 on failure.
- */
-static int wp_des3_block_get_params(OSSL_PARAM params[], unsigned int mode,
-    size_t kBits, size_t ivBits)
-{
-    int ok = 1;
-    OSSL_PARAM *p;
-
-    WOLFPROV_ENTER(WP_LOG_COMP_DES, "wp_des3_block_get_params");
-
-    p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_MODE);
-    if ((p != NULL) && (!OSSL_PARAM_set_uint(p, mode))) {
-        ok = 0;
-    }
-    if (ok) {
-        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_KEYLEN);
-        if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, kBits / 8))) {
-            ok = 0;
-        }
-    }
-    if (ok) {
-        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_BLOCK_SIZE);
-        if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, DES_BLOCK_SIZE))) {
-            ok = 0;
-        }
-    }
-    if (ok) {
-        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_IVLEN);
-        if ((p != NULL) && (!OSSL_PARAM_set_size_t(p, ivBits / 8))) {
-            ok = 0;
-        }
-    }
-
-    WOLFPROV_LEAVE(WP_LOG_COMP_DES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
-    return ok;
 }
 
 /**
@@ -914,32 +915,84 @@ IMPLEMENT_DES3_BLOCK_DISPATCH(lcmode, kBits, ivBits)
 /** wp_des3cbc_functions_functions */
 IMPLEMENT_DES3_BLOCK(cbc, CBC, 192, 64)
 
-#else /* defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS */
+#else /* WP_FIPS_DENY_LEGACY */
 
-#define IMPLEMENT_DES3_BLOCK_NULL(mode)                                        \
-const OSSL_DISPATCH wp_des3##mode##_functions[] = {                            \
-    { OSSL_FUNC_CIPHER_NEWCTX,          (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_FREECTX,         (DFUNC)wp_des3_void                 }, \
-    { OSSL_FUNC_CIPHER_DUPCTX,          (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_ENCRYPT_INIT,    (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_DECRYPT_INIT,    (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_UPDATE,          (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_FINAL,           (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_CIPHER,          (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_GET_PARAMS,      (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_GET_CTX_PARAMS,  (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_SET_CTX_PARAMS,  (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_GETTABLE_PARAMS, (DFUNC)wp_des3_null                 }, \
-    { OSSL_FUNC_CIPHER_GETTABLE_CTX_PARAMS,                                    \
-                              (DFUNC)wp_des3_null                           }, \
-    { OSSL_FUNC_CIPHER_SETTABLE_CTX_PARAMS,                                    \
-                              (DFUNC)wp_des3_null                           }, \
-    { 0, NULL }                                                                \
+static int wp_des3cbc_get_params(OSSL_PARAM params[])
+{
+    return wp_des3_block_get_params(params, EVP_CIPH_CBC_MODE, 192, 64);
+}
+
+static int wp_des3_denied(void)
+{
+    ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
+        "3DES is disabled in FIPS mode");
+    return 0;
+}
+
+static void* wp_des3_denied_newctx(void* provCtx)
+{
+    (void)provCtx;
+    wp_des3_denied();
+    return NULL;
+}
+
+static void wp_des3_denied_freectx(void* ctx)
+{
+    (void)ctx;
+}
+
+static int wp_des3_denied_init(void* ctx, const unsigned char* key,
+    size_t keyLen, const unsigned char* iv, size_t ivLen,
+    const OSSL_PARAM params[])
+{
+    (void)ctx;
+    (void)key;
+    (void)keyLen;
+    (void)iv;
+    (void)ivLen;
+    (void)params;
+    return wp_des3_denied();
+}
+
+static int wp_des3_denied_update(void* ctx, unsigned char* out, size_t* outLen,
+    size_t outSize, const unsigned char* in, size_t inLen)
+{
+    (void)ctx;
+    (void)out;
+    (void)outSize;
+    (void)in;
+    (void)inLen;
+    if (outLen != NULL) {
+        *outLen = 0;
+    }
+    return wp_des3_denied();
+}
+
+static int wp_des3_denied_final(void* ctx, unsigned char* out, size_t* outLen,
+    size_t outSize)
+{
+    (void)ctx;
+    (void)out;
+    (void)outSize;
+    if (outLen != NULL) {
+        *outLen = 0;
+    }
+    return wp_des3_denied();
+}
+
+const OSSL_DISPATCH wp_des3cbc_functions[] = {
+    { OSSL_FUNC_CIPHER_NEWCTX,          (DFUNC)wp_des3_denied_newctx        },
+    { OSSL_FUNC_CIPHER_FREECTX,         (DFUNC)wp_des3_denied_freectx       },
+    { OSSL_FUNC_CIPHER_DUPCTX,          (DFUNC)wp_des3_denied_newctx        },
+    { OSSL_FUNC_CIPHER_ENCRYPT_INIT,    (DFUNC)wp_des3_denied_init          },
+    { OSSL_FUNC_CIPHER_DECRYPT_INIT,    (DFUNC)wp_des3_denied_init          },
+    { OSSL_FUNC_CIPHER_UPDATE,          (DFUNC)wp_des3_denied_update        },
+    { OSSL_FUNC_CIPHER_FINAL,           (DFUNC)wp_des3_denied_final         },
+    { OSSL_FUNC_CIPHER_CIPHER,          (DFUNC)wp_des3_denied_update        },
+    { OSSL_FUNC_CIPHER_GET_PARAMS,      (DFUNC)wp_des3cbc_get_params        },
+    { OSSL_FUNC_CIPHER_GETTABLE_PARAMS, (DFUNC)wp_cipher_gettable_params    },
+    { 0, NULL }
 };
-static int wp_des3_null(void) { return 0; }
-static void wp_des3_void(void) {}
-
-IMPLEMENT_DES3_BLOCK_NULL(cbc)
 
 #endif
-#endif /* WP_HAVE_DES3CBC */
+#endif /* WP_HAVE_DES3CBC || WP_FIPS_DENY_LEGACY */

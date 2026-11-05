@@ -280,6 +280,11 @@ static int wp_epki2pki_decode(wp_Epki2Pki* ctx, OSSL_CORE_BIO* coreBio,
     if ((!done) && ok && !wp_epki2pki_is_epki(data, len)) {
         done = 1;
     }
+#ifdef WP_FIPS_DENY_LEGACY
+    if ((!done) && ok && !wp_check_fips_pkcs8(data, len)) {
+        ok = 0;
+    }
+#endif
     if ((!done) && ok && ((pwCb == NULL) ||
             (!pwCb(password, sizeof(password), &passwordLen, NULL,
                 pwCbArg)))) {

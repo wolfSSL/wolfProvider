@@ -31,6 +31,7 @@
     <ClCompile Include="..\..\..\test\test_rand_seed.c" />
     <ClCompile Include="..\..\..\test\test_ecc.c" />
     <ClCompile Include="..\..\..\test\test_ecx.c" />
+    <ClCompile Include="..\..\..\test\test_fips_policy.c" />
     <ClCompile Include="..\..\..\test\test_gmac.c" />
     <ClCompile Include="..\..\..\test\test_krb5kdf.c" />
     <ClCompile Include="..\..\..\test\test_sshkdf.c" />
