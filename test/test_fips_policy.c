@@ -280,9 +280,15 @@ int test_fips_legacy_key_decrypt(void* data)
 
             if (encoded != NULL) {
                 if (cases[scheme].traditional) {
-                    rc = PEM_write_bio_PrivateKey_traditional(encoded, key,
-                        cipher, (const unsigned char*)pass,
-                        (int)XSTRLEN(pass), NULL, NULL);
+                    /* This writer has no libctx argument. Create the legacy
+                     * fixture with OpenSSL, even under a global FIPS config. */
+                    OSSL_LIB_CTX* saved = OSSL_LIB_CTX_set0_default(osslLibCtx);
+                    if (saved != NULL) {
+                        rc = PEM_write_bio_PrivateKey_traditional(encoded, key,
+                            cipher, (const unsigned char*)pass,
+                            (int)XSTRLEN(pass), NULL, NULL);
+                        OSSL_LIB_CTX_set0_default(saved);
+                    }
                 }
                 else {
                     rc = (format == 0) ? i2d_PKCS8_bio(encoded, epki) :
