@@ -127,6 +127,10 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' libwebsockets ')
     uses: ./.github/workflows/libwebsockets.yml
+  mosquitto:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' mosquitto ')
+    uses: ./.github/workflows/mosquitto.yml
   net-snmp:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' net-snmp ')

@@ -66,7 +66,7 @@ RUN apt-get update \
         libpng-dev libjpeg-dev libusb-1.0-0-dev libuv1-dev libverto-dev \
         libavahi-client-dev libavahi-compat-libdnssd-dev libmemcached-dev \
         libutf8proc-dev libxxhash-dev libkeyutils-dev libcom-err2 \
-        libcjose-dev libeac-dev libefivar-dev libncurses5-dev \
+        libcjose-dev libcjson-dev libeac-dev libefivar-dev libncurses5-dev \
         libncursesw5-dev libiberty-dev libltdl-dev libltdl7 \
         libperl-dev linux-libc-dev binutils-dev uuid-dev \
         # X11 (x11vnc, qt5network5)
