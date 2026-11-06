@@ -1,7 +1,7 @@
 #!/bin/bash
 # check-workflow-result.sh
 #
-# Copyright (C) 2006-2025 wolfSSL Inc.
+# Copyright (C) 2006-2026 wolfSSL Inc.
 #
 # This file is part of wolfProvider.
 #
@@ -294,6 +294,22 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             exit 1
         else
             echo "FAIL: iperf exited $TEST_RESULT but iperf-test.log is missing or does not show the credential encryption failure"
+            exit 1
+        fi
+    # ----- MOSQUITTO -----
+    elif [ "$TEST_SUITE" = "mosquitto" ]; then
+        # The broker must fail to create its TLS context
+        if [ "$TEST_RESULT" -ne 0 ] \
+            && [ -f "mosquitto-test.log" ] \
+            && grep -q 'Error: Unable to create TLS context' \
+                mosquitto-test.log; then
+            echo "PASS: mosquitto broker failed to create its TLS context as expected with force fail enabled"
+            exit 0
+        elif [ "$TEST_RESULT" -eq 0 ]; then
+            echo "FAIL: mosquitto tests unexpectedly succeeded with force fail enabled"
+            exit 1
+        else
+            echo "FAIL: mosquitto exited $TEST_RESULT but mosquitto-test.log is missing or does not show the TLS context failure"
             exit 1
         fi
     else

@@ -90,11 +90,6 @@ jobs:
             ${{ matrix.replace_default && '--replace-default' || '' }} \
             ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
 
-      - name: Install mosquitto dependencies
-        run: |
-          apt-get update
-          apt-get install -y libcjson-dev
-
       - name: Checkout mosquitto
         uses: actions/checkout@v4
         with:
@@ -117,9 +112,16 @@ jobs:
           # Non-root, so the broker does not drop privileges and lose file access
           useradd --create-home mosqtest
           chown -R mosqtest .
+          cd test/broker
 
-          # Group 08 is the broker TLS and TLS-PSK tests
-          runuser -u mosqtest -- env ${{ matrix.force_fail }} \
-            make -C test/broker 08 2>&1 | tee mosquitto-test.log
+          if [ -n "${{ matrix.force_fail }}" ]; then
+            # The other tests use Python TLS, which force fail breaks first
+            TESTS=./08-tls-psk-pub.py
+          else
+            # Group 08 is the broker TLS and TLS-PSK tests
+            TESTS="make 08"
+          fi
+          runuser -u mosqtest -- env ${{ matrix.force_fail }} $TESTS \
+            2>&1 | tee mosquitto-test.log
           TEST_RESULT=${PIPESTATUS[0]}
           $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} mosquitto

@@ -51,7 +51,7 @@ jobs:
   libtss2-current:         { uses: ./.github/workflows/libtss2.yml,         }
   libwebsockets-current:   { uses: ./.github/workflows/libwebsockets.yml,   }
   mosquitto-current:       { uses: ./.github/workflows/mosquitto.yml,       }
-  net-snmp-current:       { uses: ./.github/workflows/net-snmp.yml,        }
+  net-snmp-current:        { uses: ./.github/workflows/net-snmp.yml,        }
   nginx-current:           { uses: ./.github/workflows/nginx.yml,           }
   nginx-pqc-current:       { uses: ./.github/workflows/nginx-pqc.yml,       }
   openldap-current:        { uses: ./.github/workflows/openldap.yml,        }
