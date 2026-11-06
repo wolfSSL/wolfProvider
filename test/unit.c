@@ -596,6 +596,7 @@ TEST_CASE test_case[] = {
 #endif
     TEST_DECL(test_ecx_dup, NULL),
     TEST_DECL(test_ecx_shared_key_first_use, NULL),
+    TEST_DECL(test_ecx_stream_sign_verify, NULL),
 #endif
 #if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
     TEST_DECL(test_ecx_x_security_bits, NULL),

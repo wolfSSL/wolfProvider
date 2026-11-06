@@ -59,6 +59,14 @@ typedef struct wp_EcxSigCtx {
     char* propQuery;
     /** Name of hash algorithm. */
     char mdName[WP_MAX_MD_NAME_SIZE];
+
+    /** Message cached by the streaming interface. EdDSA is one-shot, so the
+     * data is gathered here and signed or verified in final. */
+    unsigned char* msg;
+    /** Length of cached message in bytes. */
+    size_t msgLen;
+    /** Size of the cached message buffer in bytes. */
+    size_t msgSz;
 } wp_EcxSigCtx;
 
 
@@ -114,6 +122,7 @@ static void wp_ecx_freectx(wp_EcxSigCtx* ctx)
     if (ctx != NULL) {
         wp_ecx_free(ctx->ecx);
         OPENSSL_free(ctx->propQuery);
+        OPENSSL_clear_free(ctx->msg, ctx->msgSz);
         OPENSSL_free(ctx);
     }
 }
@@ -147,6 +156,17 @@ static wp_EcxSigCtx* wp_ecx_dupctx(wp_EcxSigCtx* srcCtx)
         }
         if (ok && (!wp_ecx_up_ref(srcCtx->ecx))) {
             ok = 0;
+        }
+        if (ok && (srcCtx->msgLen > 0)) {
+            dstCtx->msg = OPENSSL_malloc(srcCtx->msgLen);
+            if (dstCtx->msg == NULL) {
+                ok = 0;
+            }
+            else {
+                XMEMCPY(dstCtx->msg, srcCtx->msg, srcCtx->msgLen);
+                dstCtx->msgLen = srcCtx->msgLen;
+                dstCtx->msgSz  = srcCtx->msgLen;
+            }
         }
         if (ok) {
             dstCtx->ecx      = srcCtx->ecx;
@@ -204,6 +224,7 @@ static int wp_ecx_digest_signverify_init(wp_EcxSigCtx *ctx,
     }
     if (ok) {
         ctx->op = op;
+        ctx->msgLen = 0;
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -357,6 +378,59 @@ static int wp_ed25519_get_ctx_params(wp_EcxSigCtx *ctx, OSSL_PARAM *params)
  * @return  1 on success.
  * @return  0 on failure.
  */
+/**
+ * Append data to the cached message.
+ *
+ * EdDSA signs the whole message at once, so the streaming interface
+ * gathers the data here and defers the operation to final.
+ *
+ * @param [in, out] ctx      ECX signature context object.
+ * @param [in]      data     Data to append.
+ * @param [in]      dataLen  Length of data in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ecx_digest_signverify_update(wp_EcxSigCtx *ctx,
+    const unsigned char *data, size_t dataLen)
+{
+    int ok = 1;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_KE, "wp_ecx_digest_signverify_update");
+
+    if (!wolfssl_prov_is_running()) {
+        ok = 0;
+    }
+    if (ok && (dataLen > 0)) {
+        if (ctx->msgLen + dataLen > ctx->msgSz) {
+            size_t newSz = ctx->msgSz * 2;
+            unsigned char* newMsg;
+
+            if (newSz < ctx->msgLen + dataLen) {
+                newSz = ctx->msgLen + dataLen;
+            }
+            newMsg = OPENSSL_malloc(newSz);
+            if (newMsg == NULL) {
+                ok = 0;
+            }
+            else {
+                if (ctx->msgLen > 0) {
+                    XMEMCPY(newMsg, ctx->msg, ctx->msgLen);
+                }
+                OPENSSL_clear_free(ctx->msg, ctx->msgSz);
+                ctx->msg = newMsg;
+                ctx->msgSz = newSz;
+            }
+        }
+        if (ok) {
+            XMEMCPY(ctx->msg + ctx->msgLen, data, dataLen);
+            ctx->msgLen += dataLen;
+        }
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+
 static int wp_ed25519_digest_sign(wp_EcxSigCtx *ctx, unsigned char *sig,
     size_t *sigLen, size_t sigSize, const unsigned char *tbs, size_t tbsLen)
 {
@@ -486,15 +560,55 @@ static int wp_ed25519_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
 }
 
 /** Dspatch table for Ed25519 signing and verification. */
+/**
+ * Sign the cached message.
+ *
+ * @param [in, out] ctx      ECX signature context object.
+ * @param [out]     sig      Buffer to hold signature. May be NULL.
+ * @param [out]     sigLen   Length of signature in bytes.
+ * @param [in]      sigSize  Size of signature buffer in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed25519_digest_sign_final(wp_EcxSigCtx *ctx, unsigned char *sig,
+    size_t *sigLen, size_t sigSize)
+{
+    return wp_ed25519_digest_sign(ctx, sig, sigLen, sigSize, ctx->msg,
+        ctx->msgLen);
+}
+
+/**
+ * Verify a signature over the cached message.
+ *
+ * @param [in, out] ctx     ECX signature context object.
+ * @param [in]      sig     Signature to verify.
+ * @param [in]      sigLen  Length of signature in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed25519_digest_verify_final(wp_EcxSigCtx *ctx, unsigned char *sig,
+    size_t sigLen)
+{
+    return wp_ed25519_digest_verify(ctx, sig, sigLen, ctx->msg, ctx->msgLen);
+}
+
 const OSSL_DISPATCH wp_ed25519_signature_functions[] = {
     { OSSL_FUNC_SIGNATURE_NEWCTX,           (DFUNC)wp_ecx_newctx              },
     { OSSL_FUNC_SIGNATURE_FREECTX,          (DFUNC)wp_ecx_freectx             },
     { OSSL_FUNC_SIGNATURE_DUPCTX,           (DFUNC)wp_ecx_dupctx              },
     { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_INIT, (DFUNC)wp_ecx_digest_sign_init    },
     { OSSL_FUNC_SIGNATURE_DIGEST_SIGN,      (DFUNC)wp_ed25519_digest_sign     },
+    { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_UPDATE,
+      (DFUNC)wp_ecx_digest_signverify_update },
+    { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_FINAL,
+      (DFUNC)wp_ed25519_digest_sign_final },
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_INIT,
                                             (DFUNC)wp_ecx_digest_verify_init  },
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY,    (DFUNC)wp_ed25519_digest_verify   },
+    { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_UPDATE,
+      (DFUNC)wp_ecx_digest_signverify_update },
+    { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_FINAL,
+      (DFUNC)wp_ed25519_digest_verify_final },
     { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,   (DFUNC)wp_ed25519_get_ctx_params  },
     { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,
                                             (DFUNC)wp_ecx_gettable_ctx_params },
@@ -704,15 +818,55 @@ static int wp_ed448_digest_verify(wp_EcxSigCtx *ctx, unsigned char *sig,
 }
 
 /** Dspatch table for Ed448 signing and verification. */
+/**
+ * Sign the cached message.
+ *
+ * @param [in, out] ctx      ECX signature context object.
+ * @param [out]     sig      Buffer to hold signature. May be NULL.
+ * @param [out]     sigLen   Length of signature in bytes.
+ * @param [in]      sigSize  Size of signature buffer in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed448_digest_sign_final(wp_EcxSigCtx *ctx, unsigned char *sig,
+    size_t *sigLen, size_t sigSize)
+{
+    return wp_ed448_digest_sign(ctx, sig, sigLen, sigSize, ctx->msg,
+        ctx->msgLen);
+}
+
+/**
+ * Verify a signature over the cached message.
+ *
+ * @param [in, out] ctx     ECX signature context object.
+ * @param [in]      sig     Signature to verify.
+ * @param [in]      sigLen  Length of signature in bytes.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_ed448_digest_verify_final(wp_EcxSigCtx *ctx, unsigned char *sig,
+    size_t sigLen)
+{
+    return wp_ed448_digest_verify(ctx, sig, sigLen, ctx->msg, ctx->msgLen);
+}
+
 const OSSL_DISPATCH wp_ed448_signature_functions[] = {
     { OSSL_FUNC_SIGNATURE_NEWCTX,           (DFUNC)wp_ecx_newctx              },
     { OSSL_FUNC_SIGNATURE_FREECTX,          (DFUNC)wp_ecx_freectx             },
     { OSSL_FUNC_SIGNATURE_DUPCTX,           (DFUNC)wp_ecx_dupctx              },
     { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_INIT, (DFUNC)wp_ecx_digest_sign_init    },
     { OSSL_FUNC_SIGNATURE_DIGEST_SIGN,      (DFUNC)wp_ed448_digest_sign       },
+    { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_UPDATE,
+      (DFUNC)wp_ecx_digest_signverify_update },
+    { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_FINAL,
+      (DFUNC)wp_ed448_digest_sign_final },
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_INIT,
                                             (DFUNC)wp_ecx_digest_verify_init  },
     { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY,    (DFUNC)wp_ed448_digest_verify     },
+    { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_UPDATE,
+      (DFUNC)wp_ecx_digest_signverify_update },
+    { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_FINAL,
+      (DFUNC)wp_ed448_digest_verify_final },
     { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,    (DFUNC)wp_ed448_get_ctx_params   },
     { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,
                                             (DFUNC)wp_ecx_gettable_ctx_params },
