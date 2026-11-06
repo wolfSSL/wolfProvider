@@ -16,7 +16,6 @@ lib_LTLIBRARIES = libwolfprov.la
 
 EXTRA_DIST+=ChangeLog.md
 EXTRA_DIST+=README.md
-EXTRA_DIST+=examples
 EXTRA_DIST+=docs
 EXTRA_DIST+=patches
 EXTRA_DIST+=provider.conf
