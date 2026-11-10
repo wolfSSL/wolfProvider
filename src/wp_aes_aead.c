@@ -27,6 +27,7 @@
 
 #include <wolfprovider/settings.h>
 #include <wolfprovider/alg_funcs.h>
+#include <wolfprovider/wp_wolfprov.h>
 
 #include <wolfssl/wolfcrypt/error-crypt.h>
 
@@ -41,9 +42,6 @@
 #ifndef WP_AES_GCM_EXTRA_BUF_LEN
 #define WP_AES_GCM_EXTRA_BUF_LEN 128
 #endif
-
-/* Opt-in for one complete GCM payload per Update. */
-#define WP_PARAM_GCM_SINGLE_UPDATE "wolfprov-gcm-single-update"
 
 /**
  * Authenticated Encryption with Associated Data structure.
@@ -115,8 +113,11 @@ typedef struct wp_AeadCtx {
     size_t bufSize;
     /* Original IV */
     unsigned char origIv[AES_BLOCK_SIZE];
+    /** Caller opted in to one complete payload per operation. */
     unsigned int singleUpdate:1;
+    /** Single-update payload has been processed. */
     unsigned int singleDone:1;
+    /** Expected tag set for single-update decryption. */
     unsigned int singleTagSet:1;
 #endif
 } wp_AeadCtx;
@@ -421,19 +422,21 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
 
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
     p = OSSL_PARAM_locate(params, WP_PARAM_GCM_SINGLE_UPDATE);
-    if (p != NULL && (ctx->mode != EVP_CIPH_GCM_MODE ||
-        !OSSL_PARAM_set_int(p, ctx->singleUpdate))) {
-        return 0;
+    if ((p != NULL) && ((ctx->mode != EVP_CIPH_GCM_MODE) ||
+            (!OSSL_PARAM_set_int(p, ctx->singleUpdate)))) {
+        ok = 0;
     }
-    if (ctx->singleUpdate && OSSL_PARAM_locate(params,
-            OSSL_CIPHER_PARAM_AEAD_TLS1_GET_IV_GEN) != NULL) {
-        return 0;
+    if (ok && ctx->singleUpdate && (OSSL_PARAM_locate(params,
+            OSSL_CIPHER_PARAM_AEAD_TLS1_GET_IV_GEN) != NULL)) {
+        ok = 0;
     }
 #endif
 
-    p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_IVLEN);
-    if (p != NULL && !OSSL_PARAM_set_size_t(p, ctx->ivLen)) {
-        ok = 0;
+    if (ok) {
+        p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_IVLEN);
+        if (p != NULL && !OSSL_PARAM_set_size_t(p, ctx->ivLen)) {
+            ok = 0;
+        }
     }
     if (ok) {
         p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_KEYLEN);
@@ -706,6 +709,40 @@ static int wp_aead_set_param_tls1_iv_rand(wp_AeadCtx* ctx,
 #endif
 }
 
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+/**
+ * Set the single-update opt-in from the parameters.
+ *
+ * @param [in, out] ctx     AEAD context object.
+ * @param [in]      params  Array of parameters and values.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+static int wp_aead_set_param_single_update(wp_AeadCtx* ctx,
+    const OSSL_PARAM params[])
+{
+    int ok = 1;
+    int enabled = 0;
+
+    WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_set_param_single_update");
+
+    if ((ctx->mode != EVP_CIPH_GCM_MODE) ||
+            (!OSSL_PARAM_get_int(params, &enabled)) ||
+            ((enabled != 0) && (enabled != 1)) || (ctx->inLen != 0) ||
+            ctx->singleDone || ctx->authErr ||
+            (ctx->tlsAadLen != UNINITIALISED_SIZET) || ctx->ivGen ||
+            (ctx->ivState != IV_STATE_BUFFERED)) {
+        ok = 0;
+    }
+    if (ok) {
+        ctx->singleUpdate = enabled;
+    }
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
+}
+#endif
+
 /**
  * Set the AEAD context parameters.
  *
@@ -731,7 +768,8 @@ static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
             (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD) == 0 ||
              XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED) == 0 ||
              XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV) == 0)) {
-            return 0;
+            ok = 0;
+            break;
         }
 #endif
         /* params->key is a NUL-terminated provider parameter name. Use
@@ -741,23 +779,15 @@ static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
         if (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TAG) == 0) {
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
             if (ctx->singleUpdate && (ctx->singleDone || ctx->authErr)) {
-                return 0;
+                ok = 0;
+                break;
             }
 #endif
             ok = wp_aead_set_param_tag(ctx, params);
         }
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
         else if (XSTRCMP(params->key, WP_PARAM_GCM_SINGLE_UPDATE) == 0) {
-            int enabled;
-            if (ctx->mode != EVP_CIPH_GCM_MODE ||
-                !OSSL_PARAM_get_int(params, &enabled) ||
-                (enabled != 0 && enabled != 1) || ctx->inLen != 0 ||
-                ctx->singleDone || ctx->authErr ||
-                ctx->tlsAadLen != UNINITIALISED_SIZET || ctx->ivGen ||
-                ctx->ivState != IV_STATE_BUFFERED) {
-                return 0;
-            }
-            ctx->singleUpdate = enabled;
+            ok = wp_aead_set_param_single_update(ctx, params);
         }
 #endif
         else if (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_IVLEN) == 0) {
@@ -778,7 +808,7 @@ static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
 
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
         if (!ok && singleParams) {
-            return 0;
+            break;
         }
 #endif
         params++;
@@ -884,7 +914,7 @@ static int wp_aead_get_params(OSSL_PARAM params[], unsigned int md,
 /**
  * Return an array of supported gettable parameters for the AEAD context.
  *
- * @param [in] ctx      AEAD context object. Unused.
+ * @param [in] ctx      AEAD context object.
  * @param [in] provCtx  Provider context object. Unused.
  * @return  Array of parameters with data type.
  */
@@ -911,21 +941,23 @@ static const OSSL_PARAM *wp_aead_gettable_ctx_params(wp_AeadCtx* ctx,
 #endif
         OSSL_PARAM_END
     };
+    const OSSL_PARAM* ret = wp_aead_supported_gettable_ctx_params;
+
     (void)ctx;
     (void)provCtx;
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
     /* The first descriptor requires a GCM context. */
-    if (ctx == NULL || ctx->mode != EVP_CIPH_GCM_MODE) {
-        return wp_aead_supported_gettable_ctx_params + 1;
+    if ((ctx == NULL) || (ctx->mode != EVP_CIPH_GCM_MODE)) {
+        ret++;
     }
 #endif
-    return wp_aead_supported_gettable_ctx_params;
+    return ret;
 }
 
 /**
  * Return an array of supported settable parameters for the AEAD context.
  *
- * @param [in] ctx      AEAD context object. Unused.
+ * @param [in] ctx      AEAD context object.
  * @param [in] provCtx  Provider context object. Unused.
  * @return  Array of parameters with data type.
  */
@@ -949,15 +981,17 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
 #endif
         OSSL_PARAM_END
     };
+    const OSSL_PARAM* ret = wp_aead_supported_settable_ctx_params;
+
     (void)ctx;
     (void)provCtx;
 #if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
     /* The first descriptor requires a GCM context. */
-    if (ctx == NULL || ctx->mode != EVP_CIPH_GCM_MODE) {
-        return wp_aead_supported_settable_ctx_params + 1;
+    if ((ctx == NULL) || (ctx->mode != EVP_CIPH_GCM_MODE)) {
+        ret++;
     }
 #endif
-    return wp_aead_supported_settable_ctx_params;
+    return ret;
 }
 
 #if defined(WP_HAVE_AESGCM) || defined(WP_HAVE_AESCCM)
@@ -1645,56 +1679,86 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
 
 #else
 
-/* Decryption requires the expected tag before the complete payload. */
+/**
+ * Encrypt/decrypt a complete AES-GCM payload in one call.
+ *
+ * Decryption requires the expected tag before the payload.
+ *
+ * @param [in, out] ctx      AEAD context object.
+ * @param [out]     out      Buffer to hold encrypted/decrypted data.
+ * @param [out]     outLen   Length of data in output buffer.
+ * @param [in]      outSize  Size of output buffer in bytes.
+ * @param [in]      in       Data to be encrypted/decrypted.
+ * @param [in]      inLen    Length of data to be encrypted/decrypted.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
 static int wp_aesgcm_single_update(wp_AeadCtx *ctx, unsigned char *out,
     size_t *outLen, size_t outSize, const unsigned char *in, size_t inLen)
 {
-    int rc;
+    int ok = 1;
+    int rc = 0;
     byte empty = 0;
 
+    WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_single_update");
+
     *outLen = 0;
-    if (ctx->singleDone || ctx->authErr || !ctx->keySet ||
-        ctx->ivState != IV_STATE_BUFFERED || !WP_FITS_WORD32(inLen) ||
-        !WP_FITS_WORD32(ctx->aadLen) || outSize < inLen ||
-        (inLen != 0 && (in == NULL || out == NULL)) ||
-        (!ctx->enc && !ctx->singleTagSet)) {
-        ctx->authErr = 1;
-        ctx->ivState = IV_STATE_FINISHED;
-        return 0;
+    if (ctx->singleDone || ctx->authErr || (!ctx->keySet) ||
+            (ctx->ivState != IV_STATE_BUFFERED) || (!WP_FITS_WORD32(inLen)) ||
+            (!WP_FITS_WORD32(ctx->aadLen)) || (outSize < inLen) ||
+            ((inLen != 0) && ((in == NULL) || (out == NULL))) ||
+            ((!ctx->enc) && (!ctx->singleTagSet))) {
+        ok = 0;
     }
-    if (ctx->tagLen == UNINITIALISED_SIZET) {
-        ctx->tagLen = EVP_GCM_TLS_TAG_LEN;
-    }
-    ctx->singleDone = 1;
-    XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
-    ctx->ivState = IV_STATE_COPIED;
-    rc = wc_AesGcmSetExtIV(&ctx->aes, ctx->origIv, (word32)ctx->ivLen);
-    if (rc == 0) {
-        if (ctx->enc) {
-            ctx->ivSet = 1;
-            rc = wc_AesGcmEncrypt_ex(&ctx->aes, out != NULL ? out : &empty,
-                in != NULL ? in : &empty, (word32)inLen, ctx->origIv,
-                (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
-                ctx->aad, (word32)ctx->aadLen);
-            ctx->tagAvail = (rc == 0);
+    if (ok) {
+        if (ctx->tagLen == UNINITIALISED_SIZET) {
+            ctx->tagLen = EVP_GCM_TLS_TAG_LEN;
         }
-        else {
-            rc = wc_AesGcmDecrypt(&ctx->aes, out != NULL ? out : &empty,
-                in != NULL ? in : &empty, (word32)inLen, ctx->origIv,
-                (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
-                ctx->aad, (word32)ctx->aadLen);
+        ctx->singleDone = 1;
+        XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
+        ctx->ivState = IV_STATE_COPIED;
+        rc = wc_AesGcmSetExtIV(&ctx->aes, ctx->origIv, (word32)ctx->ivLen);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmSetExtIV", rc);
+            ok = 0;
         }
     }
-    if (rc != 0) {
-        if (out != NULL && inLen != 0) {
+    if (ok && ctx->enc) {
+        ctx->ivSet = 1;
+        rc = wc_AesGcmEncrypt_ex(&ctx->aes, (out != NULL) ? out : &empty,
+            (in != NULL) ? in : &empty, (word32)inLen, ctx->origIv,
+            (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+            ctx->aad, (word32)ctx->aadLen);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmEncrypt_ex", rc);
+            ok = 0;
+        }
+        ctx->tagAvail = ok;
+    }
+    else if (ok) {
+        rc = wc_AesGcmDecrypt(&ctx->aes, (out != NULL) ? out : &empty,
+            (in != NULL) ? in : &empty, (word32)inLen, ctx->origIv,
+            (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+            ctx->aad, (word32)ctx->aadLen);
+        if (rc != 0) {
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, "wc_AesGcmDecrypt", rc);
+            ok = 0;
+        }
+    }
+
+    if (ok) {
+        *outLen = inLen;
+    }
+    else {
+        if ((rc != 0) && (out != NULL) && (inLen != 0)) {
             OPENSSL_cleanse(out, inLen);
         }
         ctx->authErr = 1;
         ctx->ivState = IV_STATE_FINISHED;
-        return 0;
     }
-    *outLen = inLen;
-    return 1;
+
+    WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
+    return ok;
 }
 
 /**
@@ -1855,6 +1919,7 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
 {
     int ok = 1;
     int process = 0;
+    int single = 0;
     size_t curLen = 0;
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_stream_update");
@@ -1890,8 +1955,7 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
         }
         else if (inLen > 0) {
             if (ctx->singleUpdate) {
-                return wp_aesgcm_single_update(ctx, out, outLen, outSize,
-                    in, inLen);
+                single = 1;
             }
             else {
                 curLen = ctx->inLen;
@@ -1904,8 +1968,12 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
             }
         }
 
+        if (single) {
+            ok = wp_aesgcm_single_update(ctx, out, outLen, outSize, in,
+                inLen);
+        }
         /* If there is data to process, do it now */
-        if (process) {
+        else if (process) {
             ok = wp_aesgcm_encdec(ctx, out, outLen, curLen, 0);
         }
         else {
