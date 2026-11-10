@@ -2510,6 +2510,118 @@ int test_aes_gcm_final_no_update_no_iv(void *data)
     return err;
 }
 
+#ifndef WOLFSSL_AESGCM_STREAM
+
+static EVP_CIPHER_CTX *test_aes_gcm_single_ctx(EVP_CIPHER *cipher, int enc,
+    unsigned char *key, unsigned char *iv, unsigned char *aad, int aadLen)
+{
+    EVP_CIPHER_CTX *ctx;
+    OSSL_PARAM params[2];
+    int on = 1;
+    int len = 0;
+
+    params[0] = OSSL_PARAM_construct_int("wolfprov-gcm-single-update", &on);
+    params[1] = OSSL_PARAM_construct_end();
+
+    ctx = EVP_CIPHER_CTX_new();
+    if ((ctx != NULL) &&
+        ((EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, enc) != 1) ||
+         (EVP_CIPHER_CTX_set_params(ctx, params) != 1) ||
+         (EVP_CipherUpdate(ctx, NULL, &len, aad, aadLen) != 1))) {
+        EVP_CIPHER_CTX_free(ctx);
+        ctx = NULL;
+    }
+    return ctx;
+}
+
+static int test_aes_gcm_single_dec(EVP_CIPHER *cipher, unsigned char *key,
+    unsigned char *iv, unsigned char *aad, int aadLen, unsigned char *ct,
+    int len, unsigned char *tag, unsigned char *pt)
+{
+    EVP_CIPHER_CTX *ctx;
+    unsigned char dec[64];
+    int decLen = 0, fLen = 0;
+    int ok;
+
+    ctx = test_aes_gcm_single_ctx(cipher, 0, key, iv, aad, aadLen);
+    ok = (ctx != NULL) &&
+         (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag) == 1) &&
+         (EVP_DecryptUpdate(ctx, dec, &decLen, ct, len) == 1) &&
+         (EVP_DecryptFinal_ex(ctx, dec + decLen, &fLen) == 1) &&
+         (memcmp(dec, pt, len) == 0);
+    EVP_CIPHER_CTX_free(ctx);
+    return ok;
+}
+
+int test_aes_gcm_single_update(void *data)
+{
+    int err;
+    EVP_CIPHER *ossl;
+    EVP_CIPHER *wp;
+    EVP_CIPHER_CTX *ctx = NULL;
+    unsigned char key[16];
+    unsigned char iv[12];
+    unsigned char aad[] = "additional data";
+    int aadLen = (int)(sizeof(aad) - 1);
+    unsigned char pt[] = "GCM plaintext for single update test";
+    int ptLen = (int)(sizeof(pt) - 1);
+    unsigned char refCt[64];
+    unsigned char refTag[16];
+    unsigned char ct[64];
+    unsigned char tag[16];
+    int len = 0, fLen = 0;
+
+    (void)data;
+
+    memset(key, 0xAA, sizeof(key));
+    memset(iv, 0xBB, sizeof(iv));
+
+    ossl = EVP_CIPHER_fetch(osslLibCtx, "AES-128-GCM", "");
+    wp = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = (ossl == NULL) || (wp == NULL);
+    if (err == 0) {
+        err = test_aes_tag_enc(ossl, key, iv, sizeof(iv), aad, pt, ptLen,
+                               refCt, refTag, 0, 0);
+    }
+
+    if (err == 0) {
+        PRINT_MSG("Single-update encrypt matches OpenSSL");
+        ctx = test_aes_gcm_single_ctx(wp, 1, key, iv, aad, aadLen);
+        err = (ctx == NULL) ||
+              (EVP_EncryptUpdate(ctx, ct, &len, pt, ptLen) != 1) ||
+              (EVP_EncryptFinal_ex(ctx, ct + len, &fLen) != 1) ||
+              (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag) != 1) ||
+              (memcmp(ct, refCt, ptLen) != 0) || (memcmp(tag, refTag, 16) != 0);
+        EVP_CIPHER_CTX_free(ctx);
+    }
+    if (err == 0) {
+        PRINT_MSG("Single-update rejects a second payload Update");
+        ctx = test_aes_gcm_single_ctx(wp, 1, key, iv, aad, aadLen);
+        err = (ctx == NULL) ||
+              (EVP_EncryptUpdate(ctx, ct, &len, pt, 16) != 1) ||
+              (EVP_EncryptUpdate(ctx, ct + 16, &len, pt + 16,
+                                 ptLen - 16) == 1);
+        EVP_CIPHER_CTX_free(ctx);
+    }
+    if (err == 0) {
+        PRINT_MSG("Single-update decrypt with early tag");
+        err = !test_aes_gcm_single_dec(wp, key, iv, aad, aadLen, refCt, ptLen,
+                                       refTag, pt);
+    }
+    if (err == 0) {
+        PRINT_MSG("Single-update decrypt rejects a bad tag");
+        refTag[0] ^= 0x01;
+        err = test_aes_gcm_single_dec(wp, key, iv, aad, aadLen, refCt, ptLen,
+                                      refTag, pt);
+    }
+
+    EVP_CIPHER_free(wp);
+    EVP_CIPHER_free(ossl);
+    return err;
+}
+
+#endif /* !WOLFSSL_AESGCM_STREAM */
+
 #endif /* WP_HAVE_AESGCM */
 
 /******************************************************************************/
