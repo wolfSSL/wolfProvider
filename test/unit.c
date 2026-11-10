@@ -337,6 +337,9 @@ TEST_CASE test_case[] = {
     TEST_DECL(test_aes_gcm_key_no_iv, NULL),
     TEST_DECL(test_aes_gcm_stream_key_no_iv, NULL),
     TEST_DECL(test_aes_gcm_final_no_update_no_iv, NULL),
+#ifndef WOLFSSL_AESGCM_STREAM
+    TEST_DECL(test_aes_gcm_single_update, NULL),
+#endif
 #endif
 #ifdef WP_HAVE_AESCCM
     TEST_DECL(test_aes128_ccm, NULL),

@@ -298,6 +298,9 @@ int test_aes_gcm_tag_len_undersized(void *data);
 int test_aes_gcm_key_no_iv(void *data);
 int test_aes_gcm_stream_key_no_iv(void *data);
 int test_aes_gcm_final_no_update_no_iv(void *data);
+#ifndef WOLFSSL_AESGCM_STREAM
+int test_aes_gcm_single_update(void *data);
+#endif
 
 #endif /* WP_HAVE_AESGCM */
 

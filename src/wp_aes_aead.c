@@ -42,6 +42,9 @@
 #define WP_AES_GCM_EXTRA_BUF_LEN 128
 #endif
 
+/* Opt-in for one complete GCM payload per Update. */
+#define WP_PARAM_GCM_SINGLE_UPDATE "wolfprov-gcm-single-update"
+
 /**
  * Authenticated Encryption with Associated Data structure.
  */
@@ -112,6 +115,9 @@ typedef struct wp_AeadCtx {
     size_t bufSize;
     /* Original IV */
     unsigned char origIv[AES_BLOCK_SIZE];
+    unsigned int singleUpdate:1;
+    unsigned int singleDone:1;
+    unsigned int singleTagSet:1;
 #endif
 } wp_AeadCtx;
 
@@ -413,6 +419,18 @@ static int wp_aead_get_ctx_params(wp_AeadCtx* ctx, OSSL_PARAM params[])
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_get_ctx_params");
 
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    p = OSSL_PARAM_locate(params, WP_PARAM_GCM_SINGLE_UPDATE);
+    if (p != NULL && (ctx->mode != EVP_CIPH_GCM_MODE ||
+        !OSSL_PARAM_set_int(p, ctx->singleUpdate))) {
+        return 0;
+    }
+    if (ctx->singleUpdate && OSSL_PARAM_locate(params,
+            OSSL_CIPHER_PARAM_AEAD_TLS1_GET_IV_GEN) != NULL) {
+        return 0;
+    }
+#endif
+
     p = OSSL_PARAM_locate(params, OSSL_CIPHER_PARAM_IVLEN);
     if (p != NULL && !OSSL_PARAM_set_size_t(p, ctx->ivLen)) {
         ok = 0;
@@ -540,6 +558,9 @@ static int wp_aead_set_param_tag(wp_AeadCtx* ctx,
     if (ok) {
         ctx->tagLen = sz;
     }
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    ctx->singleTagSet = ok && (p->data != NULL);
+#endif
 
     WOLFPROV_LEAVE(WP_LOG_COMP_AES, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
     return ok;
@@ -696,17 +717,49 @@ static int wp_aead_set_param_tls1_iv_rand(wp_AeadCtx* ctx,
 static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
 {
     int ok = 1;
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    /* With the opt-in, fail on the first rejected parameter. */
+    int singleParams = ctx->singleUpdate || (params != NULL &&
+        OSSL_PARAM_locate_const(params, WP_PARAM_GCM_SINGLE_UPDATE) != NULL);
+#endif
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aead_set_ctx_params");
 
     while ((params != NULL) && (params->key != NULL)) {
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+        if (ctx->singleUpdate &&
+            (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_AAD) == 0 ||
+             XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_IV_FIXED) == 0 ||
+             XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV) == 0)) {
+            return 0;
+        }
+#endif
         /* params->key is a NUL-terminated provider parameter name. Use
          * XSTRCMP so we never read past the end of the caller's key when
          * it is shorter than the target constant (e.g. "tlsivinv" vs
          * "tlsivfixed"). */
         if (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_TAG) == 0) {
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+            if (ctx->singleUpdate && (ctx->singleDone || ctx->authErr)) {
+                return 0;
+            }
+#endif
             ok = wp_aead_set_param_tag(ctx, params);
         }
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+        else if (XSTRCMP(params->key, WP_PARAM_GCM_SINGLE_UPDATE) == 0) {
+            int enabled;
+            if (ctx->mode != EVP_CIPH_GCM_MODE ||
+                !OSSL_PARAM_get_int(params, &enabled) ||
+                (enabled != 0 && enabled != 1) || ctx->inLen != 0 ||
+                ctx->singleDone || ctx->authErr ||
+                ctx->tlsAadLen != UNINITIALISED_SIZET || ctx->ivGen ||
+                ctx->ivState != IV_STATE_BUFFERED) {
+                return 0;
+            }
+            ctx->singleUpdate = enabled;
+        }
+#endif
         else if (XSTRCMP(params->key, OSSL_CIPHER_PARAM_AEAD_IVLEN) == 0) {
             ok = wp_aead_set_param_iv_len(ctx, params);
         }
@@ -723,6 +776,11 @@ static int wp_aead_set_ctx_params(wp_AeadCtx* ctx, const OSSL_PARAM params[])
             ok = wp_aead_set_param_tls1_iv_rand(ctx, params);
         }
 
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+        if (!ok && singleParams) {
+            return 0;
+        }
+#endif
         params++;
     }
 
@@ -837,6 +895,9 @@ static const OSSL_PARAM *wp_aead_gettable_ctx_params(wp_AeadCtx* ctx,
      * Supported gettable parameters for AEAD context.
      */
     static const OSSL_PARAM wp_aead_supported_gettable_ctx_params[] = {
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+        OSSL_PARAM_int(WP_PARAM_GCM_SINGLE_UPDATE, NULL),
+#endif
         OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_KEYLEN, NULL),
         OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_IVLEN, NULL),
         OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_AEAD_TAGLEN, NULL),
@@ -852,6 +913,12 @@ static const OSSL_PARAM *wp_aead_gettable_ctx_params(wp_AeadCtx* ctx,
     };
     (void)ctx;
     (void)provCtx;
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    /* The first descriptor requires a GCM context. */
+    if (ctx == NULL || ctx->mode != EVP_CIPH_GCM_MODE) {
+        return wp_aead_supported_gettable_ctx_params + 1;
+    }
+#endif
     return wp_aead_supported_gettable_ctx_params;
 }
 
@@ -869,6 +936,9 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
      * Supported settable parameters for AEAD context.
      */
     static const OSSL_PARAM wp_aead_supported_settable_ctx_params[] = {
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+        OSSL_PARAM_int(WP_PARAM_GCM_SINGLE_UPDATE, NULL),
+#endif
         OSSL_PARAM_size_t(OSSL_CIPHER_PARAM_AEAD_IVLEN, NULL),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG, NULL, 0),
         OSSL_PARAM_octet_string(OSSL_CIPHER_PARAM_AEAD_TLS1_AAD, NULL, 0),
@@ -881,6 +951,12 @@ static const OSSL_PARAM *wp_aead_settable_ctx_params(wp_AeadCtx* ctx,
     };
     (void)ctx;
     (void)provCtx;
+#if defined(WP_HAVE_AESGCM) && !defined(WOLFSSL_AESGCM_STREAM)
+    /* The first descriptor requires a GCM context. */
+    if (ctx == NULL || ctx->mode != EVP_CIPH_GCM_MODE) {
+        return wp_aead_supported_settable_ctx_params + 1;
+    }
+#endif
     return wp_aead_supported_settable_ctx_params;
 }
 
@@ -908,6 +984,9 @@ static void wp_aead_reset_op_state(wp_AeadCtx* ctx)
     }
     ctx->inLen = 0;
     ctx->bufSize = 0;
+    ctx->singleUpdate = 0;
+    ctx->singleDone = 0;
+    ctx->singleTagSet = 0;
 #endif
 }
 #endif
@@ -1566,6 +1645,58 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
 
 #else
 
+/* Decryption requires the expected tag before the complete payload. */
+static int wp_aesgcm_single_update(wp_AeadCtx *ctx, unsigned char *out,
+    size_t *outLen, size_t outSize, const unsigned char *in, size_t inLen)
+{
+    int rc;
+    byte empty = 0;
+
+    *outLen = 0;
+    if (ctx->singleDone || ctx->authErr || !ctx->keySet ||
+        ctx->ivState != IV_STATE_BUFFERED || !WP_FITS_WORD32(inLen) ||
+        !WP_FITS_WORD32(ctx->aadLen) || outSize < inLen ||
+        (inLen != 0 && (in == NULL || out == NULL)) ||
+        (!ctx->enc && !ctx->singleTagSet)) {
+        ctx->authErr = 1;
+        ctx->ivState = IV_STATE_FINISHED;
+        return 0;
+    }
+    if (ctx->tagLen == UNINITIALISED_SIZET) {
+        ctx->tagLen = EVP_GCM_TLS_TAG_LEN;
+    }
+    ctx->singleDone = 1;
+    XMEMCPY(ctx->origIv, ctx->iv, ctx->ivLen);
+    ctx->ivState = IV_STATE_COPIED;
+    rc = wc_AesGcmSetExtIV(&ctx->aes, ctx->origIv, (word32)ctx->ivLen);
+    if (rc == 0) {
+        if (ctx->enc) {
+            ctx->ivSet = 1;
+            rc = wc_AesGcmEncrypt_ex(&ctx->aes, out != NULL ? out : &empty,
+                in != NULL ? in : &empty, (word32)inLen, ctx->origIv,
+                (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+                ctx->aad, (word32)ctx->aadLen);
+            ctx->tagAvail = (rc == 0);
+        }
+        else {
+            rc = wc_AesGcmDecrypt(&ctx->aes, out != NULL ? out : &empty,
+                in != NULL ? in : &empty, (word32)inLen, ctx->origIv,
+                (word32)ctx->ivLen, ctx->buf, (word32)ctx->tagLen,
+                ctx->aad, (word32)ctx->aadLen);
+        }
+    }
+    if (rc != 0) {
+        if (out != NULL && inLen != 0) {
+            OPENSSL_cleanse(out, inLen);
+        }
+        ctx->authErr = 1;
+        ctx->ivState = IV_STATE_FINISHED;
+        return 0;
+    }
+    *outLen = inLen;
+    return 1;
+}
+
 /**
  * Encrypt/decrypt the data using AES-GCM.
  *
@@ -1739,6 +1870,10 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
         if (ctx->ivState == IV_STATE_FINISHED) {
             ok = 0;
         }
+        else if (ctx->singleUpdate && ctx->singleDone && inLen != 0) {
+            ctx->authErr = 1;
+            ok = 0;
+        }
         else if ((out == NULL) && (in == NULL)) {
             /* Nothing to do. */
             oLen = (word32)inLen;
@@ -1754,12 +1889,18 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
             ok = 0;
         }
         else if (inLen > 0) {
-            curLen = ctx->inLen;
-            if (!wp_aead_cache_in(ctx, in, inLen)) {
-                ok = 0;
+            if (ctx->singleUpdate) {
+                return wp_aesgcm_single_update(ctx, out, outLen, outSize,
+                    in, inLen);
             }
             else {
-                process = 1;
+                curLen = ctx->inLen;
+                if (!wp_aead_cache_in(ctx, in, inLen)) {
+                    ok = 0;
+                }
+                else {
+                    process = 1;
+                }
             }
         }
 
@@ -1769,6 +1910,11 @@ static int wp_aesgcm_stream_update(wp_AeadCtx *ctx, unsigned char *out,
         }
         else {
             *outLen = oLen;
+        }
+        if (!ok && ctx->singleUpdate) {
+            *outLen = 0;
+            ctx->authErr = 1;
+            ctx->ivState = IV_STATE_FINISHED;
         }
     }
 
@@ -1794,11 +1940,30 @@ static int wp_aesgcm_stream_final(wp_AeadCtx *ctx, unsigned char *out,
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_stream_final");
 
+    /* authErr can bypass the single-update Final branch. */
+    if (ctx->singleUpdate) {
+        *outLen = 0;
+    }
+
     if (ctx->tlsAadLen != UNINITIALISED_SIZET) {
         ok = wp_aesgcm_tls_cipher(ctx, out, outLen, NULL, 0);
     }
     else if (ctx->authErr) {
         ok = 0;
+    }
+    else if (ctx->singleUpdate) {
+        if (ctx->ivState == IV_STATE_FINISHED) {
+            ok = 0;
+        }
+        else if (!ctx->singleDone) {
+            ok = wp_aesgcm_single_update(ctx, NULL, outLen, 0, NULL, 0);
+        }
+        OPENSSL_free(ctx->aad);
+        ctx->aad = NULL;
+        ctx->aadLen = 0;
+        ctx->aadSet = 0;
+        ctx->ivSet = 0;
+        ctx->ivState = IV_STATE_FINISHED;
     }
     else {
         ok = wp_aesgcm_encdec(ctx, out, outLen, ctx->inLen, 1);
