@@ -30,4 +30,8 @@ int wolfssl_prov_bio_up_ref(OSSL_CORE_BIO *bio);
 /* Prototype of public function that initializes the wolfSSL provider. */
 OSSL_provider_init_fn wolfssl_provider_init;
 
+/* AES-GCM context parameter (int) on non-streaming builds: 1 opts in to one
+ * complete payload per operation, with the tag set first when decrypting. */
+#define WP_PARAM_GCM_SINGLE_UPDATE "wolfprov-gcm-single-update"
+
 #endif /* WP_WOLFPROV_H */
