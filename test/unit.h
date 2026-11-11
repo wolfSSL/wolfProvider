@@ -274,6 +274,15 @@ int test_aes_cfb_large_update(void *data);
 
 #endif
 
+#ifdef WP_HAVE_AESOFB
+
+int test_aes128_ofb_stream(void *data);
+int test_aes192_ofb_stream(void *data);
+int test_aes256_ofb_stream(void *data);
+int test_aes_ofb_kat(void *data);
+
+#endif
+
 int test_cipher_null_zero(void *data);
 
 #ifdef WP_HAVE_AESGCM
