@@ -153,7 +153,7 @@ enum {
 typedef struct WOLFPROV_CTX {
     /** Cached handle to a resource. */
     const OSSL_CORE_HANDLE *handle;
-    /** Library context to use in all cases. */
+    /** Library context to use in all cases. Owned; may be NULL. */
     OSSL_LIB_CTX *libCtx;
    /** Random number generator. */
    WC_RNG rng;
