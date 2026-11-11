@@ -227,6 +227,10 @@ jobs:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' multi-compiler ')
     uses: ./.github/workflows/nightly-multi-compiler.yml
+  musl:
+    needs: select
+    if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' musl ')
+    uses: ./.github/workflows/musl.yml
   fips-ready:
     needs: select
     if: contains(needs.select.outputs.run, ' all ') || contains(needs.select.outputs.run, ' fips-ready ')

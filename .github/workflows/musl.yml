@@ -1,0 +1,71 @@
+name: musl Tests
+
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
+
+jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
+  musl_test:
+    needs: discover_versions
+    name: musl (Alpine) test
+    runs-on: ubuntu-22.04
+    container:
+      image: alpine:3.20
+    permissions:
+      contents: read
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_latest_ref_array) }}
+        openssl_ref:
+          - ${{ needs.discover_versions.outputs.openssl_latest_ref }}
+          - openssl-3.0.17
+        replace_default: [
+          '',
+          '--replace-default --enable-replace-default-testing']
+    env:
+      OPENSSL_TAG: ${{ matrix.openssl_ref }}
+      WOLFSSL_TAG: ${{ matrix.wolfssl_ref }}
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apk add --no-cache bash git autoconf automake libtool make gcc g++ \
+            musl-dev linux-headers perl pkgconf coreutils patch curl
+
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build wolfProvider and run unit tests
+        shell: bash
+        run: ./scripts/build-wolfprovider.sh ${{ matrix.replace_default }}
+
+      # With no config, OpenSSL activates wolfProvider as its fallback default provider.
+      - name: Load wolfProvider with no OpenSSL config
+        if: matrix.replace_default != ''
+        shell: bash
+        run: |
+          source scripts/env-setup
+          echo abc > in.txt
+          OPENSSL_CONF=/dev/null timeout 60 "$OPENSSL_BIN" list -providers | tee providers.txt
+          grep -q "wolfSSL Provider" providers.txt
+          OPENSSL_CONF=/dev/null timeout 60 "$OPENSSL_BIN" dgst -sha256 in.txt
+
+      - name: Run command-line tests
+        shell: bash
+        run: |
+          source scripts/env-setup
+          timeout 1200 ./scripts/cmd_test/do-cmd-tests.sh
+          WOLFPROV_FORCE_FAIL=1 timeout 1200 ./scripts/cmd_test/do-cmd-tests.sh

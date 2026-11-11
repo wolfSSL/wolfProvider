@@ -167,6 +167,8 @@ typedef struct WOLFPROV_CTX {
     * balanced by a cleanup that releases a reference it never took. */
    int urandomInitialized;
 #endif
+   /** Set when libCtx is a child this provider created and must free. */
+   int libCtxOwned;
 } WOLFPROV_CTX;
 
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
