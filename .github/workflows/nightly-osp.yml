@@ -50,6 +50,7 @@ jobs:
   libssh2-current:         { uses: ./.github/workflows/libssh2.yml,         }
   libtss2-current:         { uses: ./.github/workflows/libtss2.yml,         }
   libwebsockets-current:   { uses: ./.github/workflows/libwebsockets.yml,   }
+  mosquitto-current:       { uses: ./.github/workflows/mosquitto.yml,       }
   net-snmp-current:        { uses: ./.github/workflows/net-snmp.yml,        }
   nginx-current:           { uses: ./.github/workflows/nginx.yml,           }
   nginx-pqc-current:       { uses: ./.github/workflows/nginx-pqc.yml,       }
@@ -97,6 +98,7 @@ jobs:
       - libssh2-current
       - libtss2-current
       - libwebsockets-current
+      - mosquitto-current
       - net-snmp-current
       - nginx-current
       - nginx-pqc-current
@@ -145,6 +147,7 @@ jobs:
   libssh2-584:         { needs: wave1-done, if: always(), uses: ./.github/workflows/libssh2.yml,         with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
   libtss2-584:         { needs: wave1-done, if: always(), uses: ./.github/workflows/libtss2.yml,         with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
   libwebsockets-584:   { needs: wave1-done, if: always(), uses: ./.github/workflows/libwebsockets.yml,   with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
+  mosquitto-584:       { needs: wave1-done, if: always(), uses: ./.github/workflows/mosquitto.yml,       with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
   net-snmp-584:        { needs: wave1-done, if: always(), uses: ./.github/workflows/net-snmp.yml,        with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
   nginx-584:           { needs: wave1-done, if: always(), uses: ./.github/workflows/nginx.yml,           with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
   openldap-584:        { needs: wave1-done, if: always(), uses: ./.github/workflows/openldap.yml,        with: { wolfssl_refs_json: '["v5.8.4-stable"]' } }
