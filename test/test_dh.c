@@ -24,6 +24,11 @@
 #include <openssl/decoder.h>
 #include <openssl/param_build.h>
 #include <wolfprovider/internal.h>
+#include <wolfprovider/wp_wolfprov.h>
+#if defined(HAVE_PTHREAD) || defined(_POSIX_THREADS)
+#include <pthread.h>
+#define WP_HAVE_DH_NAME_RACE_TEST
+#endif
 
 #ifdef WP_HAVE_DH
 
@@ -2889,6 +2894,270 @@ int test_dh_encoder_import_object(void *data)
         err = test_encoder_import_object_rejected("DH", pkey);
     }
     EVP_PKEY_free(pkey);
+
+    return err;
+}
+
+/* Get the provider loaded in a library context. */
+static int test_dh_get_provider(OSSL_PROVIDER *prov, void *arg)
+{
+    *(OSSL_PROVIDER**)arg = prov;
+    return 0;
+}
+
+/* Whether name, of length len, is one of the colon-separated names. */
+static int test_dh_has_name(const char* names, const char* name, size_t len)
+{
+    const char* p = names;
+    const char* end;
+    size_t pLen;
+
+    while (p != NULL) {
+        end = strchr(p, ':');
+        pLen = (end == NULL) ? strlen(p) : (size_t)(end - p);
+        if ((pLen == len) && (OPENSSL_strncasecmp(p, name, len) == 0)) {
+            return 1;
+        }
+        p = (end == NULL) ? NULL : end + 1;
+    }
+    return 0;
+}
+
+/* Names of the provider's algorithm for an operation that is named DH. */
+static const char* test_dh_alg_names(OSSL_PROVIDER* prov, int op)
+{
+    const OSSL_ALGORITHM* algs;
+    int noCache = 0;
+
+    algs = OSSL_PROVIDER_query_operation(prov, op, &noCache);
+    for (; (algs != NULL) && (algs->algorithm_names != NULL); algs++) {
+        if (test_dh_has_name(algs->algorithm_names, "DH", 2)) {
+            return algs->algorithm_names;
+        }
+    }
+    return NULL;
+}
+
+/* Every name OpenSSL's default provider gives DH is a wolfProvider name. */
+static int test_dh_names_match(int op, const char* opName)
+{
+    int err = 0;
+    OSSL_PROVIDER* osslDefProv = NULL;
+    const char* osslNames = NULL;
+    const char* wpNames;
+    const char* p;
+    const char* end;
+    size_t len;
+
+    OSSL_PROVIDER_do_all(osslLibCtx, test_dh_get_provider, &osslDefProv);
+    if (osslDefProv != NULL) {
+        osslNames = test_dh_alg_names(osslDefProv, op);
+    }
+    wpNames = test_dh_alg_names(wpProv, op);
+    if ((osslNames == NULL) || (wpNames == NULL)) {
+        PRINT_ERR_MSG("No DH %s found", opName);
+        err = 1;
+    }
+    for (p = osslNames; (err == 0) && (p != NULL); ) {
+        end = strchr(p, ':');
+        len = (end == NULL) ? strlen(p) : (size_t)(end - p);
+        if (!test_dh_has_name(wpNames, p, len)) {
+            PRINT_ERR_MSG("DH %s: name %.*s of OpenSSL not in \"%s\"",
+                opName, (int)len, p, wpNames);
+            err = 1;
+        }
+        p = (end == NULL) ? NULL : end + 1;
+    }
+
+    return err;
+}
+
+#ifdef WP_HAVE_DH_NAME_RACE_TEST
+/* Number of new library contexts, and of threads racing in each. */
+#define WP_DH_NAME_RACE_ROUNDS     20
+#define WP_DH_NAME_RACE_THREADS    8
+
+typedef struct {
+    OSSL_LIB_CTX*        libCtx;
+    pthread_mutex_t*     lock;
+    pthread_cond_t*      startCond;
+    pthread_cond_t*      readyCond;
+    int*                 start;
+    int*                 ready;
+    int                  err;
+} wp_dh_name_race_args;
+
+/*
+ * Wait for the start, then make the first use of DH in the library context by
+ * the name "dhKeyAgreement", the name libcrypto uses when it starts from
+ * NID_dhKeyAgreement (EVP_PKEY_CTX_new_id(EVP_PKEY_DH), EVP_PKEY_set1_DH).
+ */
+static void* wp_dh_name_race_thread(void* arg)
+{
+    wp_dh_name_race_args* w = (wp_dh_name_race_args*)arg;
+    EVP_PKEY_CTX* ctx = NULL;
+    EVP_PKEY* pkey = NULL;
+    EVP_KEYEXCH* kex = NULL;
+    OSSL_PARAM params[2];
+
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+        (char*)"ffdhe2048", 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    pthread_mutex_lock(w->lock);
+    (*w->ready)++;
+    pthread_cond_broadcast(w->readyCond);
+    while (*w->start == 0) {
+        pthread_cond_wait(w->startCond, w->lock);
+    }
+    pthread_mutex_unlock(w->lock);
+
+    ctx = EVP_PKEY_CTX_new_from_name(w->libCtx, "dhKeyAgreement", NULL);
+    w->err = (ctx == NULL) || (EVP_PKEY_fromdata_init(ctx) != 1) ||
+        (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS,
+            params) != 1);
+    if (w->err == 0) {
+        kex = EVP_KEYEXCH_fetch(w->libCtx, "dhKeyAgreement", NULL);
+        w->err = (kex == NULL);
+    }
+
+    EVP_KEYEXCH_free(kex);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_CTX_free(ctx);
+    return NULL;
+}
+
+/*
+ * Load wolfProvider into a new library context and have the threads make
+ * their first use of DH in it together.
+ *
+ * @return  Number of threads that failed.
+ * @return  -1 when the round could not be set up.
+ */
+static int wp_dh_name_race_round(void)
+{
+    OSSL_LIB_CTX* libCtx;
+    OSSL_PROVIDER* prov = NULL;
+    pthread_t tids[WP_DH_NAME_RACE_THREADS];
+    wp_dh_name_race_args workers[WP_DH_NAME_RACE_THREADS];
+    pthread_mutex_t lock;
+    pthread_cond_t startCond;
+    pthread_cond_t readyCond;
+    int start = 0;
+    int ready = 0;
+    int created = 0;
+    int failed = 0;
+    int i;
+
+    libCtx = OSSL_LIB_CTX_new();
+    if ((libCtx == NULL) ||
+            (OSSL_PROVIDER_add_builtin(libCtx, "wolfprov-dh-name",
+                wolfssl_provider_init) != 1) ||
+            ((prov = OSSL_PROVIDER_load(libCtx, "wolfprov-dh-name")) ==
+                NULL)) {
+        PRINT_ERR_MSG("Failed to load wolfProvider into a new library "
+            "context");
+        OSSL_LIB_CTX_free(libCtx);
+        return -1;
+    }
+    if ((pthread_mutex_init(&lock, NULL) != 0) ||
+            (pthread_cond_init(&startCond, NULL) != 0) ||
+            (pthread_cond_init(&readyCond, NULL) != 0)) {
+        PRINT_ERR_MSG("Failed to init start primitives");
+        OSSL_PROVIDER_unload(prov);
+        OSSL_LIB_CTX_free(libCtx);
+        return -1;
+    }
+
+    for (i = 0; i < WP_DH_NAME_RACE_THREADS; i++) {
+        workers[i].libCtx = libCtx;
+        workers[i].lock = &lock;
+        workers[i].startCond = &startCond;
+        workers[i].readyCond = &readyCond;
+        workers[i].start = &start;
+        workers[i].ready = &ready;
+        workers[i].err = 0;
+        if (pthread_create(&tids[i], NULL, wp_dh_name_race_thread,
+                &workers[i]) != 0) {
+            PRINT_ERR_MSG("Failed to create thread %d", i);
+            failed = -1;
+            break;
+        }
+        created++;
+    }
+
+    /* Release the threads together once all are waiting. */
+    pthread_mutex_lock(&lock);
+    while (ready < created) {
+        pthread_cond_wait(&readyCond, &lock);
+    }
+    start = 1;
+    pthread_cond_broadcast(&startCond);
+    pthread_mutex_unlock(&lock);
+
+    for (i = 0; i < created; i++) {
+        pthread_join(tids[i], NULL);
+        if ((failed >= 0) && (workers[i].err != 0)) {
+            failed++;
+        }
+    }
+
+    pthread_cond_destroy(&readyCond);
+    pthread_cond_destroy(&startCond);
+    pthread_mutex_destroy(&lock);
+    OSSL_PROVIDER_unload(prov);
+    OSSL_LIB_CTX_free(libCtx);
+    return failed;
+}
+#endif /* WP_HAVE_DH_NAME_RACE_TEST */
+
+/*
+ * DH is also named "dhKeyAgreement" and 1.2.840.113549.1.3.1, as in OpenSSL's
+ * default provider. libcrypto fetches DH by "dhKeyAgreement" when it starts
+ * from NID_dhKeyAgreement. It copies its legacy names, which make
+ * "dhKeyAgreement" another name for "DH", into a library context's name map on
+ * first use, but not under one lock: threads making their first use together
+ * can look the name up before it is there.
+ */
+int test_dh_name_dhkeyagreement(void *data)
+{
+    int err;
+#ifdef WP_HAVE_DH_NAME_RACE_TEST
+    int r;
+    int failed;
+    int badRounds = 0;
+#endif
+
+    (void)data;
+
+    err = test_dh_names_match(OSSL_OP_KEYMGMT, "key manager");
+    if (test_dh_names_match(OSSL_OP_KEYEXCH, "key exchange") != 0) {
+        err = 1;
+    }
+
+#ifdef WP_HAVE_DH_NAME_RACE_TEST
+    PRINT_MSG("First use of DH by name from %d threads in %d new library "
+        "contexts", WP_DH_NAME_RACE_THREADS, WP_DH_NAME_RACE_ROUNDS);
+    for (r = 0; r < WP_DH_NAME_RACE_ROUNDS; r++) {
+        failed = wp_dh_name_race_round();
+        if (failed < 0) {
+            err = 1;
+            break;
+        }
+        if (failed > 0) {
+            PRINT_ERR_MSG("Round %d: %d of %d threads failed", r, failed,
+                WP_DH_NAME_RACE_THREADS);
+            badRounds++;
+        }
+    }
+    if (badRounds > 0) {
+        PRINT_ERR_MSG("%d of %d rounds had a failed thread", badRounds,
+            WP_DH_NAME_RACE_ROUNDS);
+        err = 1;
+    }
+#else
+    PRINT_MSG("Skipping first use of DH by name from threads (no pthreads)");
+#endif
 
     return err;
 }

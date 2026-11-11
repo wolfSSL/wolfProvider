@@ -167,7 +167,7 @@ typedef void (*DFUNC)(void);
 #define WP_NAMES_ED448          "ED448"
 
 /* DH names. */
-#define WP_NAMES_DH             "DH"
+#define WP_NAMES_DH             "DH:dhKeyAgreement:1.2.840.113549.1.3.1"
 #define WP_NAMES_DHX            "DHX"
 
 /* ML-KEM names (NIST FIPS 203). */
