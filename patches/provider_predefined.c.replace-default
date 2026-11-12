@@ -36,7 +36,7 @@ static int load_wolfprov_and_init(const OSSL_CORE_HANDLE *handle,
                                 void **provctx) {
     int ret = 0;
     OSSL_provider_init_fn *wolfssl_provider_init_fn = NULL;
-    DSO *cur, *nd = NULL;
+    DSO *cur, *new_dso = NULL;
 
     /* d_lock is not held over dlopen(). */
     if (!RUN_ONCE(&d_lock_once, d_lock_init) || !CRYPTO_THREAD_read_lock(d_lock))
@@ -45,30 +45,30 @@ static int load_wolfprov_and_init(const OSSL_CORE_HANDLE *handle,
     CRYPTO_THREAD_unlock(d_lock);
 
     if (!cur) {
-        nd = DSO_new();
-        if (!nd) {
+        new_dso = DSO_new();
+        if (!new_dso) {
             fprintf(stderr, "DSO_new() failed\n");
             return 0;
         }
 
-        if (!DSO_load(nd, "wolfprov", NULL, 0)) {
+        if (!DSO_load(new_dso, "wolfprov", NULL, 0)) {
             fprintf(stderr, "Could not load libwolfprov.so. Is the libwolfprov package installed?\n");
-            DSO_free(nd);
+            DSO_free(new_dso);
             return 0;
         }
 
         if (!CRYPTO_THREAD_write_lock(d_lock)) {
-            DSO_free(nd);
+            DSO_free(new_dso);
             return 0;
         }
         if (!d) {
-            d = nd;
-            nd = NULL;
+            d = new_dso;
+            new_dso = NULL;
         }
         cur = d;
         CRYPTO_THREAD_unlock(d_lock);
         /* Lost the race. */
-        DSO_free(nd);
+        DSO_free(new_dso);
     }
 
     wolfssl_provider_init_fn = (OSSL_provider_init_fn*)DSO_bind_func(cur, "wolfssl_provider_init");
