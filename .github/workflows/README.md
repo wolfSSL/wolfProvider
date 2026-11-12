@@ -33,6 +33,7 @@ ready_for_review) and on every push to `master`, `main`, or
 | `fips-ready.yml` | Pulls FIPS Ready bundles from ghcr (`ghcr.io/<owner>/wolfprovider/fips-ready:<ver>`, published by `nightly-fips-ready.yml`) and builds wolfSSL with `--enable-fips=ready` against each. Matrix resolved at run time from `_discover-versions.yml`'s `fips_ready_pr_array` (opt-in via `resolve_fips`, listed from ghcr tags): the back-compat anchors plus the newest bundle. The resolved FIPS module version (`ready` is v7 through 5.9.1, v8 from 5.9.2 on) is read from `HAVE_FIPS_VERSION_MAJOR` at build time and shown in the job summary. |
 | `seed-src.yml` | Builds with `--enable-seed-src` (entropy seed source variant) and `-DWP_TEST_SECCOMP_SANDBOX`, then runs the unit tests including the OpenSSH fork+seccomp-sandbox regression suite. |
 | `multi-compiler.yml` | Cross-compiler sweep: gcc-9 through gcc-14 and clang-12 through latest. Catches toolchain-specific warnings / UB. |
+| `musl.yml` | Builds on Alpine (musl libc), standard and replace-default, against the latest OpenSSL and 3.0.17. Runs the unit tests, the cmd tests with and without `WOLFPROV_FORCE_FAIL`, and loads the replace-default build with no OpenSSL config (OpenSSL's fallback provider path). glibc reports some lock misuse that musl turns into a hang, so this is the only job that catches those. Runs nightly and on PRs labeled `ci:musl` or `ci:all`. |
 | `codespell.yml` | Spell-check on tracked source. `*.patch` is excluded because OSP patches mirror upstream source whose original spelling we shouldn't silently rewrite. |
 | `sanitizers.yml` | Builds wolfProvider with `-fsanitize=address,undefined` (one job) and `-fsanitize=thread` (separate job — TSan and ASan can't coexist in one binary), runs `make test` + `cmd_test/do-cmd-tests.sh` under each. Caches OpenSSL + wolfSSL source/install to avoid the ~15 min rebuild on every push. |
 | `publish-test-deps-image.yml` | Builds and publishes `ghcr.io/wolfssl/wolfprovider-test-deps:bookworm` whenever `docker/wolfprovider-test-deps/**` changes on master. This image is what the nightly OSP jobs run inside. |
@@ -78,7 +79,7 @@ per-app workflows stay untouched.
 | Label | Effect |
 |-------|--------|
 | `ci:<name>` | Run that one job (e.g. `ci:hostap`, `ci:curl`, `ci:static-analysis`). Add several to run several. |
-| `ci:all` | Run the whole fan-out (all 44 jobs). |
+| `ci:all` | Run the whole fan-out (all 45 jobs). |
 | (no label) | Nothing runs — a normal PR is unaffected. |
 
 `<name>` is the job key in the table below (the workflow base name, e.g.
@@ -105,7 +106,7 @@ gh workflow run pr-osp-select.yml --ref <branch> -f jobs="all"
 
 ### What runs in the nightly fan-out
 
-44 workflows total: 40 third-party OSS integrations, 3 internal
+45 workflows total: 40 third-party OSS integrations, 4 internal
 validations (including nightly-fips-ready.yml, reachable via
 `ci:fips-ready`), and the static-analysis suite. Every one of these patches
 the upstream project (where needed) via `osp/wolfProvider/<app>/*.patch`

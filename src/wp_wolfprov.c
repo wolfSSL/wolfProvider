@@ -285,6 +285,9 @@ static WOLFPROV_CTX* wolfssl_prov_ctx_new(void)
  */
 static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
 {
+    if (ctx->libCtxOwned) {
+        OSSL_LIB_CTX_free(ctx->libCtx);
+    }
 #if defined(WP_HAVE_SEED_SRC) && defined(WP_HAVE_RANDOM)
     /* Release a reference only if this context took one; pairing a failed init
      * with a cleanup would tear down the shared subsystem other contexts use. */
@@ -311,12 +314,14 @@ static void wolfssl_prov_ctx_free(WOLFPROV_CTX* ctx)
  *
  * @param [in] ctx     wolfSSL provider context object.
  * @param [in] libCtx  Library context object.
+ * @param [in] owned   1 when ctx must free libCtx, 0 when it is the core's.
  */
 static void wolfssl_prov_ctx_set0_lib_ctx(WOLFPROV_CTX* ctx,
-        OSSL_LIB_CTX* libCtx)
+        OSSL_LIB_CTX* libCtx, int owned)
 {
     if (ctx != NULL) {
         ctx->libCtx = libCtx;
+        ctx->libCtxOwned = owned;
     }
 }
 
@@ -1794,17 +1799,21 @@ static const OSSL_DISPATCH wolfprov_dispatch_table[] = {
 /*
  * Initializes the wolfSSL provider.
  *
- * @param [in]  handle   Handle to the core.
- * @param [in]  in       Dispatch table from previous provider.
- * @param [out] out      Dispatch table of wolfSSL provider.
- * @param [out] provCtx  New provider context.
+ * @param [in]  handle         Handle to the core.
+ * @param [in]  in             Dispatch table from previous provider.
+ * @param [out] out            Dispatch table of wolfSSL provider.
+ * @param [out] provCtx        New provider context.
+ * @param [in]  useCoreLibCtx  1 to use the core's libctx (built-in provider),
+ *                             0 to create a child libctx (loaded module).
  * @return  1 on success.
  * @return  0 on failure.
  */
-int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
-    const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
+static int wolfssl_provider_init_ex(const OSSL_CORE_HANDLE* handle,
+    const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx,
+    int useCoreLibCtx)
 {
     int ok = 1;
+    OSSL_FUNC_core_get_libctx_fn* c_get_libctx = NULL;
     const OSSL_DISPATCH* origIn = in;
     int wcInited = 0;
     int rc;
@@ -1886,6 +1895,9 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
             case OSSL_FUNC_BIO_UP_REF:
                 c_bio_up_ref = OSSL_FUNC_BIO_up_ref(in);
                 break;
+            case OSSL_FUNC_CORE_GET_LIBCTX:
+                c_get_libctx = OSSL_FUNC_core_get_libctx(in);
+                break;
             default:
                 /* Just ignore anything we don't understand */
                 break;
@@ -1917,11 +1929,22 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
         }
     }
     if (ok) {
-        /* Using the OSSL_FUNC_core_get_libctx can yield you an
-         * uninitialized libctx in certain init flows. Instead create
-         * a new child libctx. The child libctx being NULL is allowed. */
-        wolfssl_prov_ctx_set0_lib_ctx(*provCtx,
-            OSSL_LIB_CTX_new_child(handle, origIn));
+        if (useCoreLibCtx) {
+            /* As the built-in default, init can run under the core's provider
+             * store lock, which OSSL_LIB_CTX_new_child() takes again. Use the
+             * core's libctx like OpenSSL's own default provider. */
+            if (c_get_libctx != NULL) {
+                wolfssl_prov_ctx_set0_lib_ctx(*provCtx,
+                    (OSSL_LIB_CTX*)c_get_libctx(handle), 0);
+            }
+        }
+        else {
+            /* Using the OSSL_FUNC_core_get_libctx can yield you an
+             * uninitialized libctx in certain init flows. Instead create
+             * a new child libctx. The child libctx being NULL is allowed. */
+            wolfssl_prov_ctx_set0_lib_ctx(*provCtx,
+                OSSL_LIB_CTX_new_child(handle, origIn), 1);
+        }
         /* Cache the handle in provider context. */
         wolfssl_prov_ctx_set0_handle(*provCtx, handle);
 
@@ -1938,6 +1961,27 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
     return ok;
 }
 
+/*
+ * Initializes the wolfSSL provider. Replace-default OpenSSL calls this as its
+ * built-in default provider.
+ *
+ * @param [in]  handle   Handle to the core.
+ * @param [in]  in       Dispatch table from previous provider.
+ * @param [out] out      Dispatch table of wolfSSL provider.
+ * @param [out] provCtx  New provider context.
+ * @return  1 on success.
+ * @return  0 on failure.
+ */
+int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
+    const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
+{
+#ifdef WOLFPROV_REPLACE_DEFAULT
+    return wolfssl_provider_init_ex(handle, in, out, provCtx, 1);
+#else
+    return wolfssl_provider_init_ex(handle, in, out, provCtx, 0);
+#endif
+}
+
 #ifndef WP_NO_DYNAMIC_PROVIDER
 /*
  * Initializes the wolfSSL provider - entry point for a dynamic library.
@@ -1952,6 +1996,6 @@ int wolfssl_provider_init(const OSSL_CORE_HANDLE* handle,
 int OSSL_provider_init(const OSSL_CORE_HANDLE* handle,
     const OSSL_DISPATCH* in, const OSSL_DISPATCH** out, void** provCtx)
 {
-    return wolfssl_provider_init(handle, in, out, provCtx);
+    return wolfssl_provider_init_ex(handle, in, out, provCtx, 0);
 }
 #endif

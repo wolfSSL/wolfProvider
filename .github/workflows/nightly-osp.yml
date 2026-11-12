@@ -6,7 +6,7 @@ name: Nightly OSP Suite
 # with if: always() so a single Wave 1 failure doesn't skip the
 # older-line coverage. multi-compiler, fips-ready and static-analysis run
 # once outside the waves.
-# libacvp-pqc and nginx-pqc are Wave 1 only. PQC has a v5.9.2-stable floor,
+# libacvp-pqc, nginx-pqc and musl are Wave 1 only. PQC has a v5.9.2-stable floor,
 # so the v5.8.4-stable Wave 2 line has no eligible ref to run.
 
 on:
@@ -50,6 +50,7 @@ jobs:
   libssh2-current:         { uses: ./.github/workflows/libssh2.yml,         }
   libtss2-current:         { uses: ./.github/workflows/libtss2.yml,         }
   libwebsockets-current:   { uses: ./.github/workflows/libwebsockets.yml,   }
+  musl-current:            { uses: ./.github/workflows/musl.yml,            }
   net-snmp-current:        { uses: ./.github/workflows/net-snmp.yml,        }
   nginx-current:           { uses: ./.github/workflows/nginx.yml,           }
   nginx-pqc-current:       { uses: ./.github/workflows/nginx-pqc.yml,       }
@@ -97,6 +98,7 @@ jobs:
       - libssh2-current
       - libtss2-current
       - libwebsockets-current
+      - musl-current
       - net-snmp-current
       - nginx-current
       - nginx-pqc-current
