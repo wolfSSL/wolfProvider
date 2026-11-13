@@ -52,6 +52,15 @@
     #define WP_HAVE_PKCS8_ENC
 #endif
 
+/* This is the intended FIPS design: claim MD5, MD5-SHA1 and 3DES with
+ * fips=yes, return valid metadata, and fail loudly on attempts to use them.
+ * Do not drop legacy algorithm registration in FIPS builds, even when
+ * wolfCrypt compiles them out. WP_ALLOW_NON_FIPS is the explicit opt-in
+ * override. */
+#if defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS)
+    #define WP_FIPS_DENY_LEGACY
+#endif
+
 #define WP_HAVE_DIGEST
 #if !defined(NO_MD5)
     #define WP_HAVE_MD5

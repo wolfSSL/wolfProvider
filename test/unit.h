@@ -78,8 +78,8 @@
 
 
 #ifdef TEST_MULTITHREADED
-#define PRINT_MSG(str)
-#define PRINT_ERR_MSG(str)
+#define PRINT_MSG(...)
+#define PRINT_ERR_MSG(...)
 #else
 #define PRINT_MSG(str, ...)     printf("MSG: " str "\n", ##__VA_ARGS__)
 #define PRINT_ERR_MSG(str, ...) printf("ERR: " str "\n", ##__VA_ARGS__)
@@ -117,6 +117,9 @@ typedef struct TEST_CASE {
 
 int test_logging(void *data);
 int test_ct_masks(void *data);
+int test_fips_legacy_algorithms(void *data);
+int test_fips_legacy_kdfs(void *data);
+int test_fips_legacy_key_decrypt(void *data);
 
 #define WP_VALGRIND_TEST 0x1
 

@@ -231,21 +231,69 @@ const OSSL_DISPATCH name##_functions[] = {                                     \
     { 0,                                NULL                                }  \
 };
 
-#define IMPLEMENT_DIGEST_NULL(name)                                            \
-/** Dispatch table for digest_null algorithms. */                              \
-static int name##_digest_null(void) { return 0; }                              \
-static void name##_digest_void(void) {}                                        \
-const OSSL_DISPATCH name##_functions[] = {                                     \
-    { OSSL_FUNC_DIGEST_NEWCTX,          (DFUNC)name##_digest_null           }, \
-    { OSSL_FUNC_DIGEST_INIT,            (DFUNC)name##_digest_null           }, \
-    { OSSL_FUNC_DIGEST_UPDATE,          (DFUNC)name##_digest_null           }, \
-    { OSSL_FUNC_DIGEST_FINAL,           (DFUNC)name##_digest_null           }, \
-    { OSSL_FUNC_DIGEST_FREECTX,         (DFUNC)name##_digest_void           }, \
-    { OSSL_FUNC_DIGEST_DUPCTX,          (DFUNC)name##_digest_null           }, \
-    { OSSL_FUNC_DIGEST_GET_PARAMS,      (DFUNC)name##_digest_null           }, \
-    { OSSL_FUNC_DIGEST_GETTABLE_PARAMS, (DFUNC)name##_digest_null           }, \
-    { 0,                                NULL                                }  \
+#ifdef WP_FIPS_DENY_LEGACY
+static int wp_digest_denied(void)
+{
+    ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
+        "MD5-based digests are disabled in FIPS mode");
+    return 0;
+}
+
+static void* wp_digest_denied_newctx(void* provCtx)
+{
+    (void)provCtx;
+    wp_digest_denied();
+    return NULL;
+}
+
+static void wp_digest_denied_freectx(void* ctx)
+{
+    (void)ctx;
+}
+
+static int wp_digest_denied_init(void* ctx, const OSSL_PARAM params[])
+{
+    (void)ctx;
+    (void)params;
+    return wp_digest_denied();
+}
+
+static int wp_digest_denied_update(void* ctx, const unsigned char* in,
+    size_t inLen)
+{
+    (void)ctx;
+    (void)in;
+    (void)inLen;
+    return wp_digest_denied();
+}
+
+static int wp_digest_denied_final(void* ctx, unsigned char* out,
+    size_t* outLen, size_t outSize)
+{
+    (void)ctx;
+    (void)out;
+    (void)outSize;
+    if (outLen != NULL) {
+        *outLen = 0;
+    }
+    return wp_digest_denied();
+}
+
+/* Fetching describes the method; creating or using a context is forbidden. */
+#define IMPLEMENT_DIGEST_DENIED(name, blkSize, dgstSize)                       \
+IMPLEMENT_DIGEST_GET_PARAM(name, blkSize, dgstSize, 0)                         \
+const OSSL_DISPATCH name##_functions[] = {                                    \
+    { OSSL_FUNC_DIGEST_NEWCTX,          (DFUNC)wp_digest_denied_newctx      }, \
+    { OSSL_FUNC_DIGEST_INIT,            (DFUNC)wp_digest_denied_init        }, \
+    { OSSL_FUNC_DIGEST_UPDATE,          (DFUNC)wp_digest_denied_update      }, \
+    { OSSL_FUNC_DIGEST_FINAL,           (DFUNC)wp_digest_denied_final       }, \
+    { OSSL_FUNC_DIGEST_FREECTX,         (DFUNC)wp_digest_denied_freectx     }, \
+    { OSSL_FUNC_DIGEST_DUPCTX,          (DFUNC)wp_digest_denied_newctx      }, \
+    { OSSL_FUNC_DIGEST_GET_PARAMS,      (DFUNC)name##_get_params            }, \
+    { OSSL_FUNC_DIGEST_GETTABLE_PARAMS, (DFUNC)wp_digest_gettable_params    }, \
+    { 0,                                NULL                             }  \
 };
+#endif /* WP_FIPS_DENY_LEGACY */
 
 /**
  * Get parameters of a digest algorithm.
@@ -319,9 +367,10 @@ static const OSSL_PARAM* wp_digest_gettable_params(void* provCtx)
  * MD5
  ******************************************************************************/
 
-#ifdef WP_HAVE_MD5
-#if defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS)
-IMPLEMENT_DIGEST_NULL(wp_md5)
+#if defined(WP_HAVE_MD5) || defined(WP_FIPS_DENY_LEGACY)
+#ifdef WP_FIPS_DENY_LEGACY
+/* Metadata must not depend on wolfCrypt's MD5 implementation being present. */
+IMPLEMENT_DIGEST_DENIED(wp_md5, 64, 16)
 #else
 IMPLEMENT_DIGEST(wp_md5, wc_Md5,
                  WC_MD5_BLOCK_SIZE, WC_MD5_DIGEST_SIZE,
@@ -335,8 +384,8 @@ IMPLEMENT_DIGEST(wp_md5, wc_Md5,
  * SHA1-MD5
  ******************************************************************************/
 
-#ifdef WP_HAVE_MD5_SHA1
-#if !defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS)
+#if defined(WP_HAVE_MD5_SHA1) || defined(WP_FIPS_DENY_LEGACY)
+#ifndef WP_FIPS_DENY_LEGACY
 /**
  * Combined MD5 and SHA-1 digest.
  */
@@ -472,8 +521,8 @@ IMPLEMENT_DIGEST(wp_md5_sha1, wp_Md5Sha,
                  0,
                  wp_InitMd5Sha_ex, wp_Md5ShaUpdate, wp_Md5ShaFinal,
                  wp_Md5ShaCopy, wp_Md5ShaFree)
-#else   /* defined(HAVE_FIPS) && !defined(WP_ALLOW_NON_FIPS) */
-IMPLEMENT_DIGEST_NULL(wp_md5_sha1)
+#else   /* WP_FIPS_DENY_LEGACY */
+IMPLEMENT_DIGEST_DENIED(wp_md5_sha1, 64, 36)
 #endif
 #endif
 
