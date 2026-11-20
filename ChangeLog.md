@@ -1,3 +1,15 @@
+# wolfProvider Unreleased
+
+## Enhancements and Optimizations
+* Take AES-GCM IVs for TLS 1.2 records and EVP IV generation
+  (EVP_CTRL_GCM_SET_IV_FIXED with EVP_CTRL_GCM_IV_GEN) from the wolfCrypt
+  module's own counter instead of advancing them in the provider (FIPS 140-3
+  IG C.H). The TLS explicit nonce on the wire is unchanged. Two IV_GEN calls in
+  a row now return distinct IVs, an unfinished encrypt stream is closed before
+  the next IV is handed out, and a decrypt init on a context with a generated
+  IV requires a new SET_IV_FIXED (and on FIPS v7 a new key) before encrypting
+  again (PR 531).
+
 # wolfProvider version 1.2.2 (August 27, 2026)
 
 Release 1.2.2 has been developed according to wolfSSL's development and QA
