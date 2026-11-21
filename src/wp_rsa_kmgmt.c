@@ -3443,7 +3443,9 @@ static int wp_rsa_encode_pki(const wp_Rsa* rsa, unsigned char* keyData,
         }
     }
     if (ok) {
+        PRIVATE_KEY_UNLOCK();
         ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, pkcs1Data, (word32)pkcs1Len);
+        PRIVATE_KEY_LOCK();
         if (ret <= 0) {
             ok = 0;
         }
@@ -3537,7 +3539,9 @@ static int wp_rsa_encode_priv(const wp_Rsa* rsa, unsigned char* keyData,
 
     WOLFPROV_ENTER(WP_LOG_COMP_RSA, "wp_rsa_encode_priv");
 
+    PRIVATE_KEY_UNLOCK();
     ret = wc_RsaKeyToDer((RsaKey*)&rsa->key, keyData, (word32)*keyLen);
+    PRIVATE_KEY_LOCK();
     if (ret <= 0) {
         ok = 0;
     }
