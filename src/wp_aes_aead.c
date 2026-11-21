@@ -1308,6 +1308,8 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
 {
     Aes *aes = &ctx->aes;
     int ok = 1;
+    int keepIv;
+    byte ivNext[AES_BLOCK_SIZE];
 
     WOLFPROV_ENTER(WP_LOG_COMP_AES, "wp_aesgcm_einit");
 
@@ -1316,6 +1318,13 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
     }
     if (ok) {
         WP_CHECK_FIPS_ALGO(WP_CAST_ALGO_AES);
+    }
+    /* A new key alone keeps wolfCrypt's IV sequence; older wolfCrypt clears
+     * aes.reg when the key is set, so the next IV is put back after. */
+    keepIv = ok && (key != NULL) && (iv == NULL) && ctx->ivMod;
+    if (keepIv) {
+        ok = wp_aesgcm_close_iv(ctx);
+        XMEMCPY(ivNext, aes->reg, ctx->ivLen);
     }
 #ifdef WOLFSSL_AESGCM_STREAM
     if (ok) {
@@ -1366,12 +1375,15 @@ static int wp_aesgcm_einit(wp_AeadCtx* ctx, const unsigned char *key,
         }
     }
 #endif
+    if (ok && keepIv) {
+        XMEMCPY(aes->reg, ivNext, ctx->ivLen);
+    }
     if (ok) {
         ctx->enc = 1;
         ctx->keySet |= (key != NULL);
         ctx->tlsAadLen = UNINITIALISED_SIZET;
-        /* A new key or caller IV replaces a generated IV. */
-        if ((key != NULL) || (iv != NULL)) {
+        /* A caller IV replaces a generated IV. */
+        if (iv != NULL) {
             ctx->ivMod = 0;
             ctx->ivModOpen = 0;
         }
