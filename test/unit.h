@@ -59,6 +59,12 @@
     #define WP_HAVE_EPKI_TEST
 #endif
 
+/* FIPS v7 modules: tests expect the v7 refusals. */
+#if defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION_MAJOR) && \
+    (HAVE_FIPS_VERSION_MAJOR >= 7)
+    #define WP_TEST_FIPS_V7
+#endif
+
 /* test_slhdsa.c selects a representative set and falls back to any enabled
  * set when a custom wolfSSL build enables only one parameter set. */
 #if defined(WP_HAVE_SLH_DSA_SHA2_128F) || \

@@ -905,7 +905,9 @@ int test_rsa_sign_verify_pss(void *data)
                                       EVP_sha512(), 0) == 1;
     }
 #endif
-#if defined(WP_HAVE_SHA384) && defined(WP_HAVE_SHA512)
+/* FIPS v7 refuses a PSS MGF1 hash that differs from the message hash. */
+#if defined(WP_HAVE_SHA384) && defined(WP_HAVE_SHA512) && \
+    !defined(WP_TEST_FIPS_V7)
     if (err == 0) {
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
         err = test_rsa_sign_verify_pad(RSA_PKCS1_PSS_PADDING, EVP_sha384(),
@@ -917,8 +919,7 @@ int test_rsa_sign_verify_pss(void *data)
 }
 
 /* wolfSSL caps the PSS salt at the hash length only for FIPS v7+ modules. */
-#if defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION_MAJOR) && \
-    (HAVE_FIPS_VERSION_MAJOR >= 7)
+#ifdef WP_TEST_FIPS_V7
     #define WP_TEST_PSS_SALT_MAY_CAP
 #endif
 
@@ -1696,7 +1697,7 @@ int test_rsa_enc_dec_pkcs1(void *data)
     }
     if (err == 0) {
         PRINT_MSG("Check that private decrypt works with valid key size.");
-        err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
+        err = test_rsa_enc_dec(rsa_key_der_2048, sizeof(rsa_key_der_2048),
                                RSA_PKCS1_PADDING, NULL, NULL);
     }
 
@@ -1730,12 +1731,12 @@ int test_rsa_enc_dec_oaep(void *data)
     (void)data;
 
     /* Use SHA-1 for MD and MGF1 MD. */
-    err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
+    err = test_rsa_enc_dec(rsa_key_der_2048, sizeof(rsa_key_der_2048),
                            RSA_PKCS1_OAEP_PADDING, EVP_sha1(), EVP_sha1()) == 1;
 #ifdef WP_HAVE_SHA256
     if (err == 0) {
         /* Use SHA-256 for MD and MGF1 MD. */
-        err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
+        err = test_rsa_enc_dec(rsa_key_der_2048, sizeof(rsa_key_der_2048),
                                RSA_PKCS1_OAEP_PADDING, EVP_sha256(),
                                EVP_sha256()) == 1;
     }
@@ -1743,7 +1744,7 @@ int test_rsa_enc_dec_oaep(void *data)
 #ifdef WP_HAVE_SHA384
     if (err == 0) {
         /* Use SHA-384 for MD and SHA-512 for MGF1 MD. */
-        err = test_rsa_enc_dec(rsa_key_der_1024, sizeof(rsa_key_der_1024),
+        err = test_rsa_enc_dec(rsa_key_der_2048, sizeof(rsa_key_der_2048),
                                RSA_PKCS1_OAEP_PADDING, EVP_sha384(),
                                EVP_sha512()) == 1;
     }
@@ -2030,6 +2031,10 @@ int test_rsa_pkey_invalid_key_size(void *data) {
     if (err == 0) {
         err = test_pkey_verify(pkey, wpLibCtx, buf, sizeof(buf), rsaSig,
             rsaSigLen, 0, NULL, NULL);
+#ifdef WP_TEST_FIPS_V7
+        PRINT_MSG("FIPS v7 refuses to verify with a 1024-bit key.");
+        err = err == 0;
+#endif
     }
 #endif /* HAVE_FIPS || HAVE_FIPS_VERSION */
 
