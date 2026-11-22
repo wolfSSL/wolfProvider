@@ -1507,6 +1507,7 @@ int test_ecdh_p521(void *data)
 #endif /* WP_HAVE_EC_P521 */
 
 #ifdef WP_HAVE_X25519
+#ifndef WOLFSSL_CURVE25519_BLINDING
 /* RFC 7748 Section 6.1 X25519 test vectors. */
 static const unsigned char x25519_alice_priv[] = {
     0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d,
@@ -1526,6 +1527,7 @@ static const unsigned char x25519_shared_secret[] = {
     0xe0, 0x7e, 0x21, 0xc9, 0x47, 0xd1, 0x9e, 0x33,
     0x76, 0xf0, 0x9b, 0x3c, 0x1e, 0x16, 0x17, 0x42
 };
+#endif
 
 /*
  * X25519 known-answer ECDH test using RFC 7748 Section 6.1 vectors.
