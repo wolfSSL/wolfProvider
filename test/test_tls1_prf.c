@@ -19,6 +19,7 @@
  */
 
 #include "unit.h"
+#include <openssl/err.h>
 
 #ifdef WP_HAVE_TLS1_PRF
 
@@ -531,7 +532,23 @@ int test_tls1_prf(void *data)
 
     (void)data;
 
-#ifdef WP_HAVE_MD5_SHA1
+#ifdef WP_FIPS_DENY_LEGACY
+    {
+        unsigned char key[32];
+        EVP_MD* md;
+
+        /* MD5-SHA1 must remain unusable after metadata discovery succeeds. */
+        ERR_clear_error();
+        md = EVP_MD_fetch(wpLibCtx, "MD5-SHA1", "provider=wolfprov");
+        err = (md == NULL) || (ERR_peek_error() != 0);
+        if (err == 0) {
+            err = (test_tls1_prf_calc(wpLibCtx, key, sizeof(key), md) == 0) ||
+                (ERR_peek_error() == 0);
+        }
+        ERR_clear_error();
+        EVP_MD_free(md);
+    }
+#elif defined(WP_HAVE_MD5_SHA1)
     err = test_tls1_prf_md(EVP_md5_sha1());
 #endif
 #ifdef WP_HAVE_SHA256

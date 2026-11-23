@@ -295,11 +295,31 @@ Always use `--distclean` when switching between production and testing builds:
 
 | Category | Algorithms |
 |----------|------------|
-| Digests | MD5, SHA-1 (signing), BLAKE2, SM3 |
+| Digests | MD5, MD5-SHA1, SHA-1 (signing), BLAKE2, SM3 |
 | Symmetric | DES, 3DES, ChaCha20, RC4 |
 | Asymmetric | RSA < 2048, DSA, Ed25519/Ed448 |
 | Key Exchange | X25519/X448, DH (MODP) |
 | Curves | P-192 |
+
+In a default FIPS build, wolfProvider registers MD5, MD5-SHA1, and
+DES-EDE3-CBC (3DES), including their aliases, with `fips=yes`. Fetches and
+metadata queries succeed, but cryptographic use raises an error. These entries
+claim the names for rejection; they do not provide approved cryptographic
+services. The MD5 restriction also applies to wolfProvider KDF paths.
+
+Encrypted-key import is restricted to PBES2/PBKDF2 with AES-CBC and a SHA-based
+PRF. Keys encrypted with DES/3DES, MD5-based password schemes, and traditional
+encrypted PEM are rejected before decryption. Traditional encrypted PEM uses
+MD5 for key derivation even when its cipher is AES.
+
+A successful fetch is therefore not a capability check for these algorithms.
+Configure applications for TLS 1.2 or later and exclude 3DES cipher suites.
+Legacy TLS availability checks can accept the metadata and fail later when
+the handshake attempts to use a denied algorithm.
+
+Defining `WP_ALLOW_NON_FIPS` when building wolfProvider explicitly opts out of
+these restrictions, provided the underlying wolfCrypt algorithms are compiled
+in. This override is disabled by default and permits non-FIPS operations.
 
 ---
 
