@@ -79,12 +79,12 @@ jobs:
             openssl_ref: master
           - CC: clang-14
             CXX: clang++-14
-            OS: ubuntu-latest
+            OS: ubuntu-24.04
             wolfssl_ref: master
             openssl_ref: master
           - CC: clang-15
             CXX: clang++-15
-            OS: ubuntu-latest
+            OS: ubuntu-24.04
             wolfssl_ref: master
             openssl_ref: master
           # v5.8.4-stable representative coverage (back-compat for the
@@ -97,7 +97,7 @@ jobs:
             openssl_ref: master
           - CC: clang-14
             CXX: clang++-14
-            OS: ubuntu-latest
+            OS: ubuntu-24.04
             wolfssl_ref: v5.8.4-stable
             openssl_ref: master
     steps:
