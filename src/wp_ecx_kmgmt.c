@@ -2412,7 +2412,9 @@ static int wp_ecx_encode(wp_EcxEncDecCtx* ctx, OSSL_CORE_BIO *cBio,
     }
 
     if (ok) {
+        PRIVATE_KEY_UNLOCK();
         rc = ctx->encode((void*)&ecx->key, derData, sizeof(derData));
+        PRIVATE_KEY_LOCK();
         if (rc <= 0) {
             ok = 0;
         }

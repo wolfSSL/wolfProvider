@@ -33,6 +33,9 @@
 #ifndef WC_MIN_DIGEST_SIZE
 #define WC_MIN_DIGEST_SIZE 20
 #endif
+#ifndef WC_MIN_DIGEST_SIZE_FOR_SIGN
+#define WC_MIN_DIGEST_SIZE_FOR_SIGN WC_MIN_DIGEST_SIZE
+#endif
 
 #ifdef WP_HAVE_ECC
 
@@ -879,7 +882,13 @@ int test_ecdh_x25519_keygen(void *data)
 {
     (void)data;
 
+#ifdef WP_TEST_FIPS_V7
+    /* FIPS v7 allows X25519 only inside X25519MLKEM768. */
+    PRINT_MSG("FIPS v7 refuses a standalone X25519 derive.");
+    return test_ecdh_keygen(NID_undef, "X25519", 32) == 0;
+#else
     return test_ecdh_keygen(NID_undef, "X25519", 32);
+#endif
 }
 #endif /* WP_HAVE_X25519 */
 
@@ -1507,6 +1516,7 @@ int test_ecdh_p521(void *data)
 #endif /* WP_HAVE_EC_P521 */
 
 #ifdef WP_HAVE_X25519
+#ifndef WOLFSSL_CURVE25519_BLINDING
 /* RFC 7748 Section 6.1 X25519 test vectors. */
 static const unsigned char x25519_alice_priv[] = {
     0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d,
@@ -1526,6 +1536,7 @@ static const unsigned char x25519_shared_secret[] = {
     0xe0, 0x7e, 0x21, 0xc9, 0x47, 0xd1, 0x9e, 0x33,
     0x76, 0xf0, 0x9b, 0x3c, 0x1e, 0x16, 0x17, 0x42
 };
+#endif
 
 /*
  * X25519 known-answer ECDH test using RFC 7748 Section 6.1 vectors.
@@ -1881,6 +1892,10 @@ int test_ecdsa_p192_pkey(void *data)
         PRINT_MSG("Verify with wolfprovider");
         err = test_pkey_verify_ecc(pkey, wpLibCtx, buf, sizeof(buf), ecdsaSig,
                                    ecdsaSigLen);
+#ifdef WP_TEST_FIPS_V7
+        PRINT_MSG("FIPS v7 refuses P-192 verify.");
+        err = err == 0;
+#endif
     }
     if (err == 0) {
         PRINT_MSG("Verify bad signature with wolfprovider");
@@ -1928,7 +1943,7 @@ int test_ecdsa_p224_pkey(void *data)
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[64];
     size_t ecdsaSigLen;
-    unsigned char buf[20];
+    unsigned char buf[32];
     const unsigned char *p = ecc_key_der_224;
 
     (void)data;
@@ -1983,7 +1998,7 @@ int test_ecdsa_p256_pkey(void *data)
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[80];
     size_t ecdsaSigLen;
-    unsigned char buf[20];
+    unsigned char buf[32];
     const unsigned char *p = ecc_key_der_256;
 
     (void)data;
@@ -2032,12 +2047,15 @@ int test_ecdsa_p256_pkey(void *data)
 /* Raw EVP_PKEY_verify must reject inputs below WC_MIN_DIGEST_SIZE. */
 int test_ecdsa_verify_undersized_hash(void *data)
 {
-    /* Boundaries track WC_MIN_DIGEST_SIZE so the assertions stay valid for
-     * whatever hash set the wolfSSL build enabled (typically 20 for SHA-1,
-     * but 16 when MD5 is on or 28+ in FIPS 186-5 builds). */
+    /* Verify tracks WC_MIN_DIGEST_SIZE (20, or 16 with MD5). Sign tracks
+     * WC_MIN_DIGEST_SIZE_FOR_SIGN, which FIPS 186-5 builds raise to 28. */
     static const size_t sizes[]      = { 0,
                                          WC_MIN_DIGEST_SIZE - 1,
                                          WC_MIN_DIGEST_SIZE,
+                                         WC_MAX_DIGEST_SIZE };
+    static const size_t signSizes[]  = { 0,
+                                         WC_MIN_DIGEST_SIZE_FOR_SIGN - 1,
+                                         WC_MIN_DIGEST_SIZE_FOR_SIGN,
                                          WC_MAX_DIGEST_SIZE };
     static const int    expectFail[] = { 1, 1, 0, 0 };
     int err;
@@ -2068,14 +2086,15 @@ int test_ecdsa_verify_undersized_hash(void *data)
         }
     }
 
-    /* Same minimum applies on the sign side: wolfProvider must refuse to
-     * produce a raw signature it would later refuse to verify. */
-    for (i = 0; (err == 0) && (i < sizeof(sizes)/sizeof(sizes[0])); i++) {
+    /* Sign side: wolfProvider must refuse a raw input below the sign
+     * minimum. */
+    for (i = 0; (err == 0) && (i < sizeof(signSizes)/sizeof(signSizes[0]));
+            i++) {
         int signErr;
-        PRINT_MSG("sign tbsLen=%zu", sizes[i]);
+        PRINT_MSG("sign tbsLen=%zu", signSizes[i]);
         ecdsaSigLen = sizeof(ecdsaSig);
-        signErr = test_pkey_sign_ecc(pkey, wpLibCtx, buf, sizes[i], ecdsaSig,
-                                     &ecdsaSigLen);
+        signErr = test_pkey_sign_ecc(pkey, wpLibCtx, buf, signSizes[i],
+                                     ecdsaSig, &ecdsaSigLen);
         err = (signErr != 0) != expectFail[i];
     }
 
@@ -2180,7 +2199,7 @@ int test_ecdsa_p384_pkey(void *data)
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[120];
     size_t ecdsaSigLen;
-    unsigned char buf[20];
+    unsigned char buf[32];
     const unsigned char *p = ecc_key_der_384;
 
     (void)data;
@@ -2235,7 +2254,7 @@ int test_ecdsa_p521_pkey(void *data)
     EVP_PKEY *pkey = NULL;
     unsigned char ecdsaSig[163];
     size_t ecdsaSigLen;
-    unsigned char buf[20];
+    unsigned char buf[32];
     const unsigned char *p = ecc_key_der_521;
 
     (void)data;
@@ -2315,6 +2334,10 @@ int test_ecdsa_p192(void *data)
         PRINT_MSG("Verify with wolfprovider");
         err = test_digest_verify(pkey, wpLibCtx, buf, sizeof(buf), md, NULL,
                                 ecdsaSig, ecdsaSigLen, 0, 0);
+#ifdef WP_TEST_FIPS_V7
+        PRINT_MSG("FIPS v7 refuses P-192 verify.");
+        err = err == 0;
+#endif
     }
     if (err == 0) {
         PRINT_MSG("Verify bad signature with wolfprovider");

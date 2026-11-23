@@ -59,6 +59,12 @@
     #define WP_HAVE_EPKI_TEST
 #endif
 
+/* FIPS v7 modules: tests expect the v7 refusals. */
+#if defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION_MAJOR) && \
+    (HAVE_FIPS_VERSION_MAJOR >= 7)
+    #define WP_TEST_FIPS_V7
+#endif
+
 /* test_slhdsa.c selects a representative set and falls back to any enabled
  * set when a custom wolfSSL build enables only one parameter set. */
 #if defined(WP_HAVE_SLH_DSA_SHA2_128F) || \
@@ -284,6 +290,8 @@ int test_aes256_gcm(void *data);
 int test_aes128_gcm_fixed(void *data);
 int test_aes128_gcm_tls(void *data);
 int test_aes_gcm_tls_multi_record(void *data);
+int test_aes_gcm_iv_gen_multi(void *data);
+int test_aes_gcm_iv_gen_reuse(void *data);
 int test_aes128_gcm_set_iv_inv(void *data);
 int test_aes128_gcm_key_then_iv(void *data);
 int test_aes_gcm_bad_tag(void *data);

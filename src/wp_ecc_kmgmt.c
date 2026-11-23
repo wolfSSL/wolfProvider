@@ -2856,7 +2856,9 @@ static int wp_ecc_encode_priv(const wp_Ecc *ecc, unsigned char* keyData,
 
     WOLFPROV_ENTER(WP_LOG_COMP_ECC, "wp_ecc_encode_priv");
 
+    PRIVATE_KEY_UNLOCK();
     rc = wc_EccKeyToDer((ecc_key*)&ecc->key, keyData, len);
+    PRIVATE_KEY_LOCK();
     if (rc <= 0) {
         ok = 0;
     }

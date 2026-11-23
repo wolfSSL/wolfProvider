@@ -1341,6 +1341,246 @@ int test_aes_gcm_tls_multi_record(void *data)
 
 /******************************************************************************/
 
+/* IV-fixed then IV-gen per message on one context: each IV keeps the fixed
+ * field, differs from every earlier one and decrypts with OpenSSL. */
+int test_aes_gcm_iv_gen_multi(void *data)
+{
+    int err;
+    int i;
+    int j;
+    int outLen;
+    unsigned char msg[] = "Test pattern";
+    unsigned char aad[] = "AAD";
+    unsigned char key[16];
+    unsigned char fixed[EVP_GCM_TLS_FIXED_IV_LEN];
+    unsigned char iv[8][12];
+    unsigned char enc[sizeof(msg)];
+    unsigned char tag[AES_BLOCK_SIZE];
+    unsigned char dec[sizeof(msg)];
+    int numIv = (int)(sizeof(iv) / sizeof(iv[0]));
+    EVP_CIPHER* ocipher = NULL;
+    EVP_CIPHER* wcipher = NULL;
+    EVP_CIPHER_CTX* ctx = NULL;
+
+    (void)data;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-GCM", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+    if (err == 0) {
+        err = (RAND_bytes(key, (int)sizeof(key)) != 1) ||
+              (RAND_bytes(fixed, (int)sizeof(fixed)) != 1);
+    }
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, wcipher, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                                  (int)sizeof(fixed), fixed) != 1;
+    }
+
+    for (i = 0; (err == 0) && (i < numIv); i++) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_IV_GEN,
+                                  (int)sizeof(iv[i]), iv[i]) != 1;
+        if (err == 0) {
+            PRINT_BUFFER("IV", iv[i], sizeof(iv[i]));
+            err = memcmp(iv[i], fixed, sizeof(fixed)) != 0;
+        }
+        for (j = 0; (err == 0) && (j < i); j++) {
+            err = memcmp(iv[i], iv[j], sizeof(iv[i])) == 0;
+        }
+        if (err == 0) {
+            err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                    (int)strlen((char *)aad)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptUpdate(ctx, enc, &outLen, msg,
+                                    (int)sizeof(msg)) != 1;
+        }
+        if (err == 0) {
+            err = EVP_EncryptFinal_ex(ctx, enc + outLen, &outLen) != 1;
+        }
+        if (err == 0) {
+            err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG,
+                                      (int)sizeof(tag), tag) != 1;
+        }
+        if (err == 0) {
+            PRINT_MSG("Decrypt with OpenSSL - message %d", i);
+            err = test_aes_tag_dec(ocipher, key, iv[i], (int)sizeof(iv[i]),
+                                   aad, msg, (int)sizeof(msg), enc, tag, dec,
+                                   0, 0);
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+/******************************************************************************/
+
+/* An IV from IV-gen is not handed out again after an abandoned message, the
+ * same key set again, or a switch to decrypt and back (which may fail). */
+int test_aes_gcm_iv_gen_reuse(void *data)
+{
+    int err;
+    int i;
+    int outLen;
+    unsigned char msg[] = "Test pattern";
+    unsigned char aad[] = "AAD";
+    unsigned char tlsAad[EVP_AEAD_TLS1_AAD_LEN] = {0,};
+    unsigned char key[16];
+    unsigned char fixed[EVP_GCM_TLS_FIXED_IV_LEN];
+    unsigned char iv[4][12];
+    unsigned char rec[48];
+    unsigned char enc[sizeof(msg)];
+    unsigned char tag[AES_BLOCK_SIZE];
+    unsigned char dec[sizeof(msg)];
+    EVP_CIPHER* ocipher = NULL;
+    EVP_CIPHER* wcipher = NULL;
+    EVP_CIPHER_CTX* ctx = NULL;
+
+    (void)data;
+
+    tlsAad[8]  = 23;
+    tlsAad[9]  = 3;
+    tlsAad[10] = 3;
+    tlsAad[12] = sizeof(rec) - EVP_GCM_TLS_TAG_LEN;
+
+    ocipher = EVP_CIPHER_fetch(osslLibCtx, "AES-128-GCM", "");
+    wcipher = EVP_CIPHER_fetch(wpLibCtx, "AES-128-GCM", "");
+    err = (ocipher == NULL) || (wcipher == NULL);
+    if (err == 0) {
+        err = (RAND_bytes(key, (int)sizeof(key)) != 1) ||
+              (RAND_bytes(fixed, (int)sizeof(fixed)) != 1);
+    }
+    if (err == 0) {
+        err = (ctx = EVP_CIPHER_CTX_new()) == NULL;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit(ctx, wcipher, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IV_FIXED,
+                                  (int)sizeof(fixed), fixed) != 1;
+    }
+
+    /* Message 0 produces ciphertext and is abandoned before final. */
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_IV_GEN,
+                                  (int)sizeof(iv[0]), iv[0]) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, enc, &outLen, msg, (int)sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, NULL) != 1;
+    }
+
+    /* Message 1 needs a new IV and still decrypts. */
+    if (err == 0) {
+        PRINT_MSG("IV-gen after an abandoned message");
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_IV_GEN,
+                                  (int)sizeof(iv[1]), iv[1]) != 1;
+    }
+    if (err == 0) {
+        PRINT_BUFFER("IV 0", iv[0], sizeof(iv[0]));
+        PRINT_BUFFER("IV 1", iv[1], sizeof(iv[1]));
+        err = memcmp(iv[0], iv[1], sizeof(iv[0])) == 0;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)strlen((char *)aad)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, enc, &outLen, msg, (int)sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, enc + outLen, &outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG,
+                                  (int)sizeof(tag), tag) != 1;
+    }
+    if (err == 0) {
+        err = test_aes_tag_dec(ocipher, key, iv[1], (int)sizeof(iv[1]), aad,
+                               msg, (int)sizeof(msg), enc, tag, dec, 0, 0);
+    }
+
+    /* Message 2 after the same key is set again needs a new IV. */
+    if (err == 0) {
+        PRINT_MSG("IV-gen after the same key is set again");
+        err = EVP_EncryptInit_ex(ctx, NULL, NULL, key, NULL) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_IV_GEN,
+                                  (int)sizeof(iv[2]), iv[2]) != 1;
+    }
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        err = memcmp(iv[2], iv[i], sizeof(iv[2])) == 0;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, NULL, &outLen, aad,
+                                (int)strlen((char *)aad)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptUpdate(ctx, enc, &outLen, msg, (int)sizeof(msg)) != 1;
+    }
+    if (err == 0) {
+        err = EVP_EncryptFinal_ex(ctx, enc + outLen, &outLen) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG,
+                                  (int)sizeof(tag), tag) != 1;
+    }
+    if (err == 0) {
+        err = test_aes_tag_dec(ocipher, key, iv[2], (int)sizeof(iv[2]), aad,
+                               msg, (int)sizeof(msg), enc, tag, dec, 0, 0);
+    }
+
+    /* Switch to decrypt and back with no new key or IV. */
+    if (err == 0) {
+        PRINT_MSG("IV-gen and TLS record after decrypt init");
+        err = EVP_CipherInit_ex(ctx, NULL, NULL, NULL, NULL, 0) != 1;
+    }
+    if (err == 0) {
+        err = EVP_CipherInit_ex(ctx, NULL, NULL, NULL, NULL, 1) != 1;
+    }
+    if ((err == 0) && (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_IV_GEN,
+            (int)sizeof(iv[3]), iv[3]) == 1)) {
+        PRINT_BUFFER("IV 3", iv[3], sizeof(iv[3]));
+        for (i = 0; (err == 0) && (i < 3); i++) {
+            err = memcmp(iv[3], iv[i], sizeof(iv[3])) == 0;
+        }
+    }
+    if (err == 0) {
+        memset(rec, 0, sizeof(rec));
+        memcpy(rec + EVP_GCM_TLS_EXPLICIT_IV_LEN, msg, sizeof(msg));
+    }
+    if ((err == 0) && (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_TLS1_AAD,
+            EVP_AEAD_TLS1_AAD_LEN, tlsAad) == EVP_GCM_TLS_TAG_LEN) &&
+            (EVP_CipherUpdate(ctx, rec, &outLen, rec, (int)sizeof(rec)) == 1)) {
+        PRINT_BUFFER("Explicit IV", rec, EVP_GCM_TLS_EXPLICIT_IV_LEN);
+        for (i = 0; (err == 0) && (i < 3); i++) {
+            err = memcmp(rec, iv[i] + EVP_GCM_TLS_FIXED_IV_LEN,
+                         EVP_GCM_TLS_EXPLICIT_IV_LEN) == 0;
+        }
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_free(wcipher);
+    EVP_CIPHER_free(ocipher);
+
+    return err;
+}
+
+/******************************************************************************/
+
 /* Test that OSSL_CIPHER_PARAM_AEAD_TLS1_SET_IV_INV correctly sets the
  * explicit/random portion of the IV on the decrypt side via the OSSL_PARAM
  * interface. This exercises the fix in wp_aead_set_ctx_params where the
