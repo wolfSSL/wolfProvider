@@ -531,9 +531,10 @@ int test_tls1_prf(void *data)
 
     (void)data;
 
-#ifdef WP_HAVE_MD5_SHA1
+#if defined(WP_HAVE_MD5_SHA1) && \
+    (!defined(HAVE_FIPS) || defined(WP_ALLOW_NON_FIPS))
     err = test_tls1_prf_md(EVP_md5_sha1());
-#endif
+#endif /* WP_HAVE_MD5_SHA1 && (!HAVE_FIPS || WP_ALLOW_NON_FIPS) */
 #ifdef WP_HAVE_SHA256
     if (err == 0) {
         err = test_tls1_prf_md(EVP_sha256());

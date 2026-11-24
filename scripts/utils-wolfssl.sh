@@ -202,7 +202,7 @@ install_wolfssl() {
         printf "\tConfigure wolfSSL ${WOLFSSL_TAG} ... "
 
         ./autogen.sh >>$LOG_FILE 2>&1
-        CONF_ARGS="-prefix=${WOLFSSL_INSTALL_DIR}"
+        CONF_ARGS="-prefix=${WOLFSSL_INSTALL_DIR} ${WOLFSSL_EXTRA_CONFIG_OPTS}"
 
         if [ "$WOLFPROV_DEBUG" = "1" ]; then
             CONF_ARGS+=" --enable-debug --enable-keylog-export"

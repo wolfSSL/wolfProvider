@@ -46,6 +46,7 @@ show_help() {
   echo "  WOLFSSL_ISFIPS             If set to 1, clones a wolfSSL FIPS bundle from GitHub"
   echo "  WOLFSSL_FIPS_BUNDLE        Directory containing the wolfSSL FIPS bundle to use instead of cloning from GitHub"
   echo "  WOLFSSL_FIPS_CHECK_TAG     Tag for wolfSSL FIPS bundle (v5.2.1, v5.2.4, linuxv5.2.1, v6.0.0, ready, etc). Automatically determines configure option (default: v5.2.4)"
+  echo "  WOLFSSL_EXTRA_CONFIG_OPTS  Extra wolfSSL configure options added to the defaults (e.g., --enable-des3)"
   echo "  WOLFPROV_CLEAN             If set to 1, run make clean in OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DISTCLEAN         If set to 1, remove the source and install directories of OpenSSL, wolfSSL, and wolfProvider"
   echo "  WOLFPROV_DEBUG             If set to 1, builds OpenSSL, wolfSSL, and wolfProvider with debug options enabled"

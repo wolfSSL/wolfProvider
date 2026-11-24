@@ -74,6 +74,17 @@
 #define WP_DH_MIN_BITS          1024
 #endif
 
+/* Fallbacks for digest minimums that older wolfSSL versions lack. */
+#ifndef WC_MIN_DIGEST_SIZE
+#define WC_MIN_DIGEST_SIZE              20
+#endif /* !WC_MIN_DIGEST_SIZE */
+#ifndef WC_MIN_DIGEST_SIZE_FOR_SIGN
+#define WC_MIN_DIGEST_SIZE_FOR_SIGN     WC_MIN_DIGEST_SIZE
+#endif /* !WC_MIN_DIGEST_SIZE_FOR_SIGN */
+#ifndef WC_MIN_DIGEST_SIZE_FOR_VERIFY
+#define WC_MIN_DIGEST_SIZE_FOR_VERIFY   WC_MIN_DIGEST_SIZE
+#endif /* !WC_MIN_DIGEST_SIZE_FOR_VERIFY */
+
 /* DER key encoding/decoding formats. */
 /** SubjectPublicKeyInfo encoding format. */
 #define WP_ENC_FORMAT_SPKI              1

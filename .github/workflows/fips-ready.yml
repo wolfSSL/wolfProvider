@@ -64,7 +64,7 @@ jobs:
   fips_ready_test:
     needs: [discover_versions, require_fips_resolved]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})
+    name: FIPS Ready ${{ matrix.wolfssl_bundle_ref }} (${{ matrix.openssl_ref }})${{ matrix.wolfssl_extra_opts != '' && format(' {0}', matrix.wolfssl_extra_opts) || '' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -75,7 +75,13 @@ jobs:
       matrix:
         wolfssl_bundle_ref: ${{ fromJson(needs.discover_versions.outputs.fips_ready_pr_array) }}
         openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_latest_ref_array) }}
+        wolfssl_extra_opts: [ '' ]
         # force_fail collapsed into sequential runs in the test step
+        include:
+          # DES3 also enables MD5, so non-FIPS algorithms are in the build
+          - wolfssl_bundle_ref: ${{ needs.discover_versions.outputs.fips_ready_latest }}
+            openssl_ref: ${{ needs.discover_versions.outputs.openssl_latest_ref }}
+            wolfssl_extra_opts: '--enable-des3'
     steps:
       - name: Checkout wolfProvider
         uses: actions/checkout@v4
@@ -92,7 +98,7 @@ jobs:
           # The build below sets WOLFPROV_FIPS_FORCE_FAIL, which adds
           # -DHAVE_FORCE_FIPS_FAILURE to the wolfSSL build; key the cached
           # install on it so a wolfSSL built without the define is never reused.
-          extra_key: forcefail
+          extra_key: forcefail${{ matrix.wolfssl_extra_opts }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download FIPS Ready Bundle
@@ -107,6 +113,7 @@ jobs:
           # flag) that enables HAVE_FORCE_FIPS_FAILURE for the fips_status test.
           OPENSSL_TAG=${{ matrix.openssl_ref }} \
           WOLFPROV_FIPS_FORCE_FAIL=1 \
+          WOLFSSL_EXTRA_CONFIG_OPTS="${{ matrix.wolfssl_extra_opts }}" \
           ./scripts/build-wolfprovider.sh --fips-bundle="$FIPS_BUNDLE_PATH" \
           --fips-check=ready --wolfssl-ver=v${{matrix.wolfssl_bundle_ref}}-stable
 

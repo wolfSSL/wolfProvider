@@ -32,13 +32,6 @@
 
 #ifdef WP_HAVE_ECDSA
 
-/* WC_MIN_DIGEST_SIZE was introduced in wolfSSL v5.9.1. Fall back to the
- * SHA-1 digest size on older releases so the raw-ECDSA minimum matches the
- * behavior FIPS 186-4 requires. */
-#ifndef WC_MIN_DIGEST_SIZE
-#define WC_MIN_DIGEST_SIZE 20
-#endif
-
 /**
  * ECDSA signature context.
  *
@@ -291,7 +284,7 @@ static int wp_ecdsa_sign(wp_EcdsaSigCtx *ctx, unsigned char *sig,
             ok = 0;
         }
         else if ((hashType == WC_HASH_TYPE_NONE) &&
-                 (tbsLen < WC_MIN_DIGEST_SIZE)) {
+                 (tbsLen < WC_MIN_DIGEST_SIZE_FOR_SIGN)) {
             ok = 0;
         }
         else if ((ok = wp_ecc_check_usage(ctx->ecc))) {
@@ -391,7 +384,7 @@ static int wp_ecdsa_verify(wp_EcdsaSigCtx *ctx, const unsigned char *sig,
             ok = 0;
         }
         else if ((hashType == WC_HASH_TYPE_NONE) &&
-                 (tbsLen < WC_MIN_DIGEST_SIZE)) {
+                 (tbsLen < WC_MIN_DIGEST_SIZE_FOR_VERIFY)) {
             ok = 0;
         }
         else if ((!WP_FITS_WORD32(sigLen)) || (!WP_FITS_WORD32(tbsLen))) {
