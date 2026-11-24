@@ -1,0 +1,127 @@
+name: Mosquitto Tests
+
+
+on:
+  workflow_call:
+    inputs:
+      wolfssl_refs_json:
+        description: "JSON array of wolfssl refs to test; empty = use discover_versions output"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch: {}
+
+jobs:
+  discover_versions:
+    uses: ./.github/workflows/_discover-versions.yml
+
+  build_wolfprovider:
+    needs: discover_versions
+    uses: ./.github/workflows/build-wolfprovider.yml
+    with:
+      wolfssl_ref: ${{ matrix.wolfssl_ref }}
+      openssl_ref: ${{ matrix.openssl_ref }}
+      fips_ref: ${{ matrix.fips_ref }}
+      replace_default: ${{ matrix.replace_default }}
+    strategy:
+      fail-fast: false
+      matrix:
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        replace_default: [ true ]
+
+  test_mosquitto:
+    runs-on: ubuntu-22.04
+    needs: [build_wolfprovider, discover_versions]
+    container:
+      image: ghcr.io/wolfssl/wolfprovider-test-deps:bookworm
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mosquitto_ref: [ 'v2.1.2' ]
+        wolfssl_ref: ${{ inputs.wolfssl_refs_json != '' && fromJson(inputs.wolfssl_refs_json) || fromJson(needs.discover_versions.outputs.wolfssl_ref_array) }}
+        openssl_ref: ${{ fromJson(needs.discover_versions.outputs.openssl_ref_array) }}
+        fips_ref: [ 'FIPS', 'non-FIPS' ]
+        force_fail: ['WOLFPROV_FORCE_FAIL=1', '']
+        replace_default: [ true ]
+    env:
+      WOLFSSL_PACKAGES_PATH: /tmp/wolfssl-packages
+      OPENSSL_PACKAGES_PATH: /tmp/openssl-packages
+      WOLFPROV_PACKAGES_PATH: /tmp/wolfprov-packages
+      # Leave out optional features whose libraries are not in the image
+      MOSQ_OPTS: >-
+        WITH_DOCS=no WITH_WEBSOCKETS=no WITH_EDITLINE=no WITH_SQLITE=no
+        WITH_HTTP_API=no WITH_ARGON2=no
+    steps:
+      - name: Checkout wolfProvider
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download packages from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: debian-packages-${{ matrix.fips_ref }}${{ matrix.replace_default && '-replace-default' || '' }}-${{ matrix.wolfssl_ref }}-${{ matrix.openssl_ref }}
+          path: /tmp
+
+      - name: Install wolfSSL/OpenSSL/wolfprov packages
+        run: |
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFSSL_PACKAGES_PATH }}/libwolfssl_*.deb
+
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/openssl_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl3_*.deb \
+            ${{ env.OPENSSL_PACKAGES_PATH }}/libssl-dev_*.deb
+
+          apt install --reinstall -y --allow-downgrades --allow-change-held-packages \
+            ${{ env.WOLFPROV_PACKAGES_PATH }}/libwolfprov_*.deb
+
+          # Keep later apt installs from replacing the wolfprov-patched libssl3
+          apt-mark hold libssl3 libssl-dev openssl libwolfssl libwolfprov
+
+      - name: Verify wolfProvider is properly installed
+        run: |
+          $GITHUB_WORKSPACE/scripts/verify-install.sh \
+            ${{ matrix.replace_default && '--replace-default' || '' }} \
+            ${{ matrix.fips_ref == 'FIPS' && '--fips' || '' }}
+
+      - name: Checkout mosquitto
+        uses: actions/checkout@v4
+        with:
+          repository: eclipse-mosquitto/mosquitto
+          path: mosquitto
+          ref: ${{ matrix.mosquitto_ref }}
+
+      - name: Build mosquitto
+        working-directory: mosquitto
+        run: |
+          make -j $MOSQ_OPTS binary
+          make -C test/broker $MOSQ_OPTS test-compile
+
+      - name: Run mosquitto TLS tests
+        working-directory: mosquitto
+        shell: bash
+        run: |
+          set +o pipefail # keep -e from aborting before PIPESTATUS is read
+
+          # Non-root, so the broker does not drop privileges and lose file access
+          useradd --create-home mosqtest
+          chown -R mosqtest .
+          cd test/broker
+
+          if [ -n "${{ matrix.force_fail }}" ]; then
+            # The other tests use Python TLS, which force fail breaks first
+            TESTS=./08-tls-psk-pub.py
+          else
+            # Group 08 is the broker TLS and TLS-PSK tests
+            TESTS="make 08"
+          fi
+          runuser -u mosqtest -- env ${{ matrix.force_fail }} $TESTS \
+            2>&1 | tee mosquitto-test.log
+          TEST_RESULT=${PIPESTATUS[0]}
+          $GITHUB_WORKSPACE/.github/scripts/check-workflow-result.sh $TEST_RESULT ${{ matrix.force_fail }} mosquitto
