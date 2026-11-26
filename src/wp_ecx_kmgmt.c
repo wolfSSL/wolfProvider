@@ -538,18 +538,19 @@ static int wp_ecx_set_params(wp_Ecx* ecx, const OSSL_PARAM params[])
     return ok;
 }
 
+#if defined(WP_HAVE_X25519) || defined(WP_HAVE_X448)
 /**
- * Return an array of supported gettable parameters for the ECX key object.
+ * Return an array of supported gettable parameters for the X25519/X448 key.
  *
  * @param [in] provCtx  Provider context object. Unused.
  * @return  Array of parameters with data type.
  */
-static const OSSL_PARAM* wp_ecx_gettable_params(WOLFPROV_CTX* provCtx)
+static const OSSL_PARAM* wp_ecx_x_gettable_params(WOLFPROV_CTX* provCtx)
 {
     /**
-     * Supported gettable parameters for ECX key object.
+     * Supported gettable parameters for X25519/X448 key object.
      */
-    static const OSSL_PARAM wp_ecx_supported_gettable_params[] = {
+    static const OSSL_PARAM wp_ecx_x_supported_gettable_params[] = {
         OSSL_PARAM_int(OSSL_PKEY_PARAM_BITS, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
         OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
@@ -559,8 +560,36 @@ static const OSSL_PARAM* wp_ecx_gettable_params(WOLFPROV_CTX* provCtx)
         OSSL_PARAM_END
     };
     (void)provCtx;
-    return wp_ecx_supported_gettable_params;
+    return wp_ecx_x_supported_gettable_params;
 }
+#endif
+
+#if defined(WP_HAVE_ED25519) || defined(WP_HAVE_ED448)
+/**
+ * Return an array of supported gettable parameters for the Ed25519/Ed448 key.
+ *
+ * @param [in] provCtx  Provider context object. Unused.
+ * @return  Array of parameters with data type.
+ */
+static const OSSL_PARAM* wp_ecx_ed_gettable_params(WOLFPROV_CTX* provCtx)
+{
+    /**
+     * Supported gettable parameters for Ed25519/Ed448 key object.
+     */
+    static const OSSL_PARAM wp_ecx_ed_supported_gettable_params[] = {
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_SECURITY_BITS, NULL),
+        OSSL_PARAM_int(OSSL_PKEY_PARAM_MAX_SIZE, NULL),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_ENCODED_PUBLIC_KEY, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, NULL, 0),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0),
+        OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_MANDATORY_DIGEST, NULL, 0),
+        OSSL_PARAM_END
+    };
+    (void)provCtx;
+    return wp_ecx_ed_supported_gettable_params;
+}
+#endif
 
 /**
  * Get the security bits for an ECX key.
@@ -727,6 +756,14 @@ static int wp_ecx_get_params(wp_Ecx* ecx, OSSL_PARAM params[])
     }
     if (ok && (!wp_ecx_get_params_priv_key(ecx, params))) {
         ok = 0;
+    }
+    if (ok && ((ecx->data->keyType == WP_KEY_TYPE_ED25519) ||
+            (ecx->data->keyType == WP_KEY_TYPE_ED448))) {
+        /* Pure EdDSA: no digest. */
+        p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_MANDATORY_DIGEST);
+        if ((p != NULL) && !OSSL_PARAM_set_utf8_string(p, "")) {
+            ok = 0;
+        }
     }
 
     WOLFPROV_LEAVE(WP_LOG_COMP_KE, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);
@@ -1507,7 +1544,7 @@ const OSSL_DISPATCH wp_##alg##_keymgmt_functions[] = {                         \
     { OSSL_FUNC_KEYMGMT_LOAD,        (DFUNC)wp_ecx_load                     }, \
     { OSSL_FUNC_KEYMGMT_GET_PARAMS,  (DFUNC)wp_ecx_get_params               }, \
     { OSSL_FUNC_KEYMGMT_GETTABLE_PARAMS,                                       \
-                                     (DFUNC)wp_ecx_gettable_params          }, \
+                                     (DFUNC)wp_ecx_##type##_gettable_params }, \
     { OSSL_FUNC_KEYMGMT_SET_PARAMS,  (DFUNC)wp_ecx_set_params               }, \
     { OSSL_FUNC_KEYMGMT_SETTABLE_PARAMS,                                       \
                                      (DFUNC)wp_ecx_settable_params          }, \
