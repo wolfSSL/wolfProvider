@@ -584,10 +584,44 @@ IMPLEMENT_DIGEST(wp_sha3_512, wc_Sha3,
  * XOF
  ******************************************************************************/
 
+/** XOF is absorbing input. */
+#define WP_XOF_ABSORB       0
+/** XOF output is being squeezed. */
+#define WP_XOF_SQUEEZE      1
+/** XOF has been finalized. */
+#define WP_XOF_FINAL        2
+
+/* OpenSSL 3.4+ SHAKE has no default output length or digest size. */
+#if OPENSSL_VERSION_NUMBER >= 0x30400000L
+    #define WP_XOF_DEFAULT_LEN(len)     SIZE_MAX
+    #define WP_XOF_SIZE(len)            0
+#else
+    #define WP_XOF_DEFAULT_LEN(len)     (len)
+    #define WP_XOF_SIZE(len)            (len)
+#endif
+
+/** Implement creating a new XOF object. */
+#define IMPLEMENT_XOF_NEWCTX(alg, name, CTX, dgstSize)                         \
+/**                                                                            \
+ * Create a new XOF context object with the default output length.             \
+ *                                                                             \
+ * @param [in] provCtx  Provider context.                                      \
+ * @return NULL on error.                                                      \
+ * @return XOF context object on success.                                      \
+ */                                                                            \
+static CTX* name##_newctx(WOLFPROV_CTX* provCtx)                               \
+{                                                                              \
+    CTX* ctx = wp_##alg##_newctx(provCtx);                                     \
+    if (ctx != NULL) {                                                         \
+        ctx->outLen = WP_XOF_DEFAULT_LEN(dgstSize);                            \
+    }                                                                          \
+    return ctx;                                                                \
+}
+
 /** Implement initialization of an XOF object. */
 #define IMPLEMENT_XOF_INIT(alg, name, CTX, init)                               \
 /**                                                                            \
- * Initialize the XOF context object.                                          \
+ * Initialize the XOF context object. Absorbing restarts; output length kept.  \
  *                                                                             \
  * @param [in]      ctx     XOF context object.                                \
  * @param [in, out] params  Parameters to be set.                              \
@@ -608,6 +642,9 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #init, rc); \
             ok = 0;                                                            \
         }                                                                      \
+        ctx->state = WP_XOF_ABSORB;                                            \
+        ctx->bufLen = 0;                                                       \
+        OPENSSL_cleanse(ctx->buf, sizeof(ctx->buf));                           \
     }                                                                          \
     if (ok && (!wp_##alg##_set_ctx_params(ctx, params))) {                     \
         ok = 0;                                                                \
@@ -616,10 +653,34 @@ static int name##_init(CTX* ctx, const OSSL_PARAM params[])                    \
     return ok;                                                                 \
 }                                                                              \
 
+/** Implement updating an XOF object with data. */
+#define IMPLEMENT_XOF_UPDATE(name, WC_CTX, CTX, upd)                           \
+IMPLEMENT_DIGEST_UPDATE(name##_absorb, WC_CTX, upd)                            \
+/**                                                                            \
+ * Update the XOF context object with data. Fails once output has started.     \
+ *                                                                             \
+ * @param [in, out] ctx    XOF context object.                                 \
+ * @param [in]      in     Data to be absorbed.                                \
+ * @param [in]      inLen  Length of data in bytes.                            \
+ * @return 1 on success.                                                       \
+ * @return 0 on failure.                                                       \
+ */                                                                            \
+static int name##_update(CTX* ctx, const unsigned char* in, size_t inLen)      \
+{                                                                              \
+    int ok = (ctx != NULL) && (ctx->state == WP_XOF_ABSORB);                   \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_update");                       \
+    if (ok) {                                                                  \
+        ok = name##_absorb_update(&ctx->obj, in, inLen);                       \
+    }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    return ok;                                                                 \
+}
+
 /** Implement finalizing an XOF object to produce output. */
 #define IMPLEMENT_XOF_FINAL(name, CTX, dgstSize, fin)                          \
 /**                                                                            \
- * Finalize the XOF operation.                                                 \
+ * Finalize the XOF operation. Fails once squeezed or finalized, or when the   \
+ * output length is unset (OpenSSL 3.4+) or larger than outSize.               \
  *                                                                             \
  * @param [in, out] ctx      XOF context object.                               \
  * @param [out]     out      Output buffer.                                    \
@@ -636,22 +697,93 @@ static int name##_final(CTX* ctx, unsigned char* out, size_t* outLen,          \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
-    if (ok && ((outSize < ctx->outLen) || (!WP_FITS_WORD32(ctx->outLen)))) {   \
+    if (ok && ((ctx->state != WP_XOF_ABSORB) || (outSize < ctx->outLen) ||     \
+            (!WP_FITS_WORD32(ctx->outLen)))) {                                 \
         ok = 0;                                                                \
     }                                                                          \
     if (ok) {                                                                  \
-        int rc = fin(&ctx->obj, out, (word32)ctx->outLen);                     \
+        int rc = (ctx->outLen == 0) ? 0 :                                      \
+            fin(&ctx->obj, out, (word32)ctx->outLen);                          \
         if (rc != 0) {                                                         \
             WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #fin, rc);   \
             ok = 0;                                                            \
         }                                                                      \
         else {                                                                 \
            *outLen = ctx->outLen;                                             \
+           ctx->state = WP_XOF_FINAL;                                         \
         }                                                                      \
     }                                                                          \
     WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
+
+#if defined(OSSL_FUNC_DIGEST_SQUEEZE) && (LIBWOLFSSL_VERSION_HEX >= 0x05005001)
+/** Implement squeezing output from an XOF object. */
+#define IMPLEMENT_XOF_SQUEEZE(name, CTX, blkSize, absorb, squeeze)             \
+/**                                                                            \
+ * Squeeze output from the XOF. Can be called repeatedly until finalized.      \
+ *                                                                             \
+ * @param [in, out] ctx      XOF context object.                               \
+ * @param [out]     out      Output buffer.                                    \
+ * @param [out]     outLen   Length of output in bytes.                        \
+ * @param [in]      outSize  Number of bytes to squeeze.                       \
+ * @return 1 on success.                                                       \
+ * @return 0 on failure.                                                       \
+ */                                                                            \
+static int name##_squeeze(CTX* ctx, unsigned char* out, size_t* outLen,        \
+    size_t outSize)                                                            \
+{                                                                              \
+    int ok = 1;                                                                \
+    int rc;                                                                    \
+    size_t len = outSize;                                                      \
+    size_t n;                                                                  \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_squeeze");                      \
+    if ((!wolfssl_prov_is_running()) || (ctx == NULL) ||                       \
+            ((len > 0) && (ctx->state == WP_XOF_FINAL))) {                     \
+        ok = 0;                                                                \
+    }                                                                          \
+    if (ok && (len > 0) && (ctx->state == WP_XOF_ABSORB)) {                    \
+        /* Pad the absorbed data; output comes from whole squeezed blocks. */  \
+        rc = absorb(&ctx->obj, ctx->buf, 0);                                   \
+        if (rc != 0) {                                                         \
+            WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #absorb, rc);       \
+            ctx->state = WP_XOF_FINAL;                                         \
+            ok = 0;                                                            \
+        }                                                                      \
+        else {                                                                 \
+            ctx->state = WP_XOF_SQUEEZE;                                       \
+            ctx->bufLen = 0;                                                   \
+        }                                                                      \
+    }                                                                          \
+    while (ok && (len > 0)) {                                                  \
+        if (ctx->bufLen == 0) {                                                \
+            rc = squeeze(&ctx->obj, ctx->buf, 1);                              \
+            if (rc != 0) {                                                     \
+                WOLFPROV_MSG_DEBUG_RETCODE(WP_LOG_LEVEL_DEBUG, #squeeze, rc);  \
+                ok = 0;                                                        \
+                break;                                                         \
+            }                                                                  \
+            ctx->bufLen = blkSize;                                             \
+        }                                                                      \
+        n = (len < ctx->bufLen) ? len : ctx->bufLen;                           \
+        XMEMCPY(out, ctx->buf + blkSize - ctx->bufLen, n);                     \
+        out += n;                                                              \
+        len -= n;                                                              \
+        ctx->bufLen -= n;                                                      \
+    }                                                                          \
+    if (ok) {                                                                  \
+        *outLen = outSize;                                                     \
+    }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    return ok;                                                                 \
+}
+/** Dispatch table entry for squeezing. */
+#define WP_XOF_SQUEEZE_FUNC(name)                                              \
+    { OSSL_FUNC_DIGEST_SQUEEZE,           (DFUNC)name##_squeeze             },
+#else
+#define IMPLEMENT_XOF_SQUEEZE(name, CTX, blkSize, absorb, squeeze)
+#define WP_XOF_SQUEEZE_FUNC(name)
+#endif
 
 /** Implement disposing of an XOF object. */
 #define IMPLEMENT_XOF_FREECTX(name, CTX, free)                                 \
@@ -694,6 +826,9 @@ static CTX* name##_dupctx(CTX* src)                                            \
         }                                                                      \
         else {                                                                 \
             dst->outLen = src->outLen;                                         \
+            dst->state = src->state;                                           \
+            dst->bufLen = src->bufLen;                                         \
+            XMEMCPY(dst->buf, src->buf, sizeof(dst->buf));                     \
         }                                                                      \
     }                                                                          \
     return dst;                                                                \
@@ -716,30 +851,68 @@ static int name##_set_ctx_params(CTX* ctx, const OSSL_PARAM params[])          \
     if (!wolfssl_prov_is_running()) {                                          \
         ok = 0;                                                                \
     }                                                                          \
-    if (ok && (params != NULL) && (!wp_params_get_size_t(params,               \
-                OSSL_DIGEST_PARAM_XOFLEN, &ctx->outLen))) {                    \
+    if (ok && (params != NULL)) {                                              \
+        /* Size is an alias of XOF length. */                                  \
+        const OSSL_PARAM* p = OSSL_PARAM_locate_const(params,                  \
+            OSSL_DIGEST_PARAM_XOFLEN);                                         \
+        if (p == NULL) {                                                       \
+            p = OSSL_PARAM_locate_const(params, OSSL_DIGEST_PARAM_SIZE);       \
+        }                                                                      \
+        if ((p != NULL) && (!OSSL_PARAM_get_size_t(p, &ctx->outLen))) {        \
+            ok = 0;                                                            \
+        }                                                                      \
+    }                                                                          \
+    WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
+    return ok;                                                                 \
+}
+
+/** Implement getting the context parameters. */
+#define IMPLEMENT_XOF_GET_CTX_PARAMS(name, CTX)                                \
+/**                                                                            \
+ * Get the output length from the context.                                     \
+ *                                                                             \
+ * @param [in]      ctx     XOF context.                                       \
+ * @param [in, out] params  Parameters to be filled.                           \
+ * @return 1 on success.                                                       \
+ * @return 0 on failure.                                                       \
+ */                                                                            \
+static int name##_get_ctx_params(CTX* ctx, OSSL_PARAM params[])                \
+{                                                                              \
+    int ok = 1;                                                                \
+    OSSL_PARAM* p;                                                             \
+    WOLFPROV_ENTER(WP_LOG_COMP_DIGEST, #name "_get_ctx_params");               \
+    if (ctx == NULL) {                                                         \
+        ok = 0;                                                                \
+    }                                                                          \
+    p = OSSL_PARAM_locate(params, OSSL_DIGEST_PARAM_XOFLEN);                   \
+    if (ok && (p != NULL) && (!OSSL_PARAM_set_size_t(p, ctx->outLen))) {       \
+        ok = 0;                                                                \
+    }                                                                          \
+    p = OSSL_PARAM_locate(params, OSSL_DIGEST_PARAM_SIZE);                     \
+    if (ok && (p != NULL) && (!OSSL_PARAM_set_size_t(p, ctx->outLen))) {       \
         ok = 0;                                                                \
     }                                                                          \
     WOLFPROV_LEAVE(WP_LOG_COMP_DIGEST, __FILE__ ":" WOLFPROV_STRINGIZE(__LINE__), ok);\
     return ok;                                                                 \
 }
 
-
 /**
  * Implement the XOF functions for an algorithm.
  * Also define the dispatch table for the functions.
  */
 #define IMPLEMENT_XOF(alg, name, WC_CTX, CTX, blkSize, dgstSize, flags,        \
-                      init, upd, fin, copy, free)                              \
+                      init, upd, fin, copy, free, absorb, squeeze)             \
+IMPLEMENT_XOF_NEWCTX(alg, name, CTX, dgstSize)                                 \
 IMPLEMENT_XOF_INIT(alg, name, CTX, init)                                       \
-IMPLEMENT_DIGEST_UPDATE(name, WC_CTX, upd)                                     \
+IMPLEMENT_XOF_UPDATE(name, WC_CTX, CTX, upd)                                   \
 IMPLEMENT_XOF_FINAL(name, CTX, dgstSize, fin)                                  \
+IMPLEMENT_XOF_SQUEEZE(name, CTX, blkSize, absorb, squeeze)                     \
 IMPLEMENT_XOF_FREECTX(name, CTX, free)                                         \
 IMPLEMENT_XOF_DUPCTX(name, CTX, copy)                                          \
-IMPLEMENT_DIGEST_GET_PARAM(name, blkSize, dgstSize, flags)                     \
+IMPLEMENT_DIGEST_GET_PARAM(name, blkSize, WP_XOF_SIZE(dgstSize), flags)        \
 /** Dispatch table for XOF algorithms. */                                      \
 const OSSL_DISPATCH name##_functions[] = {                                     \
-    { OSSL_FUNC_DIGEST_NEWCTX,            (DFUNC)wp_##alg##_newctx          }, \
+    { OSSL_FUNC_DIGEST_NEWCTX,            (DFUNC)name##_newctx              }, \
     { OSSL_FUNC_DIGEST_INIT,              (DFUNC)name##_init                }, \
     { OSSL_FUNC_DIGEST_UPDATE,            (DFUNC)name##_update              }, \
     { OSSL_FUNC_DIGEST_FINAL,             (DFUNC)name##_final               }, \
@@ -748,8 +921,10 @@ const OSSL_DISPATCH name##_functions[] = {                                     \
     { OSSL_FUNC_DIGEST_GET_PARAMS,        (DFUNC)name##_get_params          }, \
     { OSSL_FUNC_DIGEST_GETTABLE_PARAMS,   (DFUNC)wp_digest_gettable_params  }, \
     { OSSL_FUNC_DIGEST_SET_CTX_PARAMS,    (DFUNC)wp_##alg##_set_ctx_params  }, \
-    { OSSL_FUNC_DIGEST_SETTABLE_CTX_PARAMS,                                    \
-                                          (DFUNC)wp_xof_settable_ctx_params }, \
+    { OSSL_FUNC_DIGEST_SETTABLE_CTX_PARAMS,   (DFUNC)wp_xof_ctx_params      }, \
+    { OSSL_FUNC_DIGEST_GET_CTX_PARAMS,    (DFUNC)wp_##alg##_get_ctx_params  }, \
+    { OSSL_FUNC_DIGEST_GETTABLE_CTX_PARAMS,   (DFUNC)wp_xof_ctx_params      }, \
+    WP_XOF_SQUEEZE_FUNC(name)                                                  \
     { 0,                                  NULL                              }  \
 };
 
@@ -757,49 +932,73 @@ const OSSL_DISPATCH name##_functions[] = {                                     \
  * SHAKE
  ******************************************************************************/
 
-#ifdef WP_HAVE_SHAKE_256
+#if defined(WP_HAVE_SHAKE_128) || defined(WP_HAVE_SHAKE_256)
 
 /**
- * Get the table of supported settable parameters for XOF.
+ * Get the table of supported settable and gettable parameters for XOF.
  *
  * @param [in] ctx      Context object. Unused.
  * @param [in] provCtx  Provider context. Unused.
  * @return Table of supported parameters.
  */
-static const OSSL_PARAM* wp_xof_settable_ctx_params(void* ctx,
-    WOLFPROV_CTX* provCtx)
+static const OSSL_PARAM* wp_xof_ctx_params(void* ctx, WOLFPROV_CTX* provCtx)
 {
-    static const OSSL_PARAM wp_xof_supported_settable_ctx_params[] = {
+    static const OSSL_PARAM wp_xof_supported_ctx_params[] = {
         {OSSL_DIGEST_PARAM_XOFLEN, OSSL_PARAM_UNSIGNED_INTEGER, NULL, 0, 0},
+        {OSSL_DIGEST_PARAM_SIZE, OSSL_PARAM_UNSIGNED_INTEGER, NULL, 0, 0},
         OSSL_PARAM_END
     };
     (void)ctx;
     (void)provCtx;
-    return wp_xof_supported_settable_ctx_params;
+    return wp_xof_supported_ctx_params;
 }
 
-/** All SHAKE algorithms are eXtendable Output Functions. */
-#define WP_SHAKE_FLAGS  WP_DIGEST_FLAG_XOF
+/** SHAKE algorithms are XOFs without parameters in the ASN.1 alg id. */
+#define WP_SHAKE_FLAGS  (WP_DIGEST_FLAG_XOF | WP_DIGEST_FLAG_ALGID_ABSENT)
+
+/** Largest SHAKE block size (SHAKE-128 rate). */
+#define WP_SHAKE_MAX_BLOCK_SIZE     168
 
 /**
  * SHAKE context object.
- * Need to keep the outpt length for finalization.
+ * Keeps the output length for finalization and the squeeze state.
  */
 typedef struct wp_ShakeCtx {
     /** wolfSSL SHAKE object - must be first field. */
     wc_Shake obj;
+    /** Last squeezed block - follows obj to be 8-byte aligned.
+     * Last bufLen bytes not yet output. */
+    unsigned char buf[WP_SHAKE_MAX_BLOCK_SIZE];
+    /** Number of squeezed bytes in buf not yet output. */
+    size_t bufLen;
     /** Output length when finalization is called. */
     size_t outLen;
+    /** Absorbing, squeezing or finalized. */
+    int state;
 } wp_ShakeCtx;
 
 
 IMPLEMENT_DIGEST_NEWCTX(wp_shake, wp_ShakeCtx)
 IMPLEMENT_XOF_SET_CTX_PARAMS(wp_shake, wp_ShakeCtx)
+IMPLEMENT_XOF_GET_CTX_PARAMS(wp_shake, wp_ShakeCtx)
 
+#ifdef WP_HAVE_SHAKE_128
+/* No wolfCrypt SHAKE-128 digest size constant: 128 / 8. */
+IMPLEMENT_XOF(shake, wp_shake_128, wc_Shake, wp_ShakeCtx,
+              WC_SHA3_128_BLOCK_SIZE, 16,
+              WP_SHAKE_FLAGS,
+              wc_InitShake128, wc_Shake128_Update, wc_Shake128_Final,
+              wc_Shake128_Copy, wc_Shake128_Free, wc_Shake128_Absorb,
+              wc_Shake128_SqueezeBlocks)
+#endif
+
+#ifdef WP_HAVE_SHAKE_256
 IMPLEMENT_XOF(shake, wp_shake_256, wc_Shake, wp_ShakeCtx,
               WC_SHA3_256_BLOCK_SIZE, WC_SHA3_256_DIGEST_SIZE,
               WP_SHAKE_FLAGS,
               wc_InitShake256, wc_Shake256_Update, wc_Shake256_Final,
-              wc_Shake256_Copy, wc_Shake256_Free)
+              wc_Shake256_Copy, wc_Shake256_Free, wc_Shake256_Absorb,
+              wc_Shake256_SqueezeBlocks)
+#endif
 
 #endif

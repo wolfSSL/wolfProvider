@@ -27,7 +27,7 @@ Information on how to configure, build, and test wolfProvider can be found here:
 * SHA-1
 * SHA-2: SHA-224, SHA-256, SHA-384, SHA-512, SHA-512/224, SHA-512/256
 * SHA-3: SHA3-224, SHA3-256, SHA3-384, SHA3-512
-* SHAKE-256
+* SHAKE-128, SHAKE-256
 
 ### Symmetric Ciphers
 * AES (128, 192, 256-bit keys)

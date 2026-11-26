@@ -92,6 +92,10 @@
     #define WP_HAVE_SHA3_256
     #define WP_HAVE_SHA3_384
     #define WP_HAVE_SHA3_512
+    #if (LIBWOLFSSL_VERSION_HEX >= 0x05005001) && defined(WOLFSSL_SHAKE128) && \
+        !defined(WOLFSSL_NO_SHAKE128)
+         #define WP_HAVE_SHAKE_128
+    #endif
     #if (LIBWOLFSSL_VERSION_HEX >= 0x05000000) && defined(WOLFSSL_SHAKE256) && \
         !defined(WOLFSSL_NO_SHAKE256)
          #define WP_HAVE_SHAKE_256
