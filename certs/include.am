@@ -2,6 +2,8 @@
 # for test_rsa.c
 dist_noinst_SCRIPTS += certs/server-key.pem
 dist_noinst_SCRIPTS += certs/server-cert.pem
+dist_noinst_SCRIPTS += certs/ca-cert.pem
+dist_noinst_SCRIPTS += certs/crl.pem
 
 # for test_ecc.c
 dist_noinst_SCRIPTS += certs/server-ecc.pem

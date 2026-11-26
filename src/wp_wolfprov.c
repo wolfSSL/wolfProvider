@@ -1665,6 +1665,14 @@ static const OSSL_ALGORITHM wolfprov_decoder[] = {
       wp_epki_to_pki_decoder_functions,
       "" },
 
+    /* DER certificate and CRL pass-through for the file store. */
+    { WP_NAMES_DER2OBJ, WP_DECODER_PROPERTIES(Certificate),
+      wp_der_to_cert_decoder_functions,
+      "" },
+    { WP_NAMES_DER2OBJ, WP_DECODER_PROPERTIES(CertificateList),
+      wp_der_to_crl_decoder_functions,
+      "" },
+
     { NULL, NULL, NULL, NULL }
 };
 
