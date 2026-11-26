@@ -873,6 +873,92 @@ int test_rsa_sign_verify_recover_pkcs1(void *data)
     return test_rsa_sign_verify_recover(RSA_PKCS1_PADDING);
 }
 
+int test_rsa_verify_recover(void *data)
+{
+    int err;
+    int i;
+    int j;
+    unsigned char msg[] = { 'a', 'b', 'c' };
+    /* Not a DigestInfo. */
+    unsigned char raw[19 + SHA256_DIGEST_LENGTH] = { 0 };
+    unsigned char *digest = raw + 19;
+    /* Bad prefix, bare digest, too short. */
+    size_t badLen[] = { sizeof(raw), SHA256_DIGEST_LENGTH, 20 };
+    unsigned char sig[256];
+    unsigned char badSig[3][256];
+    unsigned char rout[256];
+    unsigned char noPad[256];
+    size_t sigLen = sizeof(sig);
+    size_t routLen = 0;
+    const unsigned char *p = rsa_key_der_2048;
+    OSSL_LIB_CTX *libCtxs[] = { osslLibCtx, wpLibCtx };
+    EVP_PKEY_CTX *ctx;
+    EVP_PKEY *pkey;
+
+    (void)data;
+
+    pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, sizeof(rsa_key_der_2048));
+    err = (pkey == NULL) ||
+        (EVP_Digest(msg, sizeof(msg), digest, NULL, EVP_sha256(), NULL) != 1);
+    if (err == 0) {
+        err = test_digest_sign(pkey, osslLibCtx, msg, sizeof(msg), "SHA256",
+            NULL, sig, &sigLen, RSA_PKCS1_PADDING, 0);
+    }
+    for (j = 0; (err == 0) && (j < 3); j++) {
+        err = test_pkey_sign(pkey, osslLibCtx, raw + sizeof(raw) - badLen[j],
+            badLen[j], badSig[j], &sigLen, RSA_PKCS1_PADDING, NULL, NULL);
+    }
+    for (i = 0; (err == 0) && (i < 2); i++) {
+        ctx = EVP_PKEY_CTX_new_from_pkey(libCtxs[i], pkey, NULL);
+        err = (ctx == NULL) || (EVP_PKEY_verify_recover_init(ctx) != 1) ||
+            (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_PADDING) <= 0) ||
+            (EVP_PKEY_CTX_set_signature_md(ctx, EVP_sha256()) <= 0);
+        /* Size query. */
+        if (err == 0) {
+            err = (EVP_PKEY_verify_recover(ctx, NULL, &routLen, sig,
+                sigLen) != 1) || (routLen != sizeof(rout));
+        }
+        /* Output too small. */
+        if ((err == 0) && (libCtxs[i] == wpLibCtx)) {
+            routLen = SHA256_DIGEST_LENGTH - 1;
+            err = EVP_PKEY_verify_recover(ctx, rout, &routLen, sig,
+                sigLen) == 1;
+        }
+        if (err == 0) {
+            routLen = SHA256_DIGEST_LENGTH;
+            err = (EVP_PKEY_verify_recover(ctx, rout, &routLen, sig,
+                sigLen) != 1) || (routLen != SHA256_DIGEST_LENGTH) ||
+                (memcmp(rout, digest, SHA256_DIGEST_LENGTH) != 0);
+        }
+        for (j = 0; (err == 0) && (j < 3); j++) {
+            routLen = SHA256_DIGEST_LENGTH;
+            err = EVP_PKEY_verify_recover(ctx, rout, &routLen, badSig[j],
+                sigLen) == 1;
+        }
+        /* No padding. */
+        if (err == 0) {
+            err = (EVP_PKEY_verify_recover_init(ctx) != 1) ||
+                (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_NO_PADDING) <= 0);
+        }
+        if ((err == 0) && (libCtxs[i] == wpLibCtx)) {
+            routLen = sizeof(rout) - 1;
+            err = EVP_PKEY_verify_recover(ctx, rout, &routLen, sig,
+                sigLen) == 1;
+        }
+        if (err == 0) {
+            routLen = sizeof(rout);
+            err = (EVP_PKEY_verify_recover(ctx, rout, &routLen, sig,
+                sigLen) != 1) || (routLen != sizeof(rout)) ||
+                ((i == 1) && (memcmp(rout, noPad, sizeof(rout)) != 0));
+            memcpy(noPad, rout, sizeof(rout));
+        }
+        EVP_PKEY_CTX_free(ctx);
+    }
+
+    EVP_PKEY_free(pkey);
+    return err;
+}
+
 int test_rsa_sign_verify_pss(void *data)
 {
     int err = 0;
