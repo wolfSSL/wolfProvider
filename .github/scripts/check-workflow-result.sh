@@ -108,6 +108,7 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             ACTUAL_SORTED="${TEMP_DIR}/actual_sorted.txt"
             EXPECTED_SORTED="${TEMP_DIR}/expected_sorted.txt"
             OPTIONAL_SORTED="${TEMP_DIR}/optional_sorted.txt"
+            EXTRA_SORTED="${TEMP_DIR}/extra_sorted.txt"
             
             # Clean and sort both lists
             echo "$ACTUAL_FAILS" | tr ' ' '\n' | grep -v '^$' | sort > "$ACTUAL_SORTED"
@@ -121,11 +122,11 @@ if [ "$WOLFPROV_FORCE_FAIL" = "WOLFPROV_FORCE_FAIL=1" ]; then
             # Find missing in actual (in expected but not in actual)
             MISSING=$(comm -23 "$EXPECTED_SORTED" "$ACTUAL_SORTED" | tr '\n' ' ')
             # Find extra in actual (in actual but not in expected)
-            EXTRA=$(comm -13 "$EXPECTED_SORTED" "$ACTUAL_SORTED" | tr '\n' ' ')
+            comm -13 "$EXPECTED_SORTED" "$ACTUAL_SORTED" > "$EXTRA_SORTED"
             # Strip out optional failures
-            EXTRA=$(comm -23 "$EXTRA" "$OPTIONAL_SORTED" | tr '\n' ' ')
-            # List the optional failures
-            OPTIONAL_FAILS=$(comm -13 "$EXPECTED_SORTED" "$OPTIONAL_SORTED" | tr '\n' ' ')
+            EXTRA=$(comm -23 "$EXTRA_SORTED" "$OPTIONAL_SORTED" | tr '\n' ' ')
+            # List the optional failures that occurred
+            OPTIONAL_FAILS=$(comm -12 "$EXTRA_SORTED" "$OPTIONAL_SORTED" | tr '\n' ' ')
 
             # Clean up temporary files
             rm -rf "$TEMP_DIR"
