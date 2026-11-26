@@ -145,6 +145,12 @@ evp_test_run() {
         )
     fi
 
+    # Only when wolfProvider offers AES-XTS (not FIPS v5 or wolfSSL < 5.6.6).
+    if OPENSSL_CONF=$WOLFPROV_CONFIG $OPENSSL_BIN list -cipher-algorithms \
+            2>/dev/null | grep -q "AES-128-XTS.* @ "; then
+        EVP_TESTS+=(evpciph_aes_xts.txt)
+    fi
+
     for T in ${EVP_TESTS[@]}
     do
         printf "\t\t$T ... "
