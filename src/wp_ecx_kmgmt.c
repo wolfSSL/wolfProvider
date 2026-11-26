@@ -1090,7 +1090,8 @@ static int wp_ecx_import(wp_Ecx* ecx, int selection, const OSSL_PARAM params[])
             }
         }
     }
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+    /* Any keypair bit (OpenSSL hybrid KEMs import pub with DOMAIN|PRIVATE). */
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0)) {
         if (!wp_params_get_octet_string_ptr(params, OSSL_PKEY_PARAM_PUB_KEY,
             &pubData, &len)) {
             ok = 0;

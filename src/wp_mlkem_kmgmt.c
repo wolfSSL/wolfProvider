@@ -545,7 +545,8 @@ static int wp_mlkem_import(wp_MlKem* mlkem, int selection,
             }
         }
     }
-    if (ok && ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)) {
+    /* Any keypair bit (OpenSSL hybrid KEMs import pub with DOMAIN|PRIVATE). */
+    if (ok && ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) != 0)) {
         if (!wp_params_get_octet_string_ptr(params, OSSL_PKEY_PARAM_PUB_KEY,
                 &pubData, &pubLen)) {
             ok = 0;

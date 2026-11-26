@@ -166,6 +166,7 @@ int test_mlkem_keygen(void* data)
  * import into a fresh EVP_PKEY via EVP_PKEY_fromdata, re-export, and verify
  * the bytes match exactly. Proves the OSSL_PARAM marshaling for raw keys is
  * lossless in both directions.
+ * Also import the public key with private-key selection.
  */
 int test_mlkem_import_export_roundtrip(void* data)
 {
@@ -173,13 +174,17 @@ int test_mlkem_import_export_roundtrip(void* data)
     size_t i;
     EVP_PKEY* k1 = NULL;
     EVP_PKEY* k2 = NULL;
+    EVP_PKEY* k3 = NULL;
     EVP_PKEY_CTX* ctx = NULL;
     OSSL_PARAM* params = NULL;
+    OSSL_PARAM pubParams[2];
     unsigned char* pub1 = NULL;
     unsigned char* pub2 = NULL;
+    unsigned char* pub3 = NULL;
     unsigned char* priv1 = NULL;
     unsigned char* priv2 = NULL;
-    size_t pub1Len = 0, pub2Len = 0, priv1Len = 0, priv2Len = 0;
+    size_t pub1Len = 0, pub2Len = 0, pub3Len = 0;
+    size_t priv1Len = 0, priv2Len = 0;
 
     (void)data;
 
@@ -249,15 +254,35 @@ int test_mlkem_import_export_roundtrip(void* data)
                 (memcmp(priv1, priv2, priv1Len) != 0);
             if (err) PRINT_ERR_MSG("Private key roundtrip mismatch");
         }
+        if (err == 0) {
+            pubParams[0] = OSSL_PARAM_construct_octet_string(
+                OSSL_PKEY_PARAM_PUB_KEY, pub1, pub1Len);
+            pubParams[1] = OSSL_PARAM_construct_end();
+            err = EVP_PKEY_fromdata_init(ctx) != 1 ||
+                EVP_PKEY_fromdata(ctx, &k3,
+                    OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS |
+                    OSSL_KEYMGMT_SELECT_PRIVATE_KEY, pubParams) != 1;
+            if (err) PRINT_ERR_MSG("Public key import failed");
+        }
+        if (err == 0) {
+            err = mlkem_get_pub(k3, &pub3, &pub3Len);
+        }
+        if (err == 0) {
+            err = (pub1Len != pub3Len) ||
+                (memcmp(pub1, pub3, pub1Len) != 0);
+            if (err) PRINT_ERR_MSG("Imported public key mismatch");
+        }
 
         OPENSSL_free(pub1); pub1 = NULL;
         OPENSSL_free(pub2); pub2 = NULL;
+        OPENSSL_free(pub3); pub3 = NULL;
         OPENSSL_clear_free(priv1, priv1Len); priv1 = NULL; priv1Len = 0;
         OPENSSL_clear_free(priv2, priv2Len); priv2 = NULL; priv2Len = 0;
         OSSL_PARAM_free(params); params = NULL;
         EVP_PKEY_CTX_free(ctx); ctx = NULL;
         EVP_PKEY_free(k1); k1 = NULL;
         EVP_PKEY_free(k2); k2 = NULL;
+        EVP_PKEY_free(k3); k3 = NULL;
     }
     return err;
 }
